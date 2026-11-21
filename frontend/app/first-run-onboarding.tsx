@@ -79,11 +79,11 @@ export function PublicOnboarding() {
         </motion.section>}
 
         {feature && <motion.section key={feature.eyebrow} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: .22 }} className="flex min-h-0 flex-1 items-center justify-center text-center">
-          <div className="flex w-full -translate-y-2 flex-col items-center">
+          <div className="flex w-full flex-col items-center">
             <div className="grid size-20 place-items-center rounded-[26px] border border-[#e4c9b8] bg-[#fff8f2] text-[#c6531d] shadow-[0_24px_50px_-34px_rgba(101,52,27,.65)]">{feature.icon}</div>
-            <p className="mt-7 text-[10px] font-semibold tracking-[.18em] text-[#c6531d]">{feature.eyebrow}</p>
-            <h1 className="font-display mt-3 max-w-[14ch] text-[34px] font-semibold leading-[1.08] tracking-[-.05em]">{feature.title}</h1>
-            <p className="mt-4 max-w-[31ch] text-[15px] leading-6 text-[#806f65]">{feature.description}</p>
+            <p className="mt-9 text-[10px] font-semibold tracking-[.18em] text-[#c6531d]">{feature.eyebrow}</p>
+            <h1 className="font-display mt-3 max-w-[14ch] text-[34px] font-semibold leading-[1.12] tracking-[-.05em]">{feature.title}</h1>
+            <p className="mt-7 max-w-[31ch] text-[15px] leading-6 text-[#806f65]">{feature.description}</p>
             <p className="mt-3 max-w-[31ch] text-[13px] font-semibold leading-5 text-[#70584b]">{feature.note}</p>
           </div>
         </motion.section>}
