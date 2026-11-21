@@ -416,6 +416,25 @@ CAPABILITIES: tuple[Capability, ...] = (
         ui_files=("frontend/app/first-run-onboarding.tsx",),
     ),
     Capability(
+        id="user_profile",
+        title="How to address the user (first name, address form, reply language)",
+        voice=S(
+            P,
+            "Read at voice-session start and added to the session instructions; it can only "
+            "be changed on screen, never by voice or inference.",
+        ),
+        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        ui=S(
+            P,
+            "Account settings > Preferences (address form, first name; language is mirrored). "
+            "First-run onboarding does not call it yet.",
+        ),
+        backend=S(W, "user_profiles table, keyed by the verified Clerk user id."),
+        voice_session_behavior=True,
+        routes=("GET /api/profile", "PUT /api/profile"),
+        ui_files=("frontend/app/account-settings-sheet.tsx",),
+    ),
+    Capability(
         id="voice_turn_taking",
         title="Voice turn-taking and barge-in (interrupting the assistant)",
         voice=S(
@@ -490,6 +509,23 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
 )
 
 
+API_CONTRACTS: dict[str, tuple[str, ...]] = {
+    "GET /api/profile": (
+        "Auth: Clerk bearer token; the record belongs to the verified user only.",
+        "Response 200 (defaults when nothing was saved):",
+        '{"first_name": null, "address_form": "neutral", "language": "hinglish", "updated_at": null}',
+    ),
+    "PUT /api/profile": (
+        "Auth: Clerk bearer token. Partial update: only the keys sent are changed; unknown keys are 422.",
+        'Request: {"first_name": "Moin" | null, "address_form": "masculine" | "feminine" | "neutral", '
+        '"language": "hinglish" | "hindi" | "english"}',
+        "first_name: up to 40 letters, spaces, apostrophes, dots or hyphens; null or blank clears it.",
+        'Response 200: {"first_name": "Moin", "address_form": "masculine", "language": "hinglish", '
+        '"updated_at": "2026-11-22T10:00:00Z"}',
+    ),
+}
+
+
 SURFACES = (
     ("voice", "Voice"),
     ("typed_chat", "Typed chat"),
@@ -528,6 +564,10 @@ def render_markdown() -> str:
             lines.append(f"- `{capability.id}`: " + ", ".join(f"`{route}`" for route in capability.routes))
     lines += ["", "### Infrastructure routes", ""]
     lines += [f"- `{route}`: {reason}" for route, reason in INFRASTRUCTURE_ROUTES.items()]
+    lines += ["", "### API contracts", ""]
+    for route, contract in API_CONTRACTS.items():
+        lines.append(f"- `{route}`")
+        lines += [f"  - `{line}`" if line.startswith("{") else f"  - {line}" for line in contract]
     if UNMOUNTED_ROUTERS:
         lines += ["", "### Routers defined but not mounted", ""]
         lines += [f"- `{module}`: {reason}" for module, reason in UNMOUNTED_ROUTERS.items()]

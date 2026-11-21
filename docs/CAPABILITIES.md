@@ -62,6 +62,7 @@ Prompt wording, typed-chat and UI statuses are verified by review, not by the te
 | Submit a complaint to the provider (`support_submit`) | **⛔ unsupported** No officially supported provider support channel. | **⛔ unsupported** No officially supported provider support channel. | **⛔ unsupported** No officially supported provider support channel. | **⛔ unsupported** Route exists but always refuses (SupportChannelUnavailable). | — |
 | Reopen, search or start a new conversation (`conversation_history`) | **⛔ unsupported** Navigating history is an on-screen task; voice turns join the open conversation. | **⛔ unsupported** Navigating history is an on-screen task. | **✅ works** Recent-chat drawer. | **✅ works** User-scoped, server-backed history. | — |
 | Accept terms and privacy consent (`legal_consent`) | **⛔ unsupported** Consent must be an explicit on-screen action. | **⛔ unsupported** Consent must be an explicit on-screen action. | **✅ works** FirstRunOnboarding. | **✅ works** Durable consent record. | — |
+| How to address the user (first name, address form, reply language) (`user_profile`) | **🟡 partial** Read at voice-session start and added to the session instructions; it can only be changed on screen, never by voice or inference. | **❌ missing** Typed text never reaches the assistant: page.tsx runSearch only answers a few local intents (conversation-intent.mjs) or calls the search endpoints. | **🟡 partial** Account settings > Preferences (address form, first name; language is mirrored). First-run onboarding does not call it yet. | **✅ works** user_profiles table, keyed by the verified Clerk user id. | — |
 | Voice turn-taking and barge-in (interrupting the assistant) (`voice_turn_taking`) | **🟡 partial** Relies on the OpenAI Live session defaults: build_session_config (voice/service.py) sets no turn detection; the semantic_vad config in voice/client.py is unused. No Hinglish smart-turn model in main; only an uncommitted frontend/app/smart-turn.ts in the smart-turn-hinglish worktree. Branch: `codex/smart-turn-hinglish (uncommitted)`. | **⛔ unsupported** Not applicable to typed chat. | **❌ missing** No client-side end-of-turn or interruption handling in voice-panel.tsx. | **🟡 partial** Session config only; no turn-detection settings sent. | — |
 | Show the live voice conversation as chat bubbles (`voice_transcript`) | **🟡 partial** Transcripts stream into the chat and are saved with the conversation. | **⛔ unsupported** Not applicable: typed messages are added directly. | **🟡 partial** Known gap: voice-panel.tsx keeps one shared activeTranscriptRef for both roles, so when user and assistant speech overlap (events without a source id) bubbles fragment into several pieces. | **✅ works** Persisted through PUT /api/conversations/current. | — |
 | Read the Zepto provider-side cart (`provider_cart_view`) | **❌ missing** No voice tool. | **❌ missing** Typed text never reaches the assistant: page.tsx runSearch only answers a few local intents (conversation-intent.mjs) or calls the search endpoints. | **❌ missing** No frontend caller. | **✅ works** Read-only. | — |
@@ -88,6 +89,7 @@ Prompt wording, typed-chat and UI statuses are verified by review, not by the te
 - `support_submit`: `POST /api/support/complaints/{complaint_id}/submit`
 - `conversation_history`: `GET /api/conversations`, `GET /api/conversations/current`, `PUT /api/conversations/current`, `POST /api/conversations/new`, `POST /api/conversations/{conversation_id}/open`
 - `legal_consent`: `GET /api/legal-consent`, `POST /api/legal-consent`
+- `user_profile`: `GET /api/profile`, `PUT /api/profile`
 - `provider_cart_view`: `GET /api/zepto/cart`
 
 ### Infrastructure routes
@@ -98,6 +100,18 @@ Prompt wording, typed-chat and UI statuses are verified by review, not by the te
 - `GET /api/swiggy/tools`: Diagnostic: live Swiggy MCP tool catalogue.
 - `GET /api/zepto/tools`: Diagnostic: live Zepto MCP tool catalogue.
 - `GET /api/zepto/capabilities`: Diagnostic: Zepto tool-policy summary.
+
+### API contracts
+
+- `GET /api/profile`
+  - Auth: Clerk bearer token; the record belongs to the verified user only.
+  - Response 200 (defaults when nothing was saved):
+  - `{"first_name": null, "address_form": "neutral", "language": "hinglish", "updated_at": null}`
+- `PUT /api/profile`
+  - Auth: Clerk bearer token. Partial update: only the keys sent are changed; unknown keys are 422.
+  - Request: {"first_name": "Moin" | null, "address_form": "masculine" | "feminine" | "neutral", "language": "hinglish" | "hindi" | "english"}
+  - first_name: up to 40 letters, spaces, apostrophes, dots or hyphens; null or blank clears it.
+  - Response 200: {"first_name": "Moin", "address_form": "masculine", "language": "hinglish", "updated_at": "2026-11-22T10:00:00Z"}
 
 ### Routers defined but not mounted
 
