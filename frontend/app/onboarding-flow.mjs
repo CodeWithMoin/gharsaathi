@@ -50,26 +50,21 @@ export function normalizeProfile(raw) {
 }
 
 /**
- * Chooses the profile to resume from. The server profile wins; the Clerk
- * metadata copy is a fallback until `/api/profile` is available everywhere.
+ * Chooses the profile to resume from. `GET /api/profile` always answers, using
+ * defaults until the user saves; a saved first name marks the step as done.
+ * Clerk data only prefills the draft (legacy users and `user.firstName`).
  */
 export function resolveProfile({ server, clerkMetadata, clerkFirstName } = {}) {
   const fromServer = normalizeProfile(server);
-  if (fromServer) return { profile: fromServer, source: "server", draft: draftFrom(fromServer) };
+  if (fromServer) return { profile: fromServer, draft: draftFrom(fromServer) };
   const saved = clerkMetadata && typeof clerkMetadata === "object" ? clerkMetadata.gharsaathiProfile : undefined;
-  const fromClerk = normalizeProfile({
-    first_name: saved?.firstName ?? clerkFirstName,
-    address_form: saved?.addressForm,
-    language: saved?.language,
-  });
-  if (fromClerk) return { profile: fromClerk, source: "clerk", draft: draftFrom(fromClerk) };
+  const userChosen = Boolean(server && typeof server === "object" && server.updated_at);
   return {
     profile: null,
-    source: null,
     draft: {
-      firstName: normalizeFirstName(saved?.firstName ?? clerkFirstName),
-      addressForm: isAddressForm(saved?.addressForm) ? saved.addressForm : null,
-      language: isLanguage(saved?.language) ? saved.language : "hinglish",
+      firstName: normalizeFirstName(server?.first_name) || normalizeFirstName(clerkFirstName),
+      addressForm: userChosen && isAddressForm(server.address_form) ? server.address_form : null,
+      language: userChosen && isLanguage(server.language) ? server.language : isLanguage(saved?.language) ? saved.language : "hinglish",
     },
   };
 }
@@ -179,6 +174,13 @@ export function progressPosition(step) {
 export function canSkip(step) {
   return step === "stores" || step === "address" || step === "personalize";
 }
+
+/** Shared with the account-settings address-form control. */
+export const ADDRESS_FORM_OPTIONS = [
+  { value: "masculine", label: "Masculine", example: "aap dekh rahe hain" },
+  { value: "feminine", label: "Feminine", example: "aap dekh rahi hain" },
+  { value: "neutral", label: "Neutral", example: "yeh dekhiye" },
+];
 
 const EXAMPLE_VERB = {
   masculine: { hinglish: "aap dekh rahe hain", hindi: "आप देख रहे हैं" },

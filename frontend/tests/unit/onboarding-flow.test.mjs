@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ADDRESS_FORM_OPTIONS,
   addressFormExample,
   applicableSteps,
   byAddressForm,
@@ -125,20 +126,35 @@ test("parses the /api/profile contract strictly", () => {
   assert.equal(normalizeProfile("Ravi"), null);
 });
 
-test("prefers the server profile and falls back to Clerk metadata", () => {
-  const server = { first_name: "Server", address_form: "neutral", language: "english" };
-  const clerkMetadata = { gharsaathiProfile: { firstName: "Clerk", addressForm: "feminine", language: "hindi" } };
-  assert.equal(resolveProfile({ server, clerkMetadata }).source, "server");
-  const fallback = resolveProfile({ server: null, clerkMetadata, clerkFirstName: "Ignored" });
-  assert.equal(fallback.source, "clerk");
-  assert.deepEqual(fallback.profile, { first_name: "Clerk", address_form: "feminine", language: "hindi" });
+test("a saved server profile completes the profile step", () => {
+  const server = { first_name: "Asha", address_form: "feminine", language: "english", updated_at: "2026-11-22T00:00:00Z" };
+  const resolved = resolveProfile({ server, clerkMetadata: { gharsaathiProfile: { language: "hindi" } }, clerkFirstName: "Ignored" });
+  assert.deepEqual(resolved.profile, { first_name: "Asha", address_form: "feminine", language: "english" });
+  assert.deepEqual(resolved.draft, { firstName: "Asha", addressForm: "feminine", language: "english" });
 });
 
-test("an incomplete profile still prefills the draft", () => {
-  const resolved = resolveProfile({ clerkMetadata: { gharsaathiProfile: { language: "hindi" } }, clerkFirstName: " Meena " });
+test("server defaults (nothing saved yet) leave the step open and prefill from Clerk", () => {
+  const defaults = { first_name: null, address_form: "neutral", language: "hinglish", updated_at: null };
+  const resolved = resolveProfile({ server: defaults, clerkMetadata: { gharsaathiProfile: { language: "hindi" } }, clerkFirstName: " Meena " });
   assert.equal(resolved.profile, null);
   assert.deepEqual(resolved.draft, { firstName: "Meena", addressForm: null, language: "hindi" });
+});
+
+test("a form chosen in settings without a name is kept as the draft", () => {
+  const partial = { first_name: null, address_form: "masculine", language: "english", updated_at: "2026-11-22T00:00:00Z" };
+  assert.deepEqual(resolveProfile({ server: partial }).draft, { firstName: "", addressForm: "masculine", language: "english" });
+});
+
+test("an unreachable profile API still yields an empty draft", () => {
+  assert.deepEqual(resolveProfile({ server: null }).draft, { firstName: "", addressForm: null, language: "hinglish" });
   assert.deepEqual(resolveProfile().draft, { firstName: "", addressForm: null, language: "hinglish" });
+});
+
+test("address-form options are shared and match the live example", () => {
+  assert.deepEqual(ADDRESS_FORM_OPTIONS.map((option) => option.value), ["masculine", "feminine", "neutral"]);
+  for (const option of ADDRESS_FORM_OPTIONS) {
+    assert.ok(addressFormExample(option.value, "hinglish").text.toLowerCase().startsWith(option.example), option.value);
+  }
 });
 
 test("the live example changes with address form and language", () => {

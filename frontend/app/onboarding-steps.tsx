@@ -23,6 +23,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { FormEvent, ReactNode, useEffect, useId, useRef, useState } from "react";
 import {
+  ADDRESS_FORM_OPTIONS,
   addressFormExample,
   byAddressForm,
   FIRST_NAME_MAX_LENGTH,
@@ -147,12 +148,6 @@ function Note({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 
 /* ---------------------------------------------------------------- profile */
 
-const ADDRESS_FORM_OPTIONS: Array<{ value: AddressForm; label: string; sample: string }> = [
-  { value: "masculine", label: "Masculine", sample: "aap dekh rahe hain" },
-  { value: "feminine", label: "Feminine", sample: "aap dekh rahi hain" },
-  { value: "neutral", label: "Neutral", sample: "yeh dekhiye" },
-];
-
 const LANGUAGE_OPTIONS: Array<{ value: ReplyLanguage; label: string; note: string }> = [
   { value: "hinglish", label: "Hinglish", note: "Default" },
   { value: "english", label: "English", note: "English" },
@@ -231,7 +226,7 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
           return <label key={option.value} className={`relative flex min-h-[56px] cursor-pointer items-center gap-3 px-4 transition-colors duration-150 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-[#c6531d] ${index ? "border-t border-[#f0e2d8]" : ""} ${selected ? "bg-[#fff4ec]" : "hover:bg-[#fffaf6]"}`}>
             <input type="radio" name="address-form" value={option.value} checked={selected} onChange={() => setAddressForm(option.value)} className="sr-only" />
             <span aria-hidden="true" className={`grid size-5 shrink-0 place-items-center rounded-full border-2 transition-colors duration-150 ${selected ? "border-[#c6531d] bg-[#c6531d]" : "border-[#cdb6a7] bg-white"}`}>{selected && <span className="size-1.5 rounded-full bg-white" />}</span>
-            <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-[#3d2b23]">{option.label}</span><span className="block text-[13px] text-[#806f65]">&ldquo;{option.sample}&rdquo;</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-[#3d2b23]">{option.label}</span><span className="block text-[13px] text-[#806f65]">&ldquo;{option.example}&rdquo;</span></span>
           </label>;
         })}
       </div>

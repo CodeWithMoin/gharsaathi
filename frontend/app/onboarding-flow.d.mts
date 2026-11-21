@@ -5,8 +5,10 @@ export type OnboardingStep = SetupStep | "done";
 export type DecisionStep = "stores" | "address" | "personalize";
 export type StepDecision = "done" | "skipped";
 
-/** The `/api/profile` JSON contract (GET response and PUT body). */
+/** A saved profile: the `PUT /api/profile` body onboarding sends. */
 export type HouseholdProfile = { first_name: string; address_form: AddressForm; language: ReplyLanguage };
+/** `GET /api/profile` response; defaults are returned until the user saves. */
+export type ServerProfile = { first_name: string | null; address_form: AddressForm; language: ReplyLanguage; updated_at: string | null };
 export type ProfileDraft = { firstName: string; addressForm: AddressForm | null; language: ReplyLanguage };
 
 export type OnboardingProgress = {
@@ -38,9 +40,9 @@ export function validateProfileDraft(draft: Partial<ProfileDraft> | null | undef
 export function normalizeProfile(raw: unknown): HouseholdProfile | null;
 export function resolveProfile(sources?: { server?: unknown; clerkMetadata?: unknown; clerkFirstName?: string | null }): {
   profile: HouseholdProfile | null;
-  source: "server" | "clerk" | null;
   draft: ProfileDraft;
 };
+export const ADDRESS_FORM_OPTIONS: ReadonlyArray<{ value: AddressForm; label: string; example: string }>;
 export function readOnboardingProgress(metadata: unknown): OnboardingProgress;
 export function isOnboardingComplete(progress: OnboardingProgress | null | undefined): boolean;
 export function withOnboardingProgress<T extends Record<string, unknown>>(

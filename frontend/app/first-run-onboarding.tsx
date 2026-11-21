@@ -21,6 +21,7 @@ import {
   type OnboardingProgress,
   type OnboardingSnapshot,
   type OnboardingStep,
+  type ServerProfile,
   type StepDecision,
 } from "./onboarding-flow.mjs";
 import { AddressStep, ConsentStep, DoneStep, OnboardingHeader, PersonalizeStep, ProfileStep, STEP_TITLES, StepTransition, StoresStep } from "./onboarding-steps";
@@ -127,7 +128,7 @@ export function FirstRunOnboarding({ children }: { children: (context: AppContex
   const [consent, setConsent] = useState<LegalConsentStatus | null>(null);
   const [consentError, setConsentError] = useState("");
   const [consentRetry, setConsentRetry] = useState(0);
-  const [serverProfile, setServerProfile] = useState<HouseholdProfile | null | undefined>(undefined);
+  const [serverProfile, setServerProfile] = useState<ServerProfile | null | undefined>(undefined);
   const [mode, setMode] = useState<"pending" | "first-run" | "revisit" | "app">("pending");
   const [step, setStep] = useState<OnboardingStep | null>(null);
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -156,7 +157,7 @@ export function FirstRunOnboarding({ children }: { children: (context: AppContex
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !userId) return;
     let active = true;
-    void loadProfile().then((result) => { if (active) setServerProfile(result.profile); });
+    void loadProfile().then((profile) => { if (active) setServerProfile(profile); });
     return () => { active = false; };
   }, [isLoaded, isSignedIn, loadProfile, userId]);
 
@@ -239,13 +240,14 @@ export function FirstRunOnboarding({ children }: { children: (context: AppContex
   const advance = (from: OnboardingStep, overrides?: Partial<OnboardingSnapshot>) => goTo(stepAfter(from, { ...snapshot, ...overrides }), 1);
 
   async function saveProfileStep(profile: HouseholdProfile) {
-    await saveProfile(profile);
-    // The Clerk copy remains the fallback (and feeds `user.firstName`) until /api/profile ships everywhere.
-    await writeMetadata((current) => {
-      const saved = (current.gharsaathiProfile ?? {}) as Metadata;
-      return { ...current, gharsaathiProfile: { ...saved, firstName: profile.first_name, addressForm: profile.address_form, language: profile.language } };
-    }, { firstName: profile.first_name });
-    setServerProfile(profile);
+    const saved = await saveProfile(profile);
+    // Keep Clerk's first name (shown across the app) and the language label in sync with the server profile.
+    // Best effort: the server profile is authoritative, so a Clerk hiccup must not block setup.
+    void writeMetadata((current) => {
+      const previous = (current.gharsaathiProfile ?? {}) as Metadata;
+      return { ...current, gharsaathiProfile: { ...previous, language: saved.language } };
+    }, { firstName: saved.first_name }).catch(() => undefined);
+    setServerProfile({ ...saved, updated_at: new Date().toISOString() });
     advance("profile", { profileComplete: true });
   }
 
