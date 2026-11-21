@@ -5,6 +5,8 @@ import { ArrowRight, Microphone, ShieldCheck, Stop, X } from "@phosphor-icons/re
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mapRealtimeTranscriptEvent } from "./voice-transcript.mjs";
 import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
+import { sanitizeAddressPrefill } from "./voice-address-prefill.mjs";
+import type { ZeptoAddressPrefill } from "./zepto-address-form";
 
 type VoiceStatus = "connecting" | "live" | "closing" | "error";
 type VoiceProduct = { provider?: "swiggy_instamart" | "zepto"; provider_label?: string; product_id: string; sku_id: string; spin_id?: string; name: string; brand?: string; pack_size?: string; price: { mrp: number; offer_price: number }; available: boolean; image_url?: string; rating_value?: string };
@@ -17,7 +19,17 @@ type ToolEvent =
   | { type: "tool.error"; message: string }
   | { type: "basket.updated"; basket: { item_count: number; item_total: string } }
   | { type: "basket.approval_requested"; approval: { payable: string }; quote: { eta_text?: string | null } }
+  | { type: "address_form.open"; provider: "zepto"; prefill: unknown }
+  | { type: "address_form.unavailable"; reason: string }
   | { type: "session.finished" };
+
+export type VoiceAddressFormRequest = { prefill: ZeptoAddressPrefill } | { unavailable: string };
+
+const ADDRESS_UNAVAILABLE_MESSAGES: Record<string, string> = {
+  zepto_not_connected: "Pehle Zepto connect kijiye, phir naya address add hoga.",
+  demo_mode: "Demo mode mein naya address add nahi hota.",
+  swiggy_unsupported: "Swiggy address Swiggy app mein add kijiye.",
+};
 
 async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   if (peer.iceGatheringState === "complete") return;
@@ -36,7 +48,7 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   });
 }
 
-export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[]) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: () => void }) {
+export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onAddressForm }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[]) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: () => void; onAddressForm?: (request: VoiceAddressFormRequest) => void }) {
   const authenticatedFetch = useAuthenticatedFetch();
   const [status, setStatus] = useState<VoiceStatus>("connecting");
   const [message, setMessage] = useState("Connecting to GharSaathi…");
@@ -103,6 +115,8 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         if (event.type === "tool.started" && event.name === "search_products") {
           setSearching(true);
           setMessage("Connected stores par dekh rahi hoon…");
+        } else if (event.type === "tool.started" && event.name === "open_address_form") {
+          setMessage("Address form khol rahi hoon…");
         } else if (event.type === "tool.started") {
           setBasketNotice("");
           setMessage("Basket update kar raha hoon…");
@@ -126,6 +140,12 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
           setBasketNotice(`Final bill · ${event.approval.payable}`);
           setMessage("Final bill ready hai—screen par review kijiye.");
           onBasketTouched?.();
+        } else if (event.type === "address_form.open" && event.provider === "zepto") {
+          setMessage("Address form screen par hai—details check karke Save kijiye.");
+          onAddressForm?.({ prefill: sanitizeAddressPrefill(event.prefill) });
+        } else if (event.type === "address_form.unavailable") {
+          setMessage(ADDRESS_UNAVAILABLE_MESSAGES[event.reason] ?? "Naya address abhi add nahi ho sakta.");
+          onAddressForm?.({ unavailable: event.reason });
         } else if (event.type === "session.finished") {
           source.close();
         }
@@ -133,7 +153,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         // Ignore malformed provider events.
       }
     });
-  }, [onBasketTouched, onResults]);
+  }, [onAddressForm, onBasketTouched, onResults]);
 
   const start = useCallback(async () => {
     const attempt = attemptRef.current + 1;
