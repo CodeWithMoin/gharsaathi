@@ -573,7 +573,7 @@ export default function Home() {
       <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
         <div className="flex min-w-0 items-center">
           <Brand />
-          <span className={`ml-2 size-2 shrink-0 rounded-full ring-4 ring-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} role="status" aria-label={readyStoreCount > 0 ? `${readyStoreCount} store${readyStoreCount === 1 ? "" : "s"} ready` : "No store ready"} title={connectionLabel} />
+          <span className={`ml-2 hidden size-2 shrink-0 rounded-full ring-4 ring-[#fffdf9] sm:block ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} role="status" aria-label={readyStoreCount > 0 ? `${readyStoreCount} store${readyStoreCount === 1 ? "" : "s"} ready` : "No store ready"} title={connectionLabel} />
           <span className="ml-2 hidden truncate text-[11px] text-[#806f65] sm:block">Your shopping chat</span>
         </div>
         <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
