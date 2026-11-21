@@ -4,9 +4,18 @@ import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, BellRinging, Brain, Calculator, Check, Microphone } from "@phosphor-icons/react";
 import Image from "next/image";
-import { FormEvent, ReactNode, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { useApiRequest } from "./authenticated-api";
 
 type Language = "hinglish" | "hindi" | "english";
+
+type LegalConsentStatus = {
+  terms_version: string;
+  accepted: boolean;
+  accepted_at: string | null;
+  personalization_allowed: boolean;
+  personalization_decided_at: string | null;
+};
 
 const languageOptions: Array<{ value: Language; label: string; note: string }> = [
   { value: "hinglish", label: "Hinglish", note: "Recommended" },
@@ -53,6 +62,7 @@ const featureSlides = [
 
 export function PublicOnboarding() {
   const [step, setStep] = useState(0);
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const authStep = featureSlides.length + 1;
   const isFeature = step > 0 && step < authStep;
   const feature = isFeature ? featureSlides[step - 1] : null;
@@ -91,12 +101,16 @@ export function PublicOnboarding() {
           </div>
           <div className="w-full pt-6">
             <SignUpButton mode="redirect" forceRedirectUrl="/">
-              <button className="flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition active:scale-[.98]">Create account <ArrowRight size={17} weight="bold" /></button>
+              <button disabled={!legalAccepted} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50">Create account <ArrowRight size={17} weight="bold" /></button>
             </SignUpButton>
             <SignInButton mode="redirect" forceRedirectUrl="/">
               <button className="mt-3 w-full rounded-full border border-[#ddc8ba] bg-[#fffdf9] px-5 py-3.5 text-sm font-semibold text-[#5c463b] transition active:scale-[.98]">I already have an account</button>
             </SignInButton>
-            <p className="mt-5 text-[10px] leading-4 text-[#9a8579]">Secure sign-in. Passwords and OTPs stay outside your GharSaathi chat.</p>
+            <label className="mt-5 flex cursor-pointer items-start gap-2 rounded-xl bg-[#f1e8e0] px-3 py-3 text-left text-[11px] leading-5 text-[#70584b]">
+              <input type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} className="mt-0.5 size-4 accent-[#c6531d]" />
+              <span>I agree to GharSaathi&apos;s <a href="/terms" className="font-semibold text-[#9d421a] underline underline-offset-2">Terms</a> and <a href="/privacy" className="font-semibold text-[#9d421a] underline underline-offset-2">Privacy Policy</a>.</span>
+            </label>
+            <p className="mt-3 text-[10px] leading-4 text-[#9a8579]">Secure sign-in. Passwords and OTPs stay outside your GharSaathi chat.</p>
           </div>
         </motion.section>}
       </AnimatePresence>
@@ -113,16 +127,42 @@ export function PublicOnboarding() {
 
 export function FirstRunOnboarding({ children }: { children: (profile: { justCompleted: boolean; firstName: string }) => ReactNode }) {
   const { isLoaded, isSignedIn, user } = useUser();
+  const request = useApiRequest();
   const savedProfile = useMemo(() => user?.unsafeMetadata.gharsaathiProfile as { language?: Language; complete?: boolean } | undefined, [user?.unsafeMetadata]);
   const [name, setName] = useState("");
   const [language, setLanguage] = useState<Language>("hinglish");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [justCompleted, setJustCompleted] = useState(false);
+  const [profileSavedThisVisit, setProfileSavedThisVisit] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
+  const [personalizationAllowed, setPersonalizationAllowed] = useState(false);
+  const [consent, setConsent] = useState<LegalConsentStatus | null>(null);
+  const [consentError, setConsentError] = useState("");
+  const [consentRetry, setConsentRetry] = useState(0);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !user) return;
+    let active = true;
+    setConsent(null);
+    setConsentError("");
+    void request<LegalConsentStatus>("/api/legal-consent")
+      .then((status) => {
+        if (active) setConsent(status);
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setConsentError(cause instanceof Error ? cause.message : "Could not check your consent status.");
+      });
+    return () => { active = false; };
+  }, [consentRetry, isLoaded, isSignedIn, request, user]);
 
   if (!isLoaded) return <LoadingSplash />;
   if (!isSignedIn || !user) return <PublicOnboarding />;
-  if (savedProfile?.complete || justCompleted) return <>{children({ justCompleted, firstName: user.firstName?.trim() || "there" })}</>;
+  if (!consent && !consentError) return <LoadingSplash />;
+
+  const profileComplete = Boolean(savedProfile?.complete || profileSavedThisVisit);
+  if ((consent?.accepted && profileComplete) || justCompleted) return <>{children({ justCompleted, firstName: user.firstName?.trim() || "there" })}</>;
 
   const activeUser = user;
   const displayName = name || activeUser.firstName || "";
@@ -141,15 +181,52 @@ export function FirstRunOnboarding({ children }: { children: (profile: { justCom
         firstName,
         unsafeMetadata: {
           ...activeUser.unsafeMetadata,
-          gharsaathiProfile: { complete: true, language, completedAt: new Date().toISOString() },
+          gharsaathiProfile: { complete: Boolean(consent?.accepted), language, completedAt: consent?.accepted ? new Date().toISOString() : undefined },
         },
       });
-      setJustCompleted(true);
+      if (consent?.accepted) setJustCompleted(true);
+      else setProfileSavedThisVisit(true);
     } catch {
       setError("Profile save nahi hua. Ek baar phir try karein.");
     } finally {
       setSaving(false);
     }
+  }
+
+  async function completeLegalConsent(event: FormEvent) {
+    event.preventDefault();
+    if (!legalAccepted) {
+      setError("Terms aur Privacy Policy accept karna zaroori hai.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await request<LegalConsentStatus>("/api/legal-consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ terms_accepted: true, personalization_allowed: personalizationAllowed }),
+      });
+      await activeUser.update({
+        unsafeMetadata: {
+          ...activeUser.unsafeMetadata,
+          gharsaathiProfile: { complete: true, language: savedProfile?.language ?? language, completedAt: new Date().toISOString() },
+        },
+      });
+      setJustCompleted(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Consent save nahi hua. Ek baar phir try karein.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (consentError) {
+    return <main className="grain grid min-h-[100dvh] place-items-center bg-[#f8f2ea] px-5 text-center text-[#35241c]"><section className="max-w-sm rounded-3xl border border-[#e1d0c4] bg-[#fffdf9] p-6 shadow-[0_22px_55px_-32px_rgba(101,52,27,.45)]"><h1 className="font-display text-2xl font-semibold">Consent status unavailable</h1><p className="mt-3 text-sm leading-6 text-[#806f65]">{consentError}</p><button type="button" onClick={() => setConsentRetry((value) => value + 1)} className="mt-6 rounded-full bg-[#c6531d] px-5 py-3 text-sm font-semibold text-white">Try again</button></section></main>;
+  }
+
+  if (profileComplete) {
+    return <main className="grain min-h-[100dvh] bg-[#f8f2ea] px-5 text-[#35241c]"><div className="mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-[max(3rem,env(safe-area-inset-top))]"><div className="flex items-center justify-between"><LogoMark size="small" /><span className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#9b8172]">2 of 2 · Your choice</span></div><div className="mt-12"><p className="text-[10px] font-semibold tracking-[.16em] text-[#c6531d]">YOUR CONSENT</p><h1 className="font-display mt-3 text-[32px] font-semibold leading-[1.1] tracking-[-.05em]">One last thing.</h1><p className="mt-3 text-sm leading-6 text-[#806f65]">Please review and accept the current Terms and Privacy Policy to continue.</p></div><form onSubmit={completeLegalConsent} className="mt-8 flex flex-1 flex-col"><label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#e1d0c4] bg-[#fffdf9] p-4 text-sm leading-6 text-[#5f4a3f]"><input type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} className="mt-1 size-4 shrink-0 accent-[#c6531d]" /><span>I agree to GharSaathi&apos;s <a href="/terms" className="font-semibold text-[#9d421a] underline underline-offset-2">Terms</a> and <a href="/privacy" className="font-semibold text-[#9d421a] underline underline-offset-2">Privacy Policy</a>.</span></label><label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl bg-[#f1e8e0] p-4 text-sm leading-6 text-[#70584b]"><input type="checkbox" checked={personalizationAllowed} onChange={(event) => setPersonalizationAllowed(event.target.checked)} className="mt-1 size-4 shrink-0 accent-[#c6531d]" /><span><strong className="font-semibold text-[#5f4032]">Optional:</strong> Allow personalisation from saved preferences. Shopping-history import stays a separate choice and is never enabled automatically.</span></label><p className="mt-3 text-[11px] leading-5 text-[#806f65]">You can change personalisation choices later. Accepting Terms is required; personalisation is not.</p>{error && <p className="mt-3 text-xs font-medium text-[#a33f31]" role="alert">{error}</p>}<button type="submit" disabled={saving || !legalAccepted} className="mt-auto flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-55">{saving ? "Saving…" : "Continue"} {!saving && <ArrowRight size={17} weight="bold" />}</button></form></div></main>;
   }
 
   return <main className="grain min-h-[100dvh] bg-[#f8f2ea] px-5 text-[#35241c]">

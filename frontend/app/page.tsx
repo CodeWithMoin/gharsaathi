@@ -1,8 +1,8 @@
 "use client";
 
-import { useClerk } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Basket, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, SignOut, Storefront, X } from "@phosphor-icons/react";
+import { ArrowRight, Basket, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
 import { BasketPanel, useAddBasketLine, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
@@ -13,6 +13,7 @@ import { SupportPanel } from "./support-panel";
 import { VoicePanel, type VoiceTranscriptTurn } from "./voice-panel";
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
 import { FirstRunOnboarding } from "./first-run-onboarding";
+import { AccountSettingsSheet } from "./account-settings-sheet";
 import { ZeptoAddressForm } from "./zepto-address-form";
 import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
 
@@ -49,6 +50,7 @@ export default function Home() {
 
 function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetupOpen?: boolean; userName: string }) {
   const { signOut } = useClerk();
+  const { user } = useUser();
   const apiRequest = useApiRequest();
   const addBasketLine = useAddBasketLine();
   const [voiceOpen, setVoiceOpen] = useState(false);
@@ -74,7 +76,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   const [products, setProducts] = useState<Product[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [recentChats, setRecentChats] = useState<ConversationSummary[]>([]);
   const [chatSearch, setChatSearch] = useState("");
   const [recentChatsLoading, setRecentChatsLoading] = useState(false);
@@ -316,10 +318,6 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     if (!chatDrawerOpen) return;
     void loadRecentChats();
   }, [chatDrawerOpen, loadRecentChats]);
-
-  useEffect(() => {
-    if (!chatDrawerOpen) setAccountMenuOpen(false);
-  }, [chatDrawerOpen]);
 
   useEffect(() => {
     let active = true;
@@ -684,15 +682,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
             </div>
           </div>
           <div className="bg-[#f8f2ea] px-3 pb-[max(3.5625rem,env(safe-area-inset-bottom))] pt-4">
-            <AnimatePresence initial={false}>
-              {accountMenuOpen && <motion.div id="account-menu" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: .16 }} className="mb-2 rounded-xl border border-[#e3d5cb] bg-white p-2 shadow-[0_14px_34px_-28px_rgba(61,38,27,.55)]">
-                <div className="px-2 pb-2 pt-1"><p className="truncate text-[12px] font-semibold text-[#3d2b23]">{userName}</p><p className="mt-0.5 text-[10px] text-[#8b7569]">GharSaathi account</p></div>
-                <button type="button" onClick={() => void signOut({ redirectUrl: "/" })} className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-[12px] font-medium text-[#7d3c24] transition hover:bg-[#f7ebe3] active:scale-[.99]"><SignOut size={16} /> Sign out</button>
-              </motion.div>}
-            </AnimatePresence>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => void startNewChat()} className="flex h-14 min-w-0 flex-1 items-center justify-center gap-2 rounded-[22px] bg-[#d95617] px-4 text-sm font-semibold text-white transition hover:bg-[#c94d12] active:scale-[.97]"><NotePencil size={19} weight="bold" className="shrink-0" /> New chat</button>
-              <button type="button" onClick={() => setAccountMenuOpen((open) => !open)} aria-label={`Open GharSaathi account menu for ${userName}`} aria-expanded={accountMenuOpen} aria-controls="account-menu" title="Account" className="grid size-14 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-[15px] font-semibold uppercase text-[#9f451d] ring-1 ring-[#dfc9bb] transition hover:bg-[#ead2c2] active:scale-[.96]">
+              <button type="button" onClick={() => { setChatDrawerOpen(false); setAccountSettingsOpen(true); }} aria-label={`Open account settings for ${userName}`} title="Account & settings" className="grid size-14 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-[15px] font-semibold uppercase text-[#9f451d] ring-1 ring-[#dfc9bb] transition hover:bg-[#ead2c2] active:scale-[.96]">
                 {userName.trim().charAt(0) || "G"}
               </button>
             </div>
@@ -710,7 +702,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
           {basketCount > 0 && <button onClick={() => setBasketOpen((open) => !open)} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
           <button type="button" onClick={() => setSupportOpen((open) => !open)} aria-label="Get help with an order" className={`grid size-10 place-items-center rounded-full transition active:scale-[.96] ${supportOpen ? "bg-[#f1dfd2] text-[#9f451d]" : "bg-white/70 text-[#70584b] hover:bg-[#f6ece4]"}`}><ChatCircleDots size={21} weight={supportOpen ? "fill" : "regular"} /></button>
-          <button onClick={() => setSetupOpen(true)} aria-label={`Manage stores. ${connectionLabel}`} className={`relative ml-0.5 flex h-10 items-center justify-center gap-2 rounded-full px-2.5 text-xs font-semibold transition active:scale-[.98] md:max-w-[190px] md:px-3 ${setupOpen ? "bg-[#f4e2d6] text-[#8f421b]" : "bg-white/70 text-[#5c463b] hover:bg-[#f6ece4]"}`}><Storefront size={18} className="shrink-0 text-[#c6531d]" /><span className="hidden truncate md:block">{connectionLabel}</span><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} aria-hidden="true" /></button>
+          <button onClick={() => setAccountSettingsOpen(true)} aria-label={`Open account and store settings. ${connectionLabel}`} className={`relative ml-0.5 grid size-10 place-items-center rounded-full transition active:scale-[.98] ${accountSettingsOpen ? "bg-[#f4e2d6] text-[#8f421b]" : "bg-white/70 text-[#5c463b] hover:bg-[#f6ece4]"}`}><Storefront size={18} className="text-[#c6531d]" /><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} aria-hidden="true" /></button>
         </nav>
       </div>
     </header>
@@ -757,6 +749,39 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         </motion.form>}
       </AnimatePresence>
     </div>
+
+    <AccountSettingsSheet
+      open={accountSettingsOpen}
+      onOpenChange={setAccountSettingsOpen}
+      identity={{ name: userName, email: user?.primaryEmailAddress?.emailAddress }}
+      commerceMode={commerceMode}
+      languageLabel={String((user?.unsafeMetadata.gharsaathiProfile as { language?: string } | undefined)?.language ?? "hinglish").replace(/^./, (letter) => letter.toUpperCase())}
+      privacySummary="You control saved preferences"
+      stores={[
+        { id: "swiggy", name: "Swiggy Instamart", connected: connected === true, detail: commerceMode === "demo" ? "Demo catalogue" : connected ? (selectedAddress?.tag || selectedAddress?.category || "Connected") : "Not connected" },
+        { id: "zepto", name: "Zepto", connected: zeptoConnected === true, detail: commerceMode === "demo" ? "Demo catalogue" : zeptoSearchReady ? "Search ready" : zeptoConnected ? "Connected" : "Not connected" },
+      ]}
+      addresses={[
+        ...addresses.map((address) => ({ id: `swiggy:${address.id}`, label: address.tag || address.category || "Swiggy address", detail: address.address_line, selected: addressId === address.id })),
+        ...zeptoAddresses.map((address) => ({ id: `zepto:${address.id}`, label: address.tag || address.category || "Zepto address", detail: address.address_line, selected: zeptoAddressId === address.id })),
+      ]}
+      onConnectStore={() => { setAccountSettingsOpen(false); setSetupOpen(true); }}
+      onDisconnectStore={() => { setAccountSettingsOpen(false); setSetupOpen(true); }}
+      onLanguageChange={(language) => {
+        if (!user) return;
+        const currentProfile = user.unsafeMetadata.gharsaathiProfile as Record<string, unknown> | undefined;
+        void user.update({ unsafeMetadata: { ...user.unsafeMetadata, gharsaathiProfile: { ...currentProfile, language } } });
+      }}
+      onManagePrivacy={() => { setAccountSettingsOpen(false); setSetupOpen(true); }}
+      onManageAddresses={() => { setAccountSettingsOpen(false); setSetupOpen(true); }}
+      onSelectAddress={(value) => {
+        const [provider, ...idParts] = value.split(":");
+        const id = idParts.join(":");
+        if (provider === "zepto") void selectZeptoAddress(id);
+        else void selectAddress(id);
+      }}
+      onSignOut={() => void signOut({ redirectUrl: "/" })}
+    />
 
     <AnimatePresence>
       {setupOpen && (

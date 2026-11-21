@@ -52,6 +52,20 @@ ENV_PATH="$(resolve_env_file)"
 ensure_local_postgres
 export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://${USER}@127.0.0.1:5432/equal_ai}"
 export COMMERCE_MODE="${COMMERCE_MODE:-demo}"
+
+# Clerk's Next.js setup keeps the development instance keys in the frontend
+# env file. Reuse only the server secret for the local FastAPI process when the
+# root env has not defined it; never source or execute the env file.
+if [[ -z "${CLERK_SECRET_KEY:-}" && -f "${REPO_ROOT}/frontend/.env.local" ]]; then
+  while IFS='=' read -r env_key env_value; do
+    if [[ "${env_key}" == "CLERK_SECRET_KEY" ]]; then
+      export CLERK_SECRET_KEY="${env_value%$'\r'}"
+      break
+    fi
+  done < "${REPO_ROOT}/frontend/.env.local"
+fi
+export CLERK_AUTHORIZED_PARTIES_CSV="${CLERK_AUTHORIZED_PARTIES_CSV:-http://localhost:3003,http://127.0.0.1:3003}"
+
 SWIGGY_STORE="${SWIGGY_TOKEN_STORE_PATH:-}"
 if [[ -z "${SWIGGY_STORE}" && -f "${HOME}/Downloads/equal-ai/backend/.data/swiggy_connection.enc" ]]; then
   SWIGGY_STORE="${HOME}/Downloads/equal-ai/backend/.data/swiggy_connection.enc"

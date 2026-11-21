@@ -11,6 +11,7 @@ from app.api.tracking import router as tracking_router
 from app.api.zepto import router as zepto_router
 from app.api.zepto_checkout import router as zepto_checkout_router
 from app.api.memory import router as memory_router
+from app.api.legal_consent import router as legal_consent_router
 from app.api.purchase_memory import router as purchase_memory_router
 from app.api.voice import router as voice_router
 from app.core.config import get_settings
@@ -52,6 +53,7 @@ app.add_middleware(
     expose_headers=["Retry-After"],
 )
 app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])
+app.include_router(legal_consent_router, prefix="/api/legal-consent", tags=["Legal consent"])
 app.include_router(
     purchase_memory_router,
     prefix="/api/memory",

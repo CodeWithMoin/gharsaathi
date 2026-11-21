@@ -1,0 +1,5 @@
+import Link from "next/link";
+
+export default function PrivacyPage() {
+  return <main className="min-h-[100dvh] bg-[#f8f2ea] px-6 py-12 text-[#35241c]"><article className="mx-auto max-w-2xl"><Link href="/" className="text-sm font-semibold text-[#9d421a] underline underline-offset-2">Back to GharSaathi</Link><p className="mt-10 text-xs font-semibold tracking-[.16em] text-[#c6531d]">LEGAL</p><h1 className="font-display mt-3 text-4xl font-semibold tracking-[-.05em]">Privacy Policy</h1><p className="mt-3 text-sm text-[#806f65]">Version 2026-11-22</p><section className="mt-10 space-y-6 text-sm leading-7 text-[#5f4a3f]"><p>We use account, conversation, and shopping information to provide GharSaathi. Provider credentials remain server-side and are not requested in chat.</p><p>Personalisation is optional and is not part of accepting these terms. Shopping-history import requires a separate action and can be turned off and deleted from settings.</p><p>We record the legal-policy version and time that an authenticated account accepts it so we can respect current consent.</p></section></article></main>;
+}

@@ -63,6 +63,28 @@ class MemoryEventType(str, enum.Enum):
     DELETED = "deleted"
 
 
+class LegalConsentRecord(Base):
+    """A versioned record of an authenticated user's legal acceptance."""
+
+    __tablename__ = "legal_consents"
+    __table_args__ = (
+        UniqueConstraint("user_id", "terms_version", name="uq_legal_consent_user_version"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128), index=True)
+    terms_version: Mapped[str] = mapped_column(String(64))
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    personalization_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+    personalization_decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class MemorySubject(Base):
     __tablename__ = "memory_subjects"
     __table_args__ = (
