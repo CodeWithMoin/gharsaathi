@@ -358,6 +358,9 @@ class BasketToolExecutor:
             return _error(f"The {store.label} basket is empty.")
         result = await self.approvals.request(basket.id)
         quote = result.quote
+        # Imported here: app.api.basket -> app.dependencies -> app.voice is a cycle.
+        from app.api.basket import approval_request_out
+
         return ToolOutcome(
             model_output={
                 "status": "awaiting_user_approval",
@@ -396,6 +399,9 @@ class BasketToolExecutor:
                     "eta_text": quote.eta_text,
                 },
                 "basket": _basket_ui(result.basket, store),
+                # Same shape as POST /api/basket/approval so the basket panel can
+                # show this exact bill without requesting (and superseding) a new one.
+                "request": approval_request_out(result).model_dump(mode="json"),
             },
         )
 

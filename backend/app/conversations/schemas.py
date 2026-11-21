@@ -4,6 +4,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# A long voice session produces many spoken turns, and a single turn can run long.
+MAX_CHAT_MESSAGES = 1_000
+MAX_CHAT_MESSAGE_CHARS = 20_000
+
 
 class PriceSnapshot(BaseModel):
     mrp: float = Field(ge=0)
@@ -30,7 +34,7 @@ class ProductSnapshot(BaseModel):
 class ChatMessageSnapshot(BaseModel):
     id: str = Field(min_length=1, max_length=128)
     role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=10_000)
+    content: str = Field(min_length=1, max_length=MAX_CHAT_MESSAGE_CHARS)
     modality: Literal["text", "voice"] = "text"
     created_at: datetime
 
@@ -48,7 +52,7 @@ class ConversationStateUpsert(BaseModel):
     submitted_query: str = Field(default="", max_length=120)
     products: list[ProductSnapshot] = Field(default_factory=list, max_length=100)
     searched: bool = False
-    messages: list[ChatMessageSnapshot] = Field(default_factory=list, max_length=200)
+    messages: list[ChatMessageSnapshot] = Field(default_factory=list, max_length=MAX_CHAT_MESSAGES)
     results_after_message_id: str | None = Field(default=None, max_length=128)
 
     @field_validator("submitted_query")

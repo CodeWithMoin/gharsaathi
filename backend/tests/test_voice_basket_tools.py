@@ -101,6 +101,12 @@ async def test_voice_request_approval_only_requests_review_never_places_order() 
     assert result["model_output"]["status"] == "awaiting_user_approval"
     assert result["ui_event"]["type"] == "basket.approval_requested"
     assert result["ui_event"]["approval"]["payable"] == "₹184"
+    request = result["ui_event"]["request"]
+    assert request["approval"]["id"] == result["ui_event"]["approval"]["id"]
+    assert request["approval"]["payable"] == {"paise": 18400, "display": "₹184"}
+    assert request["quote"]["payable"]["paise"] == 18400
+    assert request["basket"]["lines"][0]["name"] == "Oil"
+    assert isinstance(request["item_total_matches"], bool)
     approvals = await world.approval_repo.for_basket(result["ui_event"]["approval"]["basket_id"])
     assert [approval.status for approval in approvals] == [ApprovalStatus.PENDING]
 

@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     live_model: str = "gpt-live-1.1"
     live_voice: str = "nira"
     live_backend_model: str = "gpt-6-luna"
+    # Dev diagnostic: log content-free sideband event summaries (type, id field names, timing).
+    voice_event_log: bool = False
     memory_extraction_model: str = "gpt-4o-mini"
     jev_api_key: SecretStr = SecretStr("")
     jev_base_url: str = "https://api.typesafe.ai/v1"

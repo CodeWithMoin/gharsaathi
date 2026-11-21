@@ -545,7 +545,7 @@ export function BasketPanel({
                 <li key={line.ref.variant_id} className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 py-4 ${line.available ? "" : "opacity-60"}`}>
                   <div className="min-w-0">
                     {line.brand && <p className="truncate text-[9px] font-semibold uppercase tracking-[.12em] text-[#bd7047]">{line.brand}</p>}
-                    <h3 className="mt-0.5 truncate text-sm font-semibold text-[#3b2a22]">{line.name}</h3>
+                    <h3 className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5 text-[#3b2a22]">{line.name}</h3>
                     <p className="mt-0.5 truncate text-xs text-[#89766a]">{[line.pack_size, `${line.unit_price.display} each`].filter(Boolean).join(" · ")}</p>
                     {!line.available && <p className="mt-1 text-[11px] font-medium text-[#a44739]">No longer available</p>}
                     <div className="mt-3 flex items-center gap-2">
