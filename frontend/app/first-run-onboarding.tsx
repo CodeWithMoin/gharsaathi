@@ -2,7 +2,7 @@
 
 import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, ArrowsLeftRight, Check, Microphone, ShieldCheck } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, BellRinging, Brain, Calculator, Check, Microphone } from "@phosphor-icons/react";
 import Image from "next/image";
 import { FormEvent, ReactNode, useMemo, useState } from "react";
 
@@ -32,22 +32,22 @@ function LoadingSplash() {
 
 const featureSlides = [
   {
-    eyebrow: "VOICE FIRST",
-    title: "Bas bol dijiye.",
-    description: "Doodh ho, monthly list ho, ya batteries—Hindi, English, ya Hinglish mein naturally boliye.",
-    icon: <Microphone size={38} weight="duotone" />,
+    eyebrow: "HOUSEHOLD MEMORY",
+    title: "Aapke ghar ki choices yaad.",
+    description: "Aapki permission se brands, pack sizes, quantities, aur corrections yaad rahengi—har baar wahi baat dobara nahi.",
+    icon: <Brain size={38} weight="duotone" />,
   },
   {
-    eyebrow: "ONE CLEAR CHOICE",
-    title: "Stores ko saath mein dekhiye.",
-    description: "Swiggy aur Zepto ke useful options, pack sizes, delivery time, aur final value ek jagah compare honge.",
-    icon: <ArrowsLeftRight size={38} weight="duotone" />,
+    eyebrow: "BASKET INTELLIGENCE",
+    title: "Sirf item price nahi.",
+    description: "Equivalent packs, availability, fees, offers, delivery time, aur final payable—poore basket ka balanced decision.",
+    icon: <Calculator size={38} weight="duotone" />,
   },
   {
-    eyebrow: "YOU STAY IN CONTROL",
-    title: "Approval ke bina kuch nahi.",
-    description: "GharSaathi basket ready karegi. Exact bill badla, toh approval dobara—automatic purchase kabhi nahi.",
-    icon: <ShieldCheck size={38} weight="duotone" />,
+    eyebrow: "SHOP TO SUPPORT",
+    title: "Order ke baad bhi saath.",
+    description: "Meaningful delivery updates aur issue context isi conversation mein—support ke liye order details dobara samjhana nahi.",
+    icon: <BellRinging size={38} weight="duotone" />,
   },
 ];
 
@@ -69,7 +69,7 @@ export function PublicOnboarding() {
           <div className="mt-[8dvh]"><LogoMark /></div>
           <p className="font-display mt-6 text-[32px] font-semibold tracking-[-.05em]">GharSaathi</p>
           <h1 className="mt-10 text-[30px] font-semibold leading-[1.12] tracking-[-.045em]">Ghar ka shopping,<br />bas bol dijiye.</h1>
-          <p className="mt-4 max-w-[29ch] text-[15px] leading-6 text-[#806f65]">Aap bolenge. Main useful options compare karke basket ready karungi.</p>
+          <p className="mt-4 max-w-[29ch] text-[15px] leading-6 text-[#806f65]">Aap bolenge. Main ghar ki choices samajhkar shopping ka kaam karungi—final decision hamesha aapka.</p>
         </motion.section>}
 
         {feature && <motion.section key={feature.eyebrow} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: .22 }} className="flex flex-1 flex-col">
