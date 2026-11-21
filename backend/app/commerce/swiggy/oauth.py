@@ -68,12 +68,25 @@ class SwiggyOAuthClient:
 
     async def authorization_url(self) -> str:
         client_id = await self._register_client()
+        connection = await self.store.load()
+        now = datetime.now(UTC)
+        if connection is not None:
+            active = [
+                (state, pending)
+                for state, pending in connection.pending_authorizations.items()
+                if pending.client_id == client_id
+                and now - pending.created_at < timedelta(minutes=10)
+            ]
+            if active:
+                state, pending = max(active, key=lambda item: item[1].created_at)
+                return self._authorization_url(
+                    client_id=client_id,
+                    state=state,
+                    verifier=pending.code_verifier,
+                )
+
         state = secrets.token_urlsafe(32)
         verifier = secrets.token_urlsafe(64)
-        challenge = base64.urlsafe_b64encode(
-            hashlib.sha256(verifier.encode("ascii")).digest()
-        ).rstrip(b"=").decode("ascii")
-        now = datetime.now(UTC)
         await self.store.save_pending(
             state,
             PendingAuthorization(
@@ -82,6 +95,16 @@ class SwiggyOAuthClient:
                 created_at=now,
             ),
         )
+        return self._authorization_url(
+            client_id=client_id,
+            state=state,
+            verifier=verifier,
+        )
+
+    def _authorization_url(self, *, client_id: str, state: str, verifier: str) -> str:
+        challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(verifier.encode("ascii")).digest()
+        ).rstrip(b"=").decode("ascii")
         query = urlencode(
             {
                 "response_type": "code",

@@ -49,6 +49,7 @@ async def test_oauth_pkce_state_and_encrypted_persistence(tmp_path: Path) -> Non
     ) as client:
         oauth = SwiggyOAuthClient(app_settings, store, client)
         authorization_url = await oauth.authorization_url()
+        assert await oauth.authorization_url() == authorization_url
         query = parse_qs(urlparse(authorization_url).query)
         assert query["code_challenge_method"] == ["S256"]
         assert query["scope"] == ["mcp:tools"]

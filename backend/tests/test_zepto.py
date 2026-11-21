@@ -58,6 +58,7 @@ async def test_zepto_oauth_uses_pkce_resource_and_encrypted_storage(
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         oauth = ZeptoOAuthClient(settings, store, http_client)
         authorization_url = await oauth.authorization_url()
+        assert await oauth.authorization_url() == authorization_url
         query = parse_qs(urlparse(authorization_url).query)
         assert query["code_challenge_method"] == ["S256"]
         assert query["scope"] == ["tools:read"]
