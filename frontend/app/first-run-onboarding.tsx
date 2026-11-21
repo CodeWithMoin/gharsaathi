@@ -33,20 +33,23 @@ function LoadingSplash() {
 const featureSlides = [
   {
     eyebrow: "YOUR HOUSEHOLD",
-    title: "Aapki pasand, yaad.",
-    description: "Aapki permission se brand, pack size aur quantity yaad rahenge.",
+    title: "Aapki pasand, mujhe yaad rahegi.",
+    description: "Aapki permission se brands aur pack sizes yaad rakhungi.",
+    note: "Dobara batana nahi padega.",
     icon: <Brain size={38} weight="duotone" />,
   },
   {
-    eyebrow: "SMART COMPARISON",
-    title: "Sahi basket, ek baar mein.",
-    description: "Swiggy aur Zepto par stock, fees, offers aur delivery milaakar compare.",
+    eyebrow: "SMART SHOPPING",
+    title: "Har jagah dekhein. Behtar chunein.",
+    description: "Swiggy aur Zepto ke available options compare karungi.",
+    note: "Ek jagah comparison. Faisla aapka.",
     icon: <Calculator size={38} weight="duotone" />,
   },
   {
-    eyebrow: "AFTER YOU ORDER",
-    title: "Order ka update, yahin.",
-    description: "Delivery changes aur issue details isi chat mein. Support ke liye context ready.",
+    eyebrow: "BEYOND CHECKOUT",
+    title: "Order se delivery tak, main saath hoon.",
+    description: "Tracking mile toh updates yahin. Issue ho toh support details ready.",
+    note: "Control hamesha aapka.",
     icon: <BellRinging size={38} weight="duotone" />,
   },
 ];
@@ -61,23 +64,27 @@ export function PublicOnboarding() {
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]">
       <div className="flex h-10 items-center justify-between">
         {step > 0 ? <button type="button" onClick={() => setStep((current) => current - 1)} aria-label="Previous onboarding screen" className="grid size-10 place-items-center rounded-full border border-[#e1d0c4] bg-[#fffdf9] text-[#70584b] active:scale-[.96]"><ArrowLeft size={18} /></button> : <span />}
+        {step < authStep && <span className="text-[10px] font-semibold tracking-[.16em] text-[#9b8172]">{String(step + 1).padStart(2, "0")} / {String(authStep).padStart(2, "0")}</span>}
         {isFeature && <button type="button" onClick={() => setStep(authStep)} className="px-2 py-2 text-xs font-semibold text-[#806f65]">Skip</button>}
+        {step === 0 && <span className="w-10" aria-hidden="true" />}
       </div>
 
       <AnimatePresence mode="wait" initial={false}>
         {step === 0 && <motion.section key="intro" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .22 }} className="flex flex-1 flex-col items-center justify-center pb-2 text-center">
           <LogoMark />
           <p className="font-display mt-5 text-[30px] font-semibold tracking-[-.05em]">GharSaathi</p>
-          <h1 className="mt-8 text-[30px] font-semibold leading-[1.12] tracking-[-.045em]">Ghar ka shopping,<br />bas bol dijiye.</h1>
-          <p className="mt-4 max-w-[28ch] text-[15px] leading-6 text-[#806f65]">Aap bolenge. Main choices samajhkar options laungi. Final decision hamesha aapka.</p>
+          <h1 className="mt-7 text-[30px] font-semibold leading-[1.12] tracking-[-.045em]">Ghar ka shopping,<br />ab bas bolkar.</h1>
+          <p className="mt-4 max-w-[30ch] text-[15px] leading-6 text-[#806f65]">Aap boliye. Main products dhoondhkar basket taiyaar karungi.</p>
+          <p className="mt-3 text-[13px] font-semibold text-[#70584b]">Faisla hamesha aapka.</p>
         </motion.section>}
 
         {feature && <motion.section key={feature.eyebrow} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: .22 }} className="flex min-h-0 flex-1 items-center justify-center text-center">
           <div className="flex w-full -translate-y-2 flex-col items-center">
             <div className="grid size-20 place-items-center rounded-[26px] border border-[#e4c9b8] bg-[#fff8f2] text-[#c6531d] shadow-[0_24px_50px_-34px_rgba(101,52,27,.65)]">{feature.icon}</div>
             <p className="mt-7 text-[10px] font-semibold tracking-[.18em] text-[#c6531d]">{feature.eyebrow}</p>
-            <h1 className="font-display mt-3 max-w-[12ch] text-[36px] font-semibold leading-[1.08] tracking-[-.05em]">{feature.title}</h1>
-            <p className="mt-4 max-w-[29ch] text-[15px] leading-6 text-[#806f65]">{feature.description}</p>
+            <h1 className="font-display mt-3 max-w-[14ch] text-[34px] font-semibold leading-[1.08] tracking-[-.05em]">{feature.title}</h1>
+            <p className="mt-4 max-w-[31ch] text-[15px] leading-6 text-[#806f65]">{feature.description}</p>
+            <p className="mt-3 max-w-[31ch] text-[13px] font-semibold leading-5 text-[#70584b]">{feature.note}</p>
           </div>
         </motion.section>}
 
@@ -103,7 +110,7 @@ export function PublicOnboarding() {
         <div className="mb-5 flex justify-center gap-1.5" aria-label={`Onboarding screen ${step + 1} of ${authStep}`}>
           {Array.from({ length: authStep }, (_, index) => <span key={index} className={`h-1.5 rounded-full transition-all ${index === step ? "w-6 bg-[#c6531d]" : "w-1.5 bg-[#d9c7bb]"}`} />)}
         </div>
-        <button type="button" onClick={() => setStep((current) => Math.min(authStep, current + 1))} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition active:scale-[.98]">{step === 0 ? "See how it works" : step === authStep - 1 ? "Continue" : "Next"} <ArrowRight size={17} weight="bold" /></button>
+        <button type="button" onClick={() => setStep((current) => Math.min(authStep, current + 1))} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition active:scale-[.98]">{step === authStep - 1 ? "Get Started" : "Next"} <ArrowRight size={17} weight="bold" /></button>
       </div>}
     </div>
   </main>;
