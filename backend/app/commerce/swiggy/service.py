@@ -1,3 +1,6 @@
+import asyncio
+import time
+
 from app.commerce.swiggy.adapter import SwiggyInstamartAdapter
 from app.commerce.swiggy.client import SwiggyMcpClient
 from app.commerce.swiggy.models import (
@@ -19,6 +22,10 @@ class SwiggyService:
         self.oauth = oauth
         self.client = client
         self.adapter = adapter
+        self._search_cache: dict[
+            tuple[str, str, int], tuple[float, ProductSearchResult]
+        ] = {}
+        self._search_lock = asyncio.Lock()
 
     async def connection_status(self) -> ConnectionStatus:
         return await self.oauth.status()
@@ -49,4 +56,15 @@ class SwiggyService:
     async def search(
         self, query: str, address_id: str, offset: int
     ) -> ProductSearchResult:
-        return await self.adapter.search_products(query, address_id, offset)
+        normalized = " ".join(query.split())
+        cache_key = (address_id, normalized.casefold(), offset)
+        async with self._search_lock:
+            cached = self._search_cache.get(cache_key)
+            if cached is not None and time.monotonic() - cached[0] < 60:
+                return cached[1].model_copy(deep=True)
+            result = await self.adapter.search_products(normalized, address_id, offset)
+            self._search_cache[cache_key] = (
+                time.monotonic(),
+                result.model_copy(deep=True),
+            )
+            return result
