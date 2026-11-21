@@ -177,6 +177,8 @@ replying (2.2–3.7 s), so the observed replies would not have lost their openin
 - Clips are TTS, not real Hinglish speakers. TTS fillers have falling, "final"
   prosody, which probably hurts smart-turn compared with real hesitations. The model
   card reports 0.977 AUC on Hindi.
+- Live sessions ran before `main`'s prompt 1.8.0 (few-shot examples) was merged; they used
+  `LIVE_INSTRUCTIONS` 1.6.0 and should be re-run.
 - Live numbers come from n=3 end-of-turn and n=2 barge-in sessions per mode over
   WebSocket, with client delegation never answered. They show direction only. Live
   onset includes network and player-simulation timing.
