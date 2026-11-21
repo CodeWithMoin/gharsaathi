@@ -4,6 +4,14 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 
+from app.auth import UserIdDependency
+from app.commerce.demo import DemoSwiggyService
+from app.commerce.provider_state import (
+    ProviderAddressRepository,
+    cached_address_list,
+    is_demo_address_state,
+)
+from app.commerce.query_guard import non_search_reason
 from app.commerce.swiggy.errors import (
     SwiggyAuthenticationRequired,
     SwiggyConfigurationError,
@@ -11,7 +19,6 @@ from app.commerce.swiggy.errors import (
     SwiggyRateLimited,
     SwiggySchemaError,
 )
-from app.commerce.query_guard import non_search_reason
 from app.commerce.swiggy.models import (
     AddressList,
     AddressResolution,
@@ -22,12 +29,6 @@ from app.commerce.swiggy.models import (
     ProductSearchResult,
     ToolDescription,
 )
-from app.commerce.provider_state import (
-    ProviderAddressRepository,
-    cached_address_list,
-    is_demo_address_state,
-)
-from app.commerce.demo import DemoSwiggyService
 from app.core.config import get_settings
 from app.dependencies import SwiggyServiceDependency
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
@@ -35,7 +36,6 @@ from app.memory.personalization import excludes_product, personalize_search_quer
 from app.memory.schemas import MemoryRetrieveRequest
 from app.memory.service import MemoryService
 from app.oauth_readiness import local_callback_is_ready
-
 
 router = APIRouter()
 
@@ -83,7 +83,8 @@ def _raise_http(exc: Exception) -> None:
 
 
 @router.get("/connection", response_model=ConnectionStatus)
-async def connection(service: SwiggyServiceDependency) -> ConnectionStatus:
+async def connection(
+    _user: UserIdDependency,service: SwiggyServiceDependency) -> ConnectionStatus:
     try:
         return await service.connection_status()
     except Exception as exc:
@@ -164,7 +165,8 @@ async def disconnect(
 
 
 @router.get("/tools", response_model=list[ToolDescription])
-async def tools(service: SwiggyServiceDependency) -> list[ToolDescription]:
+async def tools(
+    _user: UserIdDependency,service: SwiggyServiceDependency) -> list[ToolDescription]:
     try:
         return await service.list_tools()
     except Exception as exc:
@@ -226,6 +228,7 @@ async def select_address(
 
 @router.post("/search", response_model=ProductSearchResult)
 async def search(
+    _user: UserIdDependency,
     body: SearchRequest, service: SwiggyServiceDependency
 ) -> ProductSearchResult:
     try:
