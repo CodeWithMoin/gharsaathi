@@ -639,7 +639,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
             <button type="button" onClick={() => setChatDrawerOpen(false)} aria-label="Close chats" className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#806f65] transition hover:bg-[#efe5dc] active:scale-[.96]"><X size={18} /></button>
           </div>
           <div className="px-3 pb-5 pt-2">
-            <label className="flex h-11 items-center gap-2 rounded-xl border border-[#e3d5cb] bg-white px-3 text-[#806f65] transition focus-within:border-[#c98d6c] focus-within:ring-2 focus-within:ring-[#efd8ca]">
+            <label className="flex h-11 items-center gap-2 rounded-2xl border border-[#e3d5cb] bg-white px-3 text-[#806f65] transition focus-within:border-[#c98d6c] focus-within:ring-2 focus-within:ring-[#efd8ca]">
               <MagnifyingGlass size={18} />
               <input value={chatSearch} onChange={(event) => setChatSearch(event.target.value)} placeholder="Search chats" className="min-w-0 flex-1 bg-transparent text-sm text-[#35241c] outline-none placeholder:text-[#a18c80]" />
               {chatSearch && <button type="button" onClick={() => setChatSearch("")} aria-label="Clear chat search" className="grid size-7 place-items-center rounded-lg text-[#9a8579] hover:bg-[#f4ebe4]"><X size={14} /></button>}
@@ -678,8 +678,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
               </motion.div>}
             </AnimatePresence>
             <div className="flex items-center gap-2">
-              <button type="button" onClick={() => void startNewChat()} className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#d95617] px-4 text-sm font-semibold text-white shadow-[0_12px_24px_-18px_rgba(177,70,20,.8)] transition hover:bg-[#c94d12] active:scale-[.97]"><NotePencil size={19} weight="bold" className="shrink-0" /> New chat</button>
-              <button type="button" onClick={() => setAccountMenuOpen((open) => !open)} aria-label={`Open GharSaathi account menu for ${userName}`} aria-expanded={accountMenuOpen} aria-controls="account-menu" title="Account" className="grid size-12 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-[15px] font-semibold uppercase text-[#9f451d] ring-1 ring-[#dfc9bb] transition hover:bg-[#ead2c2] active:scale-[.96]">
+              <button type="button" onClick={() => void startNewChat()} className="flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#d95617] px-4 text-[13px] font-semibold text-white transition hover:bg-[#c94d12] active:scale-[.97]"><NotePencil size={18} weight="bold" className="shrink-0" /> New chat</button>
+              <button type="button" onClick={() => setAccountMenuOpen((open) => !open)} aria-label={`Open GharSaathi account menu for ${userName}`} aria-expanded={accountMenuOpen} aria-controls="account-menu" title="Account" className="grid size-11 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-sm font-semibold uppercase text-[#9f451d] ring-1 ring-[#dfc9bb] transition hover:bg-[#ead2c2] active:scale-[.96]">
                 {userName.trim().charAt(0) || "G"}
               </button>
             </div>
