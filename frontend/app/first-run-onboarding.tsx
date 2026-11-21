@@ -1,7 +1,8 @@
 "use client";
 
 import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
-import { ArrowRight, Check, Microphone } from "@phosphor-icons/react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowLeft, ArrowRight, ArrowsLeftRight, Check, Microphone, ShieldCheck } from "@phosphor-icons/react";
 import Image from "next/image";
 import { FormEvent, ReactNode, useMemo, useState } from "react";
 
@@ -29,23 +30,77 @@ function LoadingSplash() {
   </main>;
 }
 
-function WelcomeScreen() {
-  return <main className="grain min-h-[100dvh] bg-[#f8f2ea] px-6 text-[#35241c]">
-    <div className="mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col items-center pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(4.5rem,env(safe-area-inset-top))] text-center">
-      <LogoMark />
-      <p className="font-display mt-6 text-[32px] font-semibold tracking-[-.05em]">GharSaathi</p>
-      <h1 className="mt-10 text-[30px] font-semibold leading-[1.12] tracking-[-.045em]">Ghar ka shopping,<br />bas bol dijiye.</h1>
-      <p className="mt-4 max-w-[29ch] text-[15px] leading-6 text-[#806f65]">Swiggy aur Zepto par compare karke basket ready karungi. Final approval hamesha aapka.</p>
+const featureSlides = [
+  {
+    eyebrow: "VOICE FIRST",
+    title: "Bas bol dijiye.",
+    description: "Doodh ho, monthly list ho, ya batteries—Hindi, English, ya Hinglish mein naturally boliye.",
+    icon: <Microphone size={38} weight="duotone" />,
+  },
+  {
+    eyebrow: "ONE CLEAR CHOICE",
+    title: "Stores ko saath mein dekhiye.",
+    description: "Swiggy aur Zepto ke useful options, pack sizes, delivery time, aur final value ek jagah compare honge.",
+    icon: <ArrowsLeftRight size={38} weight="duotone" />,
+  },
+  {
+    eyebrow: "YOU STAY IN CONTROL",
+    title: "Approval ke bina kuch nahi.",
+    description: "GharSaathi basket ready karegi. Exact bill badla, toh approval dobara—automatic purchase kabhi nahi.",
+    icon: <ShieldCheck size={38} weight="duotone" />,
+  },
+];
 
-      <div className="mt-auto w-full pt-12">
-        <SignUpButton mode="redirect" forceRedirectUrl="/">
-          <button className="flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition active:scale-[.98]">Get started <ArrowRight size={17} weight="bold" /></button>
-        </SignUpButton>
-        <SignInButton mode="redirect" forceRedirectUrl="/">
-          <button className="mt-3 w-full rounded-full border border-[#ddc8ba] bg-[#fffdf9] px-5 py-3.5 text-sm font-semibold text-[#5c463b] transition active:scale-[.98]">I already have an account</button>
-        </SignInButton>
-        <p className="mt-5 text-[10px] leading-4 text-[#9a8579]">Secure sign-in by Clerk · Passwords and OTPs never enter GharSaathi chat</p>
+export function PublicOnboarding() {
+  const [step, setStep] = useState(0);
+  const authStep = featureSlides.length + 1;
+  const isFeature = step > 0 && step < authStep;
+  const feature = isFeature ? featureSlides[step - 1] : null;
+
+  return <main className="grain min-h-[100dvh] bg-[#f8f2ea] px-6 text-[#35241c]">
+    <div className="mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]">
+      <div className="flex h-10 items-center justify-between">
+        {step > 0 ? <button type="button" onClick={() => setStep((current) => current - 1)} aria-label="Previous onboarding screen" className="grid size-10 place-items-center rounded-full border border-[#e1d0c4] bg-[#fffdf9] text-[#70584b] active:scale-[.96]"><ArrowLeft size={18} /></button> : <span />}
+        {isFeature && <button type="button" onClick={() => setStep(authStep)} className="px-2 py-2 text-xs font-semibold text-[#806f65]">Skip</button>}
       </div>
+
+      <AnimatePresence mode="wait" initial={false}>
+        {step === 0 && <motion.section key="intro" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .22 }} className="flex flex-1 flex-col items-center text-center">
+          <div className="mt-[8dvh]"><LogoMark /></div>
+          <p className="font-display mt-6 text-[32px] font-semibold tracking-[-.05em]">GharSaathi</p>
+          <h1 className="mt-10 text-[30px] font-semibold leading-[1.12] tracking-[-.045em]">Ghar ka shopping,<br />bas bol dijiye.</h1>
+          <p className="mt-4 max-w-[29ch] text-[15px] leading-6 text-[#806f65]">Aap bolenge. Main useful options compare karke basket ready karungi.</p>
+        </motion.section>}
+
+        {feature && <motion.section key={feature.eyebrow} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: .22 }} className="flex flex-1 flex-col">
+          <div className="mt-[10dvh] grid size-20 place-items-center rounded-[26px] border border-[#e4c9b8] bg-[#fff8f2] text-[#c6531d] shadow-[0_24px_50px_-34px_rgba(101,52,27,.65)]">{feature.icon}</div>
+          <p className="mt-10 text-[10px] font-semibold tracking-[.18em] text-[#c6531d]">{feature.eyebrow}</p>
+          <h1 className="font-display mt-3 max-w-[12ch] text-[36px] font-semibold leading-[1.08] tracking-[-.05em]">{feature.title}</h1>
+          <p className="mt-5 max-w-[31ch] text-[15px] leading-6 text-[#806f65]">{feature.description}</p>
+        </motion.section>}
+
+        {step === authStep && <motion.section key="auth" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: .22 }} className="flex flex-1 flex-col items-center text-center">
+          <div className="mt-[7dvh]"><LogoMark /></div>
+          <h1 className="font-display mt-8 text-[34px] font-semibold leading-[1.1] tracking-[-.05em]">Apna GharSaathi<br />ready karein.</h1>
+          <p className="mt-4 max-w-[30ch] text-sm leading-6 text-[#806f65]">Secure account se chat, preferences, baskets, aur approvals aapke hi rahenge.</p>
+          <div className="mt-auto w-full pt-10">
+            <SignUpButton mode="redirect" forceRedirectUrl="/">
+              <button className="flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition active:scale-[.98]">Create account <ArrowRight size={17} weight="bold" /></button>
+            </SignUpButton>
+            <SignInButton mode="redirect" forceRedirectUrl="/">
+              <button className="mt-3 w-full rounded-full border border-[#ddc8ba] bg-[#fffdf9] px-5 py-3.5 text-sm font-semibold text-[#5c463b] transition active:scale-[.98]">I already have an account</button>
+            </SignInButton>
+            <p className="mt-5 text-[10px] leading-4 text-[#9a8579]">Secure sign-in by Clerk · Passwords and OTPs never enter GharSaathi chat</p>
+          </div>
+        </motion.section>}
+      </AnimatePresence>
+
+      {step < authStep && <div className="mt-auto pt-8">
+        <div className="mb-5 flex justify-center gap-1.5" aria-label={`Onboarding screen ${step + 1} of ${authStep}`}>
+          {Array.from({ length: authStep }, (_, index) => <span key={index} className={`h-1.5 rounded-full transition-all ${index === step ? "w-6 bg-[#c6531d]" : "w-1.5 bg-[#d9c7bb]"}`} />)}
+        </div>
+        <button type="button" onClick={() => setStep((current) => Math.min(authStep, current + 1))} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition active:scale-[.98]">{step === 0 ? "See how it works" : step === authStep - 1 ? "Continue" : "Next"} <ArrowRight size={17} weight="bold" /></button>
+      </div>}
     </div>
   </main>;
 }
@@ -60,7 +115,7 @@ export function FirstRunOnboarding({ children }: { children: (profile: { justCom
   const [justCompleted, setJustCompleted] = useState(false);
 
   if (!isLoaded) return <LoadingSplash />;
-  if (!isSignedIn || !user) return <WelcomeScreen />;
+  if (!isSignedIn || !user) return <PublicOnboarding />;
   if (savedProfile?.complete || justCompleted) return <>{children({ justCompleted, firstName: user.firstName?.trim() || "there" })}</>;
 
   const activeUser = user;
