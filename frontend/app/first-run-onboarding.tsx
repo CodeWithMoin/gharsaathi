@@ -96,7 +96,7 @@ export function PublicOnboarding() {
             <SignInButton mode="redirect" forceRedirectUrl="/">
               <button className="mt-3 w-full rounded-full border border-[#ddc8ba] bg-[#fffdf9] px-5 py-3.5 text-sm font-semibold text-[#5c463b] transition active:scale-[.98]">I already have an account</button>
             </SignInButton>
-            <p className="mt-5 text-[10px] leading-4 text-[#9a8579]">Secure sign-in by Clerk · Passwords and OTPs never enter GharSaathi chat</p>
+            <p className="mt-5 text-[10px] leading-4 text-[#9a8579]">Secure sign-in. Passwords and OTPs stay outside your GharSaathi chat.</p>
           </div>
         </motion.section>}
       </AnimatePresence>
