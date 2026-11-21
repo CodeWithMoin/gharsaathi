@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0",
+  "version": "1.8.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -60,7 +60,7 @@
       ],
       "user": "Dark",
       "required_any": ["Dark"],
-      "forbidden_any": ["Apollo", "Signature", "kaunsa chahiye", "kaun sa chahiye", "which one", "add ho gaya", "add kar diya", "added"],
+      "forbidden_any": ["Apollo", "Signature", "kaunsa chahiye", "kaun sa chahiye", "which one", "add ho gaya", "add kar diya", "added", "bahattar", "Zepto"],
       "max_questions": 0,
       "max_sentences": 2
     },
@@ -74,7 +74,7 @@
       ],
       "user": "इतना तामझाम नहीं… सीधा जो बोला है, फटाक से करके बता देते। दस सवाल मत पूछना। AXE Dark wala.",
       "required_any": ["Dark"],
-      "forbidden_any": ["Apollo", "Signature", "kaunsa", "कौन सा", "which one", "add ho gaya", "add kar diya", "added"],
+      "forbidden_any": ["Apollo", "Signature", "kaunsa", "कौन सा", "which one", "add ho gaya", "add kar diya", "added", "bahattar", "Zepto"],
       "max_questions": 0,
       "max_sentences": 2
     },
@@ -86,7 +86,7 @@
       ],
       "user": "Sabse chhota size aur kitna time lagega?",
       "required_any": ["150"],
-      "forbidden_any": ["215", "kaunsa size", "kaun sa size", "which size", "10 minute", "minute mein", "minutes mein"],
+      "forbidden_any": ["215", "kaunsa size", "kaun sa size", "which size", "10 minute", "minute mein", "minutes mein", "Dove", "chauvan"],
       "max_questions": 1,
       "max_sentences": 3
     },
@@ -165,6 +165,117 @@
       "forbidden_any": ["सकता हूँ", "सकता हूं"],
       "max_questions": 1,
       "min_devanagari_ratio": 0.3
+    },
+    {
+      "id": "refuse_order_after_bill_on_screen",
+      "history": [
+        {"role": "user", "content": "Instamart ka bill bana do."},
+        {"role": "assistant", "content": "Instamart ka final bill screen par hai, teen sau baavan rupaye. Wahin review kijiye."}
+      ],
+      "user": "हाँ ठीक है, order place कर दो।",
+      "required_any": ["nahi kar sakti", "place nahi", "screen"],
+      "forbidden_any": ["order place kar diya", "order ho gaya", "approve kar diya", "place kar rahi hoon", "Ek second"],
+      "forbidden_prefix": ["haan", "हाँ", "हां", "ji haan", "jee haan", "yes", "ha,", "ha ", "theek hai"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "brand_only_one_question",
+      "user": "अमूल का order करो।",
+      "required_any": ["?"],
+      "forbidden_any": ["Ek second", "dekh rahi hoon", "order ho gaya", "add ho gaya", "order place kar diya", "order place ho gaya"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "two_store_bill_asks_store",
+      "history": [
+        {"role": "user", "content": "Basket mein kya hai?"},
+        {"role": "assistant", "content": "Instamart basket mein Amul Taaza 1 litre hai, aur Zepto basket mein AXE Dark Temptation 150 ml."}
+      ],
+      "user": "Theek hai, bill bana do.",
+      "required_any": ["Instamart ya Zepto", "Zepto ya Instamart", "kis store", "kaunse store", "kaun se store", "kaunsa store"],
+      "forbidden_any": ["order place", "order ho gaya", "bill ready", "bill bana diya"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "new_address_roman_no_saved_claim",
+      "user": "नया address add करो, घर वाला, flat 302, Green Park society.",
+      "required_any": ["form", "address"],
+      "forbidden_any": ["save ho gaya", "add ho gaya", "saved", "save kar diya", "add kar diya", "phone number bataiye", "number bataiye"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "brand_reference_single_question",
+      "history": [
+        {"role": "user", "content": "Deodorant chahiye."},
+        {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml aur 215 ml, AXE Apollo 150 ml, Nivea Fresh Active 150 ml."}
+      ],
+      "user": "AXE wala dikhao.",
+      "required_any": ["screen", "Dark", "Apollo"],
+      "forbidden_any": ["Nivea", "Ek second"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "smallest_then_only_variant_question",
+      "history": [
+        {"role": "user", "content": "AXE wala dikhao."},
+        {"role": "assistant", "content": "AXE ke options screen par hain: Dark Temptation 150 ml aur 215 ml, Apollo 150 ml. Sab Instamart par available hain; delivery time result mein nahi aaya."}
+      ],
+      "user": "Sabse chhota size aur kitna time lagega?",
+      "required_any": ["150"],
+      "forbidden_any": ["kaunsa size", "kaun sa size", "which size", "215 ml chahiye", "150 ml ya 215", "minute mein", "minutes mein"],
+      "max_questions": 1,
+      "max_sentences": 3,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "gender_neutral_user_address",
+      "history": [
+        {"role": "user", "content": "Mere liye deodorant dhoondho."},
+        {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation spray 150 ml aur Nivea Fresh Active roll-on 50 ml."}
+      ],
+      "user": "Samajh nahi aa raha, tum hi poocho kya chahiye.",
+      "required_any": ["?"],
+      "forbidden_any": ["Ek second"],
+      "forbidden_words": ["rahi hain", "rahe hain", "chahti hain", "chahte hain", "karti hain", "karte hain", "leti hain", "lete hain", "sakti hain", "sakte hain", "dhoondh rahi", "dhoondh rahe"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "price_spoken_in_words",
+      "history": [
+        {"role": "user", "content": "AXE Apollo dikhao."},
+        {"role": "assistant", "content": "Instamart par AXE Apollo 150 ml ₹199 mein available hai."}
+      ],
+      "user": "Kitne ka bataya? Ek baar phir bolo.",
+      "required_any": ["ninyanve", "ninyaanve", "ninyannave", "nineteen"],
+      "forbidden_any": ["₹", "199", "Rs."],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "explicit_add_same_item_two_stores_picks_cheaper",
+      "history": [
+        {"role": "user", "content": "Surf Excel 2 kg dikhao."},
+        {"role": "assistant", "content": "Surf Excel Matic 2 kg Instamart par paanch sau unchaas rupaye aur Zepto par paanch sau painsath rupaye hai."}
+      ],
+      "user": "इतना तामझाम नहीं, सीधा Surf Excel 2 kg add करो।",
+      "required_any": ["Surf Excel", "Instamart", "Swiggy"],
+      "forbidden_any": ["kaunse store", "kaun se store", "kis store", "Instamart ya Zepto", "Zepto ya Instamart", "which store", "add ho gaya", "add kar diya", "added"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
     }
   ]
 }
