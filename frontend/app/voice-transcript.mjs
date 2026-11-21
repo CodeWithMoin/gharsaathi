@@ -2,8 +2,12 @@
  * Normalize transcript events emitted by both the Live API and older Realtime
  * event names used by local development snapshots.
  *
+ * GPT-Live transcript deltas carry `start_ms`/`end_ms` on the session timeline
+ * but no item id and no done event, so the timing is preserved for the turn
+ * tracker to find message boundaries.
+ *
  * @param {unknown} raw
- * @returns {{ role: "user" | "assistant", operation: "append" | "replace" | "finish", text: string, sourceId?: string } | null}
+ * @returns {{ role: "user" | "assistant", operation: "append" | "replace" | "finish", text: string, sourceId?: string, startMs?: number, endMs?: number } | null}
  */
 export function mapRealtimeTranscriptEvent(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -27,5 +31,45 @@ export function mapRealtimeTranscriptEvent(raw) {
   const text = operation === "append" ? delta : transcript;
   if (operation === "replace" && !text) operation = "finish";
   const source = event.item_id ?? event.response_id;
-  return { role, operation, text, ...(typeof source === "string" && source ? { sourceId: source } : {}) };
+  const startMs = finiteNumber(event.start_ms);
+  const endMs = finiteNumber(event.end_ms);
+  return {
+    role,
+    operation,
+    text,
+    ...(typeof source === "string" && source ? { sourceId: source } : {}),
+    ...(startMs !== undefined ? { startMs } : {}),
+    ...(endMs !== undefined ? { endMs } : {}),
+  };
+}
+
+/** @param {unknown} value */
+function finiteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+const USER_STARTS = new Set(["input_audio_buffer.speech_started"]);
+const USER_ENDS = new Set(["input_audio_buffer.speech_stopped", "input_audio_buffer.committed"]);
+const ASSISTANT_STARTS = new Set(["response.created"]);
+const ASSISTANT_ENDS = new Set(["response.done", "response.output_audio.done", "response.audio.done"]);
+const SESSION_ENDS = new Set(["session.paused", "session.closed"]);
+
+/**
+ * Maps top-level turn-boundary events. Realtime sends speech/response lifecycle
+ * events; GPT-Live only pauses or closes the session. Nested `response.event`
+ * payloads describe backend reasoning, not speech, and are ignored.
+ *
+ * @param {unknown} raw
+ * @returns {{ role: "user" | "assistant" | "both", operation: "start" | "end" } | null}
+ */
+export function mapRealtimeBoundaryEvent(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const type = /** @type {Record<string, unknown>} */ (raw).type;
+  if (typeof type !== "string") return null;
+  if (USER_STARTS.has(type)) return { role: "user", operation: "start" };
+  if (USER_ENDS.has(type)) return { role: "user", operation: "end" };
+  if (ASSISTANT_STARTS.has(type)) return { role: "assistant", operation: "start" };
+  if (ASSISTANT_ENDS.has(type)) return { role: "assistant", operation: "end" };
+  if (SESSION_ENDS.has(type)) return { role: "both", operation: "end" };
+  return null;
 }

@@ -39,7 +39,7 @@ type ProductComparisonProps = {
 
 type ProductGroup = { key: string; product: Product; offers: Product[] };
 const MAX_COMPARISON_GROUPS = 6;
-const INITIAL_COMPARISON_GROUPS = 3;
+export const INITIAL_COMPARISON_GROUPS = 3;
 
 function comparisonKey(product: Product) {
   const normalizedName = product.name.normalize("NFKD").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
