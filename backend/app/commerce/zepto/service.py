@@ -25,7 +25,6 @@ class ZeptoService:
         self.oauth = oauth
         self.client = client
         self._selected_address: tuple[int, str] | None = None
-        self._past_items_generation: int | None = None
         self._search_cache: dict[tuple[str, str, int], tuple[float, ProductSearchResult]] = {}
         self._search_lock = asyncio.Lock()
 
@@ -112,10 +111,6 @@ class ZeptoService:
                 )
                 self._selected_address = (self.client.session_generation, address_id)
                 generation = self.client.session_generation
-
-            if self._past_items_generation != generation:
-                await self.client.call_tool("get_past_order_items", {})
-                self._past_items_generation = self.client.session_generation
 
             queries = _split_queries(normalized)
             if len(queries) > 1:

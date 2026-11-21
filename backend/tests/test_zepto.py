@@ -63,7 +63,8 @@ async def test_zepto_oauth_uses_pkce_resource_and_encrypted_storage(
         assert query["scope"] == ["tools:read"]
         assert query["resource"] == ["https://mcp.zepto.test"]
         assert "code_challenge" in query
-        await oauth.exchange_code(
+        restarted_oauth = ZeptoOAuthClient(settings, store, http_client)
+        await restarted_oauth.exchange_code(
             "authorization-code", query["state"][0], "https://auth.zepto.test"
         )
 

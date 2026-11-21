@@ -1,8 +1,6 @@
-import asyncio
 import base64
 import hashlib
 import secrets
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
@@ -15,17 +13,11 @@ from app.commerce.swiggy.errors import (
 from app.commerce.swiggy.models import (
     ConnectionStatus,
     OAuthTokenResponse,
+    PendingAuthorization,
     StoredConnection,
 )
 from app.commerce.swiggy.store import EncryptedConnectionStore
 from app.core.config import Settings
-
-
-@dataclass(frozen=True)
-class PendingAuthorization:
-    code_verifier: str
-    client_id: str
-    created_at: datetime
 
 
 class SwiggyOAuthClient:
@@ -38,8 +30,6 @@ class SwiggyOAuthClient:
         self.settings = settings
         self.store = store
         self._http_client = http_client
-        self._pending: dict[str, PendingAuthorization] = {}
-        self._pending_lock = asyncio.Lock()
 
     async def _request(self, method: str, url: str, **kwargs: object) -> httpx.Response:
         if self._http_client is not None:
@@ -83,13 +73,14 @@ class SwiggyOAuthClient:
             hashlib.sha256(verifier.encode("ascii")).digest()
         ).rstrip(b"=").decode("ascii")
         now = datetime.now(UTC)
-        async with self._pending_lock:
-            self._pending = {
-                key: pending
-                for key, pending in self._pending.items()
-                if now - pending.created_at < timedelta(minutes=10)
-            }
-            self._pending[state] = PendingAuthorization(verifier, client_id, now)
+        await self.store.save_pending(
+            state,
+            PendingAuthorization(
+                code_verifier=verifier,
+                client_id=client_id,
+                created_at=now,
+            ),
+        )
         query = urlencode(
             {
                 "response_type": "code",
@@ -104,8 +95,7 @@ class SwiggyOAuthClient:
         return f"{self.settings.swiggy_base_url}/auth/authorize?{query}"
 
     async def exchange_code(self, code: str, state: str) -> None:
-        async with self._pending_lock:
-            pending = self._pending.pop(state, None)
+        pending = await self.store.pop_pending(state)
         if pending is None or datetime.now(UTC) - pending.created_at >= timedelta(minutes=10):
             raise SwiggyProviderError("OAuth state is invalid or expired. Start the connection again.")
         response = await self._request(
@@ -123,8 +113,7 @@ class SwiggyOAuthClient:
         await self._save_token_response(response, pending.client_id)
 
     async def reject_authorization(self, state: str) -> None:
-        async with self._pending_lock:
-            pending = self._pending.pop(state, None)
+        pending = await self.store.pop_pending(state)
         if pending is None or datetime.now(UTC) - pending.created_at >= timedelta(minutes=10):
             raise SwiggyProviderError("OAuth state is invalid or expired. Start the connection again.")
 

@@ -106,7 +106,6 @@ async def test_zepto_search_prepares_context_once_and_caches_duplicate_query() -
     assert first == second
     assert [name for name, _ in client.calls] == [
         "select_saved_address",
-        "get_past_order_items",
         "search_products",
     ]
 

@@ -5,6 +5,12 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class PendingAuthorization(BaseModel):
+    code_verifier: str = Field(repr=False)
+    client_id: str
+    created_at: datetime
+
+
 class StoredConnection(BaseModel):
     client_id: str
     access_token: str | None = Field(default=None, repr=False)
@@ -12,6 +18,10 @@ class StoredConnection(BaseModel):
     token_type: str = "Bearer"
     scope: str | None = None
     expires_at: datetime | None = None
+    pending_authorizations: dict[str, PendingAuthorization] = Field(
+        default_factory=dict,
+        repr=False,
+    )
 
 
 class ConnectionStatus(BaseModel):

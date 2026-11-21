@@ -73,6 +73,11 @@ class ZeptoMcpClient:
             access_token = await self.oauth.access_token()
             try:
                 return await self._run_session(access_token, operation)
+            except ZeptoRateLimited:
+                self._rate_limited_until = (
+                    time.monotonic() + RATE_LIMIT_COOLDOWN_SECONDS
+                )
+                raise
             except ZeptoError:
                 raise
             except Exception as exc:
@@ -271,6 +276,8 @@ class ZeptoMcpClient:
                         structured = json.loads(text)
                     except json.JSONDecodeError:
                         if is_error:
+                            if _value_is_rate_limited(text):
+                                raise ZeptoRateLimited(RATE_LIMIT_MESSAGE)
                             raise ZeptoProviderError(text)
                         # Some Zepto read tools currently return successful MCP
                         # text content without structuredContent. Preserve it in
@@ -278,12 +285,16 @@ class ZeptoMcpClient:
                         # protocol failure. Provider text remains untrusted data.
                         structured = {"content_text": text}
             if is_error:
+                if _value_is_rate_limited(structured):
+                    raise ZeptoRateLimited(RATE_LIMIT_MESSAGE)
                 raise ZeptoProviderError(_safe_error_message(structured))
             if not isinstance(structured, dict):
                 raise ZeptoSchemaError(
                     f"Zepto {name} returned no structured result."
                 )
             if structured.get("success") is False:
+                if _value_is_rate_limited(structured):
+                    raise ZeptoRateLimited(RATE_LIMIT_MESSAGE)
                 raise ZeptoProviderError(_safe_error_message(structured))
             return structured
 
@@ -298,6 +309,20 @@ def _safe_error_message(payload: object) -> str:
         if isinstance(payload.get("message"), str):
             return payload["message"]
     return "Zepto could not complete the request."
+
+
+def _value_is_rate_limited(value: object) -> bool:
+    if isinstance(value, str):
+        message = value.casefold()
+        return any(
+            marker in message
+            for marker in ("429", "too many requests", "rate limited", "rate_limit")
+        )
+    if isinstance(value, dict):
+        return any(_value_is_rate_limited(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_value_is_rate_limited(item) for item in value)
+    return False
 
 
 def _exception_text(error: BaseException) -> str:

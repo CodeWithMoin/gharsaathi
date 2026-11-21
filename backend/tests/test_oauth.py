@@ -53,7 +53,8 @@ async def test_oauth_pkce_state_and_encrypted_persistence(tmp_path: Path) -> Non
         assert query["code_challenge_method"] == ["S256"]
         assert query["scope"] == ["mcp:tools"]
         assert "code_challenge" in query
-        await oauth.exchange_code("authorization-code", query["state"][0])
+        restarted_oauth = SwiggyOAuthClient(app_settings, store, client)
+        await restarted_oauth.exchange_code("authorization-code", query["state"][0])
 
     connection = await store.load()
     assert connection is not None
@@ -84,4 +85,3 @@ async def test_oauth_rejects_unknown_state_before_token_exchange(tmp_path: Path)
         with pytest.raises(SwiggyProviderError, match="state"):
             await oauth.exchange_code("code", "wrong-state")
     assert token_calls == 0
-

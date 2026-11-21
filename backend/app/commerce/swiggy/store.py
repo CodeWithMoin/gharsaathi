@@ -1,11 +1,12 @@
 import asyncio
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.commerce.swiggy.errors import SwiggyConfigurationError
-from app.commerce.swiggy.models import StoredConnection
+from app.commerce.swiggy.models import PendingAuthorization, StoredConnection
 
 
 class EncryptedConnectionStore:
@@ -51,10 +52,43 @@ class EncryptedConnectionStore:
 
     async def save(self, connection: StoredConnection) -> None:
         async with self._lock:
+            current = await asyncio.to_thread(self._read_sync)
+            if current is not None and not connection.pending_authorizations:
+                connection = connection.model_copy(
+                    update={
+                        "pending_authorizations": current.pending_authorizations,
+                    }
+                )
             await asyncio.to_thread(self._write_sync, connection)
+
+    async def save_pending(
+        self,
+        state: str,
+        pending: PendingAuthorization,
+    ) -> None:
+        async with self._lock:
+            connection = await asyncio.to_thread(self._read_sync)
+            if connection is None:
+                connection = StoredConnection(client_id=pending.client_id)
+            now = datetime.now(UTC)
+            connection.pending_authorizations = {
+                key: value
+                for key, value in connection.pending_authorizations.items()
+                if now - value.created_at < timedelta(minutes=10)
+            }
+            connection.pending_authorizations[state] = pending
+            await asyncio.to_thread(self._write_sync, connection)
+
+    async def pop_pending(self, state: str) -> PendingAuthorization | None:
+        async with self._lock:
+            connection = await asyncio.to_thread(self._read_sync)
+            if connection is None:
+                return None
+            pending = connection.pending_authorizations.pop(state, None)
+            await asyncio.to_thread(self._write_sync, connection)
+            return pending
 
     async def clear(self) -> None:
         async with self._lock:
             if self.path.exists():
                 await asyncio.to_thread(self.path.unlink)
-

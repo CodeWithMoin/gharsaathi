@@ -1,8 +1,6 @@
-import asyncio
 import base64
 import hashlib
 import secrets
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
@@ -15,6 +13,7 @@ from app.commerce.zepto.errors import (
 from app.commerce.zepto.models import (
     ConnectionStatus,
     OAuthTokenResponse,
+    PendingAuthorization,
     StoredConnection,
 )
 from app.commerce.zepto.store import EncryptedZeptoConnectionStore
@@ -27,13 +26,6 @@ from app.core.config import Settings
 READ_ONLY_SCOPE = "tools:read"
 
 
-@dataclass(frozen=True)
-class PendingAuthorization:
-    code_verifier: str
-    client_id: str
-    created_at: datetime
-
-
 class ZeptoOAuthClient:
     def __init__(
         self,
@@ -44,8 +36,6 @@ class ZeptoOAuthClient:
         self.settings = settings
         self.store = store
         self._http_client = http_client
-        self._pending: dict[str, PendingAuthorization] = {}
-        self._pending_lock = asyncio.Lock()
 
     async def _request(self, method: str, url: str, **kwargs: object) -> httpx.Response:
         if self._http_client is not None:
@@ -91,13 +81,14 @@ class ZeptoOAuthClient:
             hashlib.sha256(verifier.encode("ascii")).digest()
         ).rstrip(b"=").decode("ascii")
         now = datetime.now(UTC)
-        async with self._pending_lock:
-            self._pending = {
-                key: pending
-                for key, pending in self._pending.items()
-                if now - pending.created_at < timedelta(minutes=10)
-            }
-            self._pending[state] = PendingAuthorization(verifier, client_id, now)
+        await self.store.save_pending(
+            state,
+            PendingAuthorization(
+                code_verifier=verifier,
+                client_id=client_id,
+                created_at=now,
+            ),
+        )
         query = urlencode(
             {
                 "response_type": "code",
@@ -116,8 +107,7 @@ class ZeptoOAuthClient:
         expected_issuer = self.settings.zepto_authorization_server_url.rstrip("/")
         if issuer is not None and issuer.rstrip("/") != expected_issuer:
             raise ZeptoProviderError("Zepto OAuth issuer did not match the expected server.")
-        async with self._pending_lock:
-            pending = self._pending.pop(state, None)
+        pending = await self.store.pop_pending(state)
         if pending is None or datetime.now(UTC) - pending.created_at >= timedelta(minutes=10):
             raise ZeptoProviderError(
                 "OAuth state is invalid or expired. Start the connection again."
@@ -138,8 +128,7 @@ class ZeptoOAuthClient:
         await self._save_token_response(response, pending.client_id)
 
     async def reject_authorization(self, state: str) -> None:
-        async with self._pending_lock:
-            pending = self._pending.pop(state, None)
+        pending = await self.store.pop_pending(state)
         if pending is None or datetime.now(UTC) - pending.created_at >= timedelta(minutes=10):
             raise ZeptoProviderError(
                 "OAuth state is invalid or expired. Start the connection again."

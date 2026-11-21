@@ -6,6 +6,7 @@ import pytest
 
 from app.commerce.zepto.client import _SessionState, ZeptoMcpClient
 from app.commerce.zepto.errors import ZeptoProviderError, ZeptoRateLimited
+from app.commerce.zepto.models import ToolDescription
 from app.core.config import Settings
 
 
@@ -120,6 +121,36 @@ async def test_zepto_rate_limit_starts_local_cooldown() -> None:
         await client.list_tools()
 
     assert client.opened_tokens == ["same-token"]
+
+
+async def test_zepto_tool_result_rate_limit_starts_local_cooldown() -> None:
+    class LimitedSession(FakeSession):
+        async def call_tool(self, name: str, arguments: dict[str, object]):
+            del name, arguments
+            return SimpleNamespace(
+                isError=True,
+                structuredContent={"error": {"message": "HTTP 429 Too Many Requests"}},
+                content=[],
+            )
+
+    client = PersistentSessionClient(["same-token"])
+    session = LimitedSession()
+    client._session = _SessionState(
+        "same-token",
+        session,
+        FakeResources(),
+        catalogue={
+            "search": ToolDescription(
+                name="search",
+                input_schema={"type": "object", "properties": {}},
+            )
+        },
+    )  # type: ignore[arg-type]
+
+    with pytest.raises(ZeptoRateLimited):
+        await client.call_tool("search", {})
+    with pytest.raises(ZeptoRateLimited):
+        await client.list_tools()
 
 
 async def test_successful_plain_text_tool_result_is_preserved() -> None:
