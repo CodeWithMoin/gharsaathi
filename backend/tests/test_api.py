@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.commerce.swiggy.errors import SwiggyAuthenticationRequired
+from app.commerce.demo import DemoSwiggyService
 from app.commerce.swiggy.models import (
     Address,
     AddressList,
@@ -139,6 +140,24 @@ async def test_address_reload_uses_database_snapshot_without_provider_call(
     )
     assert selected.status_code == 200
     assert selected.json()["resolution"]["default_address_id"] == "addr_home"
+
+
+@pytest.mark.asyncio
+async def test_demo_addresses_do_not_leak_into_live_provider_state(
+    client: AsyncClient,
+) -> None:
+    headers = {"X-User-Id": "demo-boundary-user"}
+    app.dependency_overrides[get_swiggy_service] = DemoSwiggyService
+
+    demo = await client.get("/api/swiggy/addresses", headers=headers)
+    assert demo.status_code == 200
+    assert demo.json()["addresses"][0]["id"] == "demo-home"
+
+    app.dependency_overrides[get_swiggy_service] = lambda: fake_service
+    live = await client.get("/api/swiggy/addresses", headers=headers)
+    assert live.status_code == 200
+    assert live.json()["addresses"] == []
+    assert live.json()["needs_refresh"] is True
 
 
 @pytest.mark.asyncio

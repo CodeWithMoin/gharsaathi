@@ -9,6 +9,20 @@ from app.database.models import ProviderAddressState
 
 
 SWIGGY_PROVIDER = "swiggy_instamart"
+DEMO_RESOLUTION_SOURCE = "demo_fixture"
+
+
+def is_demo_address_list(addresses: AddressList) -> bool:
+    """Return true for local fixtures that must never enter live account state."""
+
+    return (
+        addresses.resolution.resolution_source == DEMO_RESOLUTION_SOURCE
+        or any(address.id.startswith("demo-") for address in addresses.addresses)
+    )
+
+
+def is_demo_address_state(state: ProviderAddressState) -> bool:
+    return is_demo_address_list(AddressList.model_validate(state.snapshot))
 
 
 class ProviderAddressRepository:
@@ -32,6 +46,8 @@ class ProviderAddressRepository:
         addresses: AddressList,
         provider: str = SWIGGY_PROVIDER,
     ) -> ProviderAddressState:
+        if is_demo_address_list(addresses):
+            raise ValueError("Demo addresses cannot be persisted as provider state.")
         state = await self.get(subject_id, provider)
         now = datetime.now(UTC)
         snapshot = addresses.model_dump(mode="json", exclude={"cached", "needs_refresh", "refreshed_at"})
@@ -69,6 +85,8 @@ class ProviderAddressRepository:
         if state is None:
             return None
         addresses = AddressList.model_validate(state.snapshot)
+        if is_demo_address_list(addresses):
+            return None
         if address_id not in {address.id for address in addresses.addresses}:
             return None
         state.selected_address_id = address_id

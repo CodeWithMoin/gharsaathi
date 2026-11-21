@@ -21,7 +21,11 @@ from app.commerce.swiggy.models import (
     ProductSearchResult,
     ToolDescription,
 )
-from app.commerce.provider_state import ProviderAddressRepository, cached_address_list
+from app.commerce.provider_state import (
+    ProviderAddressRepository,
+    cached_address_list,
+    is_demo_address_state,
+)
 from app.commerce.demo import DemoSwiggyService
 from app.core.config import get_settings
 from app.dependencies import SwiggyServiceDependency
@@ -155,16 +159,18 @@ async def addresses(
     refresh: Annotated[bool, Query()] = False,
 ) -> AddressList:
     try:
+        # Demo fixtures are request-local. They must never read or write the
+        # authenticated provider snapshot used after switching to live mode.
+        if isinstance(service, DemoSwiggyService):
+            return await service.addresses(page, page_size)
         repository = ProviderAddressRepository(session)
         state = await repository.get(actor.id)
+        if state is not None and is_demo_address_state(state):
+            # Clean up snapshots written by older versions of the demo route.
+            await repository.clear(actor.id)
+            state = None
         if state is not None and not refresh:
             return cached_address_list(state)
-        # Demo fixtures are local data, so seed their snapshot automatically.
-        # The live service never enters this branch: a reload without a cached
-        # snapshot remains provider-call-free until the user explicitly refreshes.
-        if not refresh and isinstance(service, DemoSwiggyService):
-            demo = await service.addresses(page, page_size)
-            return cached_address_list(await repository.save(actor.id, demo))
         if not refresh:
             return AddressList(
                 addresses=[],

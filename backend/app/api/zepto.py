@@ -5,7 +5,11 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.commerce.demo import DemoZeptoService
-from app.commerce.provider_state import ProviderAddressRepository, cached_address_list
+from app.commerce.provider_state import (
+    ProviderAddressRepository,
+    cached_address_list,
+    is_demo_address_state,
+)
 from app.commerce.swiggy.models import (
     AddressList,
     AddressResolution,
@@ -198,15 +202,15 @@ async def addresses(
     refresh: Annotated[bool, Query()] = False,
 ) -> AddressList:
     try:
+        if isinstance(service, DemoZeptoService):
+            return await service.addresses()
         repository = ProviderAddressRepository(session)
         state = await repository.get(actor.id, ZEPTO_PROVIDER)
+        if state is not None and is_demo_address_state(state):
+            await repository.clear(actor.id, ZEPTO_PROVIDER)
+            state = None
         if state is not None and not refresh:
             return cached_address_list(state)
-        if not refresh and isinstance(service, DemoZeptoService):
-            demo = await service.addresses()
-            return cached_address_list(
-                await repository.save(actor.id, demo, ZEPTO_PROVIDER)
-            )
         if not refresh:
             return AddressList(
                 addresses=[],
