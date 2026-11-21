@@ -622,24 +622,24 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   });
   const resultAnchorExists = resultsAfterMessageId !== null && chatMessages.some((item) => item.id === resultsAfterMessageId);
   const searchOutcome = loading === "search" ? (
-    <motion.div key="searching-response" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4"><div className="flex items-center gap-1.5" aria-label="GharSaathi is searching">{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">{commerceMode === "demo" ? "Static demo catalogue mein dekh rahi hoon" : zeptoSearchReady ? "Swiggy aur Zepto par dekh rahi hoon" : "Swiggy Instamart par dekh rahi hoon"}</span></div></div></motion.div>
+    <motion.div key="searching-response" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex items-center gap-1.5" aria-label="GharSaathi is searching">{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">{commerceMode === "demo" ? "Static demo catalogue mein dekh rahi hoon" : zeptoSearchReady ? "Swiggy aur Zepto par dekh rahi hoon" : "Swiggy Instamart par dekh rahi hoon"}</span></div></div></motion.div>
   ) : searched && !products.length ? (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 max-w-md rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4"><div className="flex gap-3"><Basket size={20} className="mt-0.5 shrink-0 text-[#c6531d]" /><p className="text-sm leading-6">Is address par kuch nahi mila. Product ya brand ko thoda broadly bolkar try karein.</p></div></div></motion.div>
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 max-w-md rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex gap-3"><Basket size={20} className="mt-0.5 shrink-0 text-[#c6531d]" /><p className="text-sm leading-6">Is address par kuch nahi mila. Product ya brand ko thoda broadly bolkar try karein.</p></div></div></motion.div>
   ) : products.length ? (() => {
     const productCount = groupProductsForComparison(products).length;
-    return <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><div className="mb-2 w-fit max-w-full rounded-[18px] border border-[#ebddd2] bg-[#fffdf9] px-4 py-3"><p className="text-[13px] leading-5"><strong>{productCount === 1 ? "1 relevant option mila." : `${productCount} relevant options mile.`}</strong> {productCount > 1 ? (commerceMode === "demo" ? "Add karte hi agla item khulega." : `${zeptoSearchReady ? "Swiggy aur Zepto" : "Swiggy Instamart"} ke options compare karein.`) : "Best matching option neeche hai."}</p></div><ProductComparison products={products} commerceMode={commerceMode} addingSku={addingSku} onAdd={addProduct} /><p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p></motion.div>;
+    return <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><div className="mb-2 w-fit max-w-full rounded-[18px] bg-[#fffdf9] px-4 py-3 shadow-[0_14px_34px_-32px_rgba(74,43,27,.65)]"><p className="text-[13px] leading-5"><strong>{productCount === 1 ? "1 relevant option mila." : `${productCount} relevant options mile.`}</strong> {productCount > 1 ? (commerceMode === "demo" ? "Add karte hi agla item khulega." : `${zeptoSearchReady ? "Swiggy aur Zepto" : "Swiggy Instamart"} ke options compare karein.`) : "Best matching option neeche hai."}</p></div><ProductComparison products={products} commerceMode={commerceMode} addingSku={addingSku} onAdd={addProduct} /><p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p></motion.div>;
   })() : null;
 
   return <main className="grain min-h-[100dvh] bg-[#f8f2ea] text-[#35241c]">
     <AnimatePresence>
       {chatDrawerOpen && <>
         <motion.button type="button" aria-label="Close chats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setChatDrawerOpen(false)} className="fixed inset-0 z-40 bg-[#2f2019]/30 backdrop-blur-[2px]" />
-        <motion.aside initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", stiffness: 360, damping: 36 }} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-50 flex w-3/4 max-w-[360px] flex-col border-r border-[#e4d3c7] bg-[#fbf7f2] shadow-[24px_0_60px_-32px_rgba(61,38,27,.45)]">
+        <motion.aside initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", stiffness: 360, damping: 36 }} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-50 flex w-3/4 max-w-[360px] flex-col overflow-hidden rounded-r-[2rem] bg-[#fbf7f2] shadow-[24px_0_60px_-32px_rgba(61,38,27,.45)]">
           <div className="flex items-center gap-2 px-3 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
             <Brand dense />
             <button type="button" onClick={() => setChatDrawerOpen(false)} aria-label="Close chats" className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#806f65] transition hover:bg-[#efe5dc] active:scale-[.96]"><X size={18} /></button>
           </div>
-          <div className="border-b border-[#eaded5] px-3 pb-4 pt-2">
+          <div className="px-3 pb-5 pt-2">
             <label className="flex h-11 items-center gap-2 rounded-xl border border-[#e3d5cb] bg-white px-3 text-[#806f65] transition focus-within:border-[#c98d6c] focus-within:ring-2 focus-within:ring-[#efd8ca]">
               <MagnifyingGlass size={18} />
               <input value={chatSearch} onChange={(event) => setChatSearch(event.target.value)} placeholder="Search chats" className="min-w-0 flex-1 bg-transparent text-sm text-[#35241c] outline-none placeholder:text-[#a18c80]" />
@@ -651,14 +651,14 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
               <p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#9b8172]">Recent chats</p>
               {!recentChatsLoading && recentChats.length > 0 && <span className="text-[11px] font-medium text-[#a18c80]">{recentChats.length}</span>}
             </div>
-            <div className="mt-3">
+            <div className="mt-3 space-y-1">
               {recentChatsLoading && <div className="space-y-2" aria-label="Loading chats">{[0, 1, 2].map((item) => <div key={item} className="animate-pulse border-b border-[#eaded5] px-1 py-4"><span className="block h-3 w-2/3 rounded bg-[#e9ddd4]" /><span className="mt-2 block h-2.5 w-5/6 rounded bg-[#efe6df]" /></div>)}</div>}
               {!recentChatsLoading && !filteredRecentChats.length && <div className="flex flex-col items-center px-2 pb-8 pt-14 text-center">
-                <span className="grid size-12 place-items-center rounded-2xl border border-[#e4d5ca] bg-white text-[#b65a2e]"><ChatCircleDots size={22} weight="duotone" /></span>
+                <span className="grid size-12 place-items-center rounded-2xl bg-[#f1e3d8] text-[#b65a2e]"><ChatCircleDots size={22} weight="duotone" /></span>
                 <p className="mt-4 text-sm font-semibold leading-5 text-[#3d2b23]">{chatSearch.trim() ? "Koi matching chat nahi mili" : "Abhi koi shopping chat nahi"}</p>
                 <p className="mt-2 max-w-[24ch] text-[13px] leading-5 text-[#806f65]">{chatSearch.trim() ? "Search badal kar dekhein." : "Jo bhi mangwana ho, bolkar shuru karein. Chat yahin save hogi."}</p>
               </div>}
-              {!recentChatsLoading && filteredRecentChats.map((chat) => <button type="button" key={chat.id} onClick={() => void openSavedChat(chat.id)} className={`group relative flex w-full items-start gap-3 border-b border-[#eaded5] px-1 py-3.5 text-left transition hover:bg-[#f3eae3] ${chat.is_active ? "bg-[#f3e7dd]" : ""}`}>
+              {!recentChatsLoading && filteredRecentChats.map((chat) => <button type="button" key={chat.id} onClick={() => void openSavedChat(chat.id)} className={`group relative flex w-full items-start gap-3 rounded-xl px-2 py-3 text-left transition hover:bg-[#f3eae3] ${chat.is_active ? "bg-[#f3e7dd]" : ""}`}>
                 {chat.is_active && <span className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-[#c6531d]" aria-hidden="true" />}
                 <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl bg-white text-[#9a6d58] ring-1 ring-[#eaded5]"><ChatCircleDots size={17} weight={chat.is_active ? "fill" : "regular"} /></span>
                 <span className="min-w-0 flex-1">
@@ -671,7 +671,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
               </button>)}
             </div>
           </div>
-          <div className="border-t border-[#eaded5] bg-[#fffaf5] px-3 pb-[max(3.375rem,env(safe-area-inset-bottom))] pt-3.5">
+          <div className="bg-[#fbf7f2] px-3 pb-[max(3.375rem,env(safe-area-inset-bottom))] pt-4">
             <AnimatePresence initial={false}>
               {accountMenuOpen && <motion.div id="account-menu" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: .16 }} className="mb-2 rounded-xl border border-[#e3d5cb] bg-white p-2 shadow-[0_14px_34px_-28px_rgba(61,38,27,.55)]">
                 <div className="px-2 pb-2 pt-1"><p className="truncate text-[12px] font-semibold text-[#3d2b23]">{userName}</p><p className="mt-0.5 text-[10px] text-[#8b7569]">GharSaathi account</p></div>
@@ -688,24 +688,24 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         </motion.aside>
       </>}
     </AnimatePresence>
-    <header className="fixed inset-x-0 top-0 z-30 border-b border-[#e9dbcf]/70 bg-[#fffdf9]/92 shadow-[0_10px_35px_-30px_rgba(73,42,28,.7)] backdrop-blur-xl">
+    <header className="fixed inset-x-0 top-0 z-30 bg-[#fffdf9]/92 shadow-[0_10px_35px_-30px_rgba(73,42,28,.7)] backdrop-blur-xl">
       <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
         <button type="button" onClick={() => setChatDrawerOpen(true)} aria-label="Open shopping chats" className="grid size-10 shrink-0 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><List size={21} /></button>
         <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
           {basketCount > 0 && <button onClick={() => setBasketOpen((open) => !open)} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
-          <button type="button" onClick={() => setSupportOpen((open) => !open)} aria-label="Get help with an order" className={`grid size-10 place-items-center rounded-full border transition active:scale-[.96] ${supportOpen ? "border-[#c98d6c] bg-[#f1dfd2] text-[#9f451d]" : "border-[#e4d3c7] bg-white text-[#70584b] hover:border-[#d8bbaa] hover:bg-[#fffaf5]"}`}><ChatCircleDots size={21} weight={supportOpen ? "fill" : "regular"} /></button>
-          <button onClick={() => setSetupOpen(true)} aria-label={`Manage stores. ${connectionLabel}`} className={`relative ml-0.5 flex h-10 items-center justify-center gap-2 rounded-full border px-2.5 text-xs font-semibold transition active:scale-[.98] md:max-w-[190px] md:px-3 ${setupOpen ? "border-[#c98d6c] bg-[#f4e2d6] text-[#8f421b]" : "border-[#e4d3c7] bg-white text-[#5c463b] hover:border-[#d8bbaa]"}`}><Storefront size={18} className="shrink-0 text-[#c6531d]" /><span className="hidden truncate md:block">{connectionLabel}</span><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setSupportOpen((open) => !open)} aria-label="Get help with an order" className={`grid size-10 place-items-center rounded-full transition active:scale-[.96] ${supportOpen ? "bg-[#f1dfd2] text-[#9f451d]" : "bg-white/70 text-[#70584b] hover:bg-[#f6ece4]"}`}><ChatCircleDots size={21} weight={supportOpen ? "fill" : "regular"} /></button>
+          <button onClick={() => setSetupOpen(true)} aria-label={`Manage stores. ${connectionLabel}`} className={`relative ml-0.5 flex h-10 items-center justify-center gap-2 rounded-full px-2.5 text-xs font-semibold transition active:scale-[.98] md:max-w-[190px] md:px-3 ${setupOpen ? "bg-[#f4e2d6] text-[#8f421b]" : "bg-white/70 text-[#5c463b] hover:bg-[#f6ece4]"}`}><Storefront size={18} className="shrink-0 text-[#c6531d]" /><span className="hidden truncate md:block">{connectionLabel}</span><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} aria-hidden="true" /></button>
         </nav>
       </div>
     </header>
 
     <section className={`mx-auto flex min-h-[100dvh] max-w-4xl flex-col overflow-x-clip px-4 pt-[96px] sm:px-6 ${voiceOpen ? "pb-64 sm:pb-60" : "pb-40 sm:pb-44"}`}>
       <div className="flex-1">
-        <div className="mb-5 flex items-center gap-3 sm:mb-8"><span className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#9b8172]">Today</span><span className="h-px flex-1 bg-[#e8dcd2]" /></div>
+        <div className="mb-5 sm:mb-8"><span className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#9b8172]">Today</span></div>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mr-7 sm:mr-12">
           <div className="min-w-0 max-w-[620px]">
-            <div className="rounded-[7px_20px_20px_20px] border border-[#ebddd2] bg-[#fffdf9] px-4 py-3.5 shadow-[0_16px_40px_-34px_rgba(74,43,27,.7)] sm:px-5 sm:py-4"><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hello, {userName}. <strong className="font-semibold">Aaj ghar ke liye kya mangwana hai?</strong></p><p className="mt-1 text-[13px] leading-5 text-[#806f65] sm:mt-1.5 sm:text-sm sm:leading-6">Bas bol dijiye—main ready stores par saath mein check karungi.</p></div>
-            {!hasChat && <div className="mt-3 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">{suggestions.map((suggestion) => <button key={suggestion.query} onClick={() => void runSearch(suggestion.query)} disabled={loading === "search"} className="min-h-10 rounded-2xl border border-[#dfcbbd] bg-[#fffaf5]/75 px-2 py-2 text-[11px] font-medium leading-4 text-[#70584b] transition hover:border-[#c99e84] hover:bg-white active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-0 sm:rounded-full sm:px-3.5 sm:text-xs">{suggestion.label}</button>)}</div>}
+            <div className="rounded-[7px_20px_20px_20px] bg-[#fffdf9] px-4 py-3.5 shadow-[0_16px_40px_-34px_rgba(74,43,27,.7)] sm:px-5 sm:py-4"><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hello, {userName}. <strong className="font-semibold">Aaj ghar ke liye kya mangwana hai?</strong></p><p className="mt-1 text-[13px] leading-5 text-[#806f65] sm:mt-1.5 sm:text-sm sm:leading-6">Bas bol dijiye—main ready stores par saath mein check karungi.</p></div>
+            {!hasChat && <div className="mt-3 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">{suggestions.map((suggestion) => <button key={suggestion.query} onClick={() => void runSearch(suggestion.query)} disabled={loading === "search"} className="min-h-10 rounded-2xl bg-[#eee2d8]/80 px-2 py-2 text-[11px] font-medium leading-4 text-[#70584b] transition hover:bg-[#e7d7cb] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-0 sm:rounded-full sm:px-3.5 sm:text-xs">{suggestion.label}</button>)}</div>}
           </div>
         </motion.div>
 
@@ -718,7 +718,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
                 </motion.div>
               ) : (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
-                  <div className="max-w-[620px] whitespace-pre-wrap rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4 text-[15px] leading-7 shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] sm:text-base">{chatMessage.content}</div>
+                  <div className="max-w-[620px] whitespace-pre-wrap rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 text-[15px] leading-7 shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] sm:text-base">{chatMessage.content}</div>
                 </motion.div>
               )}
               {chatMessage.id === resultsAfterMessageId && searchOutcome}
