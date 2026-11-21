@@ -634,7 +634,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     <AnimatePresence>
       {chatDrawerOpen && <>
         <motion.button type="button" aria-label="Close chats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setChatDrawerOpen(false)} className="fixed inset-0 z-40 bg-[#2f2019]/30 backdrop-blur-[2px]" />
-        <motion.aside initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", stiffness: 360, damping: 36 }} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-50 flex w-3/4 max-w-[360px] flex-col overflow-hidden rounded-r-[2rem] bg-[#fbf7f2] shadow-[24px_0_60px_-32px_rgba(61,38,27,.45)]">
+        <motion.aside initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", stiffness: 360, damping: 36 }} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-50 flex w-3/4 max-w-[360px] flex-col bg-[#fbf7f2] shadow-[24px_0_60px_-32px_rgba(61,38,27,.45)]">
+          <span aria-hidden="true" className="pointer-events-none absolute -right-8 top-0 size-8 rounded-br-[2rem] bg-[#fbf7f2]" />
+          <span aria-hidden="true" className="pointer-events-none absolute -right-8 bottom-0 size-8 rounded-tr-[2rem] bg-[#fbf7f2]" />
           <div className="flex items-center gap-2 px-3 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
             <Brand dense />
             <button type="button" onClick={() => setChatDrawerOpen(false)} aria-label="Close chats" className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#806f65] transition hover:bg-[#efe5dc] active:scale-[.96]"><X size={18} /></button>
