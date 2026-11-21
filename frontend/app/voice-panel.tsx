@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Microphone, ShieldCheck, Stop, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mapRealtimeTranscriptEvent } from "./voice-transcript.mjs";
+import { createTranscriptTurnTracker } from "./voice-transcript-turns.mjs";
 import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
 import { sanitizeAddressPrefill } from "./voice-address-prefill.mjs";
 import type { ZeptoAddressPrefill } from "./zepto-address-form";
@@ -61,9 +62,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
   const micRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const eventsRef = useRef<EventSource | null>(null);
-  const transcriptTurnsRef = useRef(new Map<string, VoiceTranscriptTurn>());
-  const activeTranscriptRef = useRef<{ role: VoiceTranscriptTurn["role"]; key: string } | null>(null);
-  const transcriptIdRef = useRef(0);
+  const transcriptTurnsRef = useRef(createTranscriptTurnTracker());
   const attemptRef = useRef(0);
 
   const cleanup = useCallback(() => {
@@ -81,29 +80,8 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
   const handleTranscriptEvent = useCallback((event: LiveEvent) => {
     const transcript = mapRealtimeTranscriptEvent(event);
     if (!transcript) return false;
-    const sourceKey = transcript.sourceId ? `${transcript.role}:${transcript.sourceId}` : null;
-    let key = sourceKey;
-    if (!key && activeTranscriptRef.current?.role === transcript.role) key = activeTranscriptRef.current.key;
-    if (!key) {
-      transcriptIdRef.current += 1;
-      key = `${transcript.role}:local-${transcriptIdRef.current}`;
-    }
-    if (transcript.operation === "finish") {
-      if (activeTranscriptRef.current?.key === key) activeTranscriptRef.current = null;
-      return true;
-    }
-    activeTranscriptRef.current = { role: transcript.role, key };
-    const previous = transcriptTurnsRef.current.get(key);
-    const content = transcript.operation === "replace" ? transcript.text : `${previous?.content ?? ""}${transcript.text}`;
-    if (!content.trim()) return true;
-    if (!previous) transcriptIdRef.current += 1;
-    const turn: VoiceTranscriptTurn = {
-      id: previous?.id ?? `voice-${Date.now().toString(36)}-${transcriptIdRef.current}`,
-      role: transcript.role,
-      content,
-    };
-    transcriptTurnsRef.current.set(key, turn);
-    onTranscriptTurn({ ...turn, content: content.trim() });
+    const turn = transcriptTurnsRef.current.apply(transcript);
+    if (turn) onTranscriptTurn(turn);
     return true;
   }, [onTranscriptTurn]);
 
@@ -161,7 +139,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     const attempt = attemptRef.current + 1;
     attemptRef.current = attempt;
     cleanup();
-    activeTranscriptRef.current = null;
+    transcriptTurnsRef.current.reset();
     setStatus("connecting");
     setMessage("Connecting to GharSaathi…");
     try {
