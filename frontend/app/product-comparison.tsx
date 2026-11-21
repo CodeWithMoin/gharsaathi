@@ -39,6 +39,7 @@ type ProductComparisonProps = {
 
 type ProductGroup = { key: string; product: Product; offers: Product[] };
 const MAX_COMPARISON_GROUPS = 6;
+const INITIAL_COMPARISON_GROUPS = 3;
 
 function comparisonKey(product: Product) {
   const normalizedName = product.name.normalize("NFKD").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -160,18 +161,42 @@ function ProductDecisionCard({ group, commerceMode, addingSku, onAdd }: {
 export function ProductComparison({ products, commerceMode, addingSku, onAdd }: ProductComparisonProps) {
   const groups = useMemo(() => groupProductsForComparison(products), [products]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showAll, setShowAll] = useState(false);
   const swiperRef = useRef<SwiperInstance | null>(null);
+  const advanceAfterExpandRef = useRef(false);
+  const visibleGroups = showAll ? groups : groups.slice(0, INITIAL_COMPARISON_GROUPS);
 
   useEffect(() => {
     setActiveIndex(0);
+    setShowAll(false);
+    advanceAfterExpandRef.current = false;
     swiperRef.current?.slideTo(0, 0);
   }, [products]);
 
+  useEffect(() => {
+    if (!showAll || !advanceAfterExpandRef.current) return;
+    advanceAfterExpandRef.current = false;
+    requestAnimationFrame(() => swiperRef.current?.slideNext());
+  }, [showAll]);
+
   const addAndAdvance = async (product: Product, index: number) => {
-    const canAdvance = index < groups.length - 1;
-    if (canAdvance) swiperRef.current?.slideNext();
+    const hasHiddenNext = !showAll && index === visibleGroups.length - 1 && groups.length > visibleGroups.length;
+    const canAdvance = index < visibleGroups.length - 1 || hasHiddenNext;
+    if (hasHiddenNext) {
+      advanceAfterExpandRef.current = true;
+      setShowAll(true);
+    } else if (canAdvance) {
+      swiperRef.current?.slideNext();
+    }
     const added = await onAdd(product);
-    if (!added && canAdvance) swiperRef.current?.slidePrev();
+    if (!added && canAdvance) {
+      if (hasHiddenNext) {
+        advanceAfterExpandRef.current = false;
+        setShowAll(false);
+      } else {
+        swiperRef.current?.slidePrev();
+      }
+    }
     return added;
   };
 
@@ -223,15 +248,15 @@ export function ProductComparison({ products, commerceMode, addingSku, onAdd }: 
         }
       `}</style>
 
-      <div data-product-deck aria-live="polite" aria-label={`Product ${activeIndex + 1} of ${groups.length}`}>
+      <div data-product-deck aria-live="polite" aria-label={`Product ${activeIndex + 1} of ${visibleGroups.length}`}>
         <Swiper
           onSwiper={(swiper) => { swiperRef.current = swiper; }}
           onSlideChange={(swiper) => setActiveIndex(swiper.activeIndex)}
           modules={[EffectCards, Mousewheel, A11y]}
           effect="cards"
           cardsEffect={{ perSlideOffset: 5, perSlideRotate: 1.25, rotate: true, slideShadows: true }}
-          grabCursor={groups.length > 1 && addingSku === null}
-          allowTouchMove={groups.length > 1 && addingSku === null}
+          grabCursor={visibleGroups.length > 1 && addingSku === null}
+          allowTouchMove={visibleGroups.length > 1 && addingSku === null}
           threshold={3}
           shortSwipes
           longSwipes
@@ -252,7 +277,7 @@ export function ProductComparison({ products, commerceMode, addingSku, onAdd }: 
           className="product-card-swiper touch-pan-y"
           data-product-card
         >
-          {groups.map((group, index) => (
+          {visibleGroups.map((group, index) => (
             <SwiperSlide key={group.key}>
               <ProductDecisionCard
                 group={group}
@@ -265,7 +290,8 @@ export function ProductComparison({ products, commerceMode, addingSku, onAdd }: 
         </Swiper>
       </div>
 
-      {groups.length > 1 && <div className="mt-3 flex justify-center gap-1.5" aria-label={`Product ${activeIndex + 1} of ${groups.length}`}>{groups.map((group, index) => <button key={group.key} type="button" onClick={() => swiperRef.current?.slideTo(index)} aria-label={`Show product ${index + 1}`} aria-current={index === activeIndex ? "true" : undefined} className={`h-1.5 rounded-full transition-[width,background-color] ${index === activeIndex ? "w-5 bg-[#c6531d]" : "w-1.5 bg-[#d9c7bb]"}`} />)}</div>}
+      {visibleGroups.length > 1 && <div className="mt-3 flex justify-center gap-1.5" aria-label={`Product ${activeIndex + 1} of ${visibleGroups.length}`}>{visibleGroups.map((group, index) => <button key={group.key} type="button" onClick={() => swiperRef.current?.slideTo(index)} aria-label={`Show product ${index + 1}`} aria-current={index === activeIndex ? "true" : undefined} className={`h-1.5 rounded-full transition-[width,background-color] ${index === activeIndex ? "w-5 bg-[#c6531d]" : "w-1.5 bg-[#d9c7bb]"}`} />)}</div>}
+      {!showAll && groups.length > visibleGroups.length && <div className="mt-3 flex justify-center"><button type="button" onClick={() => setShowAll(true)} className="rounded-full border border-[#d9c7bb] bg-[#fffaf5] px-3.5 py-2 text-[11px] font-semibold text-[#6c5042] transition hover:bg-white active:scale-[.98]">Show {groups.length - visibleGroups.length} more</button></div>}
     </motion.div>
   );
 }
