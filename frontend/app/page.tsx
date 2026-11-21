@@ -648,30 +648,30 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5">
             <div className="flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#9b8172]">Recent chats</p>
-              {!recentChatsLoading && recentChats.length > 0 && <span className="text-[10px] font-medium text-[#a18c80]">{recentChats.length}</span>}
+              <p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#9b8172]">Recent chats</p>
+              {!recentChatsLoading && recentChats.length > 0 && <span className="text-[11px] font-medium text-[#a18c80]">{recentChats.length}</span>}
             </div>
             <div className="mt-3">
               {recentChatsLoading && <div className="space-y-2" aria-label="Loading chats">{[0, 1, 2].map((item) => <div key={item} className="animate-pulse border-b border-[#eaded5] px-1 py-4"><span className="block h-3 w-2/3 rounded bg-[#e9ddd4]" /><span className="mt-2 block h-2.5 w-5/6 rounded bg-[#efe6df]" /></div>)}</div>}
               {!recentChatsLoading && !filteredRecentChats.length && <div className="flex flex-col items-center px-2 pb-8 pt-14 text-center">
                 <span className="grid size-12 place-items-center rounded-2xl border border-[#e4d5ca] bg-white text-[#b65a2e]"><ChatCircleDots size={22} weight="duotone" /></span>
-                <p className="mt-4 text-[13px] font-semibold leading-5 text-[#3d2b23]">{chatSearch.trim() ? "Koi matching chat nahi mili" : "Abhi koi shopping chat nahi"}</p>
-                <p className="mt-2 max-w-[24ch] text-[11px] leading-4 text-[#806f65]">{chatSearch.trim() ? "Search badal kar dekhein." : "Jo bhi mangwana ho, bolkar shuru karein. Chat yahin save hogi."}</p>
+                <p className="mt-4 text-sm font-semibold leading-5 text-[#3d2b23]">{chatSearch.trim() ? "Koi matching chat nahi mili" : "Abhi koi shopping chat nahi"}</p>
+                <p className="mt-2 max-w-[24ch] text-[13px] leading-5 text-[#806f65]">{chatSearch.trim() ? "Search badal kar dekhein." : "Jo bhi mangwana ho, bolkar shuru karein. Chat yahin save hogi."}</p>
               </div>}
               {!recentChatsLoading && filteredRecentChats.map((chat) => <button type="button" key={chat.id} onClick={() => void openSavedChat(chat.id)} className={`group relative flex w-full items-start gap-3 border-b border-[#eaded5] px-1 py-3.5 text-left transition hover:bg-[#f3eae3] ${chat.is_active ? "bg-[#f3e7dd]" : ""}`}>
                 {chat.is_active && <span className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-[#c6531d]" aria-hidden="true" />}
                 <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl bg-white text-[#9a6d58] ring-1 ring-[#eaded5]"><ChatCircleDots size={17} weight={chat.is_active ? "fill" : "regular"} /></span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2">
-                    <span className="block min-w-0 flex-1 truncate text-[13px] font-semibold text-[#3d2b23]">{chat.title}</span>
-                    <span className="shrink-0 text-[10px] text-[#a18c80]">{conversationTime(chat.updated_at)}</span>
+                    <span className="block min-w-0 flex-1 truncate text-sm font-semibold text-[#3d2b23]">{chat.title}</span>
+                    <span className="shrink-0 text-[11px] text-[#a18c80]">{conversationTime(chat.updated_at)}</span>
                   </span>
-                  <span className="mt-1 block truncate text-[11px] leading-4 text-[#8b7569]">{chat.preview}</span>
+                  <span className="mt-1 block truncate text-xs leading-4 text-[#8b7569]">{chat.preview}</span>
                 </span>
               </button>)}
             </div>
           </div>
-          <div className="border-t border-[#eaded5] bg-[#fffaf5] px-2 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-3">
+          <div className="border-t border-[#eaded5] bg-[#fffaf5] px-3 pb-[max(3.375rem,env(safe-area-inset-bottom))] pt-3.5">
             <AnimatePresence initial={false}>
               {accountMenuOpen && <motion.div id="account-menu" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: .16 }} className="mb-2 rounded-xl border border-[#e3d5cb] bg-white p-2 shadow-[0_14px_34px_-28px_rgba(61,38,27,.55)]">
                 <div className="px-2 pb-2 pt-1"><p className="truncate text-[12px] font-semibold text-[#3d2b23]">{userName}</p><p className="mt-0.5 text-[10px] text-[#8b7569]">GharSaathi account</p></div>
@@ -679,8 +679,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
               </motion.div>}
             </AnimatePresence>
             <div className="flex items-center gap-2">
-              <button type="button" onClick={() => void startNewChat()} className="flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#d95617] px-4 text-[13px] font-semibold text-white shadow-[0_12px_24px_-18px_rgba(177,70,20,.8)] transition hover:bg-[#c94d12] active:scale-[.97]"><NotePencil size={18} weight="bold" className="shrink-0" /> New chat</button>
-              <button type="button" onClick={() => setAccountMenuOpen((open) => !open)} aria-label={`Open GharSaathi account menu for ${userName}`} aria-expanded={accountMenuOpen} aria-controls="account-menu" title="Account" className="grid size-11 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-sm font-semibold uppercase text-[#9f451d] ring-1 ring-[#dfc9bb] transition hover:bg-[#ead2c2] active:scale-[.96]">
+              <button type="button" onClick={() => void startNewChat()} className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#d95617] px-4 text-sm font-semibold text-white shadow-[0_12px_24px_-18px_rgba(177,70,20,.8)] transition hover:bg-[#c94d12] active:scale-[.97]"><NotePencil size={19} weight="bold" className="shrink-0" /> New chat</button>
+              <button type="button" onClick={() => setAccountMenuOpen((open) => !open)} aria-label={`Open GharSaathi account menu for ${userName}`} aria-expanded={accountMenuOpen} aria-controls="account-menu" title="Account" className="grid size-12 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-[15px] font-semibold uppercase text-[#9f451d] ring-1 ring-[#dfc9bb] transition hover:bg-[#ead2c2] active:scale-[.96]">
                 {userName.trim().charAt(0) || "G"}
               </button>
             </div>
