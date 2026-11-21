@@ -32,21 +32,21 @@ function LoadingSplash() {
 
 const featureSlides = [
   {
-    eyebrow: "HOUSEHOLD MEMORY",
-    title: "Aapke ghar ki choices yaad.",
-    description: "Aapki permission se brands, pack sizes, quantities, aur corrections yaad rahengi—har baar wahi baat dobara nahi.",
+    eyebrow: "YOUR HOUSEHOLD",
+    title: "Aapki pasand, yaad.",
+    description: "Brand, pack size aur quantity sirf aapki permission se. Agli baar dobara batana nahi.",
     icon: <Brain size={38} weight="duotone" />,
   },
   {
-    eyebrow: "BASKET INTELLIGENCE",
-    title: "Sirf item price nahi.",
-    description: "Equivalent packs, availability, fees, offers, delivery time, aur final payable—poore basket ka balanced decision.",
+    eyebrow: "SMART COMPARISON",
+    title: "Sahi basket, ek baar mein.",
+    description: "Swiggy aur Zepto par stock, fees, offers aur delivery milaakar compare.",
     icon: <Calculator size={38} weight="duotone" />,
   },
   {
-    eyebrow: "SHOP TO SUPPORT",
-    title: "Order ke baad bhi saath.",
-    description: "Meaningful delivery updates aur issue context isi conversation mein—support ke liye order details dobara samjhana nahi.",
+    eyebrow: "AFTER YOU ORDER",
+    title: "Order ka update, yahin.",
+    description: "Delivery changes aur issue details isi chat mein. Support ke liye context ready.",
     icon: <BellRinging size={38} weight="duotone" />,
   },
 ];
@@ -65,25 +65,29 @@ export function PublicOnboarding() {
       </div>
 
       <AnimatePresence mode="wait" initial={false}>
-        {step === 0 && <motion.section key="intro" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .22 }} className="flex flex-1 flex-col items-center text-center">
-          <div className="mt-[8dvh]"><LogoMark /></div>
-          <p className="font-display mt-6 text-[32px] font-semibold tracking-[-.05em]">GharSaathi</p>
-          <h1 className="mt-10 text-[30px] font-semibold leading-[1.12] tracking-[-.045em]">Ghar ka shopping,<br />bas bol dijiye.</h1>
-          <p className="mt-4 max-w-[29ch] text-[15px] leading-6 text-[#806f65]">Aap bolenge. Main ghar ki choices samajhkar shopping ka kaam karungi—final decision hamesha aapka.</p>
+        {step === 0 && <motion.section key="intro" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .22 }} className="flex flex-1 flex-col items-center justify-center pb-2 text-center">
+          <LogoMark />
+          <p className="font-display mt-5 text-[30px] font-semibold tracking-[-.05em]">GharSaathi</p>
+          <h1 className="mt-8 text-[30px] font-semibold leading-[1.12] tracking-[-.045em]">Ghar ka shopping,<br />bas bol dijiye.</h1>
+          <p className="mt-4 max-w-[28ch] text-[15px] leading-6 text-[#806f65]">Aap bolenge. Main choices samajhkar options laungi. Final decision hamesha aapka.</p>
         </motion.section>}
 
-        {feature && <motion.section key={feature.eyebrow} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: .22 }} className="flex flex-1 flex-col">
-          <div className="mt-[10dvh] grid size-20 place-items-center rounded-[26px] border border-[#e4c9b8] bg-[#fff8f2] text-[#c6531d] shadow-[0_24px_50px_-34px_rgba(101,52,27,.65)]">{feature.icon}</div>
-          <p className="mt-10 text-[10px] font-semibold tracking-[.18em] text-[#c6531d]">{feature.eyebrow}</p>
-          <h1 className="font-display mt-3 max-w-[12ch] text-[36px] font-semibold leading-[1.08] tracking-[-.05em]">{feature.title}</h1>
-          <p className="mt-5 max-w-[31ch] text-[15px] leading-6 text-[#806f65]">{feature.description}</p>
+        {feature && <motion.section key={feature.eyebrow} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: .22 }} className="flex min-h-0 flex-1 items-center justify-center text-center">
+          <div className="flex w-full -translate-y-2 flex-col items-center">
+            <div className="grid size-20 place-items-center rounded-[26px] border border-[#e4c9b8] bg-[#fff8f2] text-[#c6531d] shadow-[0_24px_50px_-34px_rgba(101,52,27,.65)]">{feature.icon}</div>
+            <p className="mt-7 text-[10px] font-semibold tracking-[.18em] text-[#c6531d]">{feature.eyebrow}</p>
+            <h1 className="font-display mt-3 max-w-[12ch] text-[36px] font-semibold leading-[1.08] tracking-[-.05em]">{feature.title}</h1>
+            <p className="mt-4 max-w-[29ch] text-[15px] leading-6 text-[#806f65]">{feature.description}</p>
+          </div>
         </motion.section>}
 
-        {step === authStep && <motion.section key="auth" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: .22 }} className="flex flex-1 flex-col items-center text-center">
-          <div className="mt-[7dvh]"><LogoMark /></div>
-          <h1 className="font-display mt-8 text-[34px] font-semibold leading-[1.1] tracking-[-.05em]">Apna GharSaathi<br />ready karein.</h1>
-          <p className="mt-4 max-w-[30ch] text-sm leading-6 text-[#806f65]">Secure account se chat, preferences, baskets, aur approvals aapke hi rahenge.</p>
-          <div className="mt-auto w-full pt-10">
+        {step === authStep && <motion.section key="auth" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: .22 }} className="flex min-h-0 flex-1 flex-col text-center">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center pb-2">
+            <LogoMark />
+            <h1 className="font-display mt-7 text-[34px] font-semibold leading-[1.1] tracking-[-.05em]">Apna GharSaathi<br />ready karein.</h1>
+            <p className="mt-4 max-w-[30ch] text-sm leading-6 text-[#806f65]">Secure account se chats, preferences, baskets aur approvals sirf aapke rahenge.</p>
+          </div>
+          <div className="w-full pt-6">
             <SignUpButton mode="redirect" forceRedirectUrl="/">
               <button className="flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition active:scale-[.98]">Create account <ArrowRight size={17} weight="bold" /></button>
             </SignUpButton>
@@ -125,7 +129,7 @@ export function FirstRunOnboarding({ children }: { children: (profile: { justCom
     event.preventDefault();
     const firstName = displayName.trim();
     if (!firstName) {
-      setError("Naam bata dijiye—main isi naam se bulaungi.");
+      setError("Naam bata dijiye. Main isi naam se bulaungi.");
       return;
     }
     setSaving(true);
