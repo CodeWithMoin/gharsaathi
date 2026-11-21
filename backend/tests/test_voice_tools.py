@@ -14,6 +14,7 @@ from app.voice.sideband import FINISHED, SessionChannel, SidebandRunner
 from app.voice.tools import (
     MultiProviderShoppingToolExecutor,
     ProviderSearchTarget,
+    SearchOption,
     ShoppingToolExecutor,
 )
 
@@ -130,7 +131,7 @@ async def test_rate_limit_is_not_misreported_as_unclear_availability() -> None:
 async def test_multi_provider_search_labels_results_and_keeps_zepto_read_only() -> None:
     swiggy = FakeSearcher(ProductSearchResult(products=[product("Swiggy Milk", 70, 72)]))
     zepto = FakeSearcher(ProductSearchResult(products=[product("Zepto Milk", 68, 72)]))
-    options: dict[str, Product] = {}
+    options: dict[str, SearchOption] = {}
     executor = MultiProviderShoppingToolExecutor(
         [
             ProviderSearchTarget(

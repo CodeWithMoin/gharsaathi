@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Basket, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
-import { BasketPanel, useAddBasketLine, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
+import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
 import { groupProductsForComparison, ProductComparison, type Product } from "./product-comparison";
 import { LiveOrderTracking } from "./order-tracking";
 import { PersonalizationOnboarding } from "./personalization-onboarding";
@@ -94,7 +94,13 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   const chatMessagesRef = useRef<ChatMessage[]>([]);
   const selectedAddress = useMemo(() => addresses.find((address) => address.id === addressId), [addresses, addressId]);
   const closeVoice = useCallback(() => setVoiceOpen(false), []);
-  const handleBasketTouched = useCallback(() => setBasketOpen(true), []);
+  const basketProviderRef = useRef<ProviderName>(basketProvider);
+  useEffect(() => { basketProviderRef.current = basketProvider; }, [basketProvider]);
+  const handleBasketTouched = useCallback((provider?: ProviderName) => {
+    if (provider && provider !== basketProviderRef.current) setBasketProvider(provider);
+    else window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
+    setBasketOpen(true);
+  }, []);
   const handleVoiceResults = useCallback((searchQuery: string, foundProducts: Product[]) => {
     setSubmittedQuery(searchQuery);
     setProducts(foundProducts);
