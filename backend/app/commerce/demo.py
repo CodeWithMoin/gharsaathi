@@ -25,6 +25,12 @@ from app.commerce.zepto.models import (
     ConnectionStatus as ZeptoConnectionStatus,
     ToolDescription as ZeptoToolDescription,
 )
+from app.commerce.zepto.cart import ZeptoCart
+from app.commerce.zepto.history import (
+    ZeptoOrderDetail,
+    ZeptoOrderHistory,
+    ZeptoOrderHistoryPagination,
+)
 from app.shopping.basket import item_total_paise
 from app.shopping.models import Basket, Charge, Quote
 
@@ -184,6 +190,35 @@ class DemoZeptoService:
             connected=True,
             catalogue_discovered=False,
             exposed_actions=["demo_connection"],
+        )
+
+    async def cart(self) -> ZeptoCart:
+        return ZeptoCart(
+            is_empty=True,
+            total_items=0,
+            items=(),
+            item_total_paise=0,
+            warnings=(),
+        )
+
+    async def order_history(
+        self, *, limit: int = 10, page_number: int = 1
+    ) -> ZeptoOrderHistory:
+        return ZeptoOrderHistory(
+            orders=[],
+            pagination=ZeptoOrderHistoryPagination(
+                page_number=page_number,
+                limit=limit,
+                total=0,
+                total_pages=0,
+                has_more=False,
+            ),
+        )
+
+    async def order_detail(self, order_id: str) -> ZeptoOrderDetail:
+        del order_id
+        raise ZeptoConfigurationError(
+            "Zepto order details are unavailable while demo mode is active."
         )
 
     async def addresses(self) -> AddressList:

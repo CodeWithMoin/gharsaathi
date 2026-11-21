@@ -152,5 +152,7 @@ def test_zepto_capabilities_endpoint_is_explicitly_not_checkout() -> None:
         "remote_tool_names": ["some_provider_tool"],
         "exposed_actions": ["connect", "disconnect", "inspect_catalogue"],
         "cart_actions_exposed": False,
+        "cart_read_exposed": False,
+        "order_history_exposed": False,
         "checkout_exposed": False,
     }

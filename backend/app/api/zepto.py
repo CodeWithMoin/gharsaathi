@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Path, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -19,6 +19,8 @@ from app.commerce.zepto.errors import (
     ZeptoRateLimited,
     ZeptoSchemaError,
 )
+from app.commerce.zepto.cart import ZeptoCart
+from app.commerce.zepto.history import ZeptoOrderDetail, ZeptoOrderHistory
 from app.commerce.zepto.models import (
     CapabilitySummary,
     ConnectionStatus,
@@ -139,6 +141,50 @@ async def capabilities(service: ZeptoServiceDependency) -> CapabilitySummary:
 
     try:
         return await service.capabilities()
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.get("/cart", response_model=ZeptoCart)
+async def cart(service: ZeptoServiceDependency) -> ZeptoCart:
+    """Return a display-only provider-cart snapshot; never mutate it."""
+
+    try:
+        return await service.cart()
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.get("/orders", response_model=ZeptoOrderHistory)
+async def order_history(
+    service: ZeptoServiceDependency,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    page_number: Annotated[int, Query(ge=1, le=1000)] = 1,
+) -> ZeptoOrderHistory:
+    """Return normalized Zepto order history, distinct from repeat-item hints."""
+
+    try:
+        return await service.order_history(limit=limit, page_number=page_number)
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.get(
+    "/orders/{order_id}",
+    response_model=ZeptoOrderDetail,
+    response_model_by_alias=False,
+)
+async def order_detail(
+    order_id: Annotated[str, Path(min_length=1, max_length=256)],
+    service: ZeptoServiceDependency,
+) -> ZeptoOrderDetail:
+    """Return one authenticated Zepto order's provider-confirmed details."""
+
+    try:
+        return await service.order_detail(order_id.strip())
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")

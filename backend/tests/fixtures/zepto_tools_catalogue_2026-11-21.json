@@ -1,0 +1,572 @@
+[
+  {
+    "input_schema": {
+      "properties": {
+        "intent": {
+          "description": "User intent: \"search\" for product lookup, \"order\" for complete ordering flow, \"browse\" for discovery, \"cart\" to view cart, \"orders\" for order history, \"addresses\" for address management",
+          "enum": [
+            "search",
+            "order",
+            "browse",
+            "cart",
+            "orders",
+            "addresses"
+          ],
+          "type": "string"
+        },
+        "quantity": {
+          "default": 1,
+          "description": "Desired quantity if ordering a specific product (default: 1)",
+          "type": "number"
+        },
+        "query": {
+          "description": "Search query or product name if intent involves search (e.g., \"milk\", \"diet coke\")",
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "type": "object"
+    },
+    "name": "zepto_shop"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "pageNumber": {
+          "default": 0,
+          "description": "Page number for pagination (default: 0)",
+          "type": "number"
+        },
+        "query": {
+          "description": "Search query (e.g., \"milk\", \"organic vegetables\", \"bread\")",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "search_products"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "pageNumber": {
+          "default": 0,
+          "description": "Page number for pagination (default: 0)",
+          "type": "number"
+        },
+        "queries": {
+          "description": "Array of search queries (e.g., [\"chips\", \"diet coke\", \"popcorn\"])",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "queries"
+      ],
+      "type": "object"
+    },
+    "name": "search_multiple_products"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "product_variant_id": {
+          "description": "The unique identifier for the product variant (UUID format). This ID is returned in search results.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_variant_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_product_details"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "latitude": {
+          "description": "Latitude coordinate of the delivery location",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Longitude coordinate of the delivery location",
+          "type": "number"
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "type": "object"
+    },
+    "name": "get_location_serviceability"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "latitude": {
+          "description": "Optional: Latitude for this store location",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Optional: Longitude for this store location",
+          "type": "number"
+        },
+        "storeId": {
+          "description": "Store ID from list_all_stores response",
+          "type": "string"
+        }
+      },
+      "required": [
+        "storeId"
+      ],
+      "type": "object"
+    },
+    "name": "select_store"
+  },
+  {
+    "input_schema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "list_saved_addresses"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "addressId": {
+          "description": "The unique ID of the saved address. Use the ID value returned by list_saved_addresses, NOT the label or index number. Do NOT fabricate or guess this value.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "addressId"
+      ],
+      "type": "object"
+    },
+    "name": "select_saved_address"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "buildingName": {
+          "description": "Building or society name",
+          "type": "string"
+        },
+        "buildingType": {
+          "description": "Type of building (defaults to BUILDING_TYPE_SOCIETY)",
+          "enum": [
+            "BUILDING_TYPE_SOCIETY",
+            "BUILDING_TYPE_HOUSE",
+            "BUILDING_TYPE_OTHERS",
+            "BUILDING_TYPE_UNSPECIFIED"
+          ],
+          "type": "string"
+        },
+        "contactName": {
+          "description": "Contact person name for delivery. Required for Indian users, can be omitted for international users.",
+          "type": "string"
+        },
+        "contactNumber": {
+          "description": "Contact phone number for delivery. Required for Indian users, can be omitted for international users.",
+          "type": "string"
+        },
+        "flatDetails": {
+          "description": "Flat/house number and floor details",
+          "type": "string"
+        },
+        "floor": {
+          "description": "Floor number (optional)",
+          "type": "string"
+        },
+        "formattedAddress": {
+          "description": "Full formatted address (from Google Maps or user description)",
+          "type": "string"
+        },
+        "landmark": {
+          "description": "Nearby landmark (optional)",
+          "type": "string"
+        },
+        "latitude": {
+          "description": "Latitude coordinate of the address",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Longitude coordinate of the address",
+          "type": "number"
+        },
+        "name": {
+          "description": "Custom label for the address (e.g., \"Mom's place\", \"Office\")",
+          "type": "string"
+        },
+        "shortAddress": {
+          "description": "Short display address (area, city, state)",
+          "type": "string"
+        },
+        "type": {
+          "description": "Address label type",
+          "enum": [
+            "HOME",
+            "WORK",
+            "OTHER"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "name",
+        "flatDetails",
+        "buildingName",
+        "latitude",
+        "longitude",
+        "formattedAddress",
+        "shortAddress"
+      ],
+      "type": "object"
+    },
+    "name": "add_saved_address"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "addressId": {
+          "description": "Address ID to update. Must be the address ID currently selected for delivery.",
+          "type": "string"
+        },
+        "dropZoneSlot": {
+          "description": "Selected drop zone value. Must exactly match a value from the dropZoneConfig slots (e.g., \"Hall - 1, Ground Floor\").",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dropZoneSlot"
+      ],
+      "type": "object"
+    },
+    "name": "update_drop_zone"
+  },
+  {
+    "input_schema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "get_user_details"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "fullName": {
+          "description": "The full name provided by the user. Must be a non-empty string. Ask the user for this value — never generate it yourself.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fullName"
+      ],
+      "type": "object"
+    },
+    "name": "update_user_name"
+  },
+  {
+    "input_schema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "view_cart"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "cartItems": {
+          "description": "List of cart items to upsert for the device.",
+          "items": {
+            "properties": {
+              "availableQuantity": {
+                "description": "Available stock quantity.",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cartProductId": {
+                "description": "Cart product identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "imageUrl": {
+                "description": "Primary product image URL.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "isAd": {
+                "description": "Whether this is a sponsored product.",
+                "type": "boolean"
+              },
+              "label": {
+                "description": "Short product label (raw title) for display.",
+                "type": "string"
+              },
+              "mrp": {
+                "description": "Maximum retail price in paisa.",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "name": {
+                "description": "Product name for display purposes.",
+                "type": "string"
+              },
+              "packSize": {
+                "description": "Pack size (e.g., \"500ml\", \"1kg\").",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "price": {
+                "description": "Selling price in paisa.",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "productVariantId": {
+                "description": "Product variant identifier (pvid).",
+                "type": "string"
+              },
+              "quantity": {
+                "description": "Quantity to set. Use 0 to remove the item.",
+                "minimum": 0,
+                "type": "number"
+              },
+              "storeProductId": {
+                "description": "Store product identifier (spid).",
+                "type": "string"
+              },
+              "variantId": {
+                "description": "Variant ID (same as productVariantId where available).",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "productVariantId",
+              "storeProductId",
+              "quantity"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "deviceId": {
+          "description": "Unique device identifier used as a fallback cart key when a transportSessionId is not available.",
+          "type": "string"
+        },
+        "replaceCart": {
+          "default": false,
+          "description": "If true, replaces the entire cart with the provided items instead of merging. Use this when syncing the complete cart state from the client.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deviceId",
+        "cartItems"
+      ],
+      "type": "object"
+    },
+    "name": "update_cart"
+  },
+  {
+    "input_schema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "get_payment_methods"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "confirmOrder": {
+          "description": "Set to false (or omit) initially to generate a cart preview. Only set to true after the user has reviewed the preview and explicitly confirmed.",
+          "type": "boolean"
+        },
+        "riderTip": {
+          "default": 0,
+          "description": "Tip for the rider.",
+          "type": "number"
+        },
+        "useZeptoCash": {
+          "default": false,
+          "description": "Whether to apply Zepto Cash to the order.",
+          "type": "boolean"
+        },
+        "userAddressId": {
+          "description": "Address ID to associate with the cart.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "create_order"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "confirmOrder": {
+          "description": "Set to false (or omit) initially to generate a cart preview. Only set to true after the user has reviewed the preview and explicitly confirmed.",
+          "type": "boolean"
+        },
+        "riderTip": {
+          "default": 0,
+          "description": "Tip for the rider.",
+          "type": "number"
+        },
+        "useZeptoCash": {
+          "default": false,
+          "description": "Whether to apply Zepto Cash to the order.",
+          "type": "boolean"
+        },
+        "userAddressId": {
+          "description": "Address ID to associate with the cart.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "create_online_payment_order"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "confirmOrder": {
+          "description": "Set to false (or omit) initially to generate a cart preview. Only set to true after the user has reviewed the preview and explicitly confirmed.",
+          "type": "boolean"
+        },
+        "riderTip": {
+          "default": 0,
+          "description": "Tip for the rider.",
+          "type": "number"
+        },
+        "userAddressId": {
+          "description": "Address ID to associate with the cart.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "create_wallet_order"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "confirmOrder": {
+          "description": "Set to false (or omit) initially to generate a cart preview. Only set to true after the user has reviewed the preview and explicitly confirmed.",
+          "type": "boolean"
+        },
+        "riderTip": {
+          "default": 0,
+          "description": "Tip for the rider.",
+          "type": "number"
+        },
+        "useZeptoCash": {
+          "default": false,
+          "description": "Whether to apply Zepto Cash to the order.",
+          "type": "boolean"
+        },
+        "userAddressId": {
+          "description": "Address ID to associate with the cart.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "create_upi_reserve_pay_order"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "orderId": {
+          "description": "The order ID returned by create_online_payment_order. Required.",
+          "type": "string"
+        },
+        "poll": {
+          "default": false,
+          "description": "When false (default), performs a single status check and returns immediately. When true, starts background polling and waits until payment reaches a terminal state. Do NOT set to true unless explicitly instructed by a previous check_payment_status response.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "orderId"
+      ],
+      "type": "object"
+    },
+    "name": "check_payment_status"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "orderId": {
+          "description": "Order ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "orderId"
+      ],
+      "type": "object"
+    },
+    "name": "get_order_detail"
+  },
+  {
+    "input_schema": {
+      "properties": {
+        "limit": {
+          "default": 10,
+          "description": "Number of orders to fetch (default: 10)",
+          "type": "number"
+        },
+        "pageNumber": {
+          "default": 1,
+          "description": "Page number for order history pagination (default: 1)",
+          "type": "number"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "list_order_history"
+  },
+  {
+    "input_schema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "get_past_order_items"
+  }
+]

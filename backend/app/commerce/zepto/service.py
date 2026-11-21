@@ -4,6 +4,13 @@ import time
 
 from app.commerce.zepto.client import ZeptoMcpClient
 from app.commerce.zepto.adapter import parse_addresses, parse_products
+from app.commerce.zepto.cart import ZeptoCart, parse_view_cart
+from app.commerce.zepto.history import (
+    ZeptoOrderDetail,
+    ZeptoOrderHistory,
+    parse_order_detail,
+    parse_order_history,
+)
 from app.commerce.swiggy.models import AddressList, ProductSearchResult
 from app.commerce.zepto.models import (
     CapabilitySummary,
@@ -56,10 +63,37 @@ class ZeptoService:
             connected=True,
             catalogue_discovered=True,
             remote_tool_names=sorted({tool.name for tool in tools}),
+            exposed_actions=[
+                "connect",
+                "disconnect",
+                "inspect_catalogue",
+                "view_cart",
+                "list_order_history",
+            ],
+            cart_read_exposed=True,
+            order_history_exposed=True,
         )
 
     async def addresses(self) -> AddressList:
         return parse_addresses(await self.client.call_tool("list_saved_addresses", {}))
+
+    async def cart(self) -> ZeptoCart:
+        """Read the provider cart without replaying a failed MCP request."""
+
+        raw = await self.client.call_tool("view_cart", {}, retry_on_auth=False)
+        return parse_view_cart(raw)
+
+    async def order_history(
+        self, *, limit: int = 10, page_number: int = 1
+    ) -> ZeptoOrderHistory:
+        raw = await self.client.call_tool(
+            "list_order_history", {"limit": limit, "pageNumber": page_number}
+        )
+        return parse_order_history(raw, limit=limit, page_number=page_number)
+
+    async def order_detail(self, order_id: str) -> ZeptoOrderDetail:
+        raw = await self.client.call_tool("get_order_detail", {"orderId": order_id})
+        return parse_order_detail(raw)
 
     async def search(
         self, query: str, address_id: str, page_number: int = 0

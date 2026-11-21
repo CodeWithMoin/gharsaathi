@@ -38,7 +38,8 @@ class CapabilitySummary(BaseModel):
 
     ``remote_tool_names`` is a diagnostic view of the authenticated MCP
     catalogue, not permission to invoke one of those tools.  In particular,
-    this application has no Zepto cart, payment, checkout, or order endpoint.
+    this application exposes only read-only cart and order-history views. It
+    has no Zepto cart mutation, payment, checkout, or order endpoint.
     """
 
     connected: bool
@@ -48,4 +49,6 @@ class CapabilitySummary(BaseModel):
         default_factory=lambda: ["connect", "disconnect", "inspect_catalogue"]
     )
     cart_actions_exposed: bool = False
+    cart_read_exposed: bool = False
+    order_history_exposed: bool = False
     checkout_exposed: bool = False
