@@ -2,7 +2,7 @@
 
 import { useClerk } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Basket, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
+import { ArrowRight, Basket, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, ShieldCheck, ShoppingCartSimple, SignOut, Storefront, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
 import { BasketPanel, useAddBasketLine, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
@@ -47,7 +47,7 @@ export default function Home() {
 }
 
 function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetupOpen?: boolean; userName: string }) {
-  const { openUserProfile } = useClerk();
+  const { signOut } = useClerk();
   const apiRequest = useApiRequest();
   const addBasketLine = useAddBasketLine();
   const [voiceOpen, setVoiceOpen] = useState(false);
@@ -72,6 +72,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   const [products, setProducts] = useState<Product[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [recentChats, setRecentChats] = useState<ConversationSummary[]>([]);
   const [chatSearch, setChatSearch] = useState("");
   const [recentChatsLoading, setRecentChatsLoading] = useState(false);
@@ -313,6 +314,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     if (!chatDrawerOpen) return;
     void loadRecentChats();
   }, [chatDrawerOpen, loadRecentChats]);
+
+  useEffect(() => {
+    if (!chatDrawerOpen) setAccountMenuOpen(false);
+  }, [chatDrawerOpen]);
 
   useEffect(() => {
     let active = true;
@@ -667,9 +672,15 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
             </div>
           </div>
           <div className="border-t border-[#eaded5] bg-[#fffaf5] px-2 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-3">
+            <AnimatePresence initial={false}>
+              {accountMenuOpen && <motion.div id="account-menu" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: .16 }} className="mb-2 rounded-xl border border-[#e3d5cb] bg-white p-2 shadow-[0_14px_34px_-28px_rgba(61,38,27,.55)]">
+                <div className="px-2 pb-2 pt-1"><p className="truncate text-[12px] font-semibold text-[#3d2b23]">{userName}</p><p className="mt-0.5 text-[10px] text-[#8b7569]">GharSaathi account</p></div>
+                <button type="button" onClick={() => void signOut({ redirectUrl: "/" })} className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-[12px] font-medium text-[#7d3c24] transition hover:bg-[#f7ebe3] active:scale-[.99]"><SignOut size={16} /> Sign out</button>
+              </motion.div>}
+            </AnimatePresence>
             <div className="flex items-center gap-2">
-              <button type="button" onClick={() => void startNewChat()} className="flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-[#dfcbbd] bg-white px-3 text-[13px] font-semibold text-[#4d392f] transition hover:border-[#cfa78e] hover:bg-[#fffaf5] active:scale-[.98]"><Plus size={17} weight="bold" className="shrink-0 text-[#c6531d]" /> New chat</button>
-              <button type="button" onClick={() => { setChatDrawerOpen(false); openUserProfile(); }} aria-label={`Open account and settings for ${userName}`} title="Account & settings" className="grid size-11 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-sm font-semibold uppercase text-[#9f451d] ring-1 ring-[#dfc9bb] transition hover:bg-[#ead2c2] active:scale-[.96]">
+              <button type="button" onClick={() => void startNewChat()} className="flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#d95617] px-4 text-[13px] font-semibold text-white shadow-[0_12px_24px_-18px_rgba(177,70,20,.8)] transition hover:bg-[#c94d12] active:scale-[.97]"><NotePencil size={18} weight="bold" className="shrink-0" /> New chat</button>
+              <button type="button" onClick={() => setAccountMenuOpen((open) => !open)} aria-label={`Open GharSaathi account menu for ${userName}`} aria-expanded={accountMenuOpen} aria-controls="account-menu" title="Account" className="grid size-11 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-sm font-semibold uppercase text-[#9f451d] ring-1 ring-[#dfc9bb] transition hover:bg-[#ead2c2] active:scale-[.96]">
                 {userName.trim().charAt(0) || "G"}
               </button>
             </div>
