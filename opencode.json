@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "amazon-bedrock/global.anthropic.claude-opus-5-5",
+  "small_model": "amazon-bedrock/global.anthropic.claude-opus-5-5",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "profile": "hackathon-bedrock",
+        "region": "us-east-1"
+      },
+      "models": {
+        "global.anthropic.claude-opus-5-5": {
+          "name": "Claude Opus 5.5 (Amazon Bedrock global)"
+        }
+      }
+    }
+  },
+  "mcp": {
+    "zepto": {
+      "type": "remote",
+      "url": "https://mcp.zepto.co.in/mcp",
+      "enabled": true
+    }
+  }
+}
