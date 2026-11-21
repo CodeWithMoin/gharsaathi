@@ -14,7 +14,7 @@ from app.voice.service import (
     VoiceConfigurationError,
     VoiceProviderError,
 )
-from app.voice.prompts import BACKEND_INSTRUCTIONS, GREETING_INSTRUCTION, LIVE_INSTRUCTIONS
+from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS
 from app.voice.tools import MultiProviderShoppingToolExecutor, ShoppingToolExecutor
 from tests.shopping_fakes import World
 
@@ -44,11 +44,12 @@ def settings(api_key: str = "sk-test-key") -> Settings:
 
 
 def test_voice_prompt_uses_gharsaathi_and_feminine_hinglish() -> None:
-    combined = "\n".join((LIVE_INSTRUCTIONS, GREETING_INSTRUCTION, BACKEND_INSTRUCTIONS))
+    combined = "\n".join((LIVE_INSTRUCTIONS, BACKEND_INSTRUCTIONS))
     assert "GharSaathi" in combined
     assert "GharCart" not in combined
     assert "dekh rahi hoon" in combined
     assert "Never use masculine" in combined
+    assert "user always speaks first" in combined
 
 
 @pytest.mark.asyncio
@@ -85,7 +86,7 @@ async def test_create_posts_client_delegation_session_and_returns_answer() -> No
     assert [tool["name"] for tool in delegation["responses"]["tools"]] == ["search_products"]
     assert session["audio"] == {"output": {"voice": "nira"}}
     assert "format" not in session["audio"]
-    assert session["input"][0]["role"] == "developer"
+    assert "input" not in session
 
 
 @pytest.mark.asyncio

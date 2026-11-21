@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.core.config import Settings
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
-from app.voice.prompts import BACKEND_INSTRUCTIONS, GREETING_INSTRUCTION, LIVE_INSTRUCTIONS
+from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS
 from app.voice.sideband import SidebandHub
 from app.voice.toolbox import ToolExecutor, VOICE_TOOL_DEFINITIONS, VoiceToolbox
 from app.voice.tools import (
@@ -54,13 +54,6 @@ def build_session_config(
                 "parallel_tool_calls": True,
             },
         },
-        "input": [
-            {
-                "type": "message",
-                "role": "developer",
-                "content": [{"type": "input_text", "text": GREETING_INSTRUCTION}],
-            }
-        ],
     }
 
 
