@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.core.config import Settings
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
+from app.voice.address_tools import ZeptoConnectionChecker
 from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS
 from app.voice.sideband import SidebandHub
 from app.voice.toolbox import ToolExecutor, VOICE_TOOL_DEFINITIONS, VoiceToolbox
@@ -68,6 +69,7 @@ class LiveSessionService:
         baskets: BasketService | None = None,
         approvals: ApprovalService | None = None,
         zepto_searcher: ProductSearcher | None = None,
+        zepto_connection: ZeptoConnectionChecker | None = None,
     ) -> None:
         self.settings = settings
         self.searcher = searcher
@@ -75,6 +77,7 @@ class LiveSessionService:
         self.baskets = baskets
         self.approvals = approvals
         self.zepto_searcher = zepto_searcher
+        self.zepto_connection = zepto_connection
         self._http_client = http_client
 
     @property
@@ -96,6 +99,7 @@ class LiveSessionService:
                 self.zepto_searcher,
                 zepto_address_id,
                 household_id,
+                zepto_connection=self.zepto_connection,
             )
         if self.zepto_searcher is not None:
             return MultiProviderShoppingToolExecutor(

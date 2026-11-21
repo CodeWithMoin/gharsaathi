@@ -194,6 +194,7 @@ def get_voice_service() -> LiveSessionService:
         baskets=get_basket_service(),
         approvals=get_approval_service(),
         zepto_searcher=get_zepto_service(),
+        zepto_connection=get_zepto_service(),
     )
 
 

@@ -1,23 +1,36 @@
 "use client";
 
 import { Crosshair, MapPin, SpinnerGap, WarningCircle, X } from "@phosphor-icons/react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useApiRequest } from "./authenticated-api";
+import type { AddressPrefill } from "./voice-address-prefill.mjs";
 
 type Address = { id: string; address_line: string; category?: string; tag?: string };
+export type ZeptoAddressPrefill = AddressPrefill;
 type AddressList = {
   addresses: Address[];
   resolution: { default_address_id?: string | null };
 };
 
+const ADDRESS_TYPES = ["HOME", "WORK", "OTHER"];
+
 export function ZeptoAddressForm({
   onAdded,
   onCancel,
+  prefill,
 }: {
   onAdded: (result: AddressList) => void;
   onCancel: () => void;
+  prefill?: ZeptoAddressPrefill;
 }) {
   const request = useApiRequest();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const initial = prefill ?? {};
+  const hasPrefill = prefill !== undefined;
+
+  useEffect(() => {
+    if (hasPrefill) formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [hasPrefill]);
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [locating, setLocating] = useState(false);
@@ -87,31 +100,31 @@ export function ZeptoAddressForm({
   const labelClass = "block text-[11px] font-semibold text-[#624f44]";
 
   return (
-    <form onSubmit={submit} className="mt-4 space-y-4 rounded-2xl border border-[#dfd0eb] bg-[#fbf7ff] p-4">
+    <form ref={formRef} onSubmit={submit} className="mt-4 space-y-4 rounded-2xl border border-[#dfd0eb] bg-[#fbf7ff] p-4">
       <div className="flex items-start gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#eee2f8] text-[#6f359f]"><MapPin size={18} weight="fill" /></span>
-        <div><h4 className="text-sm font-semibold text-[#3e2b49]">Add delivery address</h4><p className="mt-1 text-[11px] leading-5 text-[#786a80]">This saves the address and delivery contact to your connected Zepto account.</p></div>
+        <div><h4 className="text-sm font-semibold text-[#3e2b49]">Add delivery address</h4><p className="mt-1 text-[11px] leading-5 text-[#786a80]">This saves the address and delivery contact to your connected Zepto account.</p>{hasPrefill && <p className="mt-1.5 text-[11px] font-medium leading-5 text-[#6f359f]">Filled from what you said—please check every field, set the location, and add the contact number.</p>}</div>
         <button type="button" onClick={onCancel} className="ml-auto grid size-8 place-items-center rounded-full text-[#7a687f] hover:bg-[#eee3f4]" aria-label="Close address form"><X size={15} /></button>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className={labelClass}>Type<select name="type" defaultValue="HOME" className={inputClass}><option value="HOME">Home</option><option value="WORK">Work</option><option value="OTHER">Other</option></select></label>
-        <label className={labelClass}>Label<input name="name" required maxLength={80} placeholder="Home" className={inputClass} /></label>
+        <label className={labelClass}>Type<select name="type" defaultValue={initial.type && ADDRESS_TYPES.includes(initial.type) ? initial.type : "HOME"} className={inputClass}><option value="HOME">Home</option><option value="WORK">Work</option><option value="OTHER">Other</option></select></label>
+        <label className={labelClass}>Label<input name="name" defaultValue={initial.name} required maxLength={80} placeholder="Home" className={inputClass} /></label>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <label className={labelClass}>Flat / house<input name="flat_details" required maxLength={160} placeholder="Flat 4B" className={inputClass} /></label>
-        <label className={labelClass}>Building / society<input name="building_name" required maxLength={160} placeholder="Lake View Apartments" className={inputClass} /></label>
+        <label className={labelClass}>Flat / house<input name="flat_details" defaultValue={initial.flat_details} required maxLength={160} placeholder="Flat 4B" className={inputClass} /></label>
+        <label className={labelClass}>Building / society<input name="building_name" defaultValue={initial.building_name} required maxLength={160} placeholder="Lake View Apartments" className={inputClass} /></label>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <label className={labelClass}>Building type<select name="building_type" defaultValue="BUILDING_TYPE_SOCIETY" className={inputClass}><option value="BUILDING_TYPE_SOCIETY">Society</option><option value="BUILDING_TYPE_HOUSE">House</option><option value="BUILDING_TYPE_OTHERS">Other</option></select></label>
-        <label className={labelClass}>Floor <span className="font-normal text-[#9a8c9f]">optional</span><input name="floor" maxLength={40} placeholder="4" className={inputClass} /></label>
+        <label className={labelClass}>Floor <span className="font-normal text-[#9a8c9f]">optional</span><input name="floor" defaultValue={initial.floor} maxLength={40} placeholder="4" className={inputClass} /></label>
       </div>
-      <label className={labelClass}>Full formatted address<textarea name="formatted_address" required maxLength={500} rows={2} placeholder="Street, area, city, state, PIN code" className={inputClass} /></label>
-      <label className={labelClass}>Area / city / state<input name="short_address" required maxLength={200} placeholder="Indiranagar, Bengaluru, Karnataka" className={inputClass} /></label>
-      <label className={labelClass}>Nearby landmark <span className="font-normal text-[#9a8c9f]">optional</span><input name="landmark" maxLength={160} placeholder="Near metro station" className={inputClass} /></label>
+      <label className={labelClass}>Full formatted address<textarea name="formatted_address" defaultValue={initial.formatted_address} required maxLength={500} rows={2} placeholder="Street, area, city, state, PIN code" className={inputClass} /></label>
+      <label className={labelClass}>Area / city / state<input name="short_address" defaultValue={initial.short_address} required maxLength={200} placeholder="Indiranagar, Bengaluru, Karnataka" className={inputClass} /></label>
+      <label className={labelClass}>Nearby landmark <span className="font-normal text-[#9a8c9f]">optional</span><input name="landmark" defaultValue={initial.landmark} maxLength={160} placeholder="Near metro station" className={inputClass} /></label>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className={labelClass}>Delivery contact<input name="contact_name" required maxLength={100} autoComplete="name" className={inputClass} /></label>
+        <label className={labelClass}>Delivery contact<input name="contact_name" defaultValue={initial.contact_name} required maxLength={100} autoComplete="name" className={inputClass} /></label>
         <label className={labelClass}>Contact number<input name="contact_number" required minLength={7} maxLength={20} inputMode="tel" autoComplete="tel" className={inputClass} /></label>
       </div>
 
