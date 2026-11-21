@@ -1,0 +1,504 @@
+"""Scripted multi-turn QA of the delegated voice backend brain.
+
+Drives the real backend model (``settings.live_backend_model``) through the
+OpenAI Responses API with the exact delegation instructions and voice tool
+definitions, and executes every tool call through ``VoiceToolbox`` backed by
+the static demo providers and in-memory repositories. No Swiggy or Zepto
+network call is possible: DNS lookups are restricted to the OpenAI API host.
+
+Usage (from backend/):
+    uv run --with-requirements requirements.txt python -m evaluation.run_voice_delegation \
+        [--scenario ID ...] [--report PATH]
+"""
+
+import argparse
+import asyncio
+import json
+import re
+import socket
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
+
+from openai import AsyncOpenAI
+
+from app.commerce.demo import (
+    DEMO_ADDRESS_ID,
+    DemoQuoteProvider,
+    DemoSwiggyService,
+    DemoZeptoQuoteProvider,
+    DemoZeptoService,
+)
+from app.commerce.swiggy.models import Price, Product, ProductSearchResult
+from app.core.config import get_settings
+from app.shopping.approval import ApprovalService
+from app.shopping.basket import BasketService
+from app.shopping.memory import InMemoryApprovalRepository, InMemoryBasketRepository
+from app.voice.prompts import BACKEND_INSTRUCTIONS, VOICE_PROMPT_VERSION
+from app.voice.service import build_session_config
+from app.voice.toolbox import VOICE_TOOL_DEFINITIONS, VoiceToolbox
+from app.voice.tools import ProductSearcher
+from evaluation.run_realtime_voice import MASCULINE_SELF_FORMS
+
+
+SCENARIOS_PATH = Path(__file__).with_name("voice_delegation_scenarios.json")
+DEFAULT_REPORT_PATH = Path(__file__).with_name("voice_delegation_report.json")
+HOUSEHOLD_ID = "qa_voice_delegation"
+MAX_TOOL_ROUNDS = 8
+
+MASCULINE_PATTERN = re.compile(
+    r"\b(?:raha|gaya|sakta|deta|leta|karta|dunga|lunga)\s+hoon\b|रहा हूँ|गया हूँ|सकता हूँ|करता हूँ|दूँगा|करूँगा",
+    re.IGNORECASE,
+)
+PRICE_PATTERN = re.compile(
+    r"(?:₹|rs\.?\s*|inr\s*)(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:rupaye|rupees|rupee|rupay|रुपये|रुपए)",
+    re.IGNORECASE,
+)
+MINUTES_PATTERN = re.compile(r"(\d+)\s*(?:[-–]\s*\d+\s*)?(?:min|minute|minat|मिनट)", re.IGNORECASE)
+ADD_CLAIM_PATTERN = re.compile(
+    r"add (?:ho gaya|ho gayi|ho gaye|kar diya|kar di|kar diye)|added|daal diya|daal di|जोड़ दिया|ऐड हो गया|add हो गया",
+    re.IGNORECASE,
+)
+ORDER_CLAIM_PATTERN = re.compile(
+    r"order (?:place )?(?:ho gaya|kar diya|placed|has been placed|confirm ho gaya)|approve (?:kar diya|ho gaya)|\bapproved\b|ऑर्डर (?:हो गया|कर दिया)",
+    re.IGNORECASE,
+)
+NEGATION_PATTERN = re.compile(r"\bnahi\b|\bnahin\b|\bnot\b|\bcan't\b|\bcannot\b|नहीं|\bnhi\b", re.IGNORECASE)
+SAVED_CLAIM_PATTERN = re.compile(
+    r"(?:address )?(?:save ho gaya|save kar diya|saved|add ho gaya|add kar diya)|सेव हो गया", re.IGNORECASE
+)
+DELIVERY_UNKNOWN_PATTERN = re.compile(
+    r"(?:delivery|time|samay|टाइम|डिलीवरी)[^.?!।]*(?:nahi|nahin|not|abhi|pata|नहीं)|"
+    r"(?:nahi|not|नहीं)[^.?!।]*(?:delivery|time|डिलीवरी)",
+    re.IGNORECASE,
+)
+DELIVERY_WORD_PATTERN = re.compile(r"delivery|time|samay|minute|min\b|डिलीवरी|मिनट|टाइम", re.IGNORECASE)
+SENTENCE_SPLIT = re.compile(r"(?<=[.?!।])\s+")
+
+
+
+
+@dataclass
+class NetworkGuard:
+    """Allow DNS only for the OpenAI API host; record and block everything else."""
+
+    allowed_host: str
+    lookups: list[str] = field(default_factory=list)
+    blocked: list[str] = field(default_factory=list)
+
+    def install(self) -> None:
+        original = socket.getaddrinfo
+
+        def guarded(host: Any, *args: Any, **kwargs: Any) -> Any:
+            name = host.decode() if isinstance(host, bytes) else str(host)
+            self.lookups.append(name)
+            if name != self.allowed_host:
+                self.blocked.append(name)
+                raise OSError(f"QA harness blocks network access to {name}")
+            return original(host, *args, **kwargs)
+
+        setattr(socket, "getaddrinfo", guarded)
+
+
+
+
+def _fixture_product(entry: dict[str, Any], prefix: str) -> Product:
+    return Product(
+        product_id=entry["product_id"],
+        sku_id=f"{prefix}-sku-{entry['product_id']}",
+        spin_id=f"{prefix}-spin-{entry['product_id']}",
+        name=entry["name"],
+        brand=entry["brand"],
+        pack_size=entry["pack_size"],
+        price=Price(mrp=entry["mrp"], offer_price=entry["offer_price"]),
+        available=True,
+    )
+
+
+class FixtureOverlaySearcher:
+    """Harness-only products searched first; anything else falls through to the demo store."""
+
+    def __init__(self, base: ProductSearcher, products: list[Product]) -> None:
+        self.base = base
+        self.products = products
+
+    async def search(self, query: str, address_id: str, offset: int) -> ProductSearchResult:
+        words = {word for word in re.split(r"[^a-z0-9]+", query.lower()) if len(word) > 2}
+        matched = [
+            product
+            for product in self.products
+            if words & set(re.split(r"[^a-z0-9]+", f"{product.name} {product.brand}".lower()))
+        ]
+        if matched:
+            return ProductSearchResult(products=matched)
+        return await self.base.search(query, address_id, offset)
+
+
+def build_toolbox(catalogue: str, catalogues: dict[str, Any]) -> VoiceToolbox:
+    swiggy: ProductSearcher = DemoSwiggyService()
+    zepto: ProductSearcher = DemoZeptoService()
+    if catalogue != "demo":
+        overlay = catalogues[catalogue]
+        swiggy = FixtureOverlaySearcher(
+            swiggy, [_fixture_product(item, "swiggy") for item in overlay["swiggy_instamart"]]
+        )
+        zepto = FixtureOverlaySearcher(
+            zepto, [_fixture_product(item, "zepto") for item in overlay["zepto"]]
+        )
+    basket_repo = InMemoryBasketRepository()
+    approval_repo = InMemoryApprovalRepository()
+    quotes = {"swiggy_instamart": DemoQuoteProvider(), "zepto": DemoZeptoQuoteProvider()}
+    return VoiceToolbox(
+        swiggy,
+        BasketService(basket_repo, approval_repo),
+        ApprovalService(basket_repo, approval_repo, lambda name: quotes[name]),
+        DEMO_ADDRESS_ID,
+        zepto,
+        DEMO_ADDRESS_ID,
+        HOUSEHOLD_ID,
+        zepto_connection=DemoZeptoService(),
+    )
+
+
+
+
+async def run_turn(
+    client: AsyncOpenAI,
+    delegation: dict[str, Any],
+    toolbox: VoiceToolbox,
+    user_text: str,
+    previous_response_id: str | None,
+) -> tuple[str, list[dict[str, Any]], str]:
+    calls: list[dict[str, Any]] = []
+    request_input: list[dict[str, Any]] = [{"role": "user", "content": user_text}]
+    previous = previous_response_id
+    for _ in range(MAX_TOOL_ROUNDS):
+        response = await client.responses.create(
+            model=delegation["model"],
+            instructions=delegation["instructions"],
+            tools=delegation["tools"],
+            tool_choice=delegation["tool_choice"],
+            parallel_tool_calls=delegation["parallel_tool_calls"],
+            input=request_input,
+            previous_response_id=previous,
+        )
+        previous = response.id
+        function_calls = [item for item in response.output if item.type == "function_call"]
+        if not function_calls:
+            return response.output_text.strip(), calls, response.id
+        request_input = []
+        for item in function_calls:
+            outcome = await toolbox.execute(item.name, item.arguments)
+            try:
+                arguments: Any = json.loads(item.arguments)
+            except json.JSONDecodeError:
+                arguments = item.arguments
+            calls.append(
+                {
+                    "name": item.name,
+                    "arguments": arguments,
+                    "status": outcome.model_output.get("status"),
+                    "model_output": outcome.model_output,
+                    "ui_event_type": (outcome.ui_event or {}).get("type"),
+                    "ui_prefill": (outcome.ui_event or {}).get("prefill"),
+                }
+            )
+            request_input.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps(outcome.model_output, ensure_ascii=False),
+                }
+            )
+    raise RuntimeError(f"Model kept calling tools for more than {MAX_TOOL_ROUNDS} rounds.")
+
+
+
+
+def _numbers(value: Any) -> set[float]:
+    found: set[float] = set()
+    if isinstance(value, bool):
+        return found
+    if isinstance(value, (int, float)):
+        found.add(float(value))
+    elif isinstance(value, str):
+        found.update(float(match) for match in re.findall(r"\d+(?:\.\d+)?", value.replace(",", "")))
+    elif isinstance(value, dict):
+        for item in value.values():
+            found |= _numbers(item)
+    elif isinstance(value, list):
+        for item in value:
+            found |= _numbers(item)
+    return found
+
+
+def _eta_minutes(value: Any) -> set[int]:
+    text = json.dumps(value, ensure_ascii=False)
+    return {int(match) for match in re.findall(r'"delivery_eta": "(\d+)', text)}
+
+
+def _size_value(pack_size: str | None) -> float:
+    if not pack_size:
+        return float("inf")
+    match = re.match(r"\s*(\d+(?:\.\d+)?)\s*(ml|l|g|kg)?", pack_size.lower())
+    if not match:
+        return float("inf")
+    number = float(match.group(1))
+    unit = match.group(2) or ""
+    return number * 1000 if unit in {"l", "kg"} else number
+
+
+def _search_options(session_calls: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    options: dict[str, dict[str, Any]] = {}
+    for call in session_calls:
+        if call["name"] == "search_products" and call["status"] == "ok":
+            for result in call["model_output"]["results"]:
+                if "option_id" in result:
+                    options[result["option_id"]] = result
+    return options
+
+
+def _script(text: str) -> dict[str, Any]:
+    letters = [char for char in text if char.isalpha()]
+    devanagari = sum(1 for char in letters if "\u0900" <= char <= "\u097f")
+    latin = sum(1 for char in letters if char.isascii())
+    ratio = devanagari / len(letters) if letters else 0.0
+    dominant = "devanagari" if ratio >= 0.6 else "latin" if ratio <= 0.1 else "mixed"
+    return {"devanagari_ratio": round(ratio, 3), "latin_letters": latin, "dominant": dominant}
+
+
+def _claim_sentences(pattern: re.Pattern[str], reply: str) -> list[str]:
+    return [
+        sentence
+        for sentence in SENTENCE_SPLIT.split(reply)
+        if pattern.search(sentence) and not NEGATION_PATTERN.search(sentence)
+    ]
+
+
+def check_turn(
+    expect: dict[str, Any],
+    reply: str,
+    calls: list[dict[str, Any]],
+    session_calls: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[str]]:
+    failures: list[str] = []
+    names = [call["name"] for call in calls]
+    adds = [call for call in calls if call["name"] == "add_to_basket"]
+    successful_adds = [call for call in adds if call["status"] == "added"]
+    changed = [call for call in calls if call["status"] in {"added", "updated"}]
+    approvals = [call for call in calls if call["status"] == "awaiting_user_approval"]
+    sentences = [sentence for sentence in SENTENCE_SPLIT.split(reply.strip()) if sentence]
+    questions = reply.count("?") + reply.count("？")
+    tool_numbers = _numbers([call["model_output"] for call in session_calls])
+    reply_prices = {
+        float(a or b) for a, b in PRICE_PATTERN.findall(reply.replace(",", ""))
+    }
+    reply_minutes = {int(value) for value in MINUTES_PATTERN.findall(reply)}
+    tool_minutes = _eta_minutes([call["model_output"] for call in session_calls])
+    masculine = [form for form in MASCULINE_SELF_FORMS if form.lower() in reply.lower()]
+    masculine += [match.group(0) for match in MASCULINE_PATTERN.finditer(reply)]
+    facts: dict[str, Any] = {
+        "tool_names": names,
+        "question_count": questions,
+        "sentence_count": len(sentences),
+        "masculine_self_forms": sorted(set(masculine)),
+        "reply_prices": sorted(reply_prices),
+        "invented_prices": sorted(price for price in reply_prices if price not in tool_numbers),
+        "reply_eta_minutes": sorted(reply_minutes),
+        "invented_eta_minutes": sorted(value for value in reply_minutes if value not in tool_minutes),
+        "unconfirmed_add_claim": bool(ADD_CLAIM_PATTERN.search(reply)) and not changed,
+        "order_claims": _claim_sentences(ORDER_CLAIM_PATTERN, reply),
+        "script": _script(reply),
+    }
+
+    if questions > expect.get("max_questions", 1):
+        failures.append(f"{questions} questions in one turn (max {expect.get('max_questions', 1)}).")
+    if facts["masculine_self_forms"]:
+        failures.append(f"Masculine self-reference: {facts['masculine_self_forms']}.")
+    if facts["invented_prices"]:
+        failures.append(f"Prices not returned by any tool: {facts['invented_prices']}.")
+    if facts["invented_eta_minutes"]:
+        failures.append(f"Delivery minutes not returned by any tool: {facts['invented_eta_minutes']}.")
+    if facts["unconfirmed_add_claim"]:
+        failures.append("Reply claims an add/change but no basket tool confirmed one this turn.")
+    if facts["order_claims"]:
+        failures.append(f"Reply claims an order/approval: {facts['order_claims']}.")
+
+    for name in expect.get("tools_required", []):
+        if name not in names:
+            failures.append(f"Expected tool {name} was not called (called: {names}).")
+    if "add_count" in expect and len(adds) != expect["add_count"]:
+        failures.append(f"Expected {expect['add_count']} add_to_basket call(s), got {len(adds)}.")
+    if adds and len(successful_adds) != len(adds):
+        failures.append(f"add_to_basket failed: {[call['model_output'] for call in adds]}.")
+    options = _search_options(session_calls)
+    for call in successful_adds:
+        option = options.get(call["arguments"].get("option_id"), {})
+        facts.setdefault("added", []).append(
+            {
+                "option_id": call["arguments"].get("option_id"),
+                "quantity": call["arguments"].get("quantity"),
+                "name": option.get("name"),
+                "pack_size": option.get("pack_size"),
+                "store_id": option.get("store_id"),
+                "price_rupees": option.get("price_rupees"),
+            }
+        )
+        if "add_store" in expect and option.get("store_id") != expect["add_store"]:
+            failures.append(f"Added to {option.get('store_id')}, expected {expect['add_store']}.")
+        needle = expect.get("add_product_contains")
+        if needle and needle.lower() not in str(option.get("name", "")).lower():
+            failures.append(f"Added {option.get('name')!r}, expected a product containing {needle!r}.")
+        if expect.get("add_smallest") and needle:
+            candidates = [
+                candidate for candidate in options.values() if needle.lower() in candidate["name"].lower()
+            ]
+            smallest = min(_size_value(candidate.get("pack_size")) for candidate in candidates)
+            if _size_value(option.get("pack_size")) != smallest:
+                failures.append(
+                    f"Added {option.get('pack_size')}, but the smallest {needle} option seen was {smallest:g}."
+                )
+    if "max_sentences" in expect and len(sentences) > expect["max_sentences"]:
+        failures.append(f"{len(sentences)} sentences, expected at most {expect['max_sentences']}.")
+    repeated = [word for word in expect.get("no_option_list", []) if word.lower() in reply.lower()]
+    if repeated:
+        failures.append(f"Option list repeated after selection (mentions {repeated}).")
+    if expect.get("delivery_mentioned") and not DELIVERY_WORD_PATTERN.search(reply):
+        failures.append("Delivery time question was not answered.")
+    if expect.get("delivery_unknown_stated") and not DELIVERY_UNKNOWN_PATTERN.search(reply):
+        failures.append("Did not say that delivery time is not shown.")
+    if expect.get("delivery_not_repeated") and DELIVERY_UNKNOWN_PATTERN.search(reply):
+        failures.append("Delivery-unknown disclaimer repeated after it was already stated.")
+    if "quantity_set" in expect:
+        wanted = expect["quantity_set"]
+        sets = [call for call in calls if call["name"] == "set_basket_quantity" and call["status"] == "updated"]
+        if not any(
+            call["model_output"].get("store_id") == wanted["store_id"]
+            and any(item["quantity"] == wanted["quantity"] for item in call["model_output"].get("items", []))
+            for call in sets
+        ):
+            failures.append(f"No successful quantity change to {wanted} (calls: {[c['model_output'] for c in calls]}).")
+    if "approval_store" in expect and not any(
+        call["model_output"].get("store_id") == expect["approval_store"] for call in approvals
+    ):
+        failures.append(f"No {expect['approval_store']} bill was requested ({[c['model_output'] for c in calls]}).")
+    if "no_approval_other_than" in expect:
+        others = [call for call in approvals if call["model_output"].get("store_id") != expect["no_approval_other_than"]]
+        if others:
+            failures.append(f"Bill requested for another store: {others}.")
+    if expect.get("no_approval_requested") and approvals:
+        failures.append(
+            f"Guessed a store and requested a bill: {[call['model_output'].get('store_id') for call in approvals]}."
+        )
+    if expect.get("asks_question") and questions < 1:
+        failures.append("Expected a clarifying question.")
+    if "address_fields" in expect:
+        forms = [call for call in calls if call["name"] == "open_address_form"]
+        arguments = forms[0]["arguments"] if forms else {}
+        for key, needle in expect["address_fields"].items():
+            if needle.lower() not in str(arguments.get(key) or "").lower():
+                failures.append(f"open_address_form {key}={arguments.get(key)!r}, expected to contain {needle!r}.")
+        for key in expect.get("address_null_fields", []):
+            if forms and arguments.get(key):
+                failures.append(f"open_address_form invented {key}={arguments.get(key)!r}.")
+    if expect.get("no_saved_claim") and _claim_sentences(SAVED_CLAIM_PATTERN, reply):
+        failures.append(f"Reply claims the address was saved: {_claim_sentences(SAVED_CLAIM_PATTERN, reply)}.")
+    mentions = expect.get("reply_mentions_any")
+    if mentions and not any(word.lower() in reply.lower() for word in mentions):
+        failures.append(f"Reply does not mention any of {mentions}.")
+    if expect.get("refuses_order"):
+        if approvals and facts["order_claims"]:
+            failures.append("Order/approval claimed after an approval request.")
+        if not NEGATION_PATTERN.search(reply) and "screen" not in reply.lower():
+            failures.append("Reply does not refuse or redirect to the on-screen approval.")
+    return facts, failures
+
+
+
+
+async def run_scenario(
+    client: AsyncOpenAI,
+    delegation: dict[str, Any],
+    scenario: dict[str, Any],
+    catalogues: dict[str, Any],
+) -> dict[str, Any]:
+    toolbox = build_toolbox(scenario["catalogue"], catalogues)
+    previous: str | None = None
+    session_calls: list[dict[str, Any]] = []
+    turns: list[dict[str, Any]] = []
+    for turn in scenario["turns"]:
+        try:
+            reply, calls, previous = await run_turn(client, delegation, toolbox, turn["user"], previous)
+        except Exception as exc:
+            turns.append({"user": turn["user"], "error": f"{type(exc).__name__}: {exc}", "failures": ["turn errored"]})
+            break
+        session_calls.extend(calls)
+        facts, failures = check_turn(turn.get("expect", {}), reply, calls, session_calls)
+        turns.append({"user": turn["user"], "reply": reply, "tool_calls": calls, "facts": facts, "failures": failures})
+    failed = [turn for turn in turns if turn["failures"]]
+    return {
+        "id": scenario["id"],
+        "title": scenario["title"],
+        "catalogue": scenario["catalogue"],
+        "passed": not failed and len(turns) == len(scenario["turns"]),
+        "turns": turns,
+    }
+
+
+async def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--scenario", action="append", help="Scenario id to run (repeatable).")
+    parser.add_argument("--report", type=Path, default=DEFAULT_REPORT_PATH)
+    args = parser.parse_args()
+
+    settings = get_settings()
+    api_key = settings.openai_api_key.get_secret_value().strip()
+    if not api_key:
+        raise SystemExit("OPENAI_API_KEY is not configured.")
+    guard = NetworkGuard(urlparse(settings.openai_base_url).hostname or "api.openai.com")
+    guard.install()
+    delegation = build_session_config(settings, VOICE_TOOL_DEFINITIONS)["delegation"]["responses"]
+    assert delegation["instructions"] == BACKEND_INSTRUCTIONS
+
+    data = json.loads(SCENARIOS_PATH.read_text(encoding="utf-8"))
+    scenarios = [s for s in data["scenarios"] if not args.scenario or s["id"] in args.scenario]
+    client = AsyncOpenAI(api_key=api_key, base_url=settings.openai_base_url)
+
+    previous_report: dict[str, Any] = {}
+    if args.report.exists():
+        previous_report = json.loads(args.report.read_text(encoding="utf-8"))
+    runs: list[dict[str, Any]] = previous_report.get("runs", [])
+    for scenario in scenarios:
+        result = await run_scenario(client, delegation, scenario, data["catalogues"])
+        result["run"] = 1 + sum(1 for run in runs if run["id"] == scenario["id"])
+        result["finished_at"] = datetime.now(UTC).isoformat()
+        runs.append(result)
+        print(f"{'PASS' if result['passed'] else 'FAIL'} {scenario['id']} (run {result['run']})")
+        for index, turn in enumerate(result["turns"], 1):
+            for failure in turn["failures"]:
+                print(f"    turn {index}: {failure}")
+
+    latest: dict[str, dict[str, Any]] = {run["id"]: run for run in runs}
+    report = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "model": delegation["model"],
+        "prompt_version": VOICE_PROMPT_VERSION,
+        "tool_names": [tool["name"] for tool in delegation["tools"]],
+        "network": {
+            "allowed_host": guard.allowed_host,
+            "blocked_lookups": sorted(set(previous_report.get("network", {}).get("blocked_lookups", [])) | set(guard.blocked)),
+        },
+        "summary": {
+            scenario_id: {"passed": run["passed"], "run": run["run"]}
+            for scenario_id, run in latest.items()
+        },
+        "runs": runs,
+    }
+    args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"Report: {args.report}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
