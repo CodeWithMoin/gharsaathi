@@ -62,6 +62,34 @@ status, JSON-RPC code, and `Retry-After` value. Never include an access token or
 
 Reference: [Swiggy rate-limit guidance](https://mcp.swiggy.com/builders/docs/operate/rate-limits/).
 
+## Optional Jev relevance reranker
+
+Product results always pass through deterministic query, exact-brand, availability,
+and result-cap rules first. An optional Jev second stage may then reorder only that
+shortlist; it cannot add products or change provider fields. It has a two-second
+deadline, a 60-second fingerprint cache, and a circuit breaker that pauses calls for
+30 seconds after three consecutive failures. Any failure returns the deterministic
+order.
+
+Keep it off until the provider-free and labelled Jev evaluations pass:
+
+```dotenv
+JEV_API_KEY=
+JEV_MODEL=jev-1.14.0
+JEV_TIMEOUT_SECONDS=2.0
+JEV_RERANKING_ENABLED=false
+```
+
+```bash
+cd backend
+python -m evaluation.run_relevance_benchmark  # zero external calls
+python -m evaluation.run_jev_relevance        # synthetic Jev calls; zero commerce calls
+```
+
+The Jev request contains only the shopping query and the shortlisted product name,
+brand, and pack size. It never receives provider credentials, addresses, baskets,
+prices, user IDs, or order data.
+
 ## Local setup
 
 Requirements for demo mode: Python 3.11+, Node.js 20+, and PostgreSQL. Live mode also

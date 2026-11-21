@@ -14,6 +14,7 @@ from app.commerce.zepto.history import (
     parse_order_history,
 )
 from app.commerce.swiggy.models import AddressList, ProductSearchResult
+from app.commerce.swiggy.service import ProductReranker
 from app.commerce.zepto.models import (
     CapabilitySummary,
     ConnectionStatus,
@@ -23,9 +24,15 @@ from app.commerce.zepto.oauth import ZeptoOAuthClient
 
 
 class ZeptoService:
-    def __init__(self, oauth: ZeptoOAuthClient, client: ZeptoMcpClient) -> None:
+    def __init__(
+        self,
+        oauth: ZeptoOAuthClient,
+        client: ZeptoMcpClient,
+        reranker: ProductReranker | None = None,
+    ) -> None:
         self.oauth = oauth
         self.client = client
+        self.reranker = reranker
         self._selected_address: tuple[int, str] | None = None
         self._search_cache: dict[tuple[str, str, int], tuple[float, ProductSearchResult]] = {}
         self._search_lock = asyncio.Lock()
@@ -106,30 +113,35 @@ class ZeptoService:
         async with self._search_lock:
             cached = self._search_cache.get(cache_key)
             if cached is not None and time.monotonic() - cached[0] < 60:
-                return cached[1].model_copy(deep=True)
-
-            generation = await self.client.prepare_session()
-            if self._selected_address != (generation, address_id):
-                await self.client.call_tool(
-                    "select_saved_address", {"addressId": address_id}
-                )
-                self._selected_address = (self.client.session_generation, address_id)
-                generation = self.client.session_generation
-
-            queries = _split_queries(normalized)
-            if len(queries) > 1:
-                raw = await self.client.call_tool(
-                    "search_multiple_products",
-                    {"queries": queries, "pageNumber": page_number},
-                )
+                result = cached[1].model_copy(deep=True)
             else:
-                raw = await self.client.call_tool(
-                    "search_products",
-                    {"query": queries[0], "pageNumber": page_number},
+                generation = await self.client.prepare_session()
+                if self._selected_address != (generation, address_id):
+                    await self.client.call_tool(
+                        "select_saved_address", {"addressId": address_id}
+                    )
+                    self._selected_address = (self.client.session_generation, address_id)
+                    generation = self.client.session_generation
+
+                queries = _split_queries(normalized)
+                if len(queries) > 1:
+                    raw = await self.client.call_tool(
+                        "search_multiple_products",
+                        {"queries": queries, "pageNumber": page_number},
+                    )
+                else:
+                    raw = await self.client.call_tool(
+                        "search_products",
+                        {"query": queries[0], "pageNumber": page_number},
+                    )
+                result = refine_search_result(normalized, parse_products(raw))
+                self._search_cache[cache_key] = (
+                    time.monotonic(),
+                    result.model_copy(deep=True),
                 )
-            result = refine_search_result(normalized, parse_products(raw))
-            self._search_cache[cache_key] = (time.monotonic(), result.model_copy(deep=True))
-            return result
+        if self.reranker is not None:
+            return await self.reranker.rerank(normalized, result)
+        return result
 
 
 def _split_queries(query: str) -> list[str]:

@@ -1,5 +1,6 @@
 import asyncio
 import time
+from typing import Protocol
 
 from app.commerce.query_guard import non_search_reason
 from app.commerce.relevance import refine_search_result
@@ -14,16 +15,24 @@ from app.commerce.swiggy.models import (
 from app.commerce.swiggy.oauth import SwiggyOAuthClient
 
 
+class ProductReranker(Protocol):
+    async def rerank(
+        self, query: str, result: ProductSearchResult
+    ) -> ProductSearchResult: ...
+
+
 class SwiggyService:
     def __init__(
         self,
         oauth: SwiggyOAuthClient,
         client: SwiggyMcpClient,
         adapter: SwiggyInstamartAdapter,
+        reranker: ProductReranker | None = None,
     ) -> None:
         self.oauth = oauth
         self.client = client
         self.adapter = adapter
+        self.reranker = reranker
         self._search_cache: dict[
             tuple[str, str, int], tuple[float, ProductSearchResult]
         ] = {}
@@ -65,13 +74,16 @@ class SwiggyService:
         async with self._search_lock:
             cached = self._search_cache.get(cache_key)
             if cached is not None and time.monotonic() - cached[0] < 60:
-                return cached[1].model_copy(deep=True)
-            result = refine_search_result(
-                normalized,
-                await self.adapter.search_products(normalized, address_id, offset),
-            )
-            self._search_cache[cache_key] = (
-                time.monotonic(),
-                result.model_copy(deep=True),
-            )
-            return result
+                result = cached[1].model_copy(deep=True)
+            else:
+                result = refine_search_result(
+                    normalized,
+                    await self.adapter.search_products(normalized, address_id, offset),
+                )
+                self._search_cache[cache_key] = (
+                    time.monotonic(),
+                    result.model_copy(deep=True),
+                )
+        if self.reranker is not None:
+            return await self.reranker.rerank(normalized, result)
+        return result

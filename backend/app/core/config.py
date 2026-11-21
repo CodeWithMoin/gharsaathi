@@ -48,7 +48,8 @@ class Settings(BaseSettings):
     memory_extraction_model: str = "gpt-4o-mini"
     jev_api_key: SecretStr = SecretStr("")
     jev_base_url: str = "https://api.typesafe.ai/v1"
-    jev_model: str = "jev-latest"
+    jev_model: str = "jev-1.14.0"
+    jev_timeout_seconds: float = Field(default=2.0, ge=0.1, le=10.0)
     jev_reranking_enabled: bool = False
     swiggy_rate_limit_fallback_seconds: int = Field(default=30, ge=1, le=300)
     swiggy_token_store_path: Path = Field(

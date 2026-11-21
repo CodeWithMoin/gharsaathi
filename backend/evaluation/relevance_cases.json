@@ -1,0 +1,136 @@
+{
+  "version": "product-search-relevance-v1",
+  "description": "Offline, provider-free regression cases for query routing and product-result relevance.",
+  "cases": [
+    {
+      "id": "generic-capabilities-question-does-not-search",
+      "label": "Generic non-shopping question",
+      "kind": "query_guard",
+      "query": "What can you do?",
+      "expected": {
+        "should_search": false,
+        "reason": "capabilities"
+      }
+    },
+    {
+      "id": "amul-brand-only-needs-clarification",
+      "label": "Ambiguous Amul brand request",
+      "kind": "query_guard",
+      "query": "Amul",
+      "expected": {
+        "should_search": false,
+        "reason": "ambiguous_brand",
+        "clarification_contains": ["milk", "butter", "paneer", "pack size"]
+      }
+    },
+    {
+      "id": "personal-care-remains-searchable",
+      "label": "Personal care remains in catalogue scope",
+      "kind": "query_guard",
+      "query": "anti dandruff shampoo",
+      "expected": {
+        "should_search": true
+      }
+    },
+    {
+      "id": "household-remains-searchable",
+      "label": "Household goods remain in catalogue scope",
+      "kind": "query_guard",
+      "query": "toilet cleaner",
+      "expected": {
+        "should_search": true
+      }
+    },
+    {
+      "id": "stationery-remains-searchable",
+      "label": "Stationery remains in catalogue scope",
+      "kind": "query_guard",
+      "query": "A5 notebook and blue pens",
+      "expected": {
+        "should_search": true
+      }
+    },
+    {
+      "id": "pet-supplies-remain-searchable",
+      "label": "Pet supplies remain in catalogue scope",
+      "kind": "query_guard",
+      "query": "dog treats",
+      "expected": {
+        "should_search": true
+      }
+    },
+    {
+      "id": "toys-remain-searchable",
+      "label": "Toys remain in catalogue scope",
+      "kind": "query_guard",
+      "query": "building blocks toy",
+      "expected": {
+        "should_search": true
+      }
+    },
+    {
+      "id": "small-electronics-remain-searchable",
+      "label": "Small electronics and accessories remain in catalogue scope",
+      "kind": "query_guard",
+      "query": "USB C charging cable",
+      "expected": {
+        "should_search": true
+      }
+    },
+    {
+      "id": "axe-does-not-show-denver",
+      "label": "Exact personal-care brand excludes fuzzy competitor",
+      "kind": "ranking",
+      "query": "Axe",
+      "products": [
+        {"product_id": "denver-black-code", "name": "Denver Black Code Deodorant", "brand": "Denver", "pack_size": "150 ml"},
+        {"product_id": "axe-dark-temptation", "name": "Axe Dark Temptation Body Spray", "brand": "Axe", "pack_size": "150 ml"},
+        {"product_id": "wild-stone-code", "name": "Wild Stone Code Body Perfume", "brand": "Wild Stone", "pack_size": "100 ml"},
+        {"product_id": "axe-pulse", "name": "Axe Pulse Deodorant", "brand": "Axe", "pack_size": "150 ml"}
+      ],
+      "expected": {
+        "returned_product_ids": ["axe-dark-temptation", "axe-pulse"],
+        "excluded_product_ids": ["denver-black-code", "wild-stone-code"]
+      }
+    },
+    {
+      "id": "amul-milk-one-litre-beats-wrong-product-and-pack",
+      "label": "Milk search honors brand, product type, and requested pack",
+      "kind": "ranking",
+      "query": "Amul milk 1 litre",
+      "products": [
+        {"product_id": "nandini-toned-1l", "name": "Nandini Toned Milk 1 L", "brand": "Nandini", "pack_size": "1 L"},
+        {"product_id": "amul-butter-1l", "name": "Amul Butter 1 L", "brand": "Amul", "pack_size": "1 L"},
+        {"product_id": "amul-taaza-500ml", "name": "Amul Taaza Milk 500 ml", "brand": "Amul", "pack_size": "500 ml"},
+        {"product_id": "amul-taaza-1l", "name": "Amul Taaza Milk 1 L", "brand": "Amul", "pack_size": "1 L"},
+        {"product_id": "amul-paneer-1kg", "name": "Amul Fresh Paneer 1 kg", "brand": "Amul", "pack_size": "1 kg"}
+      ],
+      "expected": {
+        "top_product_id": "amul-taaza-1l",
+        "must_precede": ["amul-butter-1l", "amul-taaza-500ml", "nandini-toned-1l"]
+      }
+    },
+    {
+      "id": "ui-presentation-is-capped-at-six",
+      "label": "UI candidates are capped rather than showing provider's ten",
+      "kind": "ranking",
+      "query": "work from home supplies",
+      "products": [
+        {"product_id": "desk-accessory-1", "name": "Desk accessory 1", "brand": "Generic", "pack_size": "1 unit"},
+        {"product_id": "desk-accessory-2", "name": "Desk accessory 2", "brand": "Generic", "pack_size": "1 unit"},
+        {"product_id": "desk-accessory-3", "name": "Desk accessory 3", "brand": "Generic", "pack_size": "1 unit"},
+        {"product_id": "desk-accessory-4", "name": "Desk accessory 4", "brand": "Generic", "pack_size": "1 unit"},
+        {"product_id": "desk-accessory-5", "name": "Desk accessory 5", "brand": "Generic", "pack_size": "1 unit"},
+        {"product_id": "desk-accessory-6", "name": "Desk accessory 6", "brand": "Generic", "pack_size": "1 unit"},
+        {"product_id": "desk-accessory-7", "name": "Desk accessory 7", "brand": "Generic", "pack_size": "1 unit"},
+        {"product_id": "desk-accessory-8", "name": "Desk accessory 8", "brand": "Generic", "pack_size": "1 unit"},
+        {"product_id": "desk-accessory-9", "name": "Desk accessory 9", "brand": "Generic", "pack_size": "1 unit"},
+        {"product_id": "desk-accessory-10", "name": "Desk accessory 10", "brand": "Generic", "pack_size": "1 unit"}
+      ],
+      "expected": {
+        "max_results": 6,
+        "returned_product_ids": ["desk-accessory-1", "desk-accessory-2", "desk-accessory-3", "desk-accessory-4", "desk-accessory-5", "desk-accessory-6"]
+      }
+    }
+  ]
+}

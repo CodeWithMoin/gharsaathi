@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.commerce.swiggy.adapter import SwiggyInstamartAdapter
+from app.commerce.jev import JevProductReranker
 from app.commerce.swiggy.client import SwiggyMcpClient
 from app.commerce.demo import (
     DemoQuoteProvider,
@@ -58,7 +59,23 @@ def get_live_swiggy_service() -> SwiggyService:
     oauth = SwiggyOAuthClient(settings, store)
     client = SwiggyMcpClient(settings, oauth)
     adapter = SwiggyInstamartAdapter(client)
-    return SwiggyService(oauth, client, adapter)
+    return SwiggyService(oauth, client, adapter, get_product_reranker())
+
+
+@lru_cache
+def get_product_reranker() -> JevProductReranker | None:
+    settings = get_settings()
+    if (
+        not settings.jev_reranking_enabled
+        or not settings.jev_api_key.get_secret_value().strip()
+    ):
+        return None
+    return JevProductReranker(
+        api_key=settings.jev_api_key,
+        base_url=settings.jev_base_url,
+        model=settings.jev_model,
+        timeout_seconds=settings.jev_timeout_seconds,
+    )
 
 
 @lru_cache
@@ -116,7 +133,7 @@ def get_live_zepto_service() -> ZeptoService:
     )
     oauth = ZeptoOAuthClient(settings, store)
     client = ZeptoMcpClient(settings, oauth)
-    return ZeptoService(oauth, client)
+    return ZeptoService(oauth, client, get_product_reranker())
 
 
 @lru_cache
