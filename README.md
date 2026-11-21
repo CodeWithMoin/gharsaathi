@@ -11,12 +11,39 @@ The integration was checked against the official Swiggy Builders Club documentat
 - Client registration: `POST https://mcp.swiggy.com/auth/register`
 - Authorization: `GET https://mcp.swiggy.com/auth/authorize`
 - Token exchange/refresh: `POST https://mcp.swiggy.com/auth/token`
-- Read-only tools: `get_addresses` and `search_products`
+- Read-only tools used here: `get_addresses`, `search_products`, and `get_orders`
 - Tool data: `structuredContent`, normally containing a `{ success, data }` envelope
 
-References: [authentication](https://mcp.swiggy.com/builders/docs/start/authenticate/), [MCP protocol](https://mcp.swiggy.com/builders/docs/reference/protocol/), [get_addresses](https://mcp.swiggy.com/builders/docs/reference/instamart/get_addresses/), and [search_products](https://mcp.swiggy.com/builders/docs/reference/instamart/search_products/).
+References: [authentication](https://mcp.swiggy.com/builders/docs/start/authenticate/), [MCP protocol](https://mcp.swiggy.com/builders/docs/reference/protocol/), [get_addresses](https://mcp.swiggy.com/builders/docs/reference/instamart/get_addresses/), [search_products](https://mcp.swiggy.com/builders/docs/reference/instamart/search_products/), and [get_orders](https://mcp.swiggy.com/builders/docs/reference/instamart/get_orders/).
 
 The backend still calls `tools/list` for the authenticated user and validates each tool call against the returned live JSON Schema. Swiggy notes that a user's live catalogue may differ from the public reference.
+
+## Swiggy rate limits
+
+Swiggy does not publish fixed request caps or remaining-quota headers. Its gateway
+can return HTTP `429` with `Retry-After`; at the MCP layer the corresponding error
+code is `-32000`. See Swiggy's official [rate-limit guidance](https://mcp.swiggy.com/builders/docs/operate/rate-limits/).
+
+The backend captures `Retry-After` before the MCP SDK can wrap the transport error,
+also recognizes JSON-RPC and proxy-style 429 messages, and applies one shared
+cooldown for the local user. A retry is attempted only when the provider's delay
+fits inside Swiggy's recommended 30-second user-facing retry budget. Otherwise the
+API immediately returns `429` with its own `Retry-After` header and a clear message.
+When an MCP bridge hides the header, the safe fallback is 30 seconds. Read calls
+are serialized, and the live tool schema is cached for five minutes to avoid an
+extra `tools/list` request on every search. Automatic 429 retries are allowlisted
+to `get_addresses` and `search_products`; future consequential tools do not inherit
+blind retries.
+
+Each MCP attempt also logs a generated correlation ID, operation name, outcome,
+duration, and rate-limit delay/source. Tokens, response bodies, address data, and
+search text are not logged. Use the correlation ID and timestamp when escalating a
+persistent provider-side 429 to Swiggy.
+
+The fallback, retry budget, and schema-cache duration can be adjusted with
+`SWIGGY_RATE_LIMIT_FALLBACK_SECONDS`, `SWIGGY_RETRY_BUDGET_SECONDS`, and
+`SWIGGY_TOOL_SCHEMA_CACHE_SECONDS`. Do not lower the fallback merely to probe the
+provider more frequently; repeated calls can prolong a gateway cooldown.
 
 ## Local setup
 
@@ -83,6 +110,19 @@ For a multi-user deployment, replace this file store with per-user encrypted dat
 - `POST /api/voice/session` — creates a 60-second OpenAI Realtime client secret
   with the versioned voice prompt; requires the local-development `X-User-Id`
   header and never returns the server API key
+- `GET /api/swiggy/orders?count=10&activeOnly=false` — read-only recent Instamart
+  history normalized without delivery address text or phone number
+- `POST /api/memory/purchase-history/sync` — explicitly fetch and import recent
+  read-only history after purchase-history consent; this is never run automatically
+- `GET /api/memory/reorder-suggestions` — evidence-backed recommendations from the
+  caller's retained graph; this does not call Swiggy or mutate a cart
+- `POST /api/memory/reorder-suggestions/{product_id}/review` — records that the
+  person chose to inspect current options and updates only their ranking model
+- `POST /api/memory/reorder-suggestions/{product_id}/dismiss` — suppresses a
+  suggestion until newer completed-order evidence exists and updates only that
+  person's ranking model
+- `DELETE /api/memory/purchase-history` — deletes the person's purchase graph and
+  revokes its reorder-suggestion permission
 
 ## Voice prompt and Realtime sessions
 
@@ -190,6 +230,48 @@ The first extraction version recognizes brand, pack-size, quantity, dietary, and
 product-avoidance preferences. It deliberately excludes demographics, precise
 location, financial profiling, health conditions, relationships, and business data.
 
+### Purchase-history graph
+
+Purchase history is represented as a person-scoped property graph in PostgreSQL:
+person → order → occurrence → product, with optional product/category edges. Composite
+foreign keys prevent an edge from connecting nodes owned by different people. Imports
+are idempotent and store only normalized order/product facts, a provenance hash, and a
+retention deadline. Raw provider responses, delivery addresses, phone numbers, and
+payment methods are not stored in the graph.
+
+Before history can be imported or queried, the person must explicitly enable the
+`purchase_history` / `proactive_reorder` permission with a positive retention period.
+The UI currently enables this memory separately and does not trigger a provider sync.
+Sync remains an explicit button action. Swiggy currently documents `get_orders` as a
+15-day window, so repeated explicit syncs can accumulate a longer retained history;
+the app does not poll the provider in the background. Recommendations use a hybrid pipeline: supported
+frequency, cadence, weekday/daypart, quantity, and item-to-item basket-affinity
+patterns generate candidates; a person-scoped online logistic ranker then orders those
+candidates. The ranker updates from explicit **Check options** and **Not now** actions,
+so two people can learn different priorities without sharing raw histories. Minimum
+evidence gates prevent two coincidental repeats from being presented as a routine.
+Population-level collaborative filtering is intentionally not enabled while the app
+has sparse single-user data; it can be evaluated later with enough consented users.
+
+Every card states its historical evidence, never claims the item is running low, and
+only offers to review current options. Recommendations cannot add to cart or place an
+order; any future purchase must still use exact-basket approval. A dismissed product
+stays suppressed until a newer completed purchase provides fresh evidence. Revoking
+purchase-history memory deletes the graph, feedback, and the person's learned model.
+
+#### Recommender upgrade path
+
+The first production baseline stays intentionally small-data friendly. The
+[Recommenders project](https://github.com/recommenders-team/recommenders) is used as a
+reference for temporal splits, ranking metrics, and future challenger models rather
+than added as a runtime dependency. SAR or LightFM becomes useful after there are
+enough consented people and item interactions for collaborative signal. SASRec should
+only be trialled after users have sufficiently long sequences; it is not a sensible
+cold-start model for a household with a few orders. Challenger promotion requires a
+time-based offline comparison on Recall@K/NDCG@K plus product safety checks, followed
+by an online experiment. Raw histories must not cross household boundaries merely to
+make model training easier.
+
 ## Verification
 
 Backend:
@@ -197,6 +279,7 @@ Backend:
 ```bash
 cd backend
 pytest -q
+python -m evaluation.run_recommender
 python -m evaluation.run_memory_extraction
 ```
 

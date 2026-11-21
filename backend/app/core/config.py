@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     voice_speed: float = Field(default=1.0, ge=0.25, le=1.5)
     voice_max_output_tokens: int = Field(default=300, ge=1, le=4096)
     voice_evaluation_model: str = "gpt-4.1-mini"
+    swiggy_rate_limit_fallback_seconds: int = Field(default=30, ge=1, le=300)
+    swiggy_retry_budget_seconds: int = Field(default=30, ge=1, le=120)
+    swiggy_tool_schema_cache_seconds: int = Field(default=300, ge=0, le=3600)
     swiggy_token_store_path: Path = Field(
         default=Path("backend/.data/swiggy_connection.enc")
     )

@@ -8,6 +8,7 @@ from app.commerce.swiggy.errors import (
     SwiggyAuthenticationRequired,
     SwiggyConfigurationError,
     SwiggyProviderError,
+    SwiggyRateLimitError,
     SwiggySchemaError,
 )
 from app.commerce.swiggy.models import (
@@ -48,6 +49,12 @@ def _raise_http(exc: Exception) -> None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
     if isinstance(exc, SwiggyConfigurationError):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    if isinstance(exc, SwiggyRateLimitError):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            str(exc),
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
     if isinstance(exc, (SwiggySchemaError, SwiggyProviderError)):
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     raise exc

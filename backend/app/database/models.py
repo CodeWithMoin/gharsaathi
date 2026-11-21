@@ -12,6 +12,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -203,3 +204,222 @@ class MemoryEvent(Base):
     )
 
     memory: Mapped[MemoryItem] = relationship(back_populates="events")
+
+
+class PurchaseOrderNode(Base):
+    """A minimal provider order node; deliberately excludes address/payment PII."""
+
+    __tablename__ = "purchase_order_nodes"
+    __table_args__ = (
+        UniqueConstraint(
+            "subject_id",
+            "provider",
+            "provider_order_id",
+            name="uq_purchase_order_subject_provider_order",
+        ),
+        UniqueConstraint("id", "subject_id", name="uq_purchase_order_id_subject"),
+        Index("ix_purchase_order_subject_occurred", "subject_id", "occurred_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("memory_subjects.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(32))
+    provider_order_id: Mapped[str] = mapped_column(String(160))
+    status: Mapped[str] = mapped_column(String(80))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    provider_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    local_weekday: Mapped[int] = mapped_column(Integer)
+    local_hour: Mapped[int] = mapped_column(Integer)
+    utc_offset_minutes: Mapped[int] = mapped_column(Integer)
+    total_paise: Mapped[int] = mapped_column(Integer)
+    is_active: Mapped[bool] = mapped_column(Boolean)
+    provenance_hash: Mapped[str] = mapped_column(String(64))
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    retention_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PurchaseProductNode(Base):
+    __tablename__ = "purchase_product_nodes"
+    __table_args__ = (
+        UniqueConstraint(
+            "subject_id",
+            "provider",
+            "identity_key",
+            name="uq_purchase_product_subject_provider_identity",
+        ),
+        UniqueConstraint("id", "subject_id", name="uq_purchase_product_id_subject"),
+        Index("ix_purchase_product_subject_name", "subject_id", "normalized_name"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("memory_subjects.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(32))
+    identity_key: Mapped[str] = mapped_column(String(160))
+    provider_item_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    name: Mapped[str] = mapped_column(String(300))
+    normalized_name: Mapped[str] = mapped_column(String(300))
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PurchaseOccurrenceEdge(Base):
+    """Person-scoped edge: an order contained a product at a point in time."""
+
+    __tablename__ = "purchase_occurrence_edges"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["order_id", "subject_id"],
+            ["purchase_order_nodes.id", "purchase_order_nodes.subject_id"],
+            ondelete="CASCADE",
+            name="fk_purchase_occurrence_owned_order",
+        ),
+        ForeignKeyConstraint(
+            ["product_id", "subject_id"],
+            ["purchase_product_nodes.id", "purchase_product_nodes.subject_id"],
+            ondelete="CASCADE",
+            name="fk_purchase_occurrence_owned_product",
+        ),
+        UniqueConstraint(
+            "order_id", "product_id", name="uq_purchase_occurrence_order_product"
+        ),
+        Index("ix_purchase_occurrence_subject_observed", "subject_id", "observed_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+    order_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    quantity: Mapped[int] = mapped_column(Integer)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String(80), default="provider_order_history")
+
+
+class PurchaseCategoryNode(Base):
+    __tablename__ = "purchase_category_nodes"
+    __table_args__ = (
+        UniqueConstraint(
+            "subject_id", "slug", name="uq_purchase_category_subject_slug"
+        ),
+        UniqueConstraint("id", "subject_id", name="uq_purchase_category_id_subject"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("memory_subjects.id", ondelete="CASCADE"), index=True
+    )
+    slug: Mapped[str] = mapped_column(String(120))
+    label: Mapped[str] = mapped_column(String(160))
+
+
+class ProductCategoryEdge(Base):
+    __tablename__ = "product_category_edges"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["product_id", "subject_id"],
+            ["purchase_product_nodes.id", "purchase_product_nodes.subject_id"],
+            ondelete="CASCADE",
+            name="fk_product_category_owned_product",
+        ),
+        ForeignKeyConstraint(
+            ["category_id", "subject_id"],
+            ["purchase_category_nodes.id", "purchase_category_nodes.subject_id"],
+            ondelete="CASCADE",
+            name="fk_product_category_owned_category",
+        ),
+        UniqueConstraint(
+            "product_id", "category_id", name="uq_product_category_edge"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    category_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    source: Mapped[str] = mapped_column(String(80))
+
+
+class PurchaseHistorySyncState(Base):
+    __tablename__ = "purchase_history_sync_states"
+    __table_args__ = (
+        UniqueConstraint(
+            "subject_id", "provider", name="uq_purchase_sync_subject_provider"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("memory_subjects.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(32))
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_success_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    window_start: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    window_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    fetched_order_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+
+class ReorderSuggestionFeedback(Base):
+    __tablename__ = "reorder_suggestion_feedback"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["product_id", "subject_id"],
+            ["purchase_product_nodes.id", "purchase_product_nodes.subject_id"],
+            ondelete="CASCADE",
+            name="fk_reorder_feedback_owned_product",
+        ),
+        Index(
+            "ix_reorder_feedback_subject_product_created",
+            "subject_id",
+            "product_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    action: Mapped[str] = mapped_column(String(32))
+    features: Mapped[dict[str, float]] = mapped_column(JSON)
+    model_score: Mapped[float] = mapped_column(Float)
+    model_version: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class PersonalRecommendationModel(Base):
+    __tablename__ = "personal_recommendation_models"
+    __table_args__ = (
+        UniqueConstraint("subject_id", name="uq_personal_recommender_subject"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("memory_subjects.id", ondelete="CASCADE"), index=True
+    )
+    model_version: Mapped[str] = mapped_column(String(80))
+    weights: Mapped[dict[str, float]] = mapped_column(JSON)
+    bias: Mapped[float] = mapped_column(Float)
+    training_examples: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

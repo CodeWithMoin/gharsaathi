@@ -51,6 +51,41 @@ type MemoryProposal = {
   status: "proposed" | "confirmed" | "rejected";
 };
 
+type ReorderSuggestion = {
+  product_id: string;
+  product_name: string;
+  provider_item_id?: string;
+  purchase_count: number;
+  total_quantity: number;
+  last_ordered_at: string;
+  pattern_confidence: number;
+  score: number;
+  model_version: string;
+  patterns: Array<{
+    kind: string;
+    confidence: number;
+    observations: number;
+    statement: string;
+    matches_current_context: boolean;
+  }>;
+  related_products: Array<{
+    product_id: string;
+    product_name: string;
+    shared_order_count: number;
+    confidence: number;
+  }>;
+  reason: string;
+  voice_prompt: string;
+  requires_approval: true;
+  assumes_current_stock: false;
+};
+
+class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("X-User-Id", DEV_USER_ID);
@@ -58,7 +93,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const payload = response.status === 204 ? null : await response.json();
   if (!response.ok) {
     const detail = payload && typeof payload.detail === "string" ? payload.detail : "Request failed.";
-    throw new Error(detail);
+    throw new ApiError(detail, response.status);
   }
   return payload as T;
 }
@@ -72,9 +107,32 @@ export default function Home() {
   const [preference, setPreference] = useState("I prefer Fortune oil in 1 litre packs.");
   const [memoryProposals, setMemoryProposals] = useState<MemoryProposal[]>([]);
   const [appliedMemories, setAppliedMemories] = useState<SearchResponse["applied_memories"]>([]);
-  const [loading, setLoading] = useState<"connection" | "addresses" | "search" | "disconnect" | "memory" | null>("connection");
+  const [suggestions, setSuggestions] = useState<ReorderSuggestion[]>([]);
+  const [historyMemory, setHistoryMemory] = useState<"checking" | "disabled" | "enabled" | "error">("checking");
+  const [loading, setLoading] = useState<"connection" | "addresses" | "search" | "disconnect" | "memory" | "history" | null>("connection");
   const [searched, setSearched] = useState(false);
   const [message, setMessage] = useState("Checking your Swiggy connection…");
+  const timezoneOffsetMinutes = -new Date().getTimezoneOffset();
+  const recommendationQuery = `timezoneOffsetMinutes=${timezoneOffsetMinutes}`;
+
+  const loadSuggestions = useCallback(async () => {
+    setHistoryMemory("checking");
+    try {
+      const data = await apiRequest<ReorderSuggestion[]>(`/api/memory/reorder-suggestions?${recommendationQuery}`);
+      setSuggestions(data);
+      setHistoryMemory("enabled");
+    } catch (error) {
+      setSuggestions([]);
+      if (error instanceof ApiError && error.status === 403) {
+        setHistoryMemory("disabled");
+      } else {
+        setHistoryMemory("error");
+        setMessage(error instanceof Error ? error.message : "Could not load purchase-history memory.");
+      }
+    }
+  }, [recommendationQuery]);
+
+  useEffect(() => { void loadSuggestions(); }, [loadSuggestions]);
 
   const loadAddresses = useCallback(async () => {
     setLoading("addresses");
@@ -213,6 +271,71 @@ export default function Home() {
     }
   }
 
+  async function enableHistoryMemory() {
+    setHistoryMemory("checking");
+    try {
+      await apiRequest("/api/memory/permissions/purchase_history/proactive_reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allowed: true, retention_days: 365 }),
+      });
+      await loadSuggestions();
+      setMessage("Purchase-history suggestions are enabled. History is only synced when you explicitly request it.");
+    } catch (error) {
+      setHistoryMemory("disabled");
+      setMessage(error instanceof Error ? error.message : "Could not enable purchase-history memory.");
+    }
+  }
+
+  async function disableHistoryMemory() {
+    setHistoryMemory("checking");
+    try {
+      await apiRequest("/api/memory/purchase-history", { method: "DELETE" });
+      setSuggestions([]);
+      setHistoryMemory("disabled");
+      setMessage("Purchase-history memory was turned off and its saved graph was deleted.");
+    } catch (error) {
+      await loadSuggestions();
+      setMessage(error instanceof Error ? error.message : "Could not delete purchase-history memory.");
+    }
+  }
+
+  async function syncHistory() {
+    setLoading("history");
+    setMessage("Importing the latest read-only completed-order history…");
+    try {
+      await apiRequest("/api/memory/purchase-history/sync", { method: "POST" });
+      await loadSuggestions();
+      setMessage("Latest history imported. Recommendation patterns were recalculated.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not import purchase history.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function reviewSuggestion(suggestion: ReorderSuggestion) {
+    setQuery(suggestion.product_name);
+    try {
+      await apiRequest(`/api/memory/reorder-suggestions/${suggestion.product_id}/review?${recommendationQuery}`, { method: "POST" });
+      setMessage(`Recommendation learned. Ready to check current options for ${suggestion.product_name}.`);
+    } catch {
+      setMessage(`Ready to check current options for ${suggestion.product_name}; feedback could not be saved.`);
+    }
+    document.getElementById("query")?.focus();
+  }
+
+  async function dismissSuggestion(suggestion: ReorderSuggestion) {
+    setSuggestions((current) => current.filter((item) => item.product_id !== suggestion.product_id));
+    try {
+      await apiRequest(`/api/memory/reorder-suggestions/${suggestion.product_id}/dismiss?${recommendationQuery}`, { method: "POST" });
+      setMessage(`Got it—${suggestion.product_name} won’t be suggested again unless a newer completed order changes the pattern.`);
+    } catch (error) {
+      await loadSuggestions();
+      setMessage(error instanceof Error ? error.message : "Could not dismiss this suggestion.");
+    }
+  }
+
   return (
     <main>
       <header className="hero">
@@ -273,6 +396,41 @@ export default function Home() {
           </div>}
         </section>
       )}
+
+      <section className="panel" aria-busy={historyMemory === "checking"}>
+        <div className="sectionHeading">
+          <div><p className="step">LEARNED PATTERNS</p><h2>Suggestions from your routines</h2></div>
+          {historyMemory === "enabled" && <div className="historyControls">{connected && <button type="button" onClick={syncHistory} disabled={loading !== null}>{loading === "history" ? "Syncing…" : "Sync latest history"}</button>}<button className="textButton" type="button" onClick={disableHistoryMemory} disabled={loading !== null}>Turn off & delete</button><button className="textButton" type="button" onClick={loadSuggestions} disabled={loading !== null}>Recalculate</button></div>}
+        </div>
+        <p>Based only on completed purchase history—not an assumption about what is left at home. Any purchase still needs your approval.</p>
+        {historyMemory === "checking" ? <div className="skeleton large" /> : historyMemory === "error" ? (
+          <div className="memoryOptIn"><p>Purchase-history memory is temporarily unavailable.</p><button type="button" onClick={loadSuggestions}>Try again</button></div>
+        ) : historyMemory === "disabled" ? (
+          <div className="memoryOptIn">
+            <p>Turn this on to learn temporal, quantity, cadence, and basket patterns from completed orders. Retention: 365 days. You can revoke it anytime.</p>
+            <button type="button" onClick={enableHistoryMemory}>Enable recommendations</button>
+          </div>
+        ) : suggestions.length === 0 ? (
+          <p className="empty">No sufficiently supported pattern yet. A couple of coincidental repeats are not enough. We won’t sync history automatically.</p>
+        ) : (
+          <div className="suggestionGrid">
+            {suggestions.map((suggestion) => (
+              <article className="suggestionCard" key={suggestion.product_id}>
+                <small>PATTERN · {Math.round(suggestion.pattern_confidence * 100)}% EVIDENCE CONFIDENCE</small>
+                <h3>{suggestion.product_name}</h3>
+                <div className="patternEvidence">
+                  {suggestion.patterns.slice(0, 2).map((pattern) => <p key={pattern.kind}>{pattern.statement}{pattern.matches_current_context ? " Matches right now." : ""}</p>)}
+                  {suggestion.related_products.length > 0 && <p>Often paired with {suggestion.related_products.map((item) => item.product_name).join(", ")}.</p>}
+                </div>
+                <div className="suggestionActions">
+                  <button className="secondary" type="button" onClick={() => dismissSuggestion(suggestion)}>Not now</button>
+                  <button type="button" onClick={() => reviewSuggestion(suggestion)}>Check options</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       {connected && addresses.length > 0 && (
         <section className="panel">

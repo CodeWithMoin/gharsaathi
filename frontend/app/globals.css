@@ -37,6 +37,17 @@ h2 { font-family:Georgia,serif; font-size:30px; font-weight:500; letter-spacing:
 .memoryCard strong { margin-top:4px; }
 .memoryActions { display:flex; flex-shrink:0; gap:8px; }
 .memoryApplied { background:#e7f0e8; border-radius:12px; color:var(--green); font-size:13px; margin:0 0 16px; padding:12px 14px; }
+.memoryOptIn { align-items:center; background:#f2f4ec; border-radius:16px; display:flex; gap:20px; justify-content:space-between; margin-top:18px; padding:16px; }
+.memoryOptIn button { flex-shrink:0; }
+.historyControls { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+.suggestionGrid { display:grid; gap:12px; grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:20px; }
+.suggestionCard { background:#f2f4ec; border:1px solid var(--line); border-radius:18px; padding:18px; }
+.suggestionCard small { color:var(--green); font-size:10px; font-weight:800; letter-spacing:.08em; }
+.suggestionCard h3 { font-family:Georgia,serif; font-size:21px; margin:7px 0; }
+.patternEvidence { min-height:96px; }
+.patternEvidence p { font-size:13px; line-height:1.5; margin:6px 0; }
+.suggestionActions { display:flex; gap:8px; margin-top:12px; }
+.suggestionActions button { flex:1; padding-left:12px; padding-right:12px; }
 .results { margin-top:42px; }
 .resultsHeading { margin-bottom:18px; }
 .productGrid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
@@ -63,10 +74,11 @@ h2 { font-family:Georgia,serif; font-size:30px; font-weight:500; letter-spacing:
   main { padding:40px 16px 72px; }
   .connection,.sectionHeading { align-items:flex-start; }
   .connection { flex-direction:column; }
-  .addressGrid,.productGrid { grid-template-columns:1fr; }
+  .addressGrid,.productGrid,.suggestionGrid { grid-template-columns:1fr; }
   .searchRow { flex-direction:column; }
   .searchRow button { width:100%; }
   .memoryCard { align-items:stretch; flex-direction:column; }
+  .memoryOptIn { align-items:stretch; flex-direction:column; }
   .memoryActions button { flex:1; }
 }
 @media (prefers-reduced-motion:reduce) { button,.skeleton { animation:none; transition:none; } }
