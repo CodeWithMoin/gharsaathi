@@ -4,7 +4,7 @@ from typing import Annotated, NoReturn
 from fastapi import APIRouter, Header, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
-from app.auth import UserIdDependency
+from app.legal_consent import ConsentedUserIdDependency
 from app.dependencies import CheckoutServiceDependency
 from app.shopping.basket import format_rupees
 from app.shopping.errors import (
@@ -76,7 +76,7 @@ async def checkout_cod(
     body: CheckoutRequest,
     response: Response,
     service: CheckoutServiceDependency,
-    user_id: UserIdDependency,
+    user_id: ConsentedUserIdDependency,
     idempotency_key: Annotated[
         str | None, Header(alias="Idempotency-Key", max_length=200)
     ] = None,

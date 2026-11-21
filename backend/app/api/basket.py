@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.dependencies import ApprovalServiceDependency, BasketServiceDependency
 from app.auth import UserIdDependency
+from app.legal_consent import ConsentedUserIdDependency
 from app.shopping.approval import ApprovalRequest
 from app.shopping.basket import (
     MAX_QUANTITY,
@@ -256,7 +257,7 @@ async def get_basket(service: BasketServiceDependency, provider: ProviderQuery, 
 
 @router.post("/lines", response_model=BasketOut)
 async def add_line(
-    body: AddLineRequest, service: BasketServiceDependency, provider: ProviderQuery, user_id: UserIdDependency
+    body: AddLineRequest, service: BasketServiceDependency, provider: ProviderQuery, user_id: ConsentedUserIdDependency
 ) -> BasketOut:
     try:
         return basket_out(
@@ -276,7 +277,7 @@ async def set_quantity(
     body: QuantityRequest,
     service: BasketServiceDependency,
     provider: ProviderQuery,
-    user_id: UserIdDependency,
+    user_id: ConsentedUserIdDependency,
 ) -> BasketOut:
     try:
         return basket_out(
@@ -288,7 +289,7 @@ async def set_quantity(
 
 @router.delete("/lines/{variant_id}", response_model=BasketOut)
 async def remove_line(
-    variant_id: str, service: BasketServiceDependency, provider: ProviderQuery, user_id: UserIdDependency
+    variant_id: str, service: BasketServiceDependency, provider: ProviderQuery, user_id: ConsentedUserIdDependency
 ) -> BasketOut:
     try:
         return basket_out(await service.remove_line(user_id, provider, variant_id))
@@ -298,7 +299,7 @@ async def remove_line(
 
 @router.post("/address", response_model=BasketOut)
 async def set_address(
-    body: AddressRequest, service: BasketServiceDependency, provider: ProviderQuery, user_id: UserIdDependency
+    body: AddressRequest, service: BasketServiceDependency, provider: ProviderQuery, user_id: ConsentedUserIdDependency
 ) -> BasketOut:
     try:
         return basket_out(await service.set_address(user_id, provider, body.address_id))
@@ -311,7 +312,7 @@ async def request_approval(
     baskets: BasketServiceDependency,
     approvals: ApprovalServiceDependency,
     provider: ProviderQuery,
-    user_id: UserIdDependency,
+    user_id: ConsentedUserIdDependency,
 ) -> ApprovalRequestOut:
     try:
         basket = await baskets.active(user_id, provider)
@@ -322,7 +323,7 @@ async def request_approval(
 
 @router.post("/approval/{approval_id}/approve", response_model=ApprovalOut)
 async def approve(
-    approval_id: str, body: ApproveRequest, approvals: ApprovalServiceDependency, user_id: UserIdDependency
+    approval_id: str, body: ApproveRequest, approvals: ApprovalServiceDependency, user_id: ConsentedUserIdDependency
 ) -> ApprovalOut:
     try:
         return approval_out(await approvals.approve(approval_id, body.fingerprint, user_id))

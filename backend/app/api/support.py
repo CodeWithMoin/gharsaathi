@@ -4,6 +4,11 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 from app.dependencies import SupportServiceDependency
 from app.auth import UserIdDependency
+from app.legal_consent import (
+    ConsentAcceptedDependency,
+    ConsentedUserIdDependency,
+    LegalConsentRequired,
+)
 from app.support.agent_tools import (
     AgentToolCall,
     AgentToolResult,
@@ -20,6 +25,7 @@ from app.support.models import ApproveComplaintRequest, Complaint, ComplaintCrea
 
 
 router = APIRouter()
+CONSEQUENTIAL_AGENT_TOOLS = {"prepare_support_complaint", "approve_support_complaint"}
 
 
 def _raise_http(exc: Exception) -> None:
@@ -41,8 +47,13 @@ async def agent_tools() -> list[dict]:
 
 @router.post("/agent/execute", response_model=AgentToolResult)
 async def execute_agent_tool(
-    body: AgentToolCall, service: SupportServiceDependency, user_id: UserIdDependency
+    body: AgentToolCall,
+    service: SupportServiceDependency,
+    user_id: UserIdDependency,
+    consent_accepted: ConsentAcceptedDependency,
 ) -> AgentToolResult:
+    if body.name in CONSEQUENTIAL_AGENT_TOOLS and not consent_accepted:
+        raise LegalConsentRequired()
     try:
         return execute_tool(service, user_id, body)
     except Exception as exc:
@@ -84,7 +95,7 @@ async def add_evidence(
 
 @router.post("/complaints/{complaint_id}/prepare", response_model=Complaint)
 async def prepare_complaint(
-    complaint_id: str, service: SupportServiceDependency, user_id: UserIdDependency
+    complaint_id: str, service: SupportServiceDependency, user_id: ConsentedUserIdDependency
 ) -> Complaint:
     try:
         return service.prepare(user_id, complaint_id)
@@ -98,7 +109,7 @@ async def approve_complaint(
     complaint_id: str,
     body: ApproveComplaintRequest,
     service: SupportServiceDependency,
-    user_id: UserIdDependency,
+    user_id: ConsentedUserIdDependency,
 ) -> Complaint:
     try:
         return service.approve(user_id, complaint_id, body.expected_revision)
@@ -109,7 +120,7 @@ async def approve_complaint(
 
 @router.post("/complaints/{complaint_id}/submit", status_code=status.HTTP_204_NO_CONTENT)
 async def submit_complaint(
-    complaint_id: str, service: SupportServiceDependency, user_id: UserIdDependency
+    complaint_id: str, service: SupportServiceDependency, user_id: ConsentedUserIdDependency
 ) -> None:
     try:
         service.submit(user_id, complaint_id)

@@ -18,9 +18,10 @@ PUBLIC_ROUTES: dict[str, str] = {
     "GET /api/zepto/oauth/readiness": "reports callback reachability only",
     "GET /api/zepto/oauth/callback": "provider redirect; validated by OAuth state",
     "GET /api/support/agent/tools": "static tool definitions, no user data",
-    # EventSource cannot send Authorization headers. The stream is keyed only by
-    # the provider-issued voice session id plus an Origin check; it is not bound to a user.
-    "GET /api/voice/sessions/{session_id}/events": "capability URL keyed by voice session id",
+    # EventSource cannot send Authorization headers. The stream requires the
+    # per-session token issued to the creating (Clerk-verified) user by
+    # POST /api/voice/session, plus an Origin check.
+    "GET /api/voice/sessions/{session_id}/events": "bound to its creator by a per-session events token",
 }
 
 

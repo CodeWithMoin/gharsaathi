@@ -3,13 +3,14 @@
 import unicodedata
 from datetime import datetime
 from typing import Literal, Protocol
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.database.models import UserProfileRecord
+from app.database.upsert import insert_if_absent
 
 
 AddressForm = Literal["masculine", "feminine", "neutral"]
@@ -74,21 +75,24 @@ def profile_for(record: UserProfileRecord | None) -> UserProfile:
 async def update_profile(
     session: AsyncSession, user_id: str, update: UserProfileUpdate
 ) -> UserProfileRecord:
-    try:
-        return await _apply_update(session, user_id, update)
-    except IntegrityError:
-        # A concurrent first save created the row; apply this update to it.
-        await session.rollback()
-        return await _apply_update(session, user_id, update)
+    """Race-safe get-or-create, then a locked read-modify-write of the row.
 
+    The row lock serialises concurrent partial updates so neither is lost.
+    """
 
-async def _apply_update(
-    session: AsyncSession, user_id: str, update: UserProfileUpdate
-) -> UserProfileRecord:
-    record = await get_profile_record(session, user_id)
-    if record is None:
-        record = UserProfileRecord(user_id=user_id, address_form="neutral", language="hinglish")
-        session.add(record)
+    await insert_if_absent(
+        session,
+        UserProfileRecord,
+        {"id": uuid4(), "user_id": user_id, "address_form": "neutral", "language": "hinglish"},
+        ["user_id"],
+    )
+    record = await session.scalar(
+        select(UserProfileRecord)
+        .where(UserProfileRecord.user_id == user_id)
+        .with_for_update()
+    )
+    if record is None:  # pragma: no cover - the insert or its winner committed a row
+        raise RuntimeError("User profile was not created.")
     fields = update.model_fields_set
     if "first_name" in fields:
         record.first_name = update.first_name

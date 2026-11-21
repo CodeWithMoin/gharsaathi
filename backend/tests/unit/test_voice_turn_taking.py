@@ -23,7 +23,7 @@ def settings(mode: str = "native") -> Settings:
 
 
 class Hub:
-    def start(self, session_id, executor) -> None:  # noqa: ANN001
+    def start(self, session_id, executor, *, owner_id, events_token) -> None:  # noqa: ANN001
         pass
 
 
@@ -78,6 +78,6 @@ async def test_session_response_reports_turn_taking_mode(mode: str) -> None:
         return httpx.Response(201, json={"session": {"id": "live_1"}, "transport": {"sdp": "answer"}})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        result = await LiveSessionService(settings(mode), NoSearch(), Hub(), client).create(OFFER)  # type: ignore[arg-type]
+        result = await LiveSessionService(settings(mode), NoSearch(), Hub(), client).create(OFFER, household_id="test-user")  # type: ignore[arg-type]
 
     assert result.turn_taking["mode"] == mode

@@ -1,16 +1,19 @@
 """BasketService + ApprovalService together, with an edit interleaved mid-transition.
 
-ApprovalService transitions take the checkout workflow lock, but basket edits
-(PATCH /api/basket/lines, voice set_basket_quantity) do not. Each repository
-call is an await point, so on one event loop an edit can land between the
-approval's read of the basket and its unconditional ``baskets.save``.
+Basket edits (PATCH /api/basket/lines, voice set_basket_quantity) do not take
+the checkout workflow lock. Each repository call is an await point, so on one
+event loop an edit can land between the approval's reads and its writes. The
+writes are compare-and-set on the basket revision and approval status, so the
+edit must survive and the approval must not end APPROVED for the old basket.
 """
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
+from datetime import datetime
 
 import pytest
 
 from app.shopping.approval import ApprovalService
+from app.shopping.errors import ApprovalRefused
 from app.shopping.memory import InMemoryApprovalRepository
 from app.shopping.models import Approval, ApprovalStatus, BasketStatus
 from tests.shopping_fakes import HOUSEHOLD, PROVIDER, World
@@ -23,11 +26,27 @@ class InterleavingApprovals(InMemoryApprovalRepository):
         super().__init__()
         self.before_save: dict[ApprovalStatus, Callable[[], Awaitable[None]]] = {}
 
-    async def save(self, approval: Approval) -> None:
-        hook = self.before_save.pop(approval.status, None)
+    async def _before(self, status: ApprovalStatus) -> None:
+        hook = self.before_save.pop(status, None)
         if hook is not None:
             await hook()
+
+    async def save(self, approval: Approval) -> None:
+        await self._before(approval.status)
         await super().save(approval)
+
+    async def transition(
+        self,
+        approval_id: str,
+        *,
+        from_statuses: Collection[ApprovalStatus],
+        to_status: ApprovalStatus,
+        decided_at: datetime,
+    ) -> bool:
+        await self._before(to_status)
+        return await super().transition(
+            approval_id, from_statuses=from_statuses, to_status=to_status, decided_at=decided_at
+        )
 
 
 def _world() -> tuple[World, InterleavingApprovals]:
@@ -44,21 +63,15 @@ async def _edit_to_quantity_two(world: World) -> None:
     assert edited.lines[0].quantity == 2  # the user is told the edit succeeded
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: ApprovalService._approve saves the basket it read earlier without a "
-        "revision check, so an edit committed mid-approval is silently reverted and "
-        "the approval ends APPROVED for the pre-edit basket (which checkout would then order)."
-    ),
-)
 async def test_edit_during_approve_is_not_lost() -> None:
     world, approvals = _world()
     basket = await world.ready_basket()
     requested = await world.approvals.request(basket.id)
     approvals.before_save[ApprovalStatus.APPROVED] = lambda: _edit_to_quantity_two(world)
 
-    await world.approvals.approve(requested.approval.id, requested.approval.fingerprint)
+    # The user approved a bill for a basket that changed underneath them: refuse.
+    with pytest.raises(ApprovalRefused, match="basket changed"):
+        await world.approvals.approve(requested.approval.id, requested.approval.fingerprint)
 
     stored = await world.basket_repo.get(basket.id)
     approval = await world.approval_repo.get(requested.approval.id)
@@ -67,24 +80,26 @@ async def test_edit_during_approve_is_not_lost() -> None:
     assert approval.status != ApprovalStatus.APPROVED or stored.revision == approval.basket_revision
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: ApprovalService._request saves the basket it re-read before the "
-        "approval insert without a revision check, so an edit committed in that "
-        "window is reverted and the user's change disappears."
-    ),
-)
 async def test_edit_during_bill_request_is_not_lost() -> None:
     world, approvals = _world()
     basket = await world.ready_basket()
     approvals.before_save[ApprovalStatus.PENDING] = lambda: _edit_to_quantity_two(world)
 
-    await world.approvals.request(basket.id)
+    requested = await world.approvals.request(basket.id)
 
     stored = await world.basket_repo.get(basket.id)
     assert stored is not None
     assert stored.lines[0].quantity == 2
+    # The edit forced a re-quote; the bill shown is for the edited basket.
+    assert world.provider.quotes == 2
+    assert requested.approval.basket_revision == stored.revision
+    assert requested.basket.lines[0].quantity == 2
+    stale = [
+        item
+        for item in await world.approval_repo.for_basket(basket.id)
+        if item.id != requested.approval.id
+    ]
+    assert [item.status for item in stale] == [ApprovalStatus.SUPERSEDED]
 
 
 async def test_edit_between_requests_supersedes_without_interleaving() -> None:

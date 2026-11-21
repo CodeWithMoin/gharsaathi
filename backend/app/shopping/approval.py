@@ -1,12 +1,13 @@
 import asyncio
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import timedelta
 
-from app.shopping.basket import OPEN_APPROVAL_STATUSES, Clock, same_variant, utc_now
+from app.shopping.basket import Clock, same_variant, utc_now
 from app.shopping.errors import ApprovalRefused, NotFound, ProviderUnavailable, ShoppingError
 from app.shopping.models import (
+    OPEN_APPROVAL_STATUSES,
     Approval,
     ApprovalStatus,
     Basket,
@@ -19,6 +20,14 @@ from app.shopping.ports import ApprovalRepository, BasketRepository, QuoteProvid
 
 
 APPROVAL_TTL = timedelta(minutes=10)
+# Re-quote this many times if the basket keeps changing while it is priced.
+QUOTE_ATTEMPTS = 3
+FROZEN_STATUSES = {BasketStatus.CHECKOUT_PENDING, BasketStatus.ORDERED}
+REQUESTABLE_STATUSES = {
+    BasketStatus.DRAFT,
+    BasketStatus.AWAITING_APPROVAL,
+    BasketStatus.APPROVED,
+}
 ProviderLookup = Callable[[ProviderName], QuoteProvider]
 
 
@@ -76,9 +85,26 @@ class ApprovalService:
     async def _request(
         self, basket_id: str, *, coordinated: bool
     ) -> ApprovalRequest:
+        for _ in range(QUOTE_ATTEMPTS):
+            result = await self._request_once(basket_id, coordinated=coordinated)
+            if result is not None:
+                return result
+        raise ApprovalRefused(
+            "The basket changed while the store was pricing it. Please review it again."
+        )
+
+    async def _request_once(
+        self, basket_id: str, *, coordinated: bool
+    ) -> ApprovalRequest | None:
+        """Quote one basket revision; ``None`` means it changed and must be re-quoted."""
+
         basket = await self._basket(basket_id)
         if basket.status == BasketStatus.ABANDONED:
             raise ApprovalRefused("This basket can no longer be approved.")
+        if basket.status in FROZEN_STATUSES:
+            raise ApprovalRefused(
+                "Checkout already started for this basket. Do not create or submit it again."
+            )
         if not basket.lines:
             raise ApprovalRefused("The basket is empty.")
         if basket.address_id is None:
@@ -100,13 +126,11 @@ class ApprovalService:
 
         current = await self._basket(basket_id)
         if current.revision != basket.revision:
-            raise ApprovalRefused(
-                "The basket changed while the store was pricing it. Please review it again."
-            )
+            return None
         check_quote(current, quote)
 
         now = self.clock()
-        await self._supersede_open(current.id)
+        await self.approvals.supersede_open(current.id, now)
         approval = Approval(
             id=uuid.uuid4().hex,
             basket_id=current.id,
@@ -117,8 +141,22 @@ class ApprovalService:
             expires_at=now + APPROVAL_TTL,
         )
         await self.approvals.save(approval)
+        # The approval only becomes approvable once the basket moves to
+        # AWAITING_APPROVAL at exactly the quoted revision.
+        if not await self.baskets.transition(
+            current.id,
+            expected_revision=current.revision,
+            from_statuses=REQUESTABLE_STATUSES,
+            to_status=BasketStatus.AWAITING_APPROVAL,
+        ):
+            await self._close(approval, ApprovalStatus.SUPERSEDED, OPEN_APPROVAL_STATUSES)
+            latest = await self._basket(basket_id)
+            if latest.status in FROZEN_STATUSES:
+                raise ApprovalRefused(
+                    "Checkout already started for this basket. Do not create or submit it again."
+                )
+            return None
         current.status = BasketStatus.AWAITING_APPROVAL
-        await self.baskets.save(current)
         return ApprovalRequest(approval=approval, quote=quote, basket=current)
 
     async def approve(
@@ -139,7 +177,7 @@ class ApprovalService:
             raise ApprovalRefused(f"This approval is {approval.status.value}; ask for a fresh one.")
         now = self.clock()
         if now >= approval.expires_at:
-            await self._close(approval, ApprovalStatus.EXPIRED)
+            await self._close(approval, ApprovalStatus.EXPIRED, {ApprovalStatus.PENDING})
             raise ApprovalRefused("This approval expired. Please review the basket again.")
         if fingerprint != approval.fingerprint:
             raise ApprovalRefused(
@@ -148,17 +186,36 @@ class ApprovalService:
         basket = await self._basket(approval.basket_id)
         if (
             basket.revision != approval.basket_revision
+            or basket.status != BasketStatus.AWAITING_APPROVAL
             or basket_fingerprint(basket, approval.payable_paise) != approval.fingerprint
         ):
-            await self._close(approval, ApprovalStatus.SUPERSEDED)
+            await self._close(approval, ApprovalStatus.SUPERSEDED, OPEN_APPROVAL_STATUSES)
+            raise ApprovalRefused(
+                "The basket changed after this bill was shown. Please review it again."
+            )
+        # Two compare-and-set writes. Any edit committed in between bumps the
+        # basket revision and supersedes the approval, so one of them fails.
+        if not await self.approvals.transition(
+            approval.id,
+            from_statuses={ApprovalStatus.PENDING},
+            to_status=ApprovalStatus.APPROVED,
+            decided_at=now,
+        ):
+            raise ApprovalRefused(
+                "The basket changed after this bill was shown. Please review it again."
+            )
+        if not await self.baskets.transition(
+            basket.id,
+            expected_revision=approval.basket_revision,
+            from_statuses={BasketStatus.AWAITING_APPROVAL},
+            to_status=BasketStatus.APPROVED,
+        ):
+            await self._close(approval, ApprovalStatus.SUPERSEDED, OPEN_APPROVAL_STATUSES)
             raise ApprovalRefused(
                 "The basket changed after this bill was shown. Please review it again."
             )
         approval.status = ApprovalStatus.APPROVED
         approval.decided_at = now
-        await self.approvals.save(approval)
-        basket.status = BasketStatus.APPROVED
-        await self.baskets.save(basket)
         return approval
 
     async def reject(self, approval_id: str, household_id: str | None = None) -> Approval:
@@ -173,27 +230,35 @@ class ApprovalService:
         approval = await self._approval(approval_id)
         if household_id is not None:
             await self._owned_basket(approval.basket_id, household_id)
-        if approval.status not in OPEN_APPROVAL_STATUSES:
-            raise ApprovalRefused(f"This approval is already {approval.status.value}.")
-        await self._close(approval, ApprovalStatus.REJECTED)
-        basket = await self.baskets.get(approval.basket_id)
-        if basket is not None and basket.status in {
-            BasketStatus.AWAITING_APPROVAL,
-            BasketStatus.APPROVED,
-        }:
-            basket.status = BasketStatus.DRAFT
-            await self.baskets.save(basket)
+        if approval.status not in OPEN_APPROVAL_STATUSES or not await self._close(
+            approval, ApprovalStatus.REJECTED, OPEN_APPROVAL_STATUSES
+        ):
+            latest = await self._approval(approval_id)
+            raise ApprovalRefused(f"This approval is already {latest.status.value}.")
+        # Thaw only the revision this approval covered; a newer edit already
+        # returned the basket to draft.
+        await self.baskets.transition(
+            approval.basket_id,
+            expected_revision=approval.basket_revision,
+            from_statuses={BasketStatus.AWAITING_APPROVAL, BasketStatus.APPROVED},
+            to_status=BasketStatus.DRAFT,
+        )
         return approval
 
-    async def _supersede_open(self, basket_id: str) -> None:
-        for approval in await self.approvals.for_basket(basket_id):
-            if approval.status in OPEN_APPROVAL_STATUSES:
-                await self._close(approval, ApprovalStatus.SUPERSEDED)
-
-    async def _close(self, approval: Approval, status: ApprovalStatus) -> None:
-        approval.status = status
-        approval.decided_at = self.clock()
-        await self.approvals.save(approval)
+    async def _close(
+        self,
+        approval: Approval,
+        status: ApprovalStatus,
+        from_statuses: Collection[ApprovalStatus],
+    ) -> bool:
+        now = self.clock()
+        closed = await self.approvals.transition(
+            approval.id, from_statuses=from_statuses, to_status=status, decided_at=now
+        )
+        if closed:
+            approval.status = status
+            approval.decided_at = now
+        return closed
 
     async def _basket(self, basket_id: str) -> Basket:
         basket = await self.baskets.get(basket_id)

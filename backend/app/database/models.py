@@ -20,6 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -246,10 +247,23 @@ class MemoryEvent(Base):
     memory: Mapped[MemoryItem] = relationship(back_populates="events")
 
 
+OPEN_BASKET_PREDICATE = (
+    "status IN ('draft', 'awaiting_approval', 'approved', 'checkout_pending')"
+)
+
+
 class ShoppingBasketRecord(Base):
     __tablename__ = "shopping_baskets"
     __table_args__ = (
         Index("ix_shopping_baskets_household_provider", "household_id", "provider"),
+        Index(
+            "uq_shopping_baskets_one_open",
+            "household_id",
+            "provider",
+            unique=True,
+            postgresql_where=text(OPEN_BASKET_PREDICATE),
+            sqlite_where=text(OPEN_BASKET_PREDICATE),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
