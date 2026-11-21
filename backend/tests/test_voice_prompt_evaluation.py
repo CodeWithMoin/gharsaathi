@@ -1,10 +1,17 @@
+import json
+import re
+
 import pytest
 
+from app.voice.address_tools import OpenAddressFormArguments
+from app.voice.basket_tools import AddArguments, QuantityArguments, StoreArguments
 from app.voice.prompts import (
     BACKEND_INSTRUCTIONS,
     LIVE_INSTRUCTIONS,
     VOICE_PROMPT_VERSION,
 )
+from app.voice.toolbox import VOICE_TOOL_DEFINITIONS
+from app.voice.tools import SearchProductsArguments
 from evaluation.run_voice_prompt import (
     build_input,
     devanagari_ratio,
@@ -24,6 +31,15 @@ REGRESSION_CASE_IDS = {
     "full_english_reply_in_english",
     "explicit_hindi_request_reply_in_hindi",
     "explicit_hindi_choice_persists",
+    "refuse_order_after_bill_on_screen",
+    "brand_only_one_question",
+    "two_store_bill_asks_store",
+    "new_address_roman_no_saved_claim",
+    "brand_reference_single_question",
+    "smallest_then_only_variant_question",
+    "gender_neutral_user_address",
+    "price_spoken_in_words",
+    "explicit_add_same_item_two_stores_picks_cheaper",
 }
 
 
@@ -121,6 +137,61 @@ def test_build_input_appends_latest_turn_after_history() -> None:
             "मैं राशन, घर का सामान और personal care products ढूँढ सकती हूँ।",
             "Main ration aur ghar ka saamaan dhoondh sakti hoon.",
         ),
+        (
+            "refuse_order_after_bill_on_screen",
+            "Order main place nahi kar sakti; bill screen par hai, wahin review kijiye.",
+            "Haan, order place kar rahi hoon.",
+        ),
+        (
+            "refuse_order_after_bill_on_screen",
+            "Order main place nahi kar sakti; bill screen par review kijiye.",
+            "Theek hai, lekin order main place nahi kar sakti.",
+        ),
+        (
+            "brand_only_one_question",
+            "Amul mein kya chahiye, doodh, butter ya kuch aur?",
+            "Ek second, Amul ke products dekh rahi hoon.",
+        ),
+        (
+            "two_store_bill_asks_store",
+            "Kis store ka bill chahiye, Instamart ya Zepto?",
+            "Dono stores ka bill bana diya, order ho gaya.",
+        ),
+        (
+            "new_address_roman_no_saved_claim",
+            "Theek hai, naya address form screen par khol rahi hoon.",
+            "नया address save ho गया है।",
+        ),
+        (
+            "pick_variant_single_word",
+            "AXE Dark Temptation 150 ml Instamart basket mein daal rahi hoon.",
+            "AXE Dark Temptation 150 ml, ek sau bahattar rupaye, Zepto par.",
+        ),
+        (
+            "brand_reference_single_question",
+            "AXE ke options screen par hain; aapko Dark Temptation chahiye ya Apollo?",
+            "AXE Dark Temptation ya Apollo chahiye? 150 ml ya 215 ml?",
+        ),
+        (
+            "smallest_then_only_variant_question",
+            "Sabse chhota 150 ml hai; delivery time abhi result mein nahi aaya. Dark Temptation ya Apollo?",
+            "Sabse chhota 150 ml hai. Delivery time nahi dikh raha. Kaunsa size chahiye? Dark ya Apollo?",
+        ),
+        (
+            "gender_neutral_user_address",
+            "Aapko spray chahiye ya roll-on?",
+            "Aap spray deodorant dhoondh rahi hain ya roll-on?",
+        ),
+        (
+            "price_spoken_in_words",
+            "AXE Apollo 150 ml ek sau ninyanve rupaye ka hai, Instamart par.",
+            "AXE Apollo 150 ml ₹199 ka hai.",
+        ),
+        (
+            "explicit_add_same_item_two_stores_picks_cheaper",
+            "Instamart par sasta hai, paanch sau unchaas rupaye; wahin add kar rahi hoon.",
+            "Surf Excel Matic 2 kg dono par hai, kaunse store ke basket mein add karun?",
+        ),
     ],
 )
 def test_regression_cases_score_good_and_bad_replies(
@@ -193,3 +264,148 @@ def test_decisive_rules_keep_safety_rules() -> None:
     assert "## Decisive selection" in BACKEND_INSTRUCTIONS
     assert "that store's basket" in BACKEND_INSTRUCTIONS
     assert "Never invent option ids" in BACKEND_INSTRUCTIONS
+
+
+def _examples(prompt: str, heading: str) -> list[str]:
+    block = prompt.split(heading, 1)[1]
+    return [line.strip() for line in block.splitlines() if line.strip()]
+
+
+_EXAMPLE_BLOCKS = [
+    pytest.param(LIVE_INSTRUCTIONS, "\n# Examples\n", id="live"),
+    pytest.param(BACKEND_INSTRUCTIONS, "\n## Examples\n", id="backend"),
+]
+
+
+@pytest.mark.parametrize(("prompt", "heading"), _EXAMPLE_BLOCKS)
+def test_few_shot_examples_are_labelled_and_roman_except_explicit_hindi(
+    prompt: str, heading: str
+) -> None:
+    lines = _examples(prompt, heading)
+    assert "Illustrative patterns only, not facts." in " ".join(lines)
+    assert "Never reuse them" in " ".join(lines)
+
+    last_user = ""
+    hindi_replies = 0
+    assistant_lines = 0
+    for line in lines:
+        if line.startswith("User:"):
+            last_user = line
+        elif line.startswith("Assistant:"):
+            assistant_lines += 1
+            ratio = devanagari_ratio(line.removeprefix("Assistant:"))
+            if "hindi mein" in last_user.casefold():
+                hindi_replies += 1
+                assert ratio >= 0.3, line
+            else:
+                assert ratio == 0.0, line
+    assert 6 <= assistant_lines <= 14
+    assert hindi_replies == 1
+
+
+def test_live_examples_cover_decisive_patterns_without_tool_sketches() -> None:
+    lines = _examples(LIVE_INSTRUCTIONS, "\n# Examples\n")
+    text = "\n".join(lines)
+
+    assert not any(line.startswith(("Tool call:", "Tool result:")) for line in lines)
+    assert "User: Dark" in text
+    assert "Assistant: Maine suna:" in text
+    assert "Instamart ya Zepto?" in text
+    # Every spoken add confirmation follows a bracketed backend confirmation.
+    confirmations = [i for i, line in enumerate(lines) if "add ho gaya" in line]
+    assert len(confirmations) >= 2
+    for index in confirmations:
+        assert lines[index - 1].startswith("[Backend"), lines[index]
+    refusal = next(line for line in lines if "place nahi kar sakti" in line)
+    assert not refusal.removeprefix("Assistant:").strip().casefold().startswith(("haan", "ji haan", "yes"))
+
+
+def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
+    definitions = {tool["name"]: tool for tool in VOICE_TOOL_DEFINITIONS}
+    validators = {
+        "search_products": SearchProductsArguments,
+        "add_to_basket": AddArguments,
+        "set_basket_quantity": QuantityArguments,
+        "view_basket": StoreArguments,
+        "request_approval": StoreArguments,
+        "open_address_form": OpenAddressFormArguments,
+    }
+    assert set(validators) == set(definitions)
+
+    issued_options: set[str] = set()
+    used: set[str] = set()
+    for line in _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n"):
+        if line.startswith("Tool call:"):
+            name, raw = line.removeprefix("Tool call:").strip().split(" ", 1)
+            assert name in definitions, name
+            arguments = json.loads(raw)
+            parameters = definitions[name]["parameters"]
+            assert set(arguments) <= set(parameters["properties"])
+            assert set(parameters["required"]) <= set(arguments)
+            validators[name].model_validate(arguments)
+            if name == "add_to_basket":
+                assert arguments["option_id"] in issued_options
+            used.add(name)
+        elif line.startswith("Tool result:"):
+            result = json.loads(line.removeprefix("Tool result:"))
+            issued_options.update(
+                item["option_id"] for item in result.get("results", []) if "option_id" in item
+            )
+    assert {"search_products", "add_to_basket", "request_approval", "open_address_form"} <= used
+    lines = _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n")
+    for index, line in enumerate(lines):
+        if line.startswith("Assistant:") and "add ho gaya" in line:
+            previous = json.loads(lines[index - 1].removeprefix("Tool result:"))
+            assert previous["status"] == "added", line
+
+
+_SPOKEN_PRICES = {
+    "ek sau bahattar rupaye": 172,
+    "do sau unchaas rupaye": 249,
+    "paanch sau unchaas rupaye": 549,
+    "ek sau sattanave rupaye": 197,
+    "one hundred and ninety-nine rupees": 199,
+    "अट्ठाईस रुपये": 28,
+}
+_PRICE_WORD = re.compile(r"rupaye|rupees|रुपये")
+_GENDERED_USER_ADDRESS = re.compile(
+    r"\b(?:rahi|rahe|chahti|chahte|karti|karte|leti|lete|sakti|sakte) hain\b", re.IGNORECASE
+)
+
+
+@pytest.mark.parametrize(("prompt", "heading"), _EXAMPLE_BLOCKS)
+def test_example_replies_speak_prices_in_words_and_address_user_neutrally(
+    prompt: str, heading: str
+) -> None:
+    for line in _examples(prompt, heading):
+        if line.startswith("Assistant:"):
+            assert "₹" not in line, line
+            assert not re.search(r"\d+\s*(?:rupaye|rupees|rs\b)", line, re.IGNORECASE), line
+            assert not _GENDERED_USER_ADDRESS.search(line), line
+
+
+def test_backend_example_prices_come_from_tool_results() -> None:
+    seen_prices: set[int] = set()
+    for line in _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n"):
+        if line.startswith("Tool result:"):
+            result = json.loads(line.removeprefix("Tool result:"))
+            seen_prices.update(item["price_rupees"] for item in result.get("results", []))
+            for key in ("payable", "item_total"):
+                if key in result:
+                    seen_prices.add(int(result[key].removeprefix("₹").replace(",", "")))
+        elif line.startswith("Assistant:") and _PRICE_WORD.search(line):
+            spoken = [amount for phrase, amount in _SPOKEN_PRICES.items() if phrase in line]
+            assert spoken, line
+            assert set(spoken) <= seen_prices, line
+
+
+def test_backend_example_adds_cheaper_store_without_asking() -> None:
+    lines = _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n")
+    start = next(i for i, line in enumerate(lines) if "seedha Surf Excel 2 kg add karo" in line)
+    search = json.loads(lines[start + 2].removeprefix("Tool result:"))["results"]
+    cheapest = min((item for item in search if item["available"]), key=lambda item: item["price_rupees"])
+    add = lines[start + 3]
+    assert add.startswith("Tool call: add_to_basket")
+    assert json.loads(add.split(" ", 3)[3])["option_id"] == cheapest["option_id"]
+    reply = lines[start + 5]
+    assert reply.startswith("Assistant:") and "?" not in reply and "sasta" in reply

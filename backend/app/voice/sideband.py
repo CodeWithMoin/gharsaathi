@@ -16,6 +16,37 @@ logger = logging.getLogger(__name__)
 
 MAX_TRACKED_SESSIONS = 20
 FINISHED = {"type": "session.finished"}
+_EVENT_ID_FIELDS = (
+    "event_id",
+    "client_event_id",
+    "item_id",
+    "response_id",
+    "delegation_id",
+    "call_id",
+)
+_EVENT_TIMING_FIELDS = ("start_ms", "end_ms", "offset_ms")
+
+
+def describe_event(event: dict[str, Any]) -> dict[str, Any]:
+    """A content-free summary of a Live event: type, id field names, timing.
+
+    Never includes transcript text, tool arguments, outputs or id values.
+    """
+    summary: dict[str, Any] = {
+        "type": str(event.get("type", "(no type)"))[:120],
+        "ids": [field for field in _EVENT_ID_FIELDS if event.get(field) is not None],
+    }
+    timing = {
+        field: event[field]
+        for field in _EVENT_TIMING_FIELDS
+        if isinstance(event.get(field), int) and not isinstance(event.get(field), bool)
+    }
+    if timing:
+        summary["timing"] = timing
+    inner = event.get("event")
+    if isinstance(inner, dict) and isinstance(inner.get("type"), str):
+        summary["inner"] = inner["type"][:120]
+    return summary
 
 
 class Connection(Protocol):
@@ -56,10 +87,13 @@ class SidebandRunner:
         connection: Connection,
         executor: ShoppingToolExecutor,
         publish: Callable[[dict[str, Any]], None],
+        *,
+        log_event_types: bool = False,
     ) -> None:
         self.connection = connection
         self.executor = executor
         self.publish = publish
+        self.log_event_types = log_event_types
         self._seen_event_ids: set[str] = set()
         self._handled_call_ids: set[str] = set()
         self._pending: dict[str, list[asyncio.Task[None]]] = {}
@@ -86,6 +120,9 @@ class SidebandRunner:
 
     async def handle(self, event: dict[str, Any]) -> bool:
         """Process one event. Returns True when the session has closed."""
+        if self.log_event_types:
+            # WARNING so the opt-in diagnostic shows without app logging configuration.
+            logger.warning("Voice sideband event %s", json.dumps(describe_event(event)))
         event_id = event.get("event_id")
         if isinstance(event_id, str):
             if event_id in self._seen_event_ids:
@@ -146,7 +183,7 @@ class SidebandRunner:
         except Exception:
             logger.exception("Voice tool %s failed", name)
             model_output = {"status": "error", "message": "The tool failed unexpectedly."}
-            self.publish({"type": "tool.error", "message": "Something went wrong while searching."})
+            self.publish({"type": "tool.error", "message": "Search mein kuch gadbad ho gayi. Ek baar phir boliye."})
         await self.send(
             {
                 "type": "response.item.create",
@@ -200,11 +237,19 @@ class SidebandHub:
                 max_size=16 * 1024 * 1024,
                 open_timeout=15,
             ) as connection:
-                await SidebandRunner(connection, executor, channel.publish).run()
+                await SidebandRunner(
+                    connection,
+                    executor,
+                    channel.publish,
+                    log_event_types=self.settings.voice_event_log,
+                ).run()
         except (OSError, WebSocketException, asyncio.TimeoutError) as exc:
             logger.warning("Voice sideband for %s ended: %s", session_id, type(exc).__name__)
             channel.publish(
-                {"type": "tool.error", "message": "Lost the server connection to voice. Shopping tools stopped."}
+                {
+                    "type": "tool.error",
+                    "message": "Voice ka server connection toot gaya. Shopping tools ruk gaye hain.",
+                }
             )
         finally:
             channel.finish()

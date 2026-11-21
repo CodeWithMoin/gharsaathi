@@ -5,8 +5,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Basket, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
-import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
-import { groupProductsForComparison, ProductComparison, type Product } from "./product-comparison";
+import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, type Approval, type ApprovalRequest, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
+import { groupProductsForComparison, INITIAL_COMPARISON_GROUPS, ProductComparison, type Product } from "./product-comparison";
+import { conversationSnapshot } from "./conversation-snapshot.mjs";
 import { LiveOrderTracking } from "./order-tracking";
 import { PersonalizationOnboarding } from "./personalization-onboarding";
 import { SupportPanel } from "./support-panel";
@@ -57,6 +58,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   const [basketOpen, setBasketOpen] = useState(false);
   const [basket, setBasket] = useState<ShoppingBasket | null>(null);
   const [basketProvider, setBasketProvider] = useState<ProviderName>("swiggy_instamart");
+  const [voiceApproval, setVoiceApproval] = useState<{ provider: ProviderName; request: ApprovalRequest } | null>(null);
+  const [chatSaveFailed, setChatSaveFailed] = useState(false);
   const [addingSku, setAddingSku] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(startWithSetupOpen);
   const [supportOpen, setSupportOpen] = useState(false);
@@ -93,6 +96,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   const conversationSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const conversationSaveTimerRef = useRef<number | null>(null);
   const chatMessagesRef = useRef<ChatMessage[]>([]);
+  // Set when the saved chat could not be loaded, so the first save starts a new chat instead of overwriting it.
+  const startFreshConversationRef = useRef(false);
   const selectedAddress = useMemo(() => addresses.find((address) => address.id === addressId), [addresses, addressId]);
   const closeVoice = useCallback(() => setVoiceOpen(false), []);
   const basketProviderRef = useRef<ProviderName>(basketProvider);
@@ -101,6 +106,16 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     if (provider && provider !== basketProviderRef.current) setBasketProvider(provider);
     else window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
     setBasketOpen(true);
+  }, []);
+  const handleVoiceApproval = useCallback((provider: ProviderName, request: ApprovalRequest) => {
+    setVoiceApproval({ provider, request });
+  }, []);
+  const handleApprovalChange = useCallback((approval: Approval | null) => {
+    if (!approval) setVoiceApproval(null);
+  }, []);
+  const hideBasket = useCallback(() => {
+    setBasketOpen(false);
+    setVoiceApproval(null);
   }, []);
   // Read through a ref so the voice callback stays stable and never restarts the live session.
   const addressFormGateRef = useRef({ commerceMode, zeptoConnected });
@@ -312,7 +327,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       .then((conversation) => {
         if (!active) return;
         if (conversation) {
-          applyConversation(conversation);
+          const earlyTurns = chatMessagesRef.current.filter((item) => !conversation.messages?.some((saved) => saved.id === item.id));
+          applyConversation(earlyTurns.length ? { ...conversation, messages: [...(conversation.messages ?? []), ...earlyTurns] } : conversation);
           window.localStorage.removeItem(LEGACY_CHAT_STORAGE_KEY);
           return;
         }
@@ -334,7 +350,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         }).then(() => window.localStorage.removeItem(LEGACY_CHAT_STORAGE_KEY));
       })
       .catch((cause: unknown) => {
-        if (active) setMessage(cause instanceof Error ? cause.message : "Could not restore this chat.");
+        if (!active) return;
+        startFreshConversationRef.current = true;
+        setMessage(cause instanceof Error ? cause.message : "Could not restore this chat.");
       })
       .finally(() => { if (active) setChatHydrated(true); });
     return () => { active = false; };
@@ -361,17 +379,23 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     if (!chatHydrated || (!submittedQuery && !chatMessages.length)) return;
     const timer = window.setTimeout(() => {
       conversationSaveTimerRef.current = null;
-      const snapshot = { submitted_query: submittedQuery, products, searched, messages: chatMessages, results_after_message_id: resultsAfterMessageId };
+      const snapshot = conversationSnapshot({ submittedQuery, products, searched, messages: chatMessages, resultsAfterMessageId });
       conversationSaveQueueRef.current = conversationSaveQueueRef.current
         .catch(() => undefined)
         .then(async () => {
+          if (startFreshConversationRef.current) {
+            await apiRequest<null>("/api/conversations/new", { method: "POST" });
+            startFreshConversationRef.current = false;
+          }
           await apiRequest<PersistedConversation>("/api/conversations/current", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(snapshot),
           });
+          setChatSaveFailed(false);
         })
         .catch((cause: unknown) => {
+          setChatSaveFailed(true);
           setMessage(cause instanceof Error ? cause.message : "Could not save this chat.");
         });
     }, 250);
@@ -414,6 +438,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       window.clearTimeout(conversationSaveTimerRef.current);
       conversationSaveTimerRef.current = null;
     }
+    setVoiceOpen(false);
     setSubmittedQuery("");
     setProducts([]);
     setSearched(false);
@@ -439,6 +464,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     try {
       await conversationSaveQueueRef.current;
       const conversation = await apiRequest<PersistedConversation>(`/api/conversations/${conversationId}/open`, { method: "POST" });
+      setVoiceOpen(false);
+      startFreshConversationRef.current = false;
       applyConversation(conversation);
       setQuery("");
       setChatDrawerOpen(false);
@@ -665,7 +692,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 max-w-md rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex gap-3"><Basket size={20} className="mt-0.5 shrink-0 text-[#c6531d]" /><p className="text-sm leading-6">Is address par kuch nahi mila. Product ya brand ko thoda broadly bolkar try karein.</p></div></div></motion.div>
   ) : products.length ? (() => {
     const productCount = groupProductsForComparison(products).length;
-    return <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><div className="mb-2 w-fit max-w-full rounded-[18px] bg-[#fffdf9] px-4 py-3 shadow-[0_14px_34px_-32px_rgba(74,43,27,.65)]"><p className="text-[13px] leading-5"><strong>{productCount === 1 ? "1 relevant option mila." : `${productCount} relevant options mile.`}</strong> {productCount > 1 ? (commerceMode === "demo" ? "Add karte hi agla item khulega." : `${zeptoSearchReady ? "Swiggy aur Zepto" : "Swiggy Instamart"} ke options compare karein.`) : "Best matching option neeche hai."}</p></div><ProductComparison products={products} commerceMode={commerceMode} addingSku={addingSku} onAdd={addProduct} /><p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p></motion.div>;
+    return <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><div className="mb-2 w-fit max-w-full rounded-[18px] bg-[#fffdf9] px-4 py-3 shadow-[0_14px_34px_-32px_rgba(74,43,27,.65)]"><p className="text-[13px] leading-5"><strong>{productCount === 1 ? "1 relevant option mila." : productCount > INITIAL_COMPARISON_GROUPS ? `${productCount} options mile—top ${INITIAL_COMPARISON_GROUPS} yahan hain.` : `${productCount} relevant options mile.`}</strong> {productCount > 1 ? (commerceMode === "demo" ? "Add karte hi agla item khulega." : `${zeptoSearchReady ? "Swiggy aur Zepto" : "Swiggy Instamart"} ke options compare karein.`) : "Best matching option neeche hai."}</p></div><ProductComparison products={products} commerceMode={commerceMode} addingSku={addingSku} onAdd={addProduct} /><p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p></motion.div>;
   })() : null;
 
   return <main className="grain min-h-[100dvh] overflow-hidden bg-[#f8f2ea] text-[#35241c]">
@@ -727,7 +754,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
         <button type="button" onClick={() => setChatDrawerOpen(true)} aria-label="Open shopping chats" className="grid size-10 shrink-0 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><List size={21} /></button>
         <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
-          {basketCount > 0 && <button onClick={() => setBasketOpen((open) => !open)} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
+          {basketCount > 0 && <button onClick={() => (basketOpen ? hideBasket() : setBasketOpen(true))} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
           <button type="button" onClick={() => setSupportOpen((open) => !open)} aria-label="Get help with an order" className={`grid size-10 place-items-center rounded-full transition active:scale-[.96] ${supportOpen ? "bg-[#f1dfd2] text-[#9f451d]" : "bg-white/70 text-[#70584b] hover:bg-[#f6ece4]"}`}><ChatCircleDots size={21} weight={supportOpen ? "fill" : "regular"} /></button>
           <button onClick={() => setAccountSettingsOpen(true)} aria-label={`Open account and store settings. ${connectionLabel}`} className={`relative ml-0.5 grid size-10 place-items-center rounded-full transition active:scale-[.98] ${accountSettingsOpen ? "bg-[#f4e2d6] text-[#8f421b]" : "bg-white/70 text-[#5c463b] hover:bg-[#f6ece4]"}`}><Storefront size={18} className="text-[#c6531d]" /><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} aria-hidden="true" /></button>
         </nav>
@@ -749,11 +776,11 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
             <div key={chatMessage.id} className="contents">
               {chatMessage.role === "user" ? (
                 <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 flex justify-end pl-8 sm:pl-12">
-                  <div className="max-w-full whitespace-pre-wrap rounded-[22px_8px_22px_22px] bg-[#3b2a22] px-5 py-3.5 text-[15px] leading-6 text-[#fffaf5] shadow-[0_18px_36px_-24px_rgba(53,36,28,.8)]">{chatMessage.content}</div>
+                  <div className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[22px_8px_22px_22px] bg-[#3b2a22] px-5 py-3.5 text-[15px] leading-6 text-[#fffaf5] shadow-[0_18px_36px_-24px_rgba(53,36,28,.8)]">{chatMessage.content}</div>
                 </motion.div>
               ) : (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
-                  <div className="max-w-[620px] whitespace-pre-wrap rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 text-[15px] leading-7 shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] sm:text-base">{chatMessage.content}</div>
+                  <div className="max-w-[620px] whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 text-[15px] leading-7 shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] sm:text-base">{chatMessage.content}</div>
                 </motion.div>
               )}
               {chatMessage.id === resultsAfterMessageId && searchOutcome}
@@ -761,8 +788,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
           ))}
           {!resultAnchorExists && searchOutcome}
         </AnimatePresence>
+        {chatSaveFailed && <p role="status" className="mt-6 text-center text-[11px] leading-4 text-[#9e4536]">Ye chat abhi save nahi hui. Agla message aate hi phir koshish hogi.</p>}
 
-        <AnimatePresence>{basketOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><BasketPanel provider={basketProvider} addressId={basketProvider === "zepto" ? zeptoAddressId : addressId} commerceMode={commerceMode} onBasketChange={setBasket} /><button type="button" onClick={() => setBasketOpen(false)} className="mx-auto mt-3 block text-xs font-semibold text-[#806f65] transition hover:text-[#3b2a22]">Hide basket</button></motion.div>}</AnimatePresence>
+        <AnimatePresence>{basketOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><BasketPanel provider={basketProvider} addressId={basketProvider === "zepto" ? zeptoAddressId : addressId} commerceMode={commerceMode} incomingRequest={voiceApproval?.provider === basketProvider ? voiceApproval.request : null} onBasketChange={setBasket} onApprovalChange={handleApprovalChange} /><button type="button" onClick={hideBasket} className="mx-auto mt-3 block text-xs font-semibold text-[#806f65] transition hover:text-[#3b2a22]">Hide basket</button></motion.div>}</AnimatePresence>
         <AnimatePresence>{supportOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><SupportPanel onClose={() => setSupportOpen(false)} onTrackOrder={() => { setSupportOpen(false); setTrackingOpen(true); }} /></motion.div>}</AnimatePresence>
         <AnimatePresence>{trackingOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><LiveOrderTracking initialAddressId={addressId || undefined} onClose={() => setTrackingOpen(false)} /></motion.div>}</AnimatePresence>
       </div>
@@ -770,7 +798,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
 
     <div className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-[#f8f2ea] via-[#f8f2ea] to-transparent px-4 pb-4 pt-10 sm:pb-6">
       <AnimatePresence mode="wait">
-        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onAddressForm={handleVoiceAddressForm} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
+        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
           <div className="flex items-center gap-2 rounded-[26px] border border-[#deccbf] bg-[#fffdf9] p-2 pl-5 shadow-[0_24px_60px_-28px_rgba(70,40,24,.55),inset_0_1px_0_rgba(255,255,255,.9)]"><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search"} className="min-w-0 flex-1 bg-transparent py-2 text-[15px] outline-none placeholder:text-[#a28e82] disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() ? <button type="submit" aria-label="Send request" disabled={loading === "search"} className="grid size-12 shrink-0 place-items-center rounded-full bg-[#3b2a22] text-white transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} disabled={loading === "search"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-[#c6531d] text-white shadow-[0_12px_30px_-14px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-[#c6531d]" /><Microphone size={23} /></button>}</div>
           <p className="mt-2.5 text-center text-[10px] text-[#8d7a6f]">Hindi · English · Hinglish &nbsp;·&nbsp; You approve every purchase</p>
         </motion.form>}

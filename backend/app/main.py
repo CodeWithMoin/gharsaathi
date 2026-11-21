@@ -52,13 +52,15 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
     expose_headers=["Retry-After"],
 )
-app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])
-app.include_router(legal_consent_router, prefix="/api/legal-consent", tags=["Legal consent"])
+# Purchase memory must be mounted first: memory's `DELETE /{memory_id}` would
+# otherwise capture `DELETE /purchase-history` and reject it as a bad UUID.
 app.include_router(
     purchase_memory_router,
     prefix="/api/memory",
     tags=["Purchase Memory"],
 )
+app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])
+app.include_router(legal_consent_router, prefix="/api/legal-consent", tags=["Legal consent"])
 app.include_router(swiggy_router, prefix="/api/swiggy", tags=["Swiggy Instamart"])
 app.include_router(zepto_router, prefix="/api/zepto", tags=["Zepto"])
 app.include_router(

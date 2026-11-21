@@ -1,0 +1,976 @@
+{
+  "generated_at": "2026-11-21T23:11:15.984630+00:00",
+  "model": "gpt-6-luna",
+  "prompt_version": "1.7.0",
+  "tool_names": [
+    "search_products",
+    "add_to_basket",
+    "set_basket_quantity",
+    "view_basket",
+    "request_approval",
+    "open_address_form"
+  ],
+  "network": {
+    "allowed_host": "api.openai.com",
+    "blocked_lookups": []
+  },
+  "summary": {
+    "s1a-deodorant-demo": {
+      "passed": true,
+      "run": 1
+    },
+    "s1b-deodorant-fixture": {
+      "passed": true,
+      "run": 1
+    },
+    "s2-impatient-surf-excel": {
+      "passed": false,
+      "run": 1
+    }
+  },
+  "runs": [
+    {
+      "id": "s1a-deodorant-demo",
+      "title": "Deodorant flow on the pure demo catalogue (no deodorant exists): must not invent or add",
+      "catalogue": "demo",
+      "passed": true,
+      "turns": [
+        {
+          "user": "mujhe deodorant chahiye",
+          "reply": "Deodorant ke relevant options nahi mile. Spray chahiye ya roll-on?",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "deodorant"
+              },
+              "status": "ok",
+              "model_output": {
+                "status": "ok",
+                "stores_checked": [
+                  "Swiggy Instamart",
+                  "Zepto"
+                ],
+                "query": "deodorant",
+                "total_variants": 6,
+                "results": [
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Fortune Sunflower Oil",
+                    "price_rupees": 155.0,
+                    "available": true,
+                    "brand": "Fortune",
+                    "pack_size": "1 L",
+                    "mrp_rupees": 175.0,
+                    "saving_rupees": 20.0,
+                    "unit_price": "₹155/L",
+                    "delivery_eta": "18 min",
+                    "option_id": "opt1"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Aashirvaad Shudh Chakki Atta",
+                    "price_rupees": 265.0,
+                    "available": true,
+                    "brand": "Aashirvaad",
+                    "pack_size": "5 kg",
+                    "mrp_rupees": 310.0,
+                    "saving_rupees": 45.0,
+                    "unit_price": "₹53/kg",
+                    "delivery_eta": "18 min",
+                    "option_id": "opt2"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Tata Tea Gold",
+                    "price_rupees": 285.0,
+                    "available": true,
+                    "brand": "Tata",
+                    "pack_size": "500 g",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 14.0,
+                    "delivery_eta": "18 min",
+                    "option_id": "opt3"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Fortune Sunflower Oil",
+                    "price_rupees": 151.0,
+                    "available": true,
+                    "brand": "Fortune",
+                    "pack_size": "1 L",
+                    "mrp_rupees": 175.0,
+                    "saving_rupees": 24.0,
+                    "delivery_eta": "12 min",
+                    "option_id": "opt4"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Aashirvaad Shudh Chakki Atta",
+                    "price_rupees": 272.0,
+                    "available": true,
+                    "brand": "Aashirvaad",
+                    "pack_size": "5 kg",
+                    "mrp_rupees": 310.0,
+                    "saving_rupees": 38.0,
+                    "delivery_eta": "14 min",
+                    "option_id": "opt5"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Tata Tea Gold",
+                    "price_rupees": 285.0,
+                    "available": true,
+                    "brand": "Tata",
+                    "pack_size": "500 g",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 14.0,
+                    "delivery_eta": "11 min",
+                    "option_id": "opt6"
+                  }
+                ],
+                "provider_statuses": [
+                  {
+                    "status": "ok",
+                    "store": "Swiggy Instamart"
+                  },
+                  {
+                    "status": "ok",
+                    "store": "Zepto"
+                  }
+                ],
+                "note": "Current item prices only; nothing was added. Only results with an option_id can be added, to that store's own local basket."
+              },
+              "ui_event_type": "tool.results",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products"
+            ],
+            "question_count": 1,
+            "sentence_count": 2,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 54,
+              "dominant": "latin"
+            }
+          },
+          "failures": []
+        },
+        {
+          "user": "AXE wala dikhao",
+          "reply": "AXE deodorant ke options abhi nahi mile. Koi doosra brand dikhau?",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "AXE deodorant"
+              },
+              "status": "ok",
+              "model_output": {
+                "status": "ok",
+                "stores_checked": [
+                  "Swiggy Instamart",
+                  "Zepto"
+                ],
+                "query": "AXE deodorant",
+                "total_variants": 6,
+                "results": [
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Fortune Sunflower Oil",
+                    "price_rupees": 155.0,
+                    "available": true,
+                    "brand": "Fortune",
+                    "pack_size": "1 L",
+                    "mrp_rupees": 175.0,
+                    "saving_rupees": 20.0,
+                    "unit_price": "₹155/L",
+                    "delivery_eta": "18 min",
+                    "option_id": "opt7"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Aashirvaad Shudh Chakki Atta",
+                    "price_rupees": 265.0,
+                    "available": true,
+                    "brand": "Aashirvaad",
+                    "pack_size": "5 kg",
+                    "mrp_rupees": 310.0,
+                    "saving_rupees": 45.0,
+                    "unit_price": "₹53/kg",
+                    "delivery_eta": "18 min",
+                    "option_id": "opt8"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Tata Tea Gold",
+                    "price_rupees": 285.0,
+                    "available": true,
+                    "brand": "Tata",
+                    "pack_size": "500 g",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 14.0,
+                    "delivery_eta": "18 min",
+                    "option_id": "opt9"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Fortune Sunflower Oil",
+                    "price_rupees": 151.0,
+                    "available": true,
+                    "brand": "Fortune",
+                    "pack_size": "1 L",
+                    "mrp_rupees": 175.0,
+                    "saving_rupees": 24.0,
+                    "delivery_eta": "12 min",
+                    "option_id": "opt10"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Aashirvaad Shudh Chakki Atta",
+                    "price_rupees": 272.0,
+                    "available": true,
+                    "brand": "Aashirvaad",
+                    "pack_size": "5 kg",
+                    "mrp_rupees": 310.0,
+                    "saving_rupees": 38.0,
+                    "delivery_eta": "14 min",
+                    "option_id": "opt11"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Tata Tea Gold",
+                    "price_rupees": 285.0,
+                    "available": true,
+                    "brand": "Tata",
+                    "pack_size": "500 g",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 14.0,
+                    "delivery_eta": "11 min",
+                    "option_id": "opt12"
+                  }
+                ],
+                "provider_statuses": [
+                  {
+                    "status": "ok",
+                    "store": "Swiggy Instamart"
+                  },
+                  {
+                    "status": "ok",
+                    "store": "Zepto"
+                  }
+                ],
+                "note": "Current item prices only; nothing was added. Only results with an option_id can be added, to that store's own local basket."
+              },
+              "ui_event_type": "tool.results",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products"
+            ],
+            "question_count": 1,
+            "sentence_count": 2,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 53,
+              "dominant": "latin"
+            }
+          },
+          "failures": []
+        },
+        {
+          "user": "sabse chhota size aur kitna time lagega",
+          "reply": "AXE deodorant ka smallest size nahi dikh raha, isliye uska delivery time bhi nahi bata pa rahi.",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "AXE deodorant smallest size"
+              },
+              "status": "ok",
+              "model_output": {
+                "status": "ok",
+                "stores_checked": [
+                  "Swiggy Instamart",
+                  "Zepto"
+                ],
+                "query": "AXE deodorant smallest size",
+                "total_variants": 6,
+                "results": [
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Fortune Sunflower Oil",
+                    "price_rupees": 155.0,
+                    "available": true,
+                    "brand": "Fortune",
+                    "pack_size": "1 L",
+                    "mrp_rupees": 175.0,
+                    "saving_rupees": 20.0,
+                    "unit_price": "₹155/L",
+                    "delivery_eta": "18 min",
+                    "option_id": "opt13"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Aashirvaad Shudh Chakki Atta",
+                    "price_rupees": 265.0,
+                    "available": true,
+                    "brand": "Aashirvaad",
+                    "pack_size": "5 kg",
+                    "mrp_rupees": 310.0,
+                    "saving_rupees": 45.0,
+                    "unit_price": "₹53/kg",
+                    "delivery_eta": "18 min",
+                    "option_id": "opt14"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Tata Tea Gold",
+                    "price_rupees": 285.0,
+                    "available": true,
+                    "brand": "Tata",
+                    "pack_size": "500 g",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 14.0,
+                    "delivery_eta": "18 min",
+                    "option_id": "opt15"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Fortune Sunflower Oil",
+                    "price_rupees": 151.0,
+                    "available": true,
+                    "brand": "Fortune",
+                    "pack_size": "1 L",
+                    "mrp_rupees": 175.0,
+                    "saving_rupees": 24.0,
+                    "delivery_eta": "12 min",
+                    "option_id": "opt16"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Aashirvaad Shudh Chakki Atta",
+                    "price_rupees": 272.0,
+                    "available": true,
+                    "brand": "Aashirvaad",
+                    "pack_size": "5 kg",
+                    "mrp_rupees": 310.0,
+                    "saving_rupees": 38.0,
+                    "delivery_eta": "14 min",
+                    "option_id": "opt17"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Tata Tea Gold",
+                    "price_rupees": 285.0,
+                    "available": true,
+                    "brand": "Tata",
+                    "pack_size": "500 g",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 14.0,
+                    "delivery_eta": "11 min",
+                    "option_id": "opt18"
+                  }
+                ],
+                "provider_statuses": [
+                  {
+                    "status": "ok",
+                    "store": "Swiggy Instamart"
+                  },
+                  {
+                    "status": "ok",
+                    "store": "Zepto"
+                  }
+                ],
+                "note": "Current item prices only; nothing was added. Only results with an option_id can be added, to that store's own local basket."
+              },
+              "ui_event_type": "tool.results",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 77,
+              "dominant": "latin"
+            }
+          },
+          "failures": []
+        },
+        {
+          "user": "Dark",
+          "reply": "AXE Dark bhi abhi available list mein nahi dikh raha.",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "AXE Dark deodorant"
+              },
+              "status": "ok",
+              "model_output": {
+                "status": "ok",
+                "stores_checked": [
+                  "Swiggy Instamart",
+                  "Zepto"
+                ],
+                "query": "AXE Dark deodorant",
+                "total_variants": 6,
+                "results": [
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Fortune Sunflower Oil",
+                    "price_rupees": 155.0,
+                    "available": true,
+                    "brand": "Fortune",
+                    "pack_size": "1 L",
+                    "mrp_rupees": 175.0,
+                    "saving_rupees": 20.0,
+                    "unit_price": "₹155/L",
+                    "delivery_eta": "18 min",
+                    "option_id": "opt19"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Aashirvaad Shudh Chakki Atta",
+                    "price_rupees": 265.0,
+                    "available": true,
+                    "brand": "Aashirvaad",
+                    "pack_size": "5 kg",
+                    "mrp_rupees": 310.0,
+                    "saving_rupees": 45.0,
+                    "unit_price": "₹53/kg",
+                    "delivery_eta": "18 min",
+                    "option_id": "opt20"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Tata Tea Gold",
+                    "price_rupees": 285.0,
+                    "available": true,
+                    "brand": "Tata",
+                    "pack_size": "500 g",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 14.0,
+                    "delivery_eta": "18 min",
+                    "option_id": "opt21"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Fortune Sunflower Oil",
+                    "price_rupees": 151.0,
+                    "available": true,
+                    "brand": "Fortune",
+                    "pack_size": "1 L",
+                    "mrp_rupees": 175.0,
+                    "saving_rupees": 24.0,
+                    "delivery_eta": "12 min",
+                    "option_id": "opt22"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Aashirvaad Shudh Chakki Atta",
+                    "price_rupees": 272.0,
+                    "available": true,
+                    "brand": "Aashirvaad",
+                    "pack_size": "5 kg",
+                    "mrp_rupees": 310.0,
+                    "saving_rupees": 38.0,
+                    "delivery_eta": "14 min",
+                    "option_id": "opt23"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Tata Tea Gold",
+                    "price_rupees": 285.0,
+                    "available": true,
+                    "brand": "Tata",
+                    "pack_size": "500 g",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 14.0,
+                    "delivery_eta": "11 min",
+                    "option_id": "opt24"
+                  }
+                ],
+                "provider_statuses": [
+                  {
+                    "status": "ok",
+                    "store": "Swiggy Instamart"
+                  },
+                  {
+                    "status": "ok",
+                    "store": "Zepto"
+                  }
+                ],
+                "note": "Current item prices only; nothing was added. Only results with an option_id can be added, to that store's own local basket."
+              },
+              "ui_event_type": "tool.results",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 43,
+              "dominant": "latin"
+            }
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-21T23:10:42.762864+00:00"
+    },
+    {
+      "id": "s1b-deodorant-fixture",
+      "title": "Deodorant -> AXE -> smallest + delivery -> Dark (demo + harness AXE fixture, no ETA)",
+      "catalogue": "axe_fixture",
+      "passed": true,
+      "turns": [
+        {
+          "user": "mujhe deodorant chahiye",
+          "reply": "Yeh deodorant options available hain:\n\n- AXE Dark Temptation, 150 ml — ₹199, Swiggy Instamart\n- AXE Dark Temptation, 215 ml — ₹299, Swiggy Instamart\n- AXE Apollo, 150 ml — ₹199, Swiggy Instamart\n- AXE Dark Temptation, 215 ml — ₹289, Zepto\n- AXE Apollo, 150 ml — ₹205, Zepto\n\nKaunsa wala chahiye?",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "deodorant"
+              },
+              "status": "ok",
+              "model_output": {
+                "status": "ok",
+                "stores_checked": [
+                  "Swiggy Instamart",
+                  "Zepto"
+                ],
+                "query": "deodorant",
+                "total_variants": 5,
+                "results": [
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "AXE Dark Temptation Deodorant Body Spray",
+                    "price_rupees": 199.0,
+                    "available": true,
+                    "brand": "AXE",
+                    "pack_size": "150 ml",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 100.0,
+                    "option_id": "opt1"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "AXE Dark Temptation Deodorant Body Spray",
+                    "price_rupees": 299.0,
+                    "available": true,
+                    "brand": "AXE",
+                    "pack_size": "215 ml",
+                    "mrp_rupees": 399.0,
+                    "saving_rupees": 100.0,
+                    "option_id": "opt2"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "AXE Apollo Deodorant Body Spray",
+                    "price_rupees": 199.0,
+                    "available": true,
+                    "brand": "AXE",
+                    "pack_size": "150 ml",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 100.0,
+                    "option_id": "opt3"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "AXE Dark Temptation Deodorant Body Spray",
+                    "price_rupees": 289.0,
+                    "available": true,
+                    "brand": "AXE",
+                    "pack_size": "215 ml",
+                    "mrp_rupees": 399.0,
+                    "saving_rupees": 110.0,
+                    "option_id": "opt4"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "AXE Apollo Deodorant Body Spray",
+                    "price_rupees": 205.0,
+                    "available": true,
+                    "brand": "AXE",
+                    "pack_size": "150 ml",
+                    "mrp_rupees": 299.0,
+                    "saving_rupees": 94.0,
+                    "option_id": "opt5"
+                  }
+                ],
+                "provider_statuses": [
+                  {
+                    "status": "ok",
+                    "store": "Swiggy Instamart"
+                  },
+                  {
+                    "status": "ok",
+                    "store": "Zepto"
+                  }
+                ],
+                "note": "Current item prices only; nothing was added. Only results with an option_id can be added, to that store's own local basket."
+              },
+              "ui_event_type": "tool.results",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products"
+            ],
+            "question_count": 1,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [
+              199.0,
+              205.0,
+              289.0,
+              299.0
+            ],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 183,
+              "dominant": "latin"
+            }
+          },
+          "failures": []
+        },
+        {
+          "user": "AXE wala dikhao",
+          "reply": "AXE Dark Temptation chahiye ya Apollo?",
+          "tool_calls": [],
+          "facts": {
+            "tool_names": [],
+            "question_count": 1,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 32,
+              "dominant": "latin"
+            }
+          },
+          "failures": []
+        },
+        {
+          "user": "sabse chhota size aur kitna time lagega",
+          "reply": "Sabse chhota size 150 ml hai. Delivery time yahan show nahi ho raha. 150 ml mein Dark Temptation chahiye ya Apollo?",
+          "tool_calls": [],
+          "facts": {
+            "tool_names": [],
+            "question_count": 1,
+            "sentence_count": 3,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 86,
+              "dominant": "latin"
+            }
+          },
+          "failures": []
+        },
+        {
+          "user": "Dark",
+          "reply": "AXE Dark Temptation, 150 ml, ₹199 ke liye Swiggy Instamart basket mein add kar diya.",
+          "tool_calls": [
+            {
+              "name": "add_to_basket",
+              "arguments": {
+                "option_id": "opt1",
+                "quantity": 1
+              },
+              "status": "added",
+              "model_output": {
+                "status": "added",
+                "store": "Swiggy Instamart",
+                "store_id": "swiggy_instamart",
+                "items": [
+                  {
+                    "item_id": "swiggy-spin-fx-axe-dark-150",
+                    "name": "AXE Dark Temptation Deodorant Body Spray",
+                    "pack_size": "150 ml",
+                    "quantity": 1,
+                    "line_total": "₹199",
+                    "available": true
+                  }
+                ],
+                "item_total": "₹199",
+                "note": "Item totals only. Fees and the final payable amount require an approval quote. Nothing was ordered."
+              },
+              "ui_event_type": "basket.updated",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "add_to_basket"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [
+              199.0
+            ],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 60,
+              "dominant": "latin"
+            },
+            "added": [
+              {
+                "option_id": "opt1",
+                "quantity": 1,
+                "name": "AXE Dark Temptation Deodorant Body Spray",
+                "pack_size": "150 ml",
+                "store_id": "swiggy_instamart",
+                "price_rupees": 199.0
+              }
+            ]
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-21T23:11:09.265508+00:00"
+    },
+    {
+      "id": "s2-impatient-surf-excel",
+      "title": "Impatient direct add",
+      "catalogue": "surf_fixture",
+      "passed": false,
+      "turns": [
+        {
+          "user": "itna taamjhaam nahi, seedha Surf Excel 2 kg add karo",
+          "reply": "Surf Excel Matic Front Load 2 kg Swiggy Instamart par ₹549, Zepto par ₹565 hai. Kaunse store ke basket mein add karun?",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "Surf Excel detergent powder 2 kg"
+              },
+              "status": "ok",
+              "model_output": {
+                "status": "ok",
+                "stores_checked": [
+                  "Swiggy Instamart",
+                  "Zepto"
+                ],
+                "query": "Surf Excel detergent powder 2 kg",
+                "total_variants": 3,
+                "results": [
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Surf Excel Matic Front Load Detergent Powder",
+                    "price_rupees": 549.0,
+                    "available": true,
+                    "brand": "Surf Excel",
+                    "pack_size": "2 kg",
+                    "mrp_rupees": 620.0,
+                    "saving_rupees": 71.0,
+                    "option_id": "opt1"
+                  },
+                  {
+                    "provider": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "add_supported": true,
+                    "name": "Surf Excel Easy Wash Detergent Powder",
+                    "price_rupees": 142.0,
+                    "available": true,
+                    "brand": "Surf Excel",
+                    "pack_size": "1 kg",
+                    "mrp_rupees": 160.0,
+                    "saving_rupees": 18.0,
+                    "option_id": "opt2"
+                  },
+                  {
+                    "provider": "Zepto",
+                    "store_id": "zepto",
+                    "add_supported": true,
+                    "name": "Surf Excel Matic Front Load Detergent Powder",
+                    "price_rupees": 565.0,
+                    "available": true,
+                    "brand": "Surf Excel",
+                    "pack_size": "2 kg",
+                    "mrp_rupees": 620.0,
+                    "saving_rupees": 55.0,
+                    "option_id": "opt3"
+                  }
+                ],
+                "provider_statuses": [
+                  {
+                    "status": "ok",
+                    "store": "Swiggy Instamart"
+                  },
+                  {
+                    "status": "ok",
+                    "store": "Zepto"
+                  }
+                ],
+                "note": "Current item prices only; nothing was added. Only results with an option_id can be added, to that store's own local basket."
+              },
+              "ui_event_type": "tool.results",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products"
+            ],
+            "question_count": 1,
+            "sentence_count": 2,
+            "masculine_self_forms": [],
+            "reply_prices": [
+              549.0,
+              565.0
+            ],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 85,
+              "dominant": "latin"
+            }
+          },
+          "failures": [
+            "Expected tool add_to_basket was not called (called: ['search_products']).",
+            "Expected 1 add_to_basket call(s), got 0.",
+            "2 sentences, expected at most 1."
+          ]
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-21T23:11:15.984617+00:00"
+    }
+  ]
+}

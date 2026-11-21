@@ -1,8 +1,25 @@
 """Strict Zepto COD preview and confirmation parsing.
 
-The MCP response is the source of truth for its bill.  This module accepts
-only the response shape observed in the live Zepto catalogue exercise and
-rejects ambiguities rather than making an order from a guessed total.
+The MCP response is the source of truth for its bill.  The live catalogue
+documents only ``create_order``'s *input* schema, so this module accepts the
+response shape observed in the live Zepto catalogue exercise and rejects
+ambiguities rather than making an order from a guessed total.
+
+Tolerated, benign variations (each still subject to the safety checks):
+
+* JSON numbers that are exactly integral (``1500.0``).  Zepto's own schemas
+  type paise and quantities as JSON Schema ``number``; an integral float is
+  the same exact value.  Fractional values and numeric strings are refused.
+* Optional display/advisory fields that do not affect the bill: address
+  ``label``/``addressLine``, item ``name``/``price``, ``totalItems``,
+  ``freeDelivery``, ``otherFees``, ``offers`` and ``etaInMinutes`` may be
+  absent or null.  When present they must still be valid and consistent.
+* Absent/null ``packagingFee``, ``discount``, ``taxes`` and
+  ``deliveryFeeDiscount`` count as zero; the bill must still reconcile to
+  Zepto's own ``toPayAmount``, so a misread component cannot produce a total.
+
+Every failure carries a stable ``step`` code (never provider data) so callers
+can log a content-free diagnostic and tell the user which check failed.
 """
 
 from __future__ import annotations
@@ -17,6 +34,33 @@ from app.shopping.models import Basket, Charge, OfferOpportunity, Quote
 
 
 PROVIDER = "zepto"
+# Exact float-to-int conversion is only guaranteed below 2**53.
+_MAX_EXACT_NUMBER = 2**53
+# A subtotal this far from the locally priced basket means a unit mismatch
+# (for example rupees instead of paise), not a price change.
+_SUBTOTAL_SCALE_LIMIT = 20
+
+
+class ZeptoPreviewCheckFailed(ZeptoSchemaError):
+    """A preview could not be verified; ``step`` names the failed check."""
+
+    def __init__(
+        self, message: str, *, step: str, facts: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(message)
+        self.step = step
+        self.facts = facts or {}
+
+
+class ZeptoPreviewRefused(ApprovalRefused):
+    """A valid preview that does not match the approved basket or context."""
+
+    def __init__(
+        self, message: str, *, step: str, facts: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(message)
+        self.step = step
+        self.facts = facts or {}
 
 
 @dataclass(frozen=True)
@@ -29,12 +73,7 @@ class ZeptoConfirmedOrder:
 
 
 def quote_from_cod_preview(basket: Basket, payload: dict[str, Any], quoted_at: datetime) -> Quote:
-    """Validate an unconfirmed COD order preview for exactly ``basket``.
-
-    All currency fields are integer paise.  In particular, JSON floats are
-    refused even when their value looks integral: accepting them would make
-    money arithmetic depend on an undocumented provider representation.
-    """
+    """Validate an unconfirmed COD order preview for exactly ``basket``."""
 
     if basket.provider != PROVIDER:
         raise ApprovalRefused("This basket is not a Zepto basket.")
@@ -43,46 +82,82 @@ def quote_from_cod_preview(basket: Basket, payload: dict[str, Any], quoted_at: d
 
     data = _data(payload)
     if _required_bool(data, "deliverable") is not True:
-        raise ApprovalRefused("The Zepto basket is not deliverable to this address.")
+        raise ZeptoPreviewRefused(
+            "The Zepto basket is not deliverable to this address.", step="deliverable"
+        )
     if _required_bool(data, "isPreview") is not True:
-        raise ZeptoSchemaError("Zepto did not return an order preview.")
+        raise ZeptoPreviewCheckFailed("Zepto did not return an order preview.", step="isPreview")
     if _required_bool(data, "requiresConfirmation") is not True:
-        raise ZeptoSchemaError("Zepto preview is missing its confirmation boundary.")
+        raise ZeptoPreviewCheckFailed(
+            "Zepto preview is missing its confirmation boundary.", step="requiresConfirmation"
+        )
     if _required_str(data, "paymentMethod") != "COD":
-        raise ApprovalRefused("Zepto did not prepare a cash-on-delivery checkout.")
+        raise ZeptoPreviewRefused(
+            "Zepto did not prepare a cash-on-delivery checkout.", step="paymentMethod"
+        )
 
     delivery_address = data.get("deliveryAddress")
     if not isinstance(delivery_address, dict):
-        raise ZeptoSchemaError("Zepto preview is missing the delivery address.")
+        raise ZeptoPreviewCheckFailed(
+            "Zepto preview is missing the delivery address.", step="deliveryAddress"
+        )
     _validate_delivery_address(delivery_address, basket.address_id)
     _validate_exact_items(basket, data.get("items"))
 
     subtotal = _money(data, "subTotal")
     delivery_fee = _money(data, "deliveryFee")
-    delivery_fee_discount = _money(data, "deliveryFeeDiscount")
-    delivery_fee_before_discount = _money(data, "deliveryFeePreDiscount")
-    packaging_fee = _money(data, "packagingFee")
-    discount = _money(data, "discount")
-    taxes = _nullable_money(data, "taxes")
+    delivery_fee_discount = _optional_money(data, "deliveryFeeDiscount")
+    raw_pre_discount = data.get("deliveryFeePreDiscount")
+    delivery_fee_before_discount = (
+        None if raw_pre_discount is None else _money(data, "deliveryFeePreDiscount")
+    )
+    packaging_fee = _optional_money(data, "packagingFee")
+    discount = _optional_money(data, "discount")
+    taxes = _optional_money(data, "taxes")
     payable = _money(data, "toPayAmount")
     other_fees = _other_fees(data.get("otherFees"))
-    eta_minutes = _nullable_nonnegative_int(data, "etaInMinutes")
-    total_items = _nonnegative_int(data.get("totalItems"), "totalItems")
-    free_delivery = _free_delivery_offer(
-        data.get("freeDelivery"),
-        subtotal,
-        delivery_fee,
-        delivery_fee_discount,
-        delivery_fee_before_discount,
-    )
-    offers = [free_delivery, *_offers(data.get("offers"), subtotal)]
+    eta_minutes = _nullable_count(data, "etaInMinutes")
+    total_items = _nullable_count(data, "totalItems")
 
-    if delivery_fee_before_discount - delivery_fee_discount != delivery_fee:
-        raise ZeptoSchemaError("Zepto delivery fees are inconsistent.")
-    if free_delivery.unlocked != (delivery_fee == 0):
-        raise ZeptoSchemaError("Zepto free-delivery status is inconsistent.")
-    if total_items != sum(line.quantity for line in basket.lines):
-        raise ApprovalRefused("Zepto preview has a different item quantity than the basket.")
+    local_total = sum(line.unit_price_paise * line.quantity for line in basket.lines)
+    if local_total > 0 and (
+        subtotal * _SUBTOTAL_SCALE_LIMIT < local_total
+        or subtotal > local_total * _SUBTOTAL_SCALE_LIMIT
+    ):
+        raise ZeptoPreviewCheckFailed(
+            "Zepto preview amounts are not in the expected unit.",
+            step="subTotal.scale",
+            facts={"subtotal_vs_local": "lower" if subtotal < local_total else "higher"},
+        )
+    if (
+        delivery_fee_before_discount is not None
+        and delivery_fee_before_discount - delivery_fee_discount != delivery_fee
+    ):
+        raise ZeptoPreviewCheckFailed(
+            "Zepto delivery fees are inconsistent.", step="deliveryFee.consistency"
+        )
+
+    free_delivery = _free_delivery_offer(
+        data.get("freeDelivery"), subtotal, delivery_fee, delivery_fee_discount
+    )
+    if free_delivery is not None and free_delivery.unlocked != (delivery_fee == 0):
+        raise ZeptoPreviewCheckFailed(
+            "Zepto free-delivery status is inconsistent.",
+            step="freeDelivery.fee_state",
+            facts={"unlocked": free_delivery.unlocked, "delivery_fee_zero": delivery_fee == 0},
+        )
+    offers = [
+        *([free_delivery] if free_delivery is not None else []),
+        *_offers(data.get("offers"), subtotal),
+    ]
+
+    basket_quantity = sum(line.quantity for line in basket.lines)
+    if total_items is not None and total_items != basket_quantity:
+        raise ZeptoPreviewRefused(
+            "Zepto preview has a different item quantity than the basket.",
+            step="totalItems",
+            facts={"total_items_vs_basket": "lower" if total_items < basket_quantity else "higher"},
+        )
 
     charges = [
         Charge(label="Delivery fee", amount_paise=delivery_fee),
@@ -94,8 +169,13 @@ def quote_from_cod_preview(basket: Basket, payload: dict[str, Any], quoted_at: d
     if discount:
         charges.append(Charge(label="Discount", amount_paise=-discount))
 
-    if subtotal + sum(charge.amount_paise for charge in charges) != payable:
-        raise ZeptoSchemaError("Zepto preview charges do not add up to the payable amount.")
+    computed = subtotal + sum(charge.amount_paise for charge in charges)
+    if computed != payable:
+        raise ZeptoPreviewCheckFailed(
+            "Zepto preview charges do not add up to the payable amount.",
+            step="payable.reconciliation",
+            facts=_reconciliation_facts(data, computed - payable),
+        )
 
     return Quote(
         provider=PROVIDER,
@@ -120,7 +200,7 @@ def parse_confirmed_cod_order(payload: dict[str, Any]) -> ZeptoConfirmedOrder:
         raise ZeptoSchemaError("Zepto confirmed an unexpected payment method.")
     order_id = _required_str(data, "orderId")
     payable = _money(data, "toPayAmount")
-    eta_minutes = _nullable_nonnegative_int(data, "etaInMinutes")
+    eta_minutes = _nullable_count(data, "etaInMinutes")
     return ZeptoConfirmedOrder(
         order_id=order_id,
         payable_paise=payable,
@@ -130,40 +210,47 @@ def parse_confirmed_cod_order(payload: dict[str, Any]) -> ZeptoConfirmedOrder:
 
 def _data(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
-        raise ZeptoSchemaError("Zepto returned an invalid checkout response.")
+        raise ZeptoPreviewCheckFailed("Zepto returned an invalid checkout response.", step="envelope")
+    if set(payload) == {"content_text"}:
+        # The MCP client wraps successful non-JSON text in this envelope.
+        raise ZeptoPreviewCheckFailed(
+            "Zepto returned text instead of a structured checkout response.",
+            step="envelope.text",
+        )
     data = payload.get("data", payload)
     if not isinstance(data, dict):
-        raise ZeptoSchemaError("Zepto returned an invalid checkout response.")
+        raise ZeptoPreviewCheckFailed("Zepto returned an invalid checkout response.", step="envelope")
     return data
 
 
 def _validate_delivery_address(address: dict[str, Any], expected_id: str) -> None:
-    """Require an explicit returned address id when the provider includes one.
+    """Require exactly one returned address id, matching the selected address.
 
-    The observed preview has an address object, but provider versions differ in
-    whether its identifier is called ``id`` or ``addressId``.  Both are
-    unambiguous, provided exactly one is a non-empty string and matches the
-    selected local address.
+    Provider versions differ in whether the identifier is called ``id`` or
+    ``addressId``.  Display fields (``label``, ``addressLine``) are not needed
+    for safety and are never retained or logged.
     """
 
-    identifiers = [
-        value
+    present = [
+        key
         for key in ("id", "addressId")
-        if isinstance((value := address.get(key)), str) and value.strip()
+        if isinstance(address.get(key), str) and address[key].strip()
     ]
-    if len(identifiers) != 1 or identifiers[0] != expected_id:
-        raise ApprovalRefused("Zepto preview is for a different delivery address.")
-    # Validate the observed shape without retaining either display field in the
-    # quote or logs. They are provider-returned, potentially sensitive text.
-    _required_str(address, "label")
-    _required_str(address, "addressLine")
+    identifiers = {address[key] for key in present}
+    if len(identifiers) != 1 or next(iter(identifiers)) != expected_id:
+        raise ZeptoPreviewRefused(
+            "Zepto preview is for a different delivery address.",
+            step="deliveryAddress.id",
+            facts={
+                "identifier_keys": present,
+                "matches_selected": expected_id in identifiers,
+            },
+        )
 
 
 def _validate_exact_items(basket: Basket, raw_items: object) -> None:
     if not isinstance(raw_items, list):
-        raise ZeptoSchemaError("Zepto preview is missing its items list.")
-    if len(raw_items) != len(basket.lines):
-        raise ApprovalRefused("Zepto preview does not match the basket items.")
+        raise ZeptoPreviewCheckFailed("Zepto preview is missing its items list.", step="items")
 
     expected: dict[tuple[str, str], int] = {}
     for line in basket.lines:
@@ -179,34 +266,67 @@ def _validate_exact_items(basket: Basket, raw_items: object) -> None:
     actual: dict[tuple[str, str], int] = {}
     for raw in raw_items:
         if not isinstance(raw, dict):
-            raise ZeptoSchemaError("Zepto preview contains an invalid item.")
-        product_variant_id = _required_str(raw, "productVariantId")
-        store_product_id = _required_str(raw, "storeProductId")
-        quantity = _nonnegative_int(raw.get("quantity"), "item quantity")
-        _money(raw, "price")
-        _required_str(raw, "name")
+            raise ZeptoPreviewCheckFailed("Zepto preview contains an invalid item.", step="items[]")
+        product_variant_id = _required_str(raw, "productVariantId", "items[].productVariantId")
+        store_product_id = _required_str(raw, "storeProductId", "items[].storeProductId")
+        quantity = _count(raw.get("quantity"), "items[].quantity")
+        if raw.get("price") is not None:
+            _count(raw.get("price"), "items[].price")
         key = (product_variant_id, store_product_id)
         if key in actual:
-            raise ZeptoSchemaError("Zepto preview contains duplicate item identifiers.")
+            raise ZeptoPreviewCheckFailed(
+                "Zepto preview contains duplicate item identifiers.", step="items.duplicate"
+            )
         actual[key] = quantity
 
     if actual != expected:
-        raise ApprovalRefused("Zepto preview does not exactly match the basket.")
+        expected_variants = {variant for variant, _ in expected}
+        expected_store_products = {store_product for _, store_product in expected}
+        unmatched = [key for key in actual if key not in expected]
+        raise ZeptoPreviewRefused(
+            "Zepto preview does not exactly match the basket.",
+            step="items.match",
+            facts={
+                "expected_lines": len(expected),
+                "returned_lines": len(actual),
+                "matched_identifiers": sum(1 for key in actual if key in expected),
+                "quantity_mismatches": sum(
+                    1 for key, quantity in actual.items()
+                    if key in expected and expected[key] != quantity
+                ),
+                "variant_only_matches": sum(
+                    1 for variant, store_product in unmatched
+                    if variant in expected_variants and store_product not in expected_store_products
+                ),
+                "store_product_only_matches": sum(
+                    1 for variant, store_product in unmatched
+                    if store_product in expected_store_products and variant not in expected_variants
+                ),
+            },
+        )
 
 
 def _other_fees(raw: object) -> list[Charge]:
+    if raw is None:
+        return []
     if not isinstance(raw, list):
-        raise ZeptoSchemaError("Zepto preview has invalid other fees.")
+        raise ZeptoPreviewCheckFailed("Zepto preview has invalid other fees.", step="otherFees")
     charges: list[Charge] = []
     labels: set[str] = set()
     for value in raw:
         if not isinstance(value, dict):
-            raise ZeptoSchemaError("Zepto preview has an invalid other fee.")
-        label = _required_str(value, "label")
+            raise ZeptoPreviewCheckFailed(
+                "Zepto preview has an invalid other fee.", step="otherFees[]"
+            )
+        label = _required_str(value, "label", "otherFees[].label")
         if label in labels:
-            raise ZeptoSchemaError("Zepto preview has duplicate other fee labels.")
+            raise ZeptoPreviewCheckFailed(
+                "Zepto preview has duplicate other fee labels.", step="otherFees.duplicate"
+            )
         labels.add(label)
-        charges.append(Charge(label=label, amount_paise=_money(value, "amount")))
+        charges.append(
+            Charge(label=label, amount_paise=_count(value.get("amount"), "otherFees[].amount"))
+        )
     return charges
 
 
@@ -215,8 +335,7 @@ def _free_delivery_offer(
     subtotal: int,
     delivery_fee: int,
     delivery_fee_discount: int,
-    delivery_fee_before_discount: int,
-) -> OfferOpportunity:
+) -> OfferOpportunity | None:
     """Normalise Zepto's free-delivery progress object.
 
     Zepto explicitly provides both the threshold and amount remaining.  We
@@ -225,22 +344,39 @@ def _free_delivery_offer(
     charged *net* delivery fee only while the offer is locked; a discount
     already present in the preview must not be counted a second time. After
     unlock, the applied delivery discount is the only confirmed saving.
+
+    An absent or null object means Zepto sent no free-delivery progress; no
+    offer is shown.  A present but malformed object is still refused.
     """
 
+    if raw is None:
+        return None
     if not isinstance(raw, dict):
-        raise ZeptoSchemaError("Zepto preview has invalid freeDelivery.")
-    unlocked = _required_bool(raw, "isUnlocked")
-    message = _required_str(raw, "message")
-    minimum_order = _money(raw, "minimumOrderValue")
-    remaining = _money(raw, "remainingAmountToUnlock")
+        raise ZeptoPreviewCheckFailed("Zepto preview has invalid freeDelivery.", step="freeDelivery")
+    unlocked = _required_bool(raw, "isUnlocked", "freeDelivery.isUnlocked")
+    message = raw.get("message")
+    title = message.strip() if isinstance(message, str) and message.strip() else "Free delivery"
+    minimum_order = _count(raw.get("minimumOrderValue"), "freeDelivery.minimumOrderValue")
+    remaining = _count(raw.get("remainingAmountToUnlock"), "freeDelivery.remainingAmountToUnlock")
     expected_remaining = max(0, minimum_order - subtotal)
     if remaining != expected_remaining:
-        raise ZeptoSchemaError("Zepto free-delivery progress is inconsistent.")
+        raise ZeptoPreviewCheckFailed(
+            "Zepto free-delivery progress is inconsistent.",
+            step="freeDelivery.progress",
+            facts={
+                "subtotal_vs_minimum": _compare(subtotal, minimum_order),
+                "remaining_vs_expected": _compare(remaining, expected_remaining),
+            },
+        )
     if unlocked != (remaining == 0):
-        raise ZeptoSchemaError("Zepto free-delivery unlock state is inconsistent.")
+        raise ZeptoPreviewCheckFailed(
+            "Zepto free-delivery unlock state is inconsistent.",
+            step="freeDelivery.unlock_state",
+            facts={"unlocked": unlocked, "remaining_zero": remaining == 0},
+        )
 
     return OfferOpportunity(
-        title=message,
+        title=title,
         kind="free_delivery",
         minimum_order_paise=minimum_order,
         remaining_paise=remaining,
@@ -285,8 +421,8 @@ def _offer(raw: object, subtotal: int) -> OfferOpportunity | None:
         return None
     title = raw.get("title")
     offer_type = raw.get("type")
-    minimum_order = raw.get("minimumOrderValue")
-    discount = raw.get("discountAmount")
+    minimum_order = _exact_count(raw.get("minimumOrderValue"))
+    discount = _exact_count(raw.get("discountAmount"))
     unlocked = raw.get("isUnlocked")
     applied = raw.get("isApplied")
     auto_applicable = raw.get("isAutoApplicable")
@@ -295,8 +431,8 @@ def _offer(raw: object, subtotal: int) -> OfferOpportunity | None:
         or not title.strip()
         or not isinstance(offer_type, str)
         or not offer_type.strip()
-        or not _is_nonnegative_int(minimum_order)
-        or not _is_nonnegative_int(discount)
+        or minimum_order is None
+        or discount is None
         or not isinstance(unlocked, bool)
         or not isinstance(applied, bool)
         or not isinstance(auto_applicable, bool)
@@ -332,39 +468,73 @@ def _offer_kind(raw: str) -> str:
     return "other"
 
 
-def _required_bool(value: dict[str, Any], key: str) -> bool:
+def _reconciliation_facts(data: dict[str, Any], difference: int) -> dict[str, Any]:
+    """Which top-level amount fields equal the gap, by name only."""
+
+    gap = abs(difference)
+    matches = sorted(
+        key
+        for key, value in data.items()
+        if isinstance(key, str) and _exact_count(value) == gap and gap > 0
+    )
+    return {
+        "computed_vs_payable": "higher" if difference > 0 else "lower",
+        "gap_equals_fields": matches,
+        "gap_equals_twice_field": sorted(
+            key
+            for key, value in data.items()
+            if isinstance(key, str) and gap > 0 and _exact_count(value) == gap / 2
+        ),
+    }
+
+
+def _compare(left: int, right: int) -> str:
+    return "equal" if left == right else ("lower" if left < right else "higher")
+
+
+def _required_bool(value: dict[str, Any], key: str, step: str | None = None) -> bool:
     raw = value.get(key)
     if not isinstance(raw, bool):
-        raise ZeptoSchemaError(f"Zepto preview has invalid {key}.")
+        raise ZeptoPreviewCheckFailed(f"Zepto preview has invalid {key}.", step=step or key)
     return raw
 
 
-def _required_str(value: dict[str, Any], key: str) -> str:
+def _required_str(value: dict[str, Any], key: str, step: str | None = None) -> str:
     raw = value.get(key)
     if not isinstance(raw, str) or not raw.strip():
-        raise ZeptoSchemaError(f"Zepto preview has invalid {key}.")
+        raise ZeptoPreviewCheckFailed(f"Zepto preview has invalid {key}.", step=step or key)
     return raw
 
 
-def _nonnegative_int(raw: object, label: str) -> int:
-    if not _is_nonnegative_int(raw):
-        raise ZeptoSchemaError(f"Zepto preview has invalid {label}.")
-    return raw
+def _exact_count(raw: object) -> int | None:
+    """A non-negative integer, or an exactly integral JSON number; else None."""
+
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw if raw >= 0 else None
+    if isinstance(raw, float) and raw.is_integer() and 0 <= raw < _MAX_EXACT_NUMBER:
+        return int(raw)
+    return None
 
 
-def _is_nonnegative_int(raw: object) -> bool:
-    return not isinstance(raw, bool) and isinstance(raw, int) and raw >= 0
+def _count(raw: object, step: str) -> int:
+    value = _exact_count(raw)
+    if value is None:
+        label = step.rsplit(".", 1)[-1]
+        raise ZeptoPreviewCheckFailed(f"Zepto preview has invalid {label}.", step=step)
+    return value
 
 
 def _money(value: dict[str, Any], key: str) -> int:
-    return _nonnegative_int(value.get(key), key)
+    return _count(value.get(key), key)
 
 
-def _nullable_money(value: dict[str, Any], key: str) -> int:
+def _optional_money(value: dict[str, Any], key: str) -> int:
     raw = value.get(key)
-    return 0 if raw is None else _nonnegative_int(raw, key)
+    return 0 if raw is None else _count(raw, key)
 
 
-def _nullable_nonnegative_int(value: dict[str, Any], key: str) -> int | None:
+def _nullable_count(value: dict[str, Any], key: str) -> int | None:
     raw = value.get(key)
-    return None if raw is None else _nonnegative_int(raw, key)
+    return None if raw is None else _count(raw, key)

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from typing import Any
 
 import pytest
@@ -10,7 +11,7 @@ from app.commerce.swiggy.errors import (
     SwiggyRateLimited,
 )
 from app.commerce.swiggy.models import Price, Product, ProductSearchResult
-from app.voice.sideband import FINISHED, SessionChannel, SidebandRunner
+from app.voice.sideband import FINISHED, SessionChannel, SidebandRunner, describe_event
 from app.voice.tools import (
     MultiProviderShoppingToolExecutor,
     ProviderSearchTarget,
@@ -269,3 +270,47 @@ def test_channel_finish_is_published_once() -> None:
     channel.finish()
     channel.finish()
     assert channel.history == [FINISHED]
+
+
+def test_describe_event_is_content_free() -> None:
+    summary = describe_event(
+        {
+            "type": "session.input_transcript.delta",
+            "event_id": "evt_secret_id",
+            "delta": "मुझे AXE dark chahiye",
+            "start_ms": 1000,
+            "end_ms": 1400,
+        }
+    )
+    assert summary == {
+        "type": "session.input_transcript.delta",
+        "ids": ["event_id"],
+        "timing": {"start_ms": 1000, "end_ms": 1400},
+    }
+    nested_summary = describe_event(nested("del_1", FUNCTION_CALL, "e1"))
+    assert nested_summary["inner"] == "response.output_item.done"
+    assert "Fortune" not in json.dumps(nested_summary)
+
+
+@pytest.mark.asyncio
+async def test_sideband_event_log_is_opt_in_and_omits_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    events = [
+        {"type": "session.output_transcript.delta", "event_id": "e1", "delta": "Nivea roll-on", "start_ms": 5, "end_ms": 9},
+    ]
+    with caplog.at_level(logging.INFO, logger="app.voice.sideband"):
+        await SidebandRunner(
+            FakeConnection(list(events)),
+            ShoppingToolExecutor(FakeSearcher(OIL), "addr_home"),
+            SessionChannel().publish,
+        ).run()
+        assert "Voice sideband event" not in caplog.text
+        await SidebandRunner(
+            FakeConnection(list(events)),
+            ShoppingToolExecutor(FakeSearcher(OIL), "addr_home"),
+            SessionChannel().publish,
+            log_event_types=True,
+        ).run()
+    assert "session.output_transcript.delta" in caplog.text
+    assert "Nivea" not in caplog.text
