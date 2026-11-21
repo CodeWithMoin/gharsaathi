@@ -1,7 +1,8 @@
 "use client";
 
+import { useClerk } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Basket, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
+import { ArrowRight, Basket, CaretRight, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
 import { BasketPanel, useAddBasketLine, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
@@ -46,6 +47,7 @@ export default function Home() {
 }
 
 function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetupOpen?: boolean; userName: string }) {
+  const { openUserProfile } = useClerk();
   const apiRequest = useApiRequest();
   const addBasketLine = useAddBasketLine();
   const [voiceOpen, setVoiceOpen] = useState(false);
@@ -633,7 +635,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
             <button type="button" onClick={() => setChatDrawerOpen(false)} aria-label="Close chats" className="ml-auto grid size-10 place-items-center rounded-full text-[#806f65] transition hover:bg-[#efe5dc] active:scale-[.96]"><X size={20} /></button>
           </div>
           <div className="border-b border-[#eaded5] px-5 pb-5 pt-2">
-            <button type="button" onClick={() => void startNewChat()} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#35241c] px-4 text-sm font-semibold text-white transition hover:bg-[#49352b] active:scale-[.99]"><Plus size={18} weight="bold" /> New chat</button>
+            <button type="button" onClick={() => void startNewChat()} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#dfcbbd] bg-white px-4 text-sm font-semibold text-[#4d392f] transition hover:border-[#cfa78e] hover:bg-[#fffaf5] active:scale-[.99]"><Plus size={18} weight="bold" className="text-[#c6531d]" /> New chat</button>
             <label className="mt-3 flex h-11 items-center gap-2 rounded-xl border border-[#e3d5cb] bg-white px-3 text-[#806f65] transition focus-within:border-[#c98d6c] focus-within:ring-2 focus-within:ring-[#efd8ca]">
               <MagnifyingGlass size={18} />
               <input value={chatSearch} onChange={(event) => setChatSearch(event.target.value)} placeholder="Search chats" className="min-w-0 flex-1 bg-transparent text-sm text-[#35241c] outline-none placeholder:text-[#a18c80]" />
@@ -664,6 +666,13 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
                 </span>
               </button>)}
             </div>
+          </div>
+          <div className="border-t border-[#eaded5] bg-[#fffaf5] px-4 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-3">
+            <button type="button" onClick={() => { setChatDrawerOpen(false); openUserProfile(); }} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-[#f2e7df] active:scale-[.99]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-sm font-semibold uppercase text-[#9f451d]">{userName.trim().charAt(0) || "G"}</span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold text-[#3d2b23]">{userName}</span><span className="mt-0.5 block text-[10px] text-[#8b7569]">Account &amp; settings</span></span>
+              <CaretRight size={16} className="shrink-0 text-[#9a8579]" />
+            </button>
           </div>
         </motion.aside>
       </>}
