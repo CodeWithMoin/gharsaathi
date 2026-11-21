@@ -61,6 +61,8 @@ LEGACY_LAYERS: dict[str, str] = {
     "test_voice.py": MODULE,
     "test_voice_address_form.py": MODULE,
     "test_voice_basket_tools.py": MODULE,
+    "test_voice_basket_address.py": MODULE,
+    "test_zepto_preview_diagnostics.py": UNIT,
     "test_voice_tools.py": MODULE,
     "test_zepto.py": MODULE,
     "test_zepto_checkout.py": MODULE,
