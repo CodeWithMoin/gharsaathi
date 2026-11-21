@@ -109,7 +109,11 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="select_address",
         title="List and select a saved delivery address",
-        voice=S(M, "Voice uses whichever address is selected on screen when the session starts; no tool."),
+        voice=S(
+            M,
+            "Voice uses whichever address is selected on screen when the session starts; "
+            "basket tools report it (label + short line from the saved snapshot). No selection tool.",
+        ),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
         ui=S(W, "Radio list per store in the setup sheet."),
         backend=S(W),

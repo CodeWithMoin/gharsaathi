@@ -1,11 +1,12 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.commerce.swiggy.models import AddressList
-from app.database.models import ProviderAddressState
+from app.commerce.swiggy.models import Address, AddressList
+from app.database.models import MemorySubject, ProviderAddressState, SubjectType
 
 
 SWIGGY_PROVIDER = "swiggy_instamart"
@@ -115,3 +116,63 @@ def cached_address_list(state: ProviderAddressState) -> AddressList:
         addresses.resolution.default_address_id = state.selected_address_id
         addresses.resolution.resolution_source = "saved_selection"
     return addresses
+
+
+SHORT_ADDRESS_LENGTH = 60
+
+
+@dataclass(frozen=True)
+class SavedAddressSummary:
+    """A display summary of one saved provider address, for the voice agent."""
+
+    label: str | None
+    short_address: str
+
+
+def summarise_address(address: Address) -> SavedAddressSummary:
+    """Label plus the leading part of the provider's own address line."""
+
+    label = next(
+        (value.strip() for value in (address.tag, address.category) if value and value.strip()),
+        None,
+    )
+    line = " ".join(address.address_line.split())
+    if len(line) > SHORT_ADDRESS_LENGTH:
+        cut = line[:SHORT_ADDRESS_LENGTH]
+        comma = cut.rfind(",")
+        line = (cut[:comma] if comma > SHORT_ADDRESS_LENGTH // 2 else cut).rstrip(" ,") + "…"
+    return SavedAddressSummary(label=label, short_address=line)
+
+
+class SavedAddressDirectory:
+    """Read-only lookup of a user's stored provider address snapshot.
+
+    Only addresses present in the server-side snapshot are described; an
+    unknown, demo or unsnapshotted address yields ``None`` rather than a guess.
+    """
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self.sessions = sessions
+
+    async def describe(
+        self, external_user_id: str, provider: str, address_id: str
+    ) -> SavedAddressSummary | None:
+        async with self.sessions() as session:
+            subject_id = (
+                await session.execute(
+                    select(MemorySubject.id).where(
+                        MemorySubject.subject_type == SubjectType.PERSON,
+                        MemorySubject.external_id == external_user_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if subject_id is None:
+                return None
+            state = await ProviderAddressRepository(session).get(subject_id, provider)
+            if state is None:
+                return None
+            addresses = AddressList.model_validate(state.snapshot)
+        if is_demo_address_list(addresses):
+            return None
+        match = next((item for item in addresses.addresses if item.id == address_id), None)
+        return summarise_address(match) if match is not None else None
