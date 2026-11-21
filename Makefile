@@ -1,9 +1,17 @@
 SHELL := /bin/bash
 
-.PHONY: help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household check check-full test test-unit test-module test-integration clean-run live-smoke live-smoke-cart
+.PHONY: start start-demo help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household check check-full test test-unit test-module test-integration clean-run live-smoke live-smoke-cart
+
+start:
+	@./scripts/start.sh live
+
+start-demo:
+	@./scripts/start.sh demo
 
 help:
 	@echo "GharSaathi local commands"
+	@echo "  make start         One command: checks setup, starts everything (live stores), opens the app"
+	@echo "  make start-demo    Same, with the static demo catalogue (no store calls)"
 	@echo "  make setup         Install frontend dependencies and warm backend dependencies"
 	@echo "  make dev           Run static demo (no commerce API/MCP calls)"
 	@echo "  make dev-live      Run with live commerce providers enabled"
