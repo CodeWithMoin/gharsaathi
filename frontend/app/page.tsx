@@ -723,7 +723,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     <AnimatePresence>
       {chatDrawerOpen && <motion.button type="button" aria-label="Close chats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setChatDrawerOpen(false)} className="fixed inset-0 z-40 bg-[#3b2a22]/20" />}
     </AnimatePresence>
-    <header className="fixed inset-x-0 top-0 z-30 bg-[#fffdf9]/92 shadow-[0_10px_35px_-30px_rgba(73,42,28,.7)] backdrop-blur-xl">
+    <header className="fixed inset-x-0 top-0 z-30 bg-[#fffdf9] shadow-[0_10px_35px_-30px_rgba(73,42,28,.7)]">
       <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
         <button type="button" onClick={() => setChatDrawerOpen(true)} aria-label="Open shopping chats" className="grid size-10 shrink-0 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><List size={21} /></button>
         <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
