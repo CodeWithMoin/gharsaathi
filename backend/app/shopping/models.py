@@ -52,6 +52,18 @@ class BasketStatus(StrEnum):
     ABANDONED = "abandoned"
 
 
+# A household has at most one open basket per provider (enforced by a partial
+# unique index in PostgreSQL).
+OPEN_BASKET_STATUSES = frozenset(
+    {
+        BasketStatus.DRAFT,
+        BasketStatus.AWAITING_APPROVAL,
+        BasketStatus.APPROVED,
+        BasketStatus.CHECKOUT_PENDING,
+    }
+)
+
+
 class Basket(BaseModel):
     id: str
     household_id: str
@@ -113,6 +125,9 @@ class ApprovalStatus(StrEnum):
     SUPERSEDED = "superseded"
     CONSUMING = "consuming"
     CONSUMED = "consumed"
+
+
+OPEN_APPROVAL_STATUSES = frozenset({ApprovalStatus.PENDING, ApprovalStatus.APPROVED})
 
 
 class Approval(BaseModel):

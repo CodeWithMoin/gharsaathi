@@ -2,9 +2,9 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from app.shopping.errors import InvalidBasketChange, NotFound
+from app.shopping.errors import BasketConflict, InvalidBasketChange, NotFound
 from app.shopping.models import (
-    ApprovalStatus,
+    OPEN_APPROVAL_STATUSES,
     Basket,
     BasketLine,
     BasketStatus,
@@ -16,7 +16,7 @@ from app.shopping.ports import ApprovalRepository, BasketRepository
 
 MIN_QUANTITY = 1
 MAX_QUANTITY = 50
-OPEN_APPROVAL_STATUSES = {ApprovalStatus.PENDING, ApprovalStatus.APPROVED}
+EDIT_ATTEMPTS = 5
 Clock = Callable[[], datetime]
 
 
@@ -71,6 +71,14 @@ def _validate_quantity(quantity: int) -> None:
 
 
 class BasketService:
+    """User edits to the open basket.
+
+    Every edit is a compare-and-set on ``Basket.revision``; that single atomic
+    write is what serialises edits with quote, approval and checkout in every
+    process. An edit that loses the race re-reads the basket and re-applies the
+    user's change, so concurrent edits are neither lost nor reported as failed.
+    """
+
     def __init__(
         self,
         baskets: BasketRepository,
@@ -86,67 +94,76 @@ class BasketService:
         if basket is not None:
             return basket
         now = self.clock()
-        basket = Basket(
-            id=uuid.uuid4().hex,
-            household_id=household_id,
-            provider=provider,
-            created_at=now,
-            updated_at=now,
+        return await self.baskets.create_open(
+            Basket(
+                id=uuid.uuid4().hex,
+                household_id=household_id,
+                provider=provider,
+                created_at=now,
+                updated_at=now,
+            )
         )
-        await self.baskets.save(basket)
-        return basket
 
     async def add_line(
         self, household_id: str, provider: ProviderName, line: BasketLine
     ) -> Basket:
-        basket = await self.active(household_id, provider)
-        self._require_editable(basket)
-        if line.ref.provider != basket.provider:
-            raise InvalidBasketChange("This item belongs to a different store.")
         _validate_quantity(line.quantity)
-        existing = next((item for item in basket.lines if same_variant(item.ref, line.ref)), None)
-        if existing is None:
-            basket.lines.append(line.model_copy(deep=True))
-        else:
+
+        def change(basket: Basket) -> bool:
+            if line.ref.provider != basket.provider:
+                raise InvalidBasketChange("This item belongs to a different store.")
+            existing = next(
+                (item for item in basket.lines if same_variant(item.ref, line.ref)), None
+            )
+            if existing is None:
+                basket.lines.append(line.model_copy(deep=True))
+                return True
             quantity = existing.quantity + line.quantity
             _validate_quantity(quantity)
             basket.lines[basket.lines.index(existing)] = line.model_copy(
                 update={"quantity": quantity}, deep=True
             )
-        return await self._commit(basket)
+            return True
+
+        return await self._edit(household_id, provider, change)
 
     async def set_quantity(
         self, household_id: str, provider: ProviderName, variant_id: str, quantity: int
     ) -> Basket:
-        basket = await self.active(household_id, provider)
-        self._require_editable(basket)
-        index = self._index(basket, variant_id)
-        if quantity == 0:
-            del basket.lines[index]
-            return await self._commit(basket)
-        _validate_quantity(quantity)
-        if basket.lines[index].quantity == quantity:
-            return basket
-        basket.lines[index].quantity = quantity
-        return await self._commit(basket)
+        if quantity != 0:
+            _validate_quantity(quantity)
+
+        def change(basket: Basket) -> bool:
+            index = self._index(basket, variant_id)
+            if quantity == 0:
+                del basket.lines[index]
+                return True
+            if basket.lines[index].quantity == quantity:
+                return False
+            basket.lines[index].quantity = quantity
+            return True
+
+        return await self._edit(household_id, provider, change)
 
     async def remove_line(
         self, household_id: str, provider: ProviderName, variant_id: str
     ) -> Basket:
-        basket = await self.active(household_id, provider)
-        self._require_editable(basket)
-        del basket.lines[self._index(basket, variant_id)]
-        return await self._commit(basket)
+        def change(basket: Basket) -> bool:
+            del basket.lines[self._index(basket, variant_id)]
+            return True
+
+        return await self._edit(household_id, provider, change)
 
     async def set_address(
         self, household_id: str, provider: ProviderName, address_id: str
     ) -> Basket:
-        basket = await self.active(household_id, provider)
-        self._require_editable(basket)
-        if basket.address_id == address_id:
-            return basket
-        basket.address_id = address_id
-        return await self._commit(basket)
+        def change(basket: Basket) -> bool:
+            if basket.address_id == address_id:
+                return False
+            basket.address_id = address_id
+            return True
+
+        return await self._edit(household_id, provider, change)
 
     @staticmethod
     def _index(basket: Basket, variant_id: str) -> int:
@@ -154,6 +171,24 @@ class BasketService:
             if line.ref.variant_id == variant_id:
                 return index
         raise NotFound("That item is not in the basket.")
+
+    async def _edit(
+        self,
+        household_id: str,
+        provider: ProviderName,
+        change: Callable[[Basket], bool],
+    ) -> Basket:
+        for attempt in range(EDIT_ATTEMPTS):
+            basket = await self.active(household_id, provider)
+            self._require_editable(basket)
+            if not change(basket):
+                return basket
+            try:
+                return await self._commit(basket)
+            except BasketConflict:
+                if attempt == EDIT_ATTEMPTS - 1:
+                    raise
+        raise AssertionError("unreachable")
 
     async def _commit(self, basket: Basket) -> Basket:
         now = self.clock()
@@ -164,11 +199,9 @@ class BasketService:
         await self.baskets.save_if_editable(
             basket, expected_revision=expected_revision
         )
-        for approval in await self.approvals.for_basket(basket.id):
-            if approval.status in OPEN_APPROVAL_STATUSES:
-                approval.status = ApprovalStatus.SUPERSEDED
-                approval.decided_at = now
-                await self.approvals.save(approval)
+        # The database repository already superseded these in the edit's own
+        # transaction; this keeps other repositories correct too.
+        await self.approvals.supersede_open(basket.id, now)
         return basket
 
     @staticmethod

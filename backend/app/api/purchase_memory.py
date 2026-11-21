@@ -3,7 +3,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.swiggy import _raise_http as _raise_swiggy_http
 from app.api.zepto import _raise_http as _raise_zepto_http
@@ -11,6 +11,7 @@ from app.commerce.demo import DemoSwiggyService, DemoZeptoService
 from app.commerce.swiggy.history import SwiggyOrderHistoryAdapter
 from app.commerce.zepto.purchase_history import ZeptoPurchaseHistoryAdapter
 from app.dependencies import SwiggyServiceDependency, ZeptoServiceDependency
+from app.legal_consent import require_accepted_consent
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 from app.memory.errors import MemoryNotFoundError, MemoryPermissionError
 from app.memory.purchase_graph import (
@@ -23,7 +24,11 @@ from app.memory.purchase_graph import (
 router = APIRouter()
 
 
-@router.post("/purchase-history/sync", response_model=PurchaseImportResult)
+@router.post(
+    "/purchase-history/sync",
+    response_model=PurchaseImportResult,
+    dependencies=[Depends(require_accepted_consent)],
+)
 async def sync_purchase_history(
     session: DbSessionDependency,
     actor: MemoryActorDependency,

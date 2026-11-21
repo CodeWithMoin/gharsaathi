@@ -120,7 +120,7 @@ def test_session_config_includes_profile_only_when_given() -> None:
 
 
 class RecordingHub:
-    def start(self, session_id: str, executor: object) -> None:
+    def start(self, session_id: str, executor: object, *, owner_id: str, events_token: str) -> None:
         pass
 
 

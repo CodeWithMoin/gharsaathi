@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.basket import router as basket_router
@@ -17,6 +18,7 @@ from app.api.purchase_memory import router as purchase_memory_router
 from app.api.voice import router as voice_router
 from app.core.config import get_settings
 from app.core.logging import install_sensitive_log_filters
+from app.legal_consent import LegalConsentRequired
 from app.dependencies import (
     close_cached_services,
     get_order_tracking_service,
@@ -53,6 +55,17 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
     expose_headers=["Retry-After"],
 )
+
+
+@app.exception_handler(LegalConsentRequired)
+async def legal_consent_required(_: Request, exc: LegalConsentRequired) -> JSONResponse:
+    # `detail` stays a string for existing clients; `code` is machine-readable.
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content={"detail": exc.message, "code": exc.code},
+    )
+
+
 # Purchase memory must be mounted first: memory's `DELETE /{memory_id}` would
 # otherwise capture `DELETE /purchase-history` and reject it as a bad UUID.
 app.include_router(

@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException, Request
 
 from app.auth import require_user_id
+from app.legal_consent import has_accepted_consent
 from app.main import app
 from tests.layers import LAYERS, LEGACY_LAYERS
 
@@ -63,3 +64,26 @@ def verified_test_identity():
         yield
     finally:
         app.dependency_overrides.pop(require_user_id, None)
+
+
+@pytest.fixture(autouse=True)
+def accepted_legal_consent():
+    """Treat the test identity as having accepted the terms.
+
+    Server-side consent enforcement is exercised by tests that request
+    ``enforce_legal_consent``. Identity is still verified: the gate depends on
+    ``require_user_id``.
+    """
+
+    app.dependency_overrides[has_accepted_consent] = lambda: True
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(has_accepted_consent, None)
+
+
+@pytest.fixture
+def enforce_legal_consent(accepted_legal_consent):
+    """Use the real, database-backed consent check for this test."""
+
+    app.dependency_overrides.pop(has_accepted_consent, None)

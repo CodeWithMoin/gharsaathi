@@ -120,8 +120,8 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     return true;
   }, [onTranscriptTurn]);
 
-  const listenForToolEvents = useCallback((sessionId: string) => {
-    const source = new EventSource(`${API_BASE_URL}/api/voice/sessions/${encodeURIComponent(sessionId)}/events`);
+  const listenForToolEvents = useCallback((sessionId: string, eventsToken: string) => {
+    const source = new EventSource(`${API_BASE_URL}/api/voice/sessions/${encodeURIComponent(sessionId)}/events?token=${encodeURIComponent(eventsToken)}`);
     eventsRef.current = source;
     source.addEventListener("message", ({ data }) => {
       try {
@@ -276,7 +276,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       if (attempt !== attemptRef.current) return;
       if (!response.ok) throw new Error(payload && typeof payload.detail === "string" ? payload.detail : "GharSaathi voice shuru nahi ho paya. Phir se try kijiye.");
       await peer.setRemoteDescription({ type: "answer", sdp: payload.sdp });
-      listenForToolEvents(payload.session_id);
+      listenForToolEvents(payload.session_id, payload.events_token);
       if (payload.turn_taking?.mode === "smart_turn" && typeof payload.turn_taking.yield_instruction === "string") {
         void startSmartTurn(attempt, mic, payload.turn_taking.yield_instruction);
       }

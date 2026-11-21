@@ -19,15 +19,6 @@ async def async_api(integration_settings) -> AsyncIterator[AsyncClient]:
         yield client
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: record_consent reads then inserts without handling the "
-        "(user_id, terms_version) unique constraint, so a double-submitted "
-        "consent form raises IntegrityError (500) instead of returning the "
-        "existing record."
-    ),
-)
 async def test_double_submitted_consent_returns_one_record(async_api: AsyncClient) -> None:
     alice = as_user("alice")
     body = {"terms_accepted": True, "personalization_allowed": False}
@@ -42,14 +33,6 @@ async def test_double_submitted_consent_returns_one_record(async_api: AsyncClien
     assert len({item.json()["accepted_at"] for item in responses}) == 1
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: BasketService.active() creates a basket when none is open, with no "
-        "uniqueness guard, so two first add-to-basket requests create two open "
-        "baskets and the later GET shows only one of the items."
-    ),
-)
 async def test_two_first_adds_land_in_one_basket(async_api: AsyncClient) -> None:
     alice = as_user("alice")
 
@@ -72,14 +55,6 @@ async def test_two_first_adds_land_in_one_basket(async_api: AsyncClient) -> None
     assert sorted(item["name"] for item in basket["lines"]) == ["atta", "dal"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: MemoryRepository.get_or_create_person selects then inserts, so a new "
-        "user's parallel first-load requests (conversation, addresses, memory) race "
-        "on uq_memory_subject_identity and one of them fails with IntegrityError (500)."
-    ),
-)
 async def test_a_new_users_parallel_first_requests_all_succeed(async_api: AsyncClient) -> None:
     alice = as_user("first-visit")
     paths = ["/api/conversations/current", "/api/zepto/addresses", "/api/memory/permissions"]
@@ -115,3 +90,80 @@ async def test_consent_is_explicit_and_bound_to_the_current_terms_version(async_
     assert status["accepted"] is True and status["personalization_allowed"] is True
     assert status["terms_version"] == initial["terms_version"]
     assert (await async_api.get("/api/legal-consent", headers=as_user("bob"))).json()["accepted"] is False
+
+
+def _workers(session_factory, count: int):
+    """Independent service stacks, like separate processes: no shared lock."""
+
+    from app.shopping.approval import ApprovalService
+    from app.shopping.basket import BasketService
+    from app.shopping.database import DatabaseApprovalRepository, DatabaseBasketRepository
+    from tests.shopping_fakes import FakeProvider
+
+    provider = FakeProvider()
+    stacks = []
+    for _ in range(count):
+        baskets = DatabaseBasketRepository(session_factory)
+        approvals = DatabaseApprovalRepository(session_factory)
+        stacks.append(
+            (BasketService(baskets, approvals), ApprovalService(baskets, approvals, lambda _: provider))
+        )
+    return stacks, DatabaseBasketRepository(session_factory), DatabaseApprovalRepository(session_factory)
+
+
+@pytest.mark.parametrize("round_", range(5))
+async def test_edits_racing_an_approval_never_leave_a_stale_approval(session_factory, round_: int) -> None:
+    from app.shopping.errors import ApprovalRefused
+    from app.shopping.models import ApprovalStatus, BasketStatus, basket_fingerprint
+    from tests.shopping_fakes import HOUSEHOLD, PROVIDER, line
+
+    stacks, basket_repo, approval_repo = _workers(session_factory, 4)
+    (editor, approver), others = stacks[0], stacks[1:]
+    await editor.add_line(HOUSEHOLD, PROVIDER, line("spin1"))
+    basket = await editor.set_address(HOUSEHOLD, PROVIDER, "addr_home")
+    requested = await approver.request(basket.id)
+    extra = [f"extra{index}" for index in range(len(others))]
+
+    async def approve() -> str:
+        try:
+            await approver.approve(requested.approval.id, requested.approval.fingerprint, HOUSEHOLD)
+            return "approved"
+        except ApprovalRefused:
+            return "refused"
+
+    edits = [
+        service.add_line(HOUSEHOLD, PROVIDER, line(variant))
+        for (service, _), variant in zip(others, extra)
+    ]
+    outcomes = await asyncio.gather(approve(), *edits)
+
+    stored = await basket_repo.get(basket.id)
+    approval = await approval_repo.get(requested.approval.id)
+    assert stored is not None and approval is not None
+    # No edit was lost.
+    assert sorted(item.ref.variant_id for item in stored.lines) == sorted(["spin1", *extra])
+    # Whatever won the race, an approval never outlives the basket it priced.
+    assert approval.status != ApprovalStatus.APPROVED
+    assert stored.status == BasketStatus.DRAFT
+    assert basket_fingerprint(stored, approval.payable_paise) != approval.fingerprint
+    assert outcomes[0] in {"approved", "refused"}
+
+
+async def test_parallel_quantity_edits_from_separate_workers_all_apply(session_factory) -> None:
+    from tests.shopping_fakes import HOUSEHOLD, PROVIDER, line
+
+    stacks, basket_repo, _ = _workers(session_factory, 4)
+    variants = [f"v{index}" for index in range(4)]
+    await asyncio.gather(
+        *(service.add_line(HOUSEHOLD, PROVIDER, line(variant)) for (service, _), variant in zip(stacks, variants))
+    )
+    await asyncio.gather(
+        *(
+            service.set_quantity(HOUSEHOLD, PROVIDER, variant, 3)
+            for (service, _), variant in zip(stacks, variants)
+        )
+    )
+
+    basket = await stacks[0][0].active(HOUSEHOLD, PROVIDER)
+    assert {item.ref.variant_id: item.quantity for item in basket.lines} == dict.fromkeys(variants, 3)
+    assert basket.revision == 8

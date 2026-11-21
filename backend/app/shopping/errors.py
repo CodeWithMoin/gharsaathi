@@ -10,6 +10,10 @@ class InvalidBasketChange(ShoppingError):
     pass
 
 
+class BasketConflict(InvalidBasketChange):
+    """Another writer changed the basket revision first; re-read and retry."""
+
+
 class ApprovalRefused(ShoppingError):
     """The basket cannot be approved in its current state."""
 

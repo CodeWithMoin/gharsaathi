@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any
 
 
@@ -7,12 +8,14 @@ OAUTH_CALLBACK_PATHS = {
     "/api/zepto/oauth/callback",
     "/callback",
 }
+# Voice event streams carry a per-session capability token in the query string.
+VOICE_EVENTS_PATH = re.compile(r"^(/api/voice/sessions/[^/?]+/events)\?")
 # Backwards-compatible name used by existing tests and integrations.
 OAUTH_CALLBACK_PATH = "/api/swiggy/oauth/callback"
 
 
 class RedactOAuthCallbackFilter(logging.Filter):
-    """Prevent OAuth codes and state values from entering Uvicorn access logs."""
+    """Keep OAuth codes/state and voice event tokens out of Uvicorn access logs."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         arguments = record.args
@@ -29,6 +32,9 @@ class RedactOAuthCallbackFilter(logging.Filter):
             ),
             None,
         )
+        if callback_path is None:
+            voice_events = VOICE_EVENTS_PATH.match(request_path)
+            callback_path = voice_events.group(1) if voice_events else None
         if callback_path is not None:
             mutable: list[Any] = list(arguments)
             mutable[2] = f"{callback_path}?[REDACTED]"

@@ -22,9 +22,13 @@ from tests.shopping_fakes import World
 class RecordingHub:
     def __init__(self) -> None:
         self.started: list[tuple[str, ShoppingToolExecutor]] = []
+        self.owners: list[tuple[str, str]] = []
 
-    def start(self, session_id: str, executor: ShoppingToolExecutor) -> None:
+    def start(
+        self, session_id: str, executor: ShoppingToolExecutor, *, owner_id: str, events_token: str
+    ) -> None:
         self.started.append((session_id, executor))
+        self.owners.append((owner_id, events_token))
 
 
 class NoSearch:
@@ -68,9 +72,14 @@ async def test_create_posts_client_delegation_session_and_returns_answer() -> No
 
     hub = RecordingHub()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        result = await service(settings(), client, hub).create(OFFER, "addr_home")
+        result = await service(settings(), client, hub).create(
+            OFFER, "addr_home", household_id="test-user"
+        )
 
-    assert result == LiveSession(session_id="live_123", sdp="answer-sdp")
+    assert (result.session_id, result.sdp) == ("live_123", "answer-sdp")
+    assert len(result.events_token) >= 32
+    # The events token is bound to the verified user who created the session.
+    assert hub.owners == [("test-user", result.events_token)]
     assert hub.started[0][0] == "live_123"
     assert hub.started[0][1].address_id == "addr_home"
     request = seen[0]
@@ -132,7 +141,7 @@ async def test_session_routes_selected_addresses_to_both_read_only_searchers() -
             hub,
             client,
             zepto_searcher=NoSearch(),
-        ).create(OFFER, "swiggy-home", "zepto-home")
+        ).create(OFFER, "swiggy-home", "zepto-home", household_id="test-user")
 
     executor = hub.started[0][1]
     assert isinstance(executor, MultiProviderShoppingToolExecutor)
@@ -178,7 +187,7 @@ class FakeVoiceService:
         household_id: str = "",
     ) -> LiveSession:
         del offer_sdp, swiggy_address_id, zepto_address_id, household_id
-        return LiveSession(session_id="live_fake", sdp="answer")
+        return LiveSession(session_id="live_fake", sdp="answer", events_token="token-fake")
 
 
 def api_client() -> TestClient:
@@ -193,7 +202,12 @@ def test_session_endpoint_returns_answer_for_allowed_origin() -> None:
         headers={"Origin": "http://localhost:3003"},
     )
     assert response.status_code == 201
-    assert response.json() == {"session_id": "live_fake", "sdp": "answer", "turn_taking": {"mode": "native"}}
+    assert response.json() == {
+        "session_id": "live_fake",
+        "sdp": "answer",
+        "turn_taking": {"mode": "native"},
+        "events_token": "token-fake",
+    }
 
 
 def test_session_endpoint_rejects_unknown_origin() -> None:

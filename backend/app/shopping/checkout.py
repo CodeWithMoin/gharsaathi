@@ -24,6 +24,7 @@ from app.database.models import (
 )
 from app.shopping.approval import check_quote
 from app.shopping.basket import Clock, utc_now
+from app.shopping.database import basket_from_record
 from app.shopping.errors import ApprovalRefused, NotFound, ProviderUnavailable, ShoppingError
 from app.shopping.models import (
     Approval,
@@ -99,14 +100,16 @@ class DatabaseCheckoutAttemptRepository:
                 session.add(record)
                 await session.flush()
 
-                approval = await session.scalar(
-                    select(ShoppingApprovalRecord)
-                    .where(ShoppingApprovalRecord.id == attempt.approval_id)
-                    .with_for_update()
-                )
+                # Lock order is basket, then approval, matching basket edits,
+                # so a concurrent edit and claim serialise instead of deadlocking.
                 basket = await session.scalar(
                     select(ShoppingBasketRecord)
                     .where(ShoppingBasketRecord.id == attempt.basket_id)
+                    .with_for_update()
+                )
+                approval = await session.scalar(
+                    select(ShoppingApprovalRecord)
+                    .where(ShoppingApprovalRecord.id == attempt.approval_id)
                     .with_for_update()
                 )
                 if approval is None or basket is None:
@@ -117,6 +120,10 @@ class DatabaseCheckoutAttemptRepository:
                     or basket.revision != basket_revision
                     or basket.household_id != attempt.household_id
                     or basket.provider != "zepto"
+                    or approval.basket_id != basket.id
+                    or approval.basket_revision != basket.revision
+                    or basket_fingerprint(basket_from_record(basket), approval.payable_paise)
+                    != approval.fingerprint
                 ):
                     raise ApprovalRefused(
                         "The approved basket changed before checkout. Please review it again."
@@ -177,11 +184,11 @@ class DatabaseCheckoutAttemptRepository:
                 raise NotFound("Checkout attempt not found.")
             if record.status != CheckoutStatus.DISPATCHING.value:
                 return _attempt(record)
-            approval = await session.get(
-                ShoppingApprovalRecord, record.approval_id, with_for_update=True
-            )
             basket = await session.get(
                 ShoppingBasketRecord, record.basket_id, with_for_update=True
+            )
+            approval = await session.get(
+                ShoppingApprovalRecord, record.approval_id, with_for_update=True
             )
             if approval is None or basket is None:
                 raise RuntimeError("Claimed checkout lost its approval or basket.")

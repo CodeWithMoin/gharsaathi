@@ -51,6 +51,7 @@ database prefix before any app code runs.
 - `override(dependency, replacement)`: a `dependency_overrides` entry that is removed after the test.
 - `session_factory`: the app's session factory on the test database, for service-level concurrency tests.
 - `tests/integration/helpers.as_user(id)`: the `X-Test-User-Id` header read by the Clerk override in `tests/conftest.py`.
+- Legal consent: `tests/conftest.py` treats every test identity as having accepted the current terms (`has_accepted_consent` is overridden; identity is still verified). Request the `enforce_legal_consent` fixture to use the real database check, as `tests/integration/test_consent_enforcement.py` does.
 
 Route-table helpers (`walk`, `operations`, `requires_user`, `PUBLIC_ROUTES`)
 are in `backend/tests/routes.py`. `walk` handles FastAPI's lazily included

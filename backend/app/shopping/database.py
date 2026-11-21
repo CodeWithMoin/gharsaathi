@@ -1,12 +1,33 @@
+from collections.abc import Collection
+from datetime import datetime
+
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.database.models import ShoppingApprovalRecord, ShoppingBasketRecord
-from app.shopping.errors import InvalidBasketChange
-from app.shopping.models import Approval, Basket, BasketStatus, ProviderName
+from app.shopping.errors import BasketConflict, InvalidBasketChange
+from app.shopping.models import (
+    OPEN_APPROVAL_STATUSES as _OPEN_APPROVALS,
+    OPEN_BASKET_STATUSES as _OPEN_BASKETS,
+    Approval,
+    ApprovalStatus,
+    Basket,
+    BasketStatus,
+    ProviderName,
+)
 
 
-OPEN_BASKET_STATUSES = ("draft", "awaiting_approval", "approved", "checkout_pending")
+OPEN_BASKET_STATUSES = tuple(sorted(status.value for status in _OPEN_BASKETS))
+OPEN_APPROVAL_STATUSES = tuple(sorted(status.value for status in _OPEN_APPROVALS))
+FROZEN_BASKET_STATUSES = (BasketStatus.CHECKOUT_PENDING.value, BasketStatus.ORDERED.value)
+CREATE_OPEN_ATTEMPTS = 3
+
+
+def _basket_values(basket: Basket) -> dict:
+    values = basket.model_dump(mode="python")
+    values["lines"] = [line.model_dump(mode="json") for line in basket.lines]
+    return values
 
 
 class DatabaseBasketRepository:
@@ -21,8 +42,7 @@ class DatabaseBasketRepository:
     async def save(self, basket: Basket) -> None:
         async with self.sessions() as session, session.begin():
             record = await session.get(ShoppingBasketRecord, basket.id)
-            values = basket.model_dump(mode="python")
-            values["lines"] = [line.model_dump(mode="json") for line in basket.lines]
+            values = _basket_values(basket)
             if record is None:
                 session.add(ShoppingBasketRecord(**values))
                 return
@@ -30,26 +50,78 @@ class DatabaseBasketRepository:
                 setattr(record, key, value)
 
     async def save_if_editable(self, basket: Basket, *, expected_revision: int) -> None:
-        """Optimistically save a user edit without thawing a checkout claim."""
+        """Compare-and-set a user edit and supersede open approvals in one transaction.
 
-        values = basket.model_dump(mode="python")
-        values["lines"] = [line.model_dump(mode="json") for line in basket.lines]
+        The ``revision`` predicate makes the UPDATE the serialisation point for
+        every writer, in any process. Superseding in the same transaction means
+        no committed edit can coexist with an open approval for its basket.
+        """
+
         async with self.sessions() as session, session.begin():
             result = await session.execute(
                 update(ShoppingBasketRecord)
                 .where(
                     ShoppingBasketRecord.id == basket.id,
                     ShoppingBasketRecord.revision == expected_revision,
-                    ShoppingBasketRecord.status.notin_(
-                        (BasketStatus.CHECKOUT_PENDING.value, BasketStatus.ORDERED.value)
-                    ),
+                    ShoppingBasketRecord.status.notin_(FROZEN_BASKET_STATUSES),
                 )
-                .values(**values)
+                .values(**_basket_values(basket))
             )
             if result.rowcount != 1:
-                raise InvalidBasketChange(
-                    "This basket changed or checkout already started. Refresh before editing."
+                status = await session.scalar(
+                    select(ShoppingBasketRecord.status).where(
+                        ShoppingBasketRecord.id == basket.id
+                    )
                 )
+                if status in FROZEN_BASKET_STATUSES:
+                    raise InvalidBasketChange(
+                        "This basket changed or checkout already started. Refresh before editing."
+                    )
+                raise BasketConflict("This basket changed. Refresh before editing.")
+            await session.execute(
+                update(ShoppingApprovalRecord)
+                .where(
+                    ShoppingApprovalRecord.basket_id == basket.id,
+                    ShoppingApprovalRecord.status.in_(OPEN_APPROVAL_STATUSES),
+                )
+                .values(status=ApprovalStatus.SUPERSEDED.value, decided_at=basket.updated_at)
+            )
+
+    async def transition(
+        self,
+        basket_id: str,
+        *,
+        expected_revision: int,
+        from_statuses: Collection[BasketStatus],
+        to_status: BasketStatus,
+    ) -> bool:
+        async with self.sessions() as session, session.begin():
+            result = await session.execute(
+                update(ShoppingBasketRecord)
+                .where(
+                    ShoppingBasketRecord.id == basket_id,
+                    ShoppingBasketRecord.revision == expected_revision,
+                    ShoppingBasketRecord.status.in_([status.value for status in from_statuses]),
+                )
+                .values(status=to_status.value)
+            )
+            return result.rowcount == 1
+
+    async def create_open(self, basket: Basket) -> Basket:
+        """Get-or-create guarded by ``uq_shopping_baskets_one_open``."""
+
+        for _ in range(CREATE_OPEN_ATTEMPTS):
+            existing = await self.active_for(basket.household_id, basket.provider)
+            if existing is not None:
+                return existing
+            try:
+                async with self.sessions() as session, session.begin():
+                    session.add(ShoppingBasketRecord(**_basket_values(basket)))
+                return basket
+            except IntegrityError:
+                # A concurrent request created the open basket first.
+                continue
+        raise BasketConflict("This basket changed. Refresh before editing.")
 
     async def active_for(self, household_id: str, provider: ProviderName) -> Basket | None:
         async with self.sessions() as session:
@@ -96,6 +168,36 @@ class DatabaseApprovalRepository:
             ).all()
             return [_approval(record) for record in records]
 
+    async def transition(
+        self,
+        approval_id: str,
+        *,
+        from_statuses: Collection[ApprovalStatus],
+        to_status: ApprovalStatus,
+        decided_at: datetime,
+    ) -> bool:
+        async with self.sessions() as session, session.begin():
+            result = await session.execute(
+                update(ShoppingApprovalRecord)
+                .where(
+                    ShoppingApprovalRecord.id == approval_id,
+                    ShoppingApprovalRecord.status.in_([status.value for status in from_statuses]),
+                )
+                .values(status=to_status.value, decided_at=decided_at)
+            )
+            return result.rowcount == 1
+
+    async def supersede_open(self, basket_id: str, decided_at: datetime) -> None:
+        async with self.sessions() as session, session.begin():
+            await session.execute(
+                update(ShoppingApprovalRecord)
+                .where(
+                    ShoppingApprovalRecord.basket_id == basket_id,
+                    ShoppingApprovalRecord.status.in_(OPEN_APPROVAL_STATUSES),
+                )
+                .values(status=ApprovalStatus.SUPERSEDED.value, decided_at=decided_at)
+            )
+
 
 def _basket(record: ShoppingBasketRecord) -> Basket:
     return Basket.model_validate(
@@ -111,6 +213,9 @@ def _basket(record: ShoppingBasketRecord) -> Basket:
             "updated_at": record.updated_at,
         }
     )
+
+
+basket_from_record = _basket
 
 
 def _approval(record: ShoppingApprovalRecord) -> Approval:

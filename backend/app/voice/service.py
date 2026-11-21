@@ -1,4 +1,5 @@
 import logging
+import secrets
 from typing import Any
 
 import httpx
@@ -46,6 +47,10 @@ class LiveSession(BaseModel):
     session_id: str
     sdp: str
     turn_taking: dict[str, str] = Field(default_factory=lambda: {"mode": "native"})
+    # Capability for GET /api/voice/sessions/{id}/events, bound to the creating
+    # user. EventSource cannot send Authorization headers, so it is passed as
+    # the ``token`` query parameter (redacted from access logs).
+    events_token: str
 
 
 def build_session_config(
@@ -186,14 +191,18 @@ class LiveSessionService:
             raise VoiceProviderError("OpenAI returned an unexpected session response.") from exc
         if not isinstance(session_id, str) or not isinstance(answer_sdp, str):
             raise VoiceProviderError("OpenAI returned an unexpected session response.")
+        events_token = secrets.token_urlsafe(32)
         self.hub.start(
             session_id,
             self._tool_executor(swiggy_address_id, zepto_address_id, household_id),
+            owner_id=household_id,
+            events_token=events_token,
         )
         return LiveSession(
             session_id=session_id,
             sdp=answer_sdp,
             turn_taking=client_turn_taking(self.settings.voice_turn_taking),
+            events_token=events_token,
         )
 
 

@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database.upsert import insert_if_absent
 from app.database.models import (
     MemoryEvent,
     MemoryEventType,
@@ -20,22 +21,34 @@ class MemoryRepository:
         self.session = session
 
     async def get_or_create_person(self, external_id: str) -> MemorySubject:
+        """Race-safe get-or-create on ``uq_memory_subject_identity``."""
+
+        subject = await self._person(external_id)
+        if subject is not None:
+            return subject
+        await insert_if_absent(
+            self.session,
+            MemorySubject,
+            {
+                "id": uuid4(),
+                "subject_type": SubjectType.PERSON,
+                "external_id": external_id,
+            },
+            ["subject_type", "external_id"],
+        )
+        subject = await self._person(external_id)
+        if subject is None:  # pragma: no cover - the insert or its winner committed a row
+            raise RuntimeError("Memory subject was not created.")
+        return subject
+
+    async def _person(self, external_id: str) -> MemorySubject | None:
         result = await self.session.execute(
             select(MemorySubject).where(
                 MemorySubject.subject_type == SubjectType.PERSON,
                 MemorySubject.external_id == external_id,
             )
         )
-        subject = result.scalar_one_or_none()
-        if subject is not None:
-            return subject
-        subject = MemorySubject(
-            subject_type=SubjectType.PERSON,
-            external_id=external_id,
-        )
-        self.session.add(subject)
-        await self.session.flush()
-        return subject
+        return result.scalar_one_or_none()
 
     async def find_person(self, external_id: str) -> MemorySubject | None:
         result = await self.session.execute(

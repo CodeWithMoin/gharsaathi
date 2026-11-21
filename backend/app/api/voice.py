@@ -3,7 +3,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Path, Request, status
+from fastapi import APIRouter, HTTPException, Path, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.dependencies import SidebandHubDependency, VoiceServiceDependency
 from app.voice.sideband import FINISHED
 from app.voice.service import LiveSession, VoiceConfigurationError, VoiceProviderError
-from app.auth import UserIdDependency
+from app.legal_consent import ConsentedUserIdDependency
 
 
 router = APIRouter()
@@ -39,7 +39,12 @@ def _check_origin(request: Request) -> None:
 
 @router.post("/session", response_model=LiveSession, status_code=status.HTTP_201_CREATED)
 async def create_session(
-    body: SessionRequest, request: Request, service: VoiceServiceDependency, user_id: UserIdDependency
+    body: SessionRequest,
+    request: Request,
+    service: VoiceServiceDependency,
+    # Voice sessions can edit baskets and request bills.
+    user_id: ConsentedUserIdDependency,
+
 ) -> LiveSession:
     _check_origin(request)
     try:
@@ -64,9 +69,18 @@ async def session_events(
     session_id: Annotated[str, Path(min_length=1, max_length=256)],
     request: Request,
     hub: SidebandHubDependency,
+    token: Annotated[str | None, Query(max_length=256)] = None,
 ) -> StreamingResponse:
+    """Stream UI events for a voice session to the user who created it.
+
+    EventSource cannot send the Clerk bearer, so the stream is authorised by
+    the per-session ``events_token`` returned (to the verified user) from
+    ``POST /api/voice/session``. A missing, wrong or expired token gets the
+    same 404 as an unknown session, so session ids cannot be probed.
+    """
+
     _check_origin(request)
-    channel = hub.channel(session_id)
+    channel = hub.authorized_channel(session_id, token)
     if channel is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown voice session.")
 

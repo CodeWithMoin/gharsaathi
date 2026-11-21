@@ -1,6 +1,9 @@
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
+import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -15,6 +18,8 @@ from app.voice.tools import ShoppingToolExecutor
 logger = logging.getLogger(__name__)
 
 MAX_TRACKED_SESSIONS = 20
+# How long the events token can open (or EventSource can re-open) the stream.
+EVENTS_TOKEN_TTL_SECONDS = 60 * 60
 FINISHED = {"type": "session.finished"}
 _EVENT_ID_FIELDS = (
     "event_id",
@@ -63,6 +68,9 @@ class SessionChannel:
     subscribers: list[asyncio.Queue[dict[str, Any]]] = field(default_factory=list)
     finished: bool = False
     task: asyncio.Task[None] | None = None
+    owner_id: str = ""
+    events_token_digest: bytes = b""
+    events_token_expires_at: float = 0.0
 
     def publish(self, event: dict[str, Any]) -> None:
         self.history.append(event)
@@ -212,9 +220,34 @@ class SidebandHub:
     def channel(self, session_id: str) -> SessionChannel | None:
         return self._channels.get(session_id)
 
-    def start(self, session_id: str, executor: ShoppingToolExecutor) -> SessionChannel:
+    def authorized_channel(self, session_id: str, events_token: str | None) -> SessionChannel | None:
+        """Return the channel only for the token issued to its creating user."""
+
+        channel = self._channels.get(session_id)
+        if channel is None or not events_token or not channel.owner_id:
+            return None
+        if time.monotonic() >= channel.events_token_expires_at:
+            return None
+        if not hmac.compare_digest(channel.events_token_digest, _token_digest(events_token)):
+            return None
+        return channel
+
+    def start(
+        self,
+        session_id: str,
+        executor: ShoppingToolExecutor,
+        *,
+        owner_id: str,
+        events_token: str,
+    ) -> SessionChannel:
+        if not owner_id or not events_token:
+            raise ValueError("A voice session needs a verified owner and an events token.")
         self._prune()
-        channel = SessionChannel()
+        channel = SessionChannel(
+            owner_id=owner_id,
+            events_token_digest=_token_digest(events_token),
+            events_token_expires_at=time.monotonic() + EVENTS_TOKEN_TTL_SECONDS,
+        )
         self._channels[session_id] = channel
         channel.task = asyncio.create_task(self._attach(session_id, executor, channel))
         return channel
@@ -253,3 +286,8 @@ class SidebandHub:
             )
         finally:
             channel.finish()
+
+
+def _token_digest(token: str) -> bytes:
+    # The raw token is never stored server-side.
+    return hashlib.sha256(token.encode("utf-8")).digest()
