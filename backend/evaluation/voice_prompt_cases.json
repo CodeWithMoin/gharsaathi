@@ -1,5 +1,5 @@
 {
-  "version": "1.6.0",
+  "version": "1.7.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -106,6 +106,65 @@
       "forbidden_any": ["Ek second", "ek second", "dekh rahi hoon", "Mujhe 'Amul", "Mujhe Amul", "mujhe amul", "मुझे अमूल"],
       "max_questions": 1,
       "max_sentences": 2
+    },
+    {
+      "id": "devanagari_transcript_roman_hinglish_price",
+      "history": [
+        {"role": "user", "content": "मुझे AXE का deodorant चाहिए।"},
+        {"role": "assistant", "content": "हाँ, AXE के भी मिल गए हैं। Dark Temptation 150 ml एक सौ बहत्तर रुपए में Zepto पर है, और Apollo 150 ml दो सौ निन्यानवे रुपए में Instamart पर।"}
+      ],
+      "user": "अच्छा, सबसे सस्ता कौन सा है?",
+      "required_any": ["bahattar rupaye", "bahattar rupay"],
+      "forbidden_any": ["रुपए", "रुपये", "बहत्तर", "172"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "devanagari_transcript_roman_hinglish_capability",
+      "user": "तुम्हारा नाम क्या है और तुम मेरी क्या मदद कर सकती हो?",
+      "required_any": ["kar sakti hoon", "karungi", "madad", "dhoondh", "compare"],
+      "forbidden_any": ["kar sakta hoon", "karunga", "सकती", "करूँगी", "करूंगी"],
+      "max_questions": 1,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "devanagari_transcript_roman_hinglish_off_topic",
+      "user": "मेरे phone में कुछ update दिख रहा है, क्या तुम देख सकती हो?",
+      "required_any": ["nahi", "shopping"],
+      "forbidden_any": ["sakta", "raha hoon", "नहीं", "सकती"],
+      "max_questions": 1,
+      "max_sentences": 3,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "full_english_reply_in_english",
+      "user": "Hi, can you tell me how you can help me with my weekly household shopping?",
+      "required_any": ["I can", "I'll", "help you"],
+      "forbidden_any": [],
+      "forbidden_words": ["hai", "hain", "hoon", "mein", "karti", "sakti", "aap", "kya", "theek"],
+      "max_questions": 1,
+      "max_devanagari_ratio": 0.0
+    },
+    {
+      "id": "explicit_hindi_request_reply_in_hindi",
+      "user": "Hindi mein bolo. Tum meri shopping mein kya madad kar sakti ho?",
+      "required_any": ["सकती", "करूँगी", "करूंगी", "मदद"],
+      "forbidden_any": ["सकता हूँ", "सकता हूं", "करूँगा", "करूंगा"],
+      "max_questions": 1,
+      "min_devanagari_ratio": 0.3
+    },
+    {
+      "id": "explicit_hindi_choice_persists",
+      "history": [
+        {"role": "user", "content": "Please Hindi mein baat karo."},
+        {"role": "assistant", "content": "ठीक है, अब मैं हिंदी में बात करूँगी।"}
+      ],
+      "user": "Achha, tum kya kya dhoondh sakti ho?",
+      "required_any": ["सकती", "ढूँढ", "ढूंढ", "मदद", "सामान"],
+      "forbidden_any": ["सकता हूँ", "सकता हूं"],
+      "max_questions": 1,
+      "min_devanagari_ratio": 0.3
     }
   ]
 }
