@@ -6,18 +6,21 @@ from fastapi import APIRouter, HTTPException, Path, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 
+from app.auth import UserIdDependency
 from app.commerce.demo import DemoZeptoService
 from app.commerce.provider_state import (
     ProviderAddressRepository,
     cached_address_list,
     is_demo_address_state,
 )
+from app.commerce.query_guard import non_search_reason
 from app.commerce.swiggy.models import (
     AddressList,
     AddressResolution,
     Pagination,
     ProductSearchResult,
 )
+from app.commerce.zepto.cart import ZeptoCart
 from app.commerce.zepto.errors import (
     ZeptoAuthenticationRequired,
     ZeptoConfigurationError,
@@ -25,8 +28,6 @@ from app.commerce.zepto.errors import (
     ZeptoRateLimited,
     ZeptoSchemaError,
 )
-from app.commerce.query_guard import non_search_reason
-from app.commerce.zepto.cart import ZeptoCart
 from app.commerce.zepto.history import ZeptoOrderDetail, ZeptoOrderHistory
 from app.commerce.zepto.models import (
     CapabilitySummary,
@@ -34,7 +35,6 @@ from app.commerce.zepto.models import (
     ToolDescription,
 )
 from app.core.config import get_settings
-from app.auth import UserIdDependency
 from app.dependencies import BasketServiceDependency, ZeptoServiceDependency
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 from app.memory.errors import MemoryPermissionError
@@ -47,7 +47,6 @@ from app.shopping.offer_suggestions import (
     ThresholdOffer,
     suggest_threshold_additions,
 )
-
 
 router = APIRouter()
 ZEPTO_PROVIDER = "zepto"
@@ -181,7 +180,8 @@ def _raise_http(exc: Exception) -> None:
 
 
 @router.get("/connection", response_model=ConnectionStatus)
-async def connection(service: ZeptoServiceDependency) -> ConnectionStatus:
+async def connection(
+    _user: UserIdDependency,service: ZeptoServiceDependency) -> ConnectionStatus:
     try:
         return await service.connection_status()
     except Exception as exc:
@@ -269,7 +269,8 @@ async def disconnect(
 
 
 @router.get("/tools", response_model=list[ToolDescription])
-async def tools(service: ZeptoServiceDependency) -> list[ToolDescription]:
+async def tools(
+    _user: UserIdDependency,service: ZeptoServiceDependency) -> list[ToolDescription]:
     try:
         return await service.list_tools()
     except Exception as exc:
@@ -278,7 +279,8 @@ async def tools(service: ZeptoServiceDependency) -> list[ToolDescription]:
 
 
 @router.get("/capabilities", response_model=CapabilitySummary)
-async def capabilities(service: ZeptoServiceDependency) -> CapabilitySummary:
+async def capabilities(
+    _user: UserIdDependency,service: ZeptoServiceDependency) -> CapabilitySummary:
     """Authenticated discovery plus the app's narrow guarded capabilities."""
 
     try:
@@ -289,7 +291,8 @@ async def capabilities(service: ZeptoServiceDependency) -> CapabilitySummary:
 
 
 @router.get("/cart", response_model=ZeptoCart)
-async def cart(service: ZeptoServiceDependency) -> ZeptoCart:
+async def cart(
+    _user: UserIdDependency,service: ZeptoServiceDependency) -> ZeptoCart:
     """Return a display-only provider-cart snapshot; never mutate it."""
 
     try:
@@ -301,6 +304,7 @@ async def cart(service: ZeptoServiceDependency) -> ZeptoCart:
 
 @router.get("/orders", response_model=ZeptoOrderHistory)
 async def order_history(
+    _user: UserIdDependency,
     service: ZeptoServiceDependency,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
     page_number: Annotated[int, Query(ge=1, le=1000)] = 1,
@@ -320,6 +324,7 @@ async def order_history(
     response_model_by_alias=False,
 )
 async def order_detail(
+    _user: UserIdDependency,
     order_id: Annotated[str, Path(min_length=1, max_length=256)],
     service: ZeptoServiceDependency,
 ) -> ZeptoOrderDetail:
@@ -422,6 +427,7 @@ async def add_address(
 
 @router.post("/search", response_model=ProductSearchResult)
 async def search(
+    _user: UserIdDependency,
     body: SearchRequest, service: ZeptoServiceDependency
 ) -> ProductSearchResult:
     if non_search_reason(body.query) is not None:
