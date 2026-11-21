@@ -238,6 +238,16 @@ database or vault storage and complete each provider's supported delegated-auth 
 enterprise onboarding. Do not expose the Zepto checkout route before that account binding
 is implemented.
 
+## Voice turn-taking
+
+`VOICE_TURN_TAKING` selects how GPT-Live voice handles pauses and interruptions:
+`native` (default), `tuned` (interruption/patience policy in the Live instructions) or
+`smart_turn` (tuned plus a browser-side Hinglish end-of-turn model and barge-in). For
+`smart_turn`, fetch and verify the model once with `cd frontend && npm run
+fetch:smart-turn-model`; without it the browser falls back to `tuned`. Findings,
+measurements and the evaluation command are in
+[`docs/voice-turn-taking.md`](docs/voice-turn-taking.md).
+
 ## Capability matrix
 
 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) lists every user-facing capability
@@ -326,6 +336,34 @@ the evidence must occur verbatim in the user's message, and the UI asks the user
 The first extraction version recognizes brand, pack-size, quantity, dietary, and
 product-avoidance preferences. It deliberately excludes demographics, precise
 location, financial profiling, health conditions, relationships, and business data.
+
+### Voice recall before search
+
+For a broad request such as "deo order karna hai", the voice backend first calls
+`recall_household_preferences` (read-only). It returns at most four of the signed-in
+person's own candidates, labelled `confirmed_preference` (confirmed memories whose
+type has an active `personalize_search` permission) or `purchase_history` (delivered,
+retained orders, only with `purchase_history/proactive_reorder` consent), plus the
+consent state. The assistant then asks one question ("… wahi chahiye?") or, with
+nothing remembered, asks for brand and size. A past purchase is never treated as
+current need or stock. Live check (OpenAI only, demo catalogues):
+`python -m evaluation.run_voice_memory_recall`.
+
+### Sample household seed (demo mode only)
+
+```bash
+make seed-sample-household            # optional: USER_ID=user_… HOUSEHOLD=USR-006
+make unseed-sample-household
+```
+
+Loads one fictional household from `backend/tests/fixtures/sample_households.json`
+(Instamart orders and confirmed brand/pack-size memories) into one signed-in user's
+records. Without `USER_ID` it uses the only signed-in user in the database and
+otherwise lists them. It refuses unless `COMMERCE_MODE=demo`, never calls a provider,
+and grants sample-scoped purchase-history (90 days) and `personalize_search`
+permissions if they are not already on. Seeded orders use `sample-` order ids and
+memories use the `sample-household-seed` source, so the unseed command removes only
+them; it leaves permissions for you to change in settings.
 
 ## Voice transcript turns and event diagnostics
 

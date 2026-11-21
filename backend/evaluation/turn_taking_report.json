@@ -1,0 +1,5056 @@
+{
+  "offline": {
+    "variants": {
+      "B thr=0.5 confirm=1": {
+        "summary": {
+          "clips": 30,
+          "cut_off_clips": 19,
+          "false_eot_events": 25,
+          "missed_eot": 0,
+          "hesitation_pauses_cut": "11/24",
+          "clause_pauses_cut": "12/12",
+          "latency_median_ms": 682,
+          "latency_p90_ms": 881
+        },
+        "rows": [
+          {
+            "id": "axe_dark-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 483.80566699999963,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.462,
+              0.56,
+              0.002,
+              0.003,
+              0.005,
+              0.011,
+              0.052,
+              0.068,
+              0.058
+            ],
+            "end_probabilities": [
+              0.466,
+              0.556
+            ]
+          },
+          {
+            "id": "axe_dark-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 882.3769579999998,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.723,
+              0.001,
+              0.016,
+              0.023,
+              0.032,
+              0.046,
+              0.107,
+              0.067
+            ],
+            "end_probabilities": [
+              0.291,
+              0.243,
+              0.43,
+              0.659
+            ]
+          },
+          {
+            "id": "axe_dark-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 463.3738749999993,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.935,
+              0.013,
+              0.021,
+              0.03,
+              0.035,
+              0.061,
+              0.046
+            ],
+            "end_probabilities": [
+              0.461,
+              0.58
+            ]
+          },
+          {
+            "id": "oil_atta-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 464.04312500000015,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.148,
+              0.36,
+              0.663,
+              0,
+              0,
+              0.001,
+              0.001
+            ],
+            "end_probabilities": [
+              0.262,
+              0.616
+            ]
+          },
+          {
+            "id": "oil_atta-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1463.8571670000001,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.026,
+              0.187,
+              0.533,
+              0.001,
+              0.001,
+              0.002,
+              0.002
+            ],
+            "end_probabilities": [
+              0.035,
+              0.043,
+              0.03,
+              0.029,
+              0.069,
+              0.082,
+              0.549
+            ]
+          },
+          {
+            "id": "oil_atta-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1600,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.37,
+              0.72,
+              0.001,
+              0.001,
+              0.004,
+              0.003
+            ],
+            "end_probabilities": [
+              0.066,
+              0.09,
+              0.221,
+              0.387,
+              0.469,
+              0.478,
+              0.319
+            ]
+          },
+          {
+            "id": "amul_milk-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 681.2480829999995,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.255,
+              0.429,
+              0.724,
+              0.002,
+              0.213,
+              0.394,
+              0.571
+            ],
+            "end_probabilities": [
+              0.196,
+              0.213,
+              0.657
+            ]
+          },
+          {
+            "id": "amul_milk-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 881.1319160000003,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.167,
+              0.413,
+              0.8,
+              0.003,
+              0.153,
+              0.245,
+              0.517
+            ],
+            "end_probabilities": [
+              0.063,
+              0.084,
+              0.276,
+              0.572
+            ]
+          },
+          {
+            "id": "amul_milk-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 681.3431669999991,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.622,
+              0.384,
+              0.41,
+              0.624
+            ],
+            "end_probabilities": [
+              0.451,
+              0.434,
+              0.628
+            ]
+          },
+          {
+            "id": "surf_wait-rishi",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 501.27166699999907,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.081,
+              0.078,
+              0.197,
+              0.314,
+              0.235,
+              0.138,
+              0.063,
+              0.064,
+              0.088,
+              0.125,
+              0.002
+            ],
+            "end_probabilities": [
+              0.428,
+              0.696
+            ]
+          },
+          {
+            "id": "surf_wait-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1062.4326249999995,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.566,
+              0.041,
+              0.031,
+              0.044,
+              0.001
+            ],
+            "end_probabilities": [
+              0.055,
+              0.071,
+              0.204,
+              0.398,
+              0.501
+            ]
+          },
+          {
+            "id": "surf_wait-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 282.57700000000114,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.714,
+              0.103,
+              0.127,
+              0.277
+            ],
+            "end_probabilities": [
+              0.52
+            ]
+          },
+          {
+            "id": "store_choice-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 882.5749169999999,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.655,
+              0.061,
+              0.207,
+              0.45,
+              0.475,
+              0.045
+            ],
+            "end_probabilities": [
+              0.357,
+              0.361,
+              0.382,
+              0.516
+            ]
+          },
+          {
+            "id": "store_choice-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 442.4262090000011,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.485,
+              0.734,
+              0.005,
+              0.01,
+              0.035,
+              0.043,
+              0.019
+            ],
+            "end_probabilities": [
+              0.37,
+              0.623
+            ]
+          },
+          {
+            "id": "store_choice-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 262.5132080000003,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.827,
+              0.038,
+              0.062,
+              0.133,
+              0.175,
+              0.004
+            ],
+            "end_probabilities": [
+              0.96
+            ]
+          },
+          {
+            "id": "maggi_recall-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 262.2627079999984,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.979,
+              0.95,
+              0.007
+            ],
+            "end_probabilities": [
+              0.75
+            ]
+          },
+          {
+            "id": "maggi_recall-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 263.3483329999999,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.989,
+              0.785,
+              0.007
+            ],
+            "end_probabilities": [
+              0.57
+            ]
+          },
+          {
+            "id": "maggi_recall-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 262.57966600000145,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.985,
+              0.956
+            ],
+            "end_probabilities": [
+              0.765
+            ]
+          },
+          {
+            "id": "onion-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 682.343832999999,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.092,
+              0.394,
+              0.726
+            ]
+          },
+          {
+            "id": "onion-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 682.5886250000003,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.03,
+              0.158,
+              0.599
+            ]
+          },
+          {
+            "id": "onion-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 862.6507499999989,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.029,
+              0.08,
+              0.385,
+              0.642
+            ]
+          },
+          {
+            "id": "show_basket-rishi",
+            "kind": "complete",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1600,
+            "pause_hits": [],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.887
+            ],
+            "end_probabilities": [
+              0.026,
+              0.053,
+              0.073,
+              0.241,
+              0.267,
+              0.122,
+              0.085
+            ]
+          },
+          {
+            "id": "show_basket-lekha",
+            "kind": "complete",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 461.04312500000015,
+            "pause_hits": [],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.778
+            ],
+            "end_probabilities": [
+              0.401,
+              0.73
+            ]
+          },
+          {
+            "id": "show_basket-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 281.3609579999993,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.149
+            ],
+            "end_probabilities": [
+              0.695
+            ]
+          },
+          {
+            "id": "dettol-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 261.1493339999997,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.776
+            ]
+          },
+          {
+            "id": "dettol-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 261.49529099999927,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.581
+            ]
+          },
+          {
+            "id": "dettol-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 241.26375000000007,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.963
+            ]
+          },
+          {
+            "id": "total-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1600,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.006,
+              0.045,
+              0.357,
+              0.465,
+              0.367,
+              0.113,
+              0.126
+            ]
+          },
+          {
+            "id": "total-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 881.4065420000006,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.007,
+              0.034,
+              0.281,
+              0.549
+            ]
+          },
+          {
+            "id": "total-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 861.0909580000007,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.003,
+              0.021,
+              0.333,
+              0.639
+            ]
+          }
+        ]
+      },
+      "B thr=0.7 confirm=1": {
+        "summary": {
+          "clips": 30,
+          "cut_off_clips": 19,
+          "false_eot_events": 24,
+          "missed_eot": 0,
+          "hesitation_pauses_cut": "10/24",
+          "clause_pauses_cut": "12/12",
+          "latency_median_ms": 883,
+          "latency_p90_ms": 1580
+        },
+        "rows": [
+          {
+            "id": "axe_dark-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 683.5185409999976,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.462,
+              0.56,
+              0.622,
+              0.777,
+              0.002,
+              0.003,
+              0.005,
+              0.011,
+              0.052,
+              0.068,
+              0.058
+            ],
+            "end_probabilities": [
+              0.466,
+              0.556,
+              0.742
+            ]
+          },
+          {
+            "id": "axe_dark-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1084.362957999998,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.723,
+              0.001,
+              0.016,
+              0.023,
+              0.032,
+              0.046,
+              0.107,
+              0.067
+            ],
+            "end_probabilities": [
+              0.291,
+              0.243,
+              0.43,
+              0.659,
+              0.809
+            ]
+          },
+          {
+            "id": "axe_dark-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 663.739791,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.935,
+              0.013,
+              0.021,
+              0.03,
+              0.035,
+              0.061,
+              0.046
+            ],
+            "end_probabilities": [
+              0.461,
+              0.58,
+              0.809
+            ]
+          },
+          {
+            "id": "oil_atta-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 663.9166250000017,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.148,
+              0.36,
+              0.663,
+              0.804,
+              0,
+              0,
+              0.001,
+              0.001
+            ],
+            "end_probabilities": [
+              0.262,
+              0.616,
+              0.811
+            ]
+          },
+          {
+            "id": "oil_atta-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1580,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.026,
+              0.187,
+              0.533,
+              0.679,
+              0.723,
+              0.001,
+              0.001,
+              0.002,
+              0.002
+            ],
+            "end_probabilities": [
+              0.035,
+              0.043,
+              0.03,
+              0.029,
+              0.069,
+              0.082,
+              0.549
+            ]
+          },
+          {
+            "id": "oil_atta-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1600,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.37,
+              0.72,
+              0.001,
+              0.001,
+              0.004,
+              0.003
+            ],
+            "end_probabilities": [
+              0.066,
+              0.09,
+              0.221,
+              0.387,
+              0.469,
+              0.478,
+              0.319
+            ]
+          },
+          {
+            "id": "amul_milk-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 881.1792920000007,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.255,
+              0.429,
+              0.724,
+              0.002,
+              0.213,
+              0.394,
+              0.571,
+              0.545,
+              0.53
+            ],
+            "end_probabilities": [
+              0.196,
+              0.213,
+              0.657,
+              0.807
+            ]
+          },
+          {
+            "id": "amul_milk-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 1600,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.167,
+              0.413,
+              0.8,
+              0.003,
+              0.153,
+              0.245,
+              0.517,
+              0.608,
+              0.727
+            ],
+            "end_probabilities": [
+              0.063,
+              0.084,
+              0.276,
+              0.572,
+              0.565,
+              0.533,
+              0.451
+            ]
+          },
+          {
+            "id": "amul_milk-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 883.880000000001,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.622,
+              0.792,
+              0.384,
+              0.41,
+              0.624,
+              0.749
+            ],
+            "end_probabilities": [
+              0.451,
+              0.434,
+              0.628,
+              0.938
+            ]
+          },
+          {
+            "id": "surf_wait-rishi",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 701.1651669999992,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.081,
+              0.078,
+              0.197,
+              0.314,
+              0.235,
+              0.138,
+              0.063,
+              0.064,
+              0.088,
+              0.125,
+              0.002
+            ],
+            "end_probabilities": [
+              0.428,
+              0.696,
+              0.718
+            ]
+          },
+          {
+            "id": "surf_wait-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1580,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.566,
+              0.53,
+              0.711,
+              0.041,
+              0.031,
+              0.044,
+              0.001
+            ],
+            "end_probabilities": [
+              0.055,
+              0.071,
+              0.204,
+              0.398,
+              0.501,
+              0.333,
+              0.333
+            ]
+          },
+          {
+            "id": "surf_wait-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 681.4226659999986,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.714,
+              0.103,
+              0.127,
+              0.277
+            ],
+            "end_probabilities": [
+              0.52,
+              0.692,
+              0.761
+            ]
+          },
+          {
+            "id": "store_choice-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1600,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.655,
+              0.867,
+              0.061,
+              0.207,
+              0.45,
+              0.475,
+              0.045
+            ],
+            "end_probabilities": [
+              0.357,
+              0.361,
+              0.382,
+              0.516,
+              0.476,
+              0.627,
+              0.623
+            ]
+          },
+          {
+            "id": "store_choice-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1560,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.485,
+              0.734,
+              0.005,
+              0.01,
+              0.035,
+              0.043,
+              0.019
+            ],
+            "end_probabilities": [
+              0.37,
+              0.623,
+              0.54,
+              0.422,
+              0.662,
+              0.618,
+              0.691
+            ]
+          },
+          {
+            "id": "store_choice-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 263.09508300000016,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.827,
+              0.038,
+              0.062,
+              0.133,
+              0.175,
+              0.004
+            ],
+            "end_probabilities": [
+              0.96
+            ]
+          },
+          {
+            "id": "maggi_recall-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 263.97316700000374,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.979,
+              0.95,
+              0.007
+            ],
+            "end_probabilities": [
+              0.75
+            ]
+          },
+          {
+            "id": "maggi_recall-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 1061.783374999999,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.989,
+              0.785,
+              0.007
+            ],
+            "end_probabilities": [
+              0.57,
+              0.688,
+              0.666,
+              0.662,
+              0.808
+            ]
+          },
+          {
+            "id": "maggi_recall-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 261.4622909999962,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.985,
+              0.956
+            ],
+            "end_probabilities": [
+              0.765
+            ]
+          },
+          {
+            "id": "onion-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 681.512333000006,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.092,
+              0.394,
+              0.726
+            ]
+          },
+          {
+            "id": "onion-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 882.8355840000004,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.03,
+              0.158,
+              0.599,
+              0.856
+            ]
+          },
+          {
+            "id": "onion-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1062.4954160000052,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.029,
+              0.08,
+              0.385,
+              0.642,
+              0.778
+            ]
+          },
+          {
+            "id": "show_basket-rishi",
+            "kind": "complete",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1600,
+            "pause_hits": [],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.887
+            ],
+            "end_probabilities": [
+              0.026,
+              0.053,
+              0.073,
+              0.241,
+              0.267,
+              0.122,
+              0.085
+            ]
+          },
+          {
+            "id": "show_basket-lekha",
+            "kind": "complete",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 463.99908300000243,
+            "pause_hits": [],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.778
+            ],
+            "end_probabilities": [
+              0.401,
+              0.73
+            ]
+          },
+          {
+            "id": "show_basket-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 484.0582080000022,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.149
+            ],
+            "end_probabilities": [
+              0.695,
+              0.87
+            ]
+          },
+          {
+            "id": "dettol-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 264.00125000000116,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.776
+            ]
+          },
+          {
+            "id": "dettol-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1580,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.581,
+              0.429,
+              0.534,
+              0.621,
+              0.643,
+              0.472,
+              0.351
+            ]
+          },
+          {
+            "id": "dettol-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 243.43912499999715,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.963
+            ]
+          },
+          {
+            "id": "total-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1600,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.006,
+              0.045,
+              0.357,
+              0.465,
+              0.367,
+              0.113,
+              0.126
+            ]
+          },
+          {
+            "id": "total-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1081.927917000001,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.007,
+              0.034,
+              0.281,
+              0.549,
+              0.759
+            ]
+          },
+          {
+            "id": "total-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1062.640207999997,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.003,
+              0.021,
+              0.333,
+              0.639,
+              0.763
+            ]
+          }
+        ]
+      },
+      "B thr=0.5 confirm=2": {
+        "summary": {
+          "clips": 30,
+          "cut_off_clips": 17,
+          "false_eot_events": 21,
+          "missed_eot": 0,
+          "hesitation_pauses_cut": "11/24",
+          "clause_pauses_cut": "10/12",
+          "latency_median_ms": 881,
+          "latency_p90_ms": 1600
+        },
+        "rows": [
+          {
+            "id": "axe_dark-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 681.3227499999994,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.462,
+              0.56,
+              0.622,
+              0.002,
+              0.003,
+              0.005,
+              0.011,
+              0.052,
+              0.068,
+              0.058
+            ],
+            "end_probabilities": [
+              0.466,
+              0.556,
+              0.742
+            ]
+          },
+          {
+            "id": "axe_dark-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1081.5714159999989,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.723,
+              0.578,
+              0.001,
+              0.016,
+              0.023,
+              0.032,
+              0.046,
+              0.107,
+              0.067
+            ],
+            "end_probabilities": [
+              0.291,
+              0.243,
+              0.43,
+              0.659,
+              0.809
+            ]
+          },
+          {
+            "id": "axe_dark-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 661.2800419999985,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.935,
+              0.932,
+              0.013,
+              0.021,
+              0.03,
+              0.035,
+              0.061,
+              0.046
+            ],
+            "end_probabilities": [
+              0.461,
+              0.58,
+              0.809
+            ]
+          },
+          {
+            "id": "oil_atta-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 661.2821669999976,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.148,
+              0.36,
+              0.663,
+              0.804,
+              0,
+              0,
+              0.001,
+              0.001
+            ],
+            "end_probabilities": [
+              0.262,
+              0.616,
+              0.811
+            ]
+          },
+          {
+            "id": "oil_atta-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1580,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.026,
+              0.187,
+              0.533,
+              0.679,
+              0.001,
+              0.001,
+              0.002,
+              0.002
+            ],
+            "end_probabilities": [
+              0.035,
+              0.043,
+              0.03,
+              0.029,
+              0.069,
+              0.082,
+              0.549
+            ]
+          },
+          {
+            "id": "oil_atta-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1600,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.37,
+              0.72,
+              0.919,
+              0.001,
+              0.001,
+              0.004,
+              0.003
+            ],
+            "end_probabilities": [
+              0.066,
+              0.09,
+              0.221,
+              0.387,
+              0.469,
+              0.478,
+              0.319
+            ]
+          },
+          {
+            "id": "amul_milk-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 881.0826659999948,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.255,
+              0.429,
+              0.724,
+              0.002,
+              0.213,
+              0.394,
+              0.571,
+              0.545
+            ],
+            "end_probabilities": [
+              0.196,
+              0.213,
+              0.657,
+              0.807
+            ]
+          },
+          {
+            "id": "amul_milk-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1081.5123749999984,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.167,
+              0.413,
+              0.8,
+              0.003,
+              0.153,
+              0.245,
+              0.517,
+              0.608
+            ],
+            "end_probabilities": [
+              0.063,
+              0.084,
+              0.276,
+              0.572,
+              0.565
+            ]
+          },
+          {
+            "id": "amul_milk-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 881.0142919999998,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.622,
+              0.792,
+              0.384,
+              0.41,
+              0.624,
+              0.749
+            ],
+            "end_probabilities": [
+              0.451,
+              0.434,
+              0.628,
+              0.938
+            ]
+          },
+          {
+            "id": "surf_wait-rishi",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 702.8566250000003,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.081,
+              0.078,
+              0.197,
+              0.314,
+              0.235,
+              0.138,
+              0.063,
+              0.064,
+              0.088,
+              0.125,
+              0.002
+            ],
+            "end_probabilities": [
+              0.428,
+              0.696,
+              0.718
+            ]
+          },
+          {
+            "id": "surf_wait-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1580,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.566,
+              0.53,
+              0.041,
+              0.031,
+              0.044,
+              0.001
+            ],
+            "end_probabilities": [
+              0.055,
+              0.071,
+              0.204,
+              0.398,
+              0.501,
+              0.333,
+              0.333
+            ]
+          },
+          {
+            "id": "surf_wait-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 481.27991699999984,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.714,
+              0.524,
+              0.103,
+              0.127,
+              0.277
+            ],
+            "end_probabilities": [
+              0.52,
+              0.692
+            ]
+          },
+          {
+            "id": "store_choice-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1481.4081250000017,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.655,
+              0.867,
+              0.061,
+              0.207,
+              0.45,
+              0.475,
+              0.045
+            ],
+            "end_probabilities": [
+              0.357,
+              0.361,
+              0.382,
+              0.516,
+              0.476,
+              0.627,
+              0.623
+            ]
+          },
+          {
+            "id": "store_choice-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 641.1577919999982,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.485,
+              0.734,
+              0.95,
+              0.005,
+              0.01,
+              0.035,
+              0.043,
+              0.019
+            ],
+            "end_probabilities": [
+              0.37,
+              0.623,
+              0.54
+            ]
+          },
+          {
+            "id": "store_choice-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 463.13520900000003,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.827,
+              0.913,
+              0.038,
+              0.062,
+              0.133,
+              0.175,
+              0.004
+            ],
+            "end_probabilities": [
+              0.96,
+              0.984
+            ]
+          },
+          {
+            "id": "maggi_recall-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 461.70445800000016,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.979,
+              0.965,
+              0.95,
+              0.917,
+              0.007
+            ],
+            "end_probabilities": [
+              0.75,
+              0.798
+            ]
+          },
+          {
+            "id": "maggi_recall-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 464.7736659999937,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.989,
+              0.985,
+              0.785,
+              0.8,
+              0.007
+            ],
+            "end_probabilities": [
+              0.57,
+              0.688
+            ]
+          },
+          {
+            "id": "maggi_recall-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 463.1480410000004,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.985,
+              0.959,
+              0.956,
+              0.961
+            ],
+            "end_probabilities": [
+              0.765,
+              0.909
+            ]
+          },
+          {
+            "id": "onion-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 881.2569999999978,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.092,
+              0.394,
+              0.726,
+              0.872
+            ]
+          },
+          {
+            "id": "onion-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 881.1762499999968,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.03,
+              0.158,
+              0.599,
+              0.856
+            ]
+          },
+          {
+            "id": "onion-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1074.7902919999979,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.029,
+              0.08,
+              0.385,
+              0.642,
+              0.778
+            ]
+          },
+          {
+            "id": "show_basket-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1600,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.887
+            ],
+            "end_probabilities": [
+              0.026,
+              0.053,
+              0.073,
+              0.241,
+              0.267,
+              0.122,
+              0.085
+            ]
+          },
+          {
+            "id": "show_basket-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 661.2439589999994,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.778
+            ],
+            "end_probabilities": [
+              0.401,
+              0.73,
+              0.848
+            ]
+          },
+          {
+            "id": "show_basket-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 481.04833399999916,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.149
+            ],
+            "end_probabilities": [
+              0.695,
+              0.87
+            ]
+          },
+          {
+            "id": "dettol-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 461.1733749999985,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.776,
+              0.606
+            ]
+          },
+          {
+            "id": "dettol-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 861.3864160000012,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.581,
+              0.429,
+              0.534,
+              0.621
+            ]
+          },
+          {
+            "id": "dettol-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 442.12950000000274,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.963,
+              0.969
+            ]
+          },
+          {
+            "id": "total-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1600,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.006,
+              0.045,
+              0.357,
+              0.465,
+              0.367,
+              0.113,
+              0.126
+            ]
+          },
+          {
+            "id": "total-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1081.5266670000055,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.007,
+              0.034,
+              0.281,
+              0.549,
+              0.759
+            ]
+          },
+          {
+            "id": "total-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1061.0158749999973,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.003,
+              0.021,
+              0.333,
+              0.639,
+              0.763
+            ]
+          }
+        ]
+      },
+      "B default thr=0.7 confirm=2": {
+        "summary": {
+          "clips": 30,
+          "cut_off_clips": 12,
+          "false_eot_events": 16,
+          "missed_eot": 0,
+          "hesitation_pauses_cut": "8/24",
+          "clause_pauses_cut": "8/12",
+          "latency_median_ms": 1084,
+          "latency_p90_ms": 1600
+        },
+        "rows": [
+          {
+            "id": "axe_dark-rishi",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 881.629915999998,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.462,
+              0.56,
+              0.622,
+              0.777,
+              0.002,
+              0.003,
+              0.005,
+              0.011,
+              0.052,
+              0.068,
+              0.058
+            ],
+            "end_probabilities": [
+              0.466,
+              0.556,
+              0.742,
+              0.869
+            ]
+          },
+          {
+            "id": "axe_dark-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1283.3473330000052,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.723,
+              0.578,
+              0.897,
+              0.882,
+              0.001,
+              0.016,
+              0.023,
+              0.032,
+              0.046,
+              0.107,
+              0.067
+            ],
+            "end_probabilities": [
+              0.291,
+              0.243,
+              0.43,
+              0.659,
+              0.809,
+              0.724
+            ]
+          },
+          {
+            "id": "axe_dark-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 864.1030829999945,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.935,
+              0.932,
+              0.013,
+              0.021,
+              0.03,
+              0.035,
+              0.061,
+              0.046
+            ],
+            "end_probabilities": [
+              0.461,
+              0.58,
+              0.809,
+              0.848
+            ]
+          },
+          {
+            "id": "oil_atta-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 863.5923330000005,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.148,
+              0.36,
+              0.663,
+              0.804,
+              0.822,
+              0,
+              0,
+              0.001,
+              0.001
+            ],
+            "end_probabilities": [
+              0.262,
+              0.616,
+              0.811,
+              0.805
+            ]
+          },
+          {
+            "id": "oil_atta-lekha",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1580,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.026,
+              0.187,
+              0.533,
+              0.679,
+              0.723,
+              0.001,
+              0.001,
+              0.002,
+              0.002
+            ],
+            "end_probabilities": [
+              0.035,
+              0.043,
+              0.03,
+              0.029,
+              0.069,
+              0.082,
+              0.549
+            ]
+          },
+          {
+            "id": "oil_atta-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1600,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.37,
+              0.72,
+              0.919,
+              0.001,
+              0.001,
+              0.004,
+              0.003
+            ],
+            "end_probabilities": [
+              0.066,
+              0.09,
+              0.221,
+              0.387,
+              0.469,
+              0.478,
+              0.319
+            ]
+          },
+          {
+            "id": "amul_milk-rishi",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1084.3547499999986,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.255,
+              0.429,
+              0.724,
+              0.002,
+              0.213,
+              0.394,
+              0.571,
+              0.545,
+              0.53
+            ],
+            "end_probabilities": [
+              0.196,
+              0.213,
+              0.657,
+              0.807,
+              0.839
+            ]
+          },
+          {
+            "id": "amul_milk-lekha",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1600,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.167,
+              0.413,
+              0.8,
+              0.003,
+              0.153,
+              0.245,
+              0.517,
+              0.608,
+              0.727
+            ],
+            "end_probabilities": [
+              0.063,
+              0.084,
+              0.276,
+              0.572,
+              0.565,
+              0.533,
+              0.451
+            ]
+          },
+          {
+            "id": "amul_milk-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 1083.408374999999,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.622,
+              0.792,
+              0.943,
+              0.384,
+              0.41,
+              0.624,
+              0.749,
+              0.798
+            ],
+            "end_probabilities": [
+              0.451,
+              0.434,
+              0.628,
+              0.938,
+              0.935
+            ]
+          },
+          {
+            "id": "surf_wait-rishi",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 902.7745829999913,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.081,
+              0.078,
+              0.197,
+              0.314,
+              0.235,
+              0.138,
+              0.063,
+              0.064,
+              0.088,
+              0.125,
+              0.002
+            ],
+            "end_probabilities": [
+              0.428,
+              0.696,
+              0.718,
+              0.712
+            ]
+          },
+          {
+            "id": "surf_wait-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1580,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.566,
+              0.53,
+              0.711,
+              0.804,
+              0.041,
+              0.031,
+              0.044,
+              0.001
+            ],
+            "end_probabilities": [
+              0.055,
+              0.071,
+              0.204,
+              0.398,
+              0.501,
+              0.333,
+              0.333
+            ]
+          },
+          {
+            "id": "surf_wait-aman",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 883.3207910000056,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.714,
+              0.524,
+              0.54,
+              0.615,
+              0.692,
+              0.657,
+              0.575,
+              0.103,
+              0.127,
+              0.277
+            ],
+            "end_probabilities": [
+              0.52,
+              0.692,
+              0.761,
+              0.84
+            ]
+          },
+          {
+            "id": "store_choice-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1600,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.655,
+              0.867,
+              0.966,
+              0.061,
+              0.207,
+              0.45,
+              0.475,
+              0.045
+            ],
+            "end_probabilities": [
+              0.357,
+              0.361,
+              0.382,
+              0.516,
+              0.476,
+              0.627,
+              0.623
+            ]
+          },
+          {
+            "id": "store_choice-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1560,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.485,
+              0.734,
+              0.95,
+              0.005,
+              0.01,
+              0.035,
+              0.043,
+              0.019
+            ],
+            "end_probabilities": [
+              0.37,
+              0.623,
+              0.54,
+              0.422,
+              0.662,
+              0.618,
+              0.691
+            ]
+          },
+          {
+            "id": "store_choice-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 471.2950419999979,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.827,
+              0.913,
+              0.038,
+              0.062,
+              0.133,
+              0.175,
+              0.004
+            ],
+            "end_probabilities": [
+              0.96,
+              0.984
+            ]
+          },
+          {
+            "id": "maggi_recall-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 469.6176669999986,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.979,
+              0.965,
+              0.95,
+              0.917,
+              0.007
+            ],
+            "end_probabilities": [
+              0.75,
+              0.798
+            ]
+          },
+          {
+            "id": "maggi_recall-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 1264.1295409999875,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.989,
+              0.985,
+              0.785,
+              0.8,
+              0.007
+            ],
+            "end_probabilities": [
+              0.57,
+              0.688,
+              0.666,
+              0.662,
+              0.808,
+              0.867
+            ]
+          },
+          {
+            "id": "maggi_recall-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 464.4183750000084,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ],
+            "release_reasons": [
+              "model",
+              "model",
+              "model"
+            ],
+            "pause_probabilities": [
+              0.985,
+              0.959,
+              0.956,
+              0.961
+            ],
+            "end_probabilities": [
+              0.765,
+              0.909
+            ]
+          },
+          {
+            "id": "onion-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 884.1797499999957,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.092,
+              0.394,
+              0.726,
+              0.872
+            ]
+          },
+          {
+            "id": "onion-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1083.8972080000094,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.03,
+              0.158,
+              0.599,
+              0.856,
+              0.886
+            ]
+          },
+          {
+            "id": "onion-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1580,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.029,
+              0.08,
+              0.385,
+              0.642,
+              0.778,
+              0.606,
+              0.448
+            ]
+          },
+          {
+            "id": "show_basket-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1600,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [
+              0.887
+            ],
+            "end_probabilities": [
+              0.026,
+              0.053,
+              0.073,
+              0.241,
+              0.267,
+              0.122,
+              0.085
+            ]
+          },
+          {
+            "id": "show_basket-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 663.8877090000024,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.778
+            ],
+            "end_probabilities": [
+              0.401,
+              0.73,
+              0.848
+            ]
+          },
+          {
+            "id": "show_basket-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 683.8118749999994,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [
+              0.149
+            ],
+            "end_probabilities": [
+              0.695,
+              0.87,
+              0.916
+            ]
+          },
+          {
+            "id": "dettol-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 863.7638749999896,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.776,
+              0.606,
+              0.777,
+              0.807
+            ]
+          },
+          {
+            "id": "dettol-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1580,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.581,
+              0.429,
+              0.534,
+              0.621,
+              0.643,
+              0.472,
+              0.351
+            ]
+          },
+          {
+            "id": "dettol-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 443.7558330000029,
+            "pause_hits": [],
+            "release_reasons": [
+              "model"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.963,
+              0.969
+            ]
+          },
+          {
+            "id": "total-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1600,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.006,
+              0.045,
+              0.357,
+              0.465,
+              0.367,
+              0.113,
+              0.126
+            ]
+          },
+          {
+            "id": "total-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1600,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.007,
+              0.034,
+              0.281,
+              0.549,
+              0.759,
+              0.433,
+              0.196
+            ]
+          },
+          {
+            "id": "total-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1580,
+            "pause_hits": [],
+            "release_reasons": [
+              "silence-timeout"
+            ],
+            "pause_probabilities": [],
+            "end_probabilities": [
+              0.003,
+              0.021,
+              0.333,
+              0.639,
+              0.763,
+              0.246,
+              0.12
+            ]
+          }
+        ]
+      }
+    },
+    "baselines": {
+      "energy silence 500 ms (proxy)": {
+        "summary": {
+          "clips": 30,
+          "cut_off_clips": 18,
+          "false_eot_events": 36,
+          "missed_eot": 0,
+          "hesitation_pauses_cut": "24/24",
+          "clause_pauses_cut": "12/12",
+          "latency_median_ms": 520,
+          "latency_p90_ms": 520
+        },
+        "rows": [
+          {
+            "id": "axe_dark-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 520,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "axe_dark-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 520,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "axe_dark-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 500,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "oil_atta-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 500,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "oil_atta-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 500,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "oil_atta-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 520,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "amul_milk-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 520,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "amul_milk-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 520,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "amul_milk-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 520,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "surf_wait-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 540,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "surf_wait-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 500,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "surf_wait-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 520,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "store_choice-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 520,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "store_choice-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 480,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "store_choice-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 500,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "maggi_recall-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 500,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "maggi_recall-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 500,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "maggi_recall-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 500,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "onion-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 520,
+            "pause_hits": []
+          },
+          {
+            "id": "onion-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 520,
+            "pause_hits": []
+          },
+          {
+            "id": "onion-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 500,
+            "pause_hits": []
+          },
+          {
+            "id": "show_basket-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 520,
+            "pause_hits": []
+          },
+          {
+            "id": "show_basket-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 500,
+            "pause_hits": []
+          },
+          {
+            "id": "show_basket-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 520,
+            "pause_hits": []
+          },
+          {
+            "id": "dettol-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 500,
+            "pause_hits": []
+          },
+          {
+            "id": "dettol-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 500,
+            "pause_hits": []
+          },
+          {
+            "id": "dettol-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 480,
+            "pause_hits": []
+          },
+          {
+            "id": "total-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 520,
+            "pause_hits": []
+          },
+          {
+            "id": "total-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 520,
+            "pause_hits": []
+          },
+          {
+            "id": "total-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 500,
+            "pause_hits": []
+          }
+        ]
+      },
+      "energy silence 800 ms (proxy)": {
+        "summary": {
+          "clips": 30,
+          "cut_off_clips": 18,
+          "false_eot_events": 30,
+          "missed_eot": 0,
+          "hesitation_pauses_cut": "21/24",
+          "clause_pauses_cut": "9/12",
+          "latency_median_ms": 800,
+          "latency_p90_ms": 800
+        },
+        "rows": [
+          {
+            "id": "axe_dark-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 800,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "axe_dark-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 800,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "axe_dark-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 780,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "oil_atta-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 780,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "oil_atta-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 780,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "oil_atta-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 800,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "amul_milk-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 800,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "amul_milk-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 800,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "amul_milk-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 800,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "surf_wait-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 820,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "surf_wait-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 780,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "surf_wait-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 800,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "store_choice-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 800,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "store_choice-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 760,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "store_choice-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 780,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "maggi_recall-rishi",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 780,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "maggi_recall-lekha",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 780,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "maggi_recall-aman",
+            "kind": "pause",
+            "false_eot": 2,
+            "cut_off": true,
+            "latency_ms": 780,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "onion-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 800,
+            "pause_hits": []
+          },
+          {
+            "id": "onion-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 800,
+            "pause_hits": []
+          },
+          {
+            "id": "onion-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 780,
+            "pause_hits": []
+          },
+          {
+            "id": "show_basket-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 800,
+            "pause_hits": []
+          },
+          {
+            "id": "show_basket-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 780,
+            "pause_hits": []
+          },
+          {
+            "id": "show_basket-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 800,
+            "pause_hits": []
+          },
+          {
+            "id": "dettol-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 780,
+            "pause_hits": []
+          },
+          {
+            "id": "dettol-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 780,
+            "pause_hits": []
+          },
+          {
+            "id": "dettol-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 760,
+            "pause_hits": []
+          },
+          {
+            "id": "total-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 800,
+            "pause_hits": []
+          },
+          {
+            "id": "total-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 800,
+            "pause_hits": []
+          },
+          {
+            "id": "total-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 780,
+            "pause_hits": []
+          }
+        ]
+      },
+      "energy silence 1200 ms (proxy)": {
+        "summary": {
+          "clips": 30,
+          "cut_off_clips": 9,
+          "false_eot_events": 9,
+          "missed_eot": 0,
+          "hesitation_pauses_cut": "9/24",
+          "clause_pauses_cut": "0/12",
+          "latency_median_ms": 1200,
+          "latency_p90_ms": 1200
+        },
+        "rows": [
+          {
+            "id": "axe_dark-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1200,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "axe_dark-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1200,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "axe_dark-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1180,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": true
+              }
+            ]
+          },
+          {
+            "id": "oil_atta-rishi",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1180,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "oil_atta-lekha",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1180,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "oil_atta-aman",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "amul_milk-rishi",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "amul_milk-lekha",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "amul_milk-aman",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "surf_wait-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1220,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "surf_wait-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1180,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "surf_wait-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1200,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "store_choice-rishi",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "store_choice-lekha",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1160,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "store_choice-aman",
+            "kind": "pause",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1180,
+            "pause_hits": [
+              {
+                "kind": "clause",
+                "cut": false
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "maggi_recall-rishi",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1180,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "maggi_recall-lekha",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1180,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "maggi_recall-aman",
+            "kind": "pause",
+            "false_eot": 1,
+            "cut_off": true,
+            "latency_ms": 1180,
+            "pause_hits": [
+              {
+                "kind": "hesitation",
+                "cut": true
+              },
+              {
+                "kind": "hesitation",
+                "cut": false
+              }
+            ]
+          },
+          {
+            "id": "onion-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": []
+          },
+          {
+            "id": "onion-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": []
+          },
+          {
+            "id": "onion-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1180,
+            "pause_hits": []
+          },
+          {
+            "id": "show_basket-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": []
+          },
+          {
+            "id": "show_basket-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1180,
+            "pause_hits": []
+          },
+          {
+            "id": "show_basket-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": []
+          },
+          {
+            "id": "dettol-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1180,
+            "pause_hits": []
+          },
+          {
+            "id": "dettol-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1180,
+            "pause_hits": []
+          },
+          {
+            "id": "dettol-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1160,
+            "pause_hits": []
+          },
+          {
+            "id": "total-rishi",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": []
+          },
+          {
+            "id": "total-lekha",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1200,
+            "pause_hits": []
+          },
+          {
+            "id": "total-aman",
+            "kind": "complete",
+            "false_eot": 0,
+            "cut_off": false,
+            "latency_ms": 1180,
+            "pause_hits": []
+          }
+        ]
+      }
+    },
+    "barge_in": [
+      {
+        "id": "barge_in-echo-30",
+        "kind": "barge_in",
+        "echo_db": -30,
+        "playback_stopped": true,
+        "false_barge_in": false,
+        "stop_latency_ms": 200,
+        "yield_sent": true
+      },
+      {
+        "id": "echo_only-echo-30",
+        "kind": "echo_only",
+        "echo_db": -30,
+        "playback_stopped": false,
+        "false_barge_in": false,
+        "stop_latency_ms": null,
+        "yield_sent": false
+      },
+      {
+        "id": "barge_in-echo-20",
+        "kind": "barge_in",
+        "echo_db": -20,
+        "playback_stopped": true,
+        "false_barge_in": false,
+        "stop_latency_ms": 200,
+        "yield_sent": true
+      },
+      {
+        "id": "echo_only-echo-20",
+        "kind": "echo_only",
+        "echo_db": -20,
+        "playback_stopped": false,
+        "false_barge_in": false,
+        "stop_latency_ms": null,
+        "yield_sent": false
+      },
+      {
+        "id": "barge_in-echo-12",
+        "kind": "barge_in",
+        "echo_db": -12,
+        "playback_stopped": true,
+        "false_barge_in": false,
+        "stop_latency_ms": 200,
+        "yield_sent": true
+      },
+      {
+        "id": "echo_only-echo-12",
+        "kind": "echo_only",
+        "echo_db": -12,
+        "playback_stopped": false,
+        "false_barge_in": false,
+        "stop_latency_ms": null,
+        "yield_sent": false
+      }
+    ],
+    "model": {
+      "sha256": "39736bc2c4a1ff303d3bd6c54ac648d175f921624e232680c3e097e0e46bb966",
+      "inference_ms_median": 82.7,
+      "inference_ms_p90": 84.1,
+      "runs": 1034
+    }
+  },
+  "live": [
+    {
+      "mode": "native",
+      "kind": "pause",
+      "id": "axe_dark-rishi",
+      "assistant_onset_s": 8.761,
+      "speech_end_s": 6.56,
+      "pauses": [
+        [
+          2.16,
+          3.06
+        ],
+        [
+          3.86,
+          5.06
+        ]
+      ],
+      "cut_off": false,
+      "latency_ms": 2201,
+      "assistant": "एक सेकंड, देख रही हूँ।",
+      "user_transcript": "मुझे AXE deo चाहिए. हाँ, वो, Dark Temptation वाला"
+    },
+    {
+      "mode": "native",
+      "kind": "pause",
+      "id": "surf_wait-lekha",
+      "assistant_onset_s": 8.441,
+      "speech_end_s": 5.74,
+      "pauses": [
+        [
+          1.28,
+          2.68
+        ],
+        [
+          3.18,
+          3.78
+        ]
+      ],
+      "cut_off": false,
+      "latency_ms": 2701,
+      "assistant": "Ek second, dekh rahi hoon.",
+      "user_transcript": "मुझे चाहिए। एक मिनट, हाँ, सर्फ एक्सेल का बड़ा पैक"
+    },
+    {
+      "mode": "native",
+      "kind": "pause",
+      "id": "maggi_recall-aman",
+      "assistant_onset_s": 10.377,
+      "speech_end_s": 6.66,
+      "pauses": [
+        [
+          2.48,
+          3.68
+        ],
+        [
+          4.54,
+          5.54
+        ]
+      ],
+      "cut_off": false,
+      "latency_ms": 3717,
+      "assistant": "Samajh gayi, Maggi Masala. Kaunsa pack size chahiye?",
+      "user_transcript": "वो जो पिछली बार लिया था, क्या नाम था? हाँ, मैगी मसाला"
+    },
+    {
+      "mode": "native",
+      "kind": "barge_in",
+      "id": "dettol-rishi+interruption",
+      "assistant_onset_s": 4.841,
+      "interrupt_s": 5.88,
+      "spoke_over_ms": 0,
+      "assistant": "Ek second, dekh rahi hoon.",
+      "user_transcript": "Dettol handwash ka refill chahiye Ruko ruko, dark wala chahiye",
+      "interrupt_after_s": 1.0
+    },
+    {
+      "mode": "tuned",
+      "kind": "pause",
+      "id": "axe_dark-rishi",
+      "assistant_onset_s": 4.779,
+      "speech_end_s": 6.56,
+      "pauses": [
+        [
+          2.16,
+          3.06
+        ],
+        [
+          3.86,
+          5.06
+        ]
+      ],
+      "cut_off": true,
+      "latency_ms": null,
+      "assistant": "Ek second, dekh rahi hoon. Haan, dekh rahi hoon.",
+      "user_transcript": "मुझे Axe deo चाहिए हाँ, वो Dark Temptation वाला"
+    },
+    {
+      "mode": "tuned",
+      "kind": "pause",
+      "id": "surf_wait-lekha",
+      "assistant_onset_s": 9.1,
+      "speech_end_s": 5.74,
+      "pauses": [
+        [
+          1.28,
+          2.68
+        ],
+        [
+          3.18,
+          3.78
+        ]
+      ],
+      "cut_off": false,
+      "latency_ms": 3360,
+      "assistant": "Theek hai, dekhti hoon.",
+      "user_transcript": "मुझे चाहिए... एक मिनट... हाँ, सॉर्फ एक्सेल का बड़ा पैक"
+    },
+    {
+      "mode": "tuned",
+      "kind": "pause",
+      "id": "maggi_recall-aman",
+      "assistant_onset_s": 9.821,
+      "speech_end_s": 6.66,
+      "pauses": [
+        [
+          2.48,
+          3.68
+        ],
+        [
+          4.54,
+          5.54
+        ]
+      ],
+      "cut_off": false,
+      "latency_ms": 3161,
+      "assistant": "Hm. Maggi Masala. Kaunsa pack dekhna hai, jaise chhota pack, ya",
+      "user_transcript": "वो जो पिछली बार लिया था, क्या नाम था? हाँ, मैगी मसाला"
+    },
+    {
+      "mode": "tuned",
+      "kind": "barge_in",
+      "id": "dettol-rishi+interruption",
+      "assistant_onset_s": 4.633,
+      "interrupt_s": 5.64,
+      "spoke_over_ms": 335,
+      "assistant": "Ek second, dekh rahi hoon. Hmm, ek second.",
+      "user_transcript": "डेटॉल हैंडवॉश का रिफ़िल चाहिए रुको रुको, डार्क वाला चाहिए",
+      "interrupt_after_s": 1.0
+    },
+    {
+      "mode": "native",
+      "kind": "barge_in",
+      "id": "dettol-rishi+interruption",
+      "assistant_onset_s": 4.414,
+      "interrupt_after_s": 0.3,
+      "interrupt_s": 4.72,
+      "spoke_over_ms": 774,
+      "assistant": "Ek second, dekh rahi hoon. AXE Dark Temptation 150 ml, do sau rupaye,",
+      "user_transcript": "डेटॉल हैंडवॉश का रिफिल चाहिए रुको, रुको, डार्क वाला चाहिए"
+    },
+    {
+      "mode": "tuned",
+      "kind": "barge_in",
+      "id": "dettol-rishi+interruption",
+      "assistant_onset_s": 4.55,
+      "interrupt_after_s": 0.3,
+      "interrupt_s": 4.88,
+      "spoke_over_ms": 630,
+      "assistant": "Ek second, dekh rahi hoon. Theek hai, dekh rahi hoon.",
+      "user_transcript": "डेटॉल हैंडवॉश का रिफिल चाहिए रुको रुको, डार्क वाला चाहिए"
+    }
+  ]
+}

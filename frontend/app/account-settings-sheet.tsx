@@ -16,6 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import Image from "next/image";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useApiRequest } from "./authenticated-api";
 
 export type AccountSettingsStore = {
   id: string;
@@ -199,7 +200,18 @@ function SimpleDetail({ icon, title, description, action, onAction }: { icon: Re
   return <div className="rounded-2xl border border-[#ead9cd] bg-[#fffdf9] p-4"><span className="grid size-11 place-items-center rounded-xl bg-[#f7e8de] text-[#bd5525]">{icon}</span><h3 className="mt-4 text-base font-semibold tracking-[-.02em]">{title}</h3><p className="mt-2 text-sm leading-6 text-[#806f65]">{description}</p><button type="button" onClick={onAction} disabled={!onAction} className="mt-5 min-h-11 w-full rounded-xl border border-[#e4cabc] px-4 text-sm font-semibold text-[#68493c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:cursor-default disabled:opacity-55">{action}</button></div>;
 }
 
+type AddressForm = "masculine" | "feminine" | "neutral";
+type ReplyLanguage = "hinglish" | "hindi" | "english";
+type VoiceProfile = { first_name: string | null; address_form: AddressForm; language: ReplyLanguage };
+
+const ADDRESS_FORMS: { id: AddressForm; label: string; example: string }[] = [
+  { id: "masculine", label: "Masculine", example: "aap dhoondh rahe hain" },
+  { id: "feminine", label: "Feminine", example: "aap dhoondh rahi hain" },
+  { id: "neutral", label: "Neutral", example: "aapko kya chahiye" },
+];
+
 function PreferencesDetail({ languageLabel, onLanguageChange, onManagePreferences }: { languageLabel: string; onLanguageChange?: (language: "hinglish" | "hindi" | "english") => void; onManagePreferences?: () => void }) {
+  const request = useApiRequest();
   const languages = [
     { id: "hinglish" as const, label: "Hinglish" },
     { id: "hindi" as const, label: "Hindi" },
@@ -212,11 +224,63 @@ function PreferencesDetail({ languageLabel, onLanguageChange, onManagePreference
     <div className="mt-4 grid grid-cols-3 gap-2">
       {languages.map((language) => {
         const selected = languageLabel.toLowerCase() === language.id;
-        return <button key={language.id} type="button" aria-pressed={selected} onClick={() => onLanguageChange?.(language.id)} disabled={!onLanguageChange} className={`min-h-11 rounded-xl px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:cursor-default ${selected ? "bg-[#c6531d] text-white" : "border border-[#e4cabc] text-[#68493c]"}`}>{language.label}</button>;
+        return <button key={language.id} type="button" aria-pressed={selected} onClick={() => { onLanguageChange?.(language.id); void request<VoiceProfile>("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: language.id }) }).catch(() => undefined); }} disabled={!onLanguageChange} className={`min-h-11 rounded-xl px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:cursor-default ${selected ? "bg-[#c6531d] text-white" : "border border-[#e4cabc] text-[#68493c]"}`}>{language.label}</button>;
       })}
     </div>
+    <AddressPreference />
     {onManagePreferences && <button type="button" onClick={onManagePreferences} className="mt-4 min-h-11 w-full rounded-xl border border-[#e4cabc] px-4 text-sm font-semibold text-[#68493c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d]">More preferences</button>}
   </div>;
+}
+
+function AddressPreference() {
+  const request = useApiRequest();
+  const nameId = useId();
+  const [profile, setProfile] = useState<VoiceProfile | null>(null);
+  const [name, setName] = useState("");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void request<VoiceProfile>("/api/profile")
+      .then((loaded) => { if (active) { setProfile(loaded); setName(loaded.first_name ?? ""); } })
+      .catch(() => { if (active) { setProfile({ first_name: null, address_form: "neutral", language: "hinglish" }); setStatus("error"); setError("Abhi profile load nahi ho paaya."); } });
+    return () => { active = false; };
+  }, [request]);
+
+  async function save(update: Partial<VoiceProfile>) {
+    setStatus("saving");
+    setError("");
+    try {
+      const saved = await request<VoiceProfile>("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(update) });
+      setProfile(saved);
+      setName(saved.first_name ?? "");
+      setStatus("saved");
+    } catch (cause) {
+      setStatus("error");
+      setError(cause instanceof Error && cause.message !== "Request failed." ? cause.message : "Save nahi ho paaya. Naam mein sirf letters rakhiye.");
+    }
+  }
+
+  if (!profile) return <div className="mt-5 h-28 animate-pulse rounded-xl bg-[#f3e6dc]" aria-label="Loading profile" />;
+  const nameChanged = name.trim() !== (profile.first_name ?? "");
+  return <section className="mt-5 border-t border-[#f0e2d8] pt-4" aria-label="Aapko kaise address karein?">
+    <h3 className="text-base font-semibold tracking-[-.02em]">Aapko kaise address karein?</h3>
+    <p className="mt-1 text-xs leading-5 text-[#806f65]">GharSaathi aapse baat karte waqt yahi use karegi. Aap kabhi bhi badal sakte hain.</p>
+    <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Address form">
+      {ADDRESS_FORMS.map((form) => {
+        const selected = profile.address_form === form.id;
+        return <button key={form.id} type="button" aria-pressed={selected} disabled={status === "saving"} onClick={() => void save({ address_form: form.id })} className={`min-h-11 rounded-xl px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:opacity-60 ${selected ? "bg-[#c6531d] text-white" : "border border-[#e4cabc] text-[#68493c]"}`}>{form.label}</button>;
+      })}
+    </div>
+    <p className="mt-2 text-[11px] text-[#8d766a]">Jaise: “{ADDRESS_FORMS.find((form) => form.id === profile.address_form)?.example}”</p>
+    <label htmlFor={nameId} className="mt-4 block text-[11px] font-semibold text-[#5f4a3f]">Aapko kis naam se bulayein? (optional)</label>
+    <div className="mt-2 flex gap-2">
+      <input id={nameId} value={name} maxLength={40} onChange={(event) => { setName(event.target.value); setStatus("idle"); }} placeholder="Jaise: Moin" className="min-h-11 min-w-0 flex-1 rounded-xl border border-[#deccbf] bg-white px-3 text-sm outline-none focus:border-[#c6531d]" />
+      <button type="button" disabled={!nameChanged || status === "saving"} onClick={() => void save({ first_name: name.trim() || null })} className="min-h-11 rounded-xl bg-[#3b2a22] px-4 text-xs font-semibold text-white disabled:opacity-40">{status === "saving" ? "Saving…" : "Save"}</button>
+    </div>
+    <p aria-live="polite" className={`mt-2 min-h-4 text-[11px] ${status === "error" ? "text-[#a33d2c]" : "text-[#55745c]"}`}>{status === "saved" ? "Save ho gaya. Agli voice baat se lagu hoga." : status === "error" ? error : ""}</p>
+  </section>;
 }
 
 function AddressesDetail({ addresses, onSelectAddress, onManageAddresses }: { addresses: AccountSettingsAddress[]; onSelectAddress?: (addressId: string) => void; onManageAddresses?: () => void }) {

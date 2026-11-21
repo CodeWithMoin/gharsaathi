@@ -111,7 +111,7 @@ async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
     names = {tool["name"] for tool in tools}
     assert names == {
         "search_products", "add_to_basket", "set_basket_quantity", "view_basket", "request_approval",
-        "open_address_form",
+        "open_address_form", "recall_household_preferences",
     }
     assert all("order" not in name and "checkout" not in name for name in names)
 
@@ -193,7 +193,7 @@ def test_session_endpoint_returns_answer_for_allowed_origin() -> None:
         headers={"Origin": "http://localhost:3003"},
     )
     assert response.status_code == 201
-    assert response.json() == {"session_id": "live_fake", "sdp": "answer"}
+    assert response.json() == {"session_id": "live_fake", "sdp": "answer", "turn_taking": {"mode": "native"}}
 
 
 def test_session_endpoint_rejects_unknown_origin() -> None:

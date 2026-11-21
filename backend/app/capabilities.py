@@ -279,7 +279,12 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="usual_items",
         title="Suggest the household's usual items from purchase history",
-        voice=S(M, "No voice tool."),
+        voice=S(
+            P,
+            "Only on request: recall_household_preferences returns consented past purchases "
+            "of the item the user asked for; no proactive suggestions by voice.",
+        ),
+        voice_tools=("recall_household_preferences",),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
         ui=S(P, "Listed inside Zepto offer suggestions; dismiss/review routes have no frontend caller."),
         backend=S(W),
@@ -308,7 +313,12 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="preference_memory",
         title="Remember explicit household preferences (brand, size, corrections)",
-        voice=S(M, "No voice tool."),
+        voice=S(
+            P,
+            "Recall only: recall_household_preferences reads confirmed preferences before a "
+            "broad item search. Saving or correcting a preference by voice is not supported.",
+        ),
+        voice_tools=("recall_household_preferences",),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
         ui=S(M, "No frontend file calls these memory routes."),
         backend=S(W, "Extract/propose, confirm/correct/reject, retrieve, delete."),
@@ -410,21 +420,51 @@ CAPABILITIES: tuple[Capability, ...] = (
         ui_files=("frontend/app/first-run-onboarding.tsx",),
     ),
     Capability(
+        id="user_profile",
+        title="How to address the user (first name, address form, reply language)",
+        voice=S(
+            P,
+            "Read at voice-session start and added to the session instructions; it can only "
+            "be changed on screen, never by voice or inference.",
+        ),
+        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        ui=S(
+            P,
+            "Account settings > Preferences (address form, first name; language is mirrored). "
+            "First-run onboarding does not call it yet.",
+        ),
+        backend=S(W, "user_profiles table, keyed by the verified Clerk user id."),
+        voice_session_behavior=True,
+        routes=("GET /api/profile", "PUT /api/profile"),
+        ui_files=("frontend/app/account-settings-sheet.tsx",),
+    ),
+    Capability(
         id="voice_turn_taking",
         title="Voice turn-taking and barge-in (interrupting the assistant)",
         voice=S(
-            P,
-            "Relies on the OpenAI Live session defaults: build_session_config (voice/service.py) "
-            "sets no turn detection; the semantic_vad config in voice/client.py is unused. "
-            "No Hinglish smart-turn model in main; only an uncommitted frontend/app/smart-turn.ts "
-            "in the smart-turn-hinglish worktree.",
-            "codex/smart-turn-hinglish (uncommitted)",
+            IP,
+            "GPT-Live has no turn_detection/VAD/commit controls; VOICE_TURN_TAKING selects native "
+            "(default, unchanged), tuned (option A: interruption + Hinglish patience policy appended "
+            "to the Live instructions) or smart_turn (option B: tuned + browser Hinglish end-of-turn "
+            "model that holds playback mid-thought and stops it on barge-in). Measured in "
+            "docs/voice-turn-taking.md; not yet verified in a real browser session.",
+            "codex/smart-turn-options",
         ),
         typed_chat=S(U, "Not applicable to typed chat."),
-        ui=S(M, "No client-side end-of-turn or interruption handling in voice-panel.tsx."),
-        backend=S(P, "Session config only; no turn-detection settings sent."),
+        ui=S(
+            IP,
+            "voice-panel.tsx starts SmartTurnController (smart-turn.ts) only when the session reports "
+            "smart_turn; the model is lazy-loaded, SHA-256 verified, and falls back to option A.",
+            "codex/smart-turn-options",
+        ),
+        backend=S(
+            IP,
+            "Setting voice_turn_taking; voice/turn_taking.py builds the instructions and the "
+            "session response's turn_taking field.",
+            "codex/smart-turn-options",
+        ),
         voice_session_behavior=True,
-        ui_files=("frontend/app/voice-panel.tsx",),
+        ui_files=("frontend/app/voice-panel.tsx", "frontend/app/smart-turn.ts"),
     ),
     Capability(
         id="voice_transcript",
@@ -477,6 +517,9 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "store_id",
         "not_connected",
         "needs_store",
+        "no_memory",
+        "purchase_history",
+        "confirmed_preference",
         # Fields, statuses and enum values shown in the backend few-shot examples.
         "swiggy_instamart",
         "price_rupees",
@@ -493,6 +536,23 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "contact_name",
     }
 )
+
+
+API_CONTRACTS: dict[str, tuple[str, ...]] = {
+    "GET /api/profile": (
+        "Auth: Clerk bearer token; the record belongs to the verified user only.",
+        "Response 200 (defaults when nothing was saved):",
+        '{"first_name": null, "address_form": "neutral", "language": "hinglish", "updated_at": null}',
+    ),
+    "PUT /api/profile": (
+        "Auth: Clerk bearer token. Partial update: only the keys sent are changed; unknown keys are 422.",
+        'Request: {"first_name": "Moin" | null, "address_form": "masculine" | "feminine" | "neutral", '
+        '"language": "hinglish" | "hindi" | "english"}',
+        "first_name: up to 40 letters, spaces, apostrophes, dots or hyphens; null or blank clears it.",
+        'Response 200: {"first_name": "Moin", "address_form": "masculine", "language": "hinglish", '
+        '"updated_at": "2026-11-22T10:00:00Z"}',
+    ),
+}
 
 
 SURFACES = (
@@ -533,6 +593,10 @@ def render_markdown() -> str:
             lines.append(f"- `{capability.id}`: " + ", ".join(f"`{route}`" for route in capability.routes))
     lines += ["", "### Infrastructure routes", ""]
     lines += [f"- `{route}`: {reason}" for route, reason in INFRASTRUCTURE_ROUTES.items()]
+    lines += ["", "### API contracts", ""]
+    for route, contract in API_CONTRACTS.items():
+        lines.append(f"- `{route}`")
+        lines += [f"  - `{line}`" if line.startswith("{") else f"  - {line}" for line in contract]
     if UNMOUNTED_ROUTERS:
         lines += ["", "### Routers defined but not mounted", ""]
         lines += [f"- `{module}`: {reason}" for module, reason in UNMOUNTED_ROUTERS.items()]

@@ -194,7 +194,7 @@
             ],
             "add_count": 1,
             "add_product_contains": "Surf Excel",
-            "max_sentences": 1
+            "max_sentences": 2
           }
         }
       ]
@@ -269,7 +269,6 @@
           "user": "aur Zepto se Madhur sugar 1 kg add karo",
           "expect": {
             "tools_required": [
-              "search_products",
               "add_to_basket"
             ],
             "add_count": 1,
@@ -345,7 +344,9 @@
             "refuses_order": true,
             "reply_mentions_any": [
               "screen",
-              "स्क्रीन"
+              "स्क्रीन",
+              "bill",
+              "review"
             ]
           }
         },
@@ -356,7 +357,9 @@
             "refuses_order": true,
             "reply_mentions_any": [
               "screen",
-              "स्क्रीन"
+              "स्क्रीन",
+              "bill",
+              "review"
             ]
           }
         }

@@ -12,6 +12,7 @@ from app.api.zepto import router as zepto_router
 from app.api.zepto_checkout import router as zepto_checkout_router
 from app.api.memory import router as memory_router
 from app.api.legal_consent import router as legal_consent_router
+from app.api.profile import router as profile_router
 from app.api.purchase_memory import router as purchase_memory_router
 from app.api.voice import router as voice_router
 from app.core.config import get_settings
@@ -61,6 +62,7 @@ app.include_router(
 )
 app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])
 app.include_router(legal_consent_router, prefix="/api/legal-consent", tags=["Legal consent"])
+app.include_router(profile_router, prefix="/api/profile", tags=["Profile"])
 app.include_router(swiggy_router, prefix="/api/swiggy", tags=["Swiggy Instamart"])
 app.include_router(zepto_router, prefix="/api/zepto", tags=["Zepto"])
 app.include_router(
