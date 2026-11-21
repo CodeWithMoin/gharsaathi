@@ -11,7 +11,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test tests/*.test.mjs tests/unit/*.test.mjs tests/module/*.test.mjs",
+    "test:unit": "node --test tests/unit/*.test.mjs tests/conversation-intent.test.mjs tests/offer-opportunity.test.mjs tests/voice-address-prefill.test.mjs tests/voice-transcript.test.mjs tests/zepto-checkout-state.test.mjs tests/conversation-snapshot.test.mjs tests/voice-approval.test.mjs tests/voice-event-recorder.test.mjs tests/smart-turn-policy.test.mjs",
+    "test:module": "node --test tests/module/*.test.mjs tests/voice-transcript-turns.test.mjs",
     "eval:smart-turn": "node scripts/eval-smart-turn.mjs"
   },
   "dependencies": {

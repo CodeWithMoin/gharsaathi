@@ -16,3 +16,4 @@ frontend/public/ort/
 frontend/public/models/*.onnx
 frontend/public/models/*.partial
 backend/evaluation/.turn_taking_clips/
+backend/.live-smoke/

@@ -257,3 +257,69 @@ async def test_user_cannot_open_another_users_chat(
         headers=headers("intruder"),
     )
     assert response.status_code == 404
+
+
+def voice_turns(count: int, *, content: str = "") -> list[dict[str, str]]:
+    return [
+        {
+            "id": f"voice-{index}",
+            "role": "user" if index % 2 == 0 else "assistant",
+            "content": content or f"voice turn {index}",
+            "modality": "voice",
+            "created_at": "2026-11-22T10:00:00Z",
+        }
+        for index in range(count)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_long_voice_session_is_saved_and_restored(
+    conversation_client: AsyncClient,
+) -> None:
+    turns = voice_turns(300)
+    turns[0]["content"] = "डियोडोरेंट " * 1500  # one long merged spoken turn
+    saved = await conversation_client.put(
+        "/api/conversations/current",
+        headers=headers("long-voice-user"),
+        json={"submitted_query": "deodorant", "products": [], "searched": False, "messages": turns},
+    )
+    assert saved.status_code == 200, saved.text
+
+    restored = await conversation_client.get(
+        "/api/conversations/current", headers=headers("long-voice-user")
+    )
+    assert len(restored.json()["messages"]) == 300
+    assert restored.json()["messages"][0]["content"] == turns[0]["content"].strip()
+
+
+@pytest.mark.asyncio
+async def test_voice_chat_reopens_from_drawer_with_its_turns_and_sorts_first(
+    conversation_client: AsyncClient,
+) -> None:
+    user = headers("drawer-voice-user")
+    voice = await conversation_client.put(
+        "/api/conversations/current",
+        headers=user,
+        json={"submitted_query": "", "products": [], "searched": False, "messages": voice_turns(4)},
+    )
+    await conversation_client.post("/api/conversations/new", headers=user)
+    await conversation_client.put("/api/conversations/current", headers=user, json=state("tea"))
+
+    listed = (await conversation_client.get("/api/conversations", headers=user)).json()
+    assert [item["title"] for item in listed] == ["tea", "voice turn 0"]
+    assert listed[1]["preview"] == "voice turn 3"
+
+    reopened = await conversation_client.post(
+        f"/api/conversations/{voice.json()['id']}/open", headers=user
+    )
+    assert [item["content"] for item in reopened.json()["messages"]] == [
+        f"voice turn {index}" for index in range(4)
+    ]
+    relisted = (await conversation_client.get("/api/conversations", headers=user)).json()
+    assert relisted[0]["id"] == voice.json()["id"]
+    assert relisted[0]["is_active"] is True
+    assert [item["is_active"] for item in relisted] == [True, False]
+
+    after_reload = await conversation_client.get("/api/conversations/current", headers=user)
+    assert after_reload.json()["id"] == voice.json()["id"]
+    assert len(after_reload.json()["messages"]) == 4

@@ -9,7 +9,9 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/verify.sh [--full]
 
-Runs backend tests plus frontend tests, lint, and TypeScript checks.
+Runs every backend test layer (unit, module, integration) plus frontend tests,
+lint, and TypeScript checks. Integration tests use a throwaway PostgreSQL
+database and skip if PostgreSQL is unreachable (see docs/TESTING.md).
 --full also creates a production frontend build. No commerce provider is called.
 EOF
 }
@@ -23,7 +25,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-printf '%s\n' "Running backend tests (mocked providers only)"
+printf '%s\n' "Running backend unit, module and integration tests (mocked providers only)"
 (cd "${REPO_ROOT}/backend" && PYTHONPATH=. uv run \
   --with-requirements requirements.txt pytest -q)
 

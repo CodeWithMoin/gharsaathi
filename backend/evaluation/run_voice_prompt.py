@@ -13,6 +13,8 @@ from app.voice.prompts import VOICE_PROMPT_VERSION, VOICE_SYSTEM_PROMPT
 
 SUITE_PATH = Path(__file__).with_name("voice_prompt_cases.json")
 _SENTENCE_END = re.compile(r"[.!?\u0964\uff1f]+(?:\s|$)")
+_DEVANAGARI_LETTER = re.compile(r"[\u0900-\u097f]")
+_LATIN_LETTER = re.compile(r"[A-Za-z]")
 
 
 def _matches_any(text: str, patterns: list[str]) -> bool:
@@ -26,6 +28,22 @@ def _question_count(text: str) -> int:
 def _sentence_count(text: str) -> int:
     pieces = [piece for piece in _SENTENCE_END.split(text.strip()) if piece.strip()]
     return len(pieces)
+
+
+def devanagari_ratio(text: str) -> float:
+    """Share of script letters that are Devanagari (0.0 for Roman-only text)."""
+    devanagari = len(_DEVANAGARI_LETTER.findall(text))
+    latin = len(_LATIN_LETTER.findall(text))
+    total = devanagari + latin
+    return devanagari / total if total else 0.0
+
+
+def _word_matches(text: str, words: list[str]) -> list[str]:
+    return [
+        word
+        for word in words
+        if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", text, re.IGNORECASE)
+    ]
 
 
 def _starts_with_any(text: str, prefixes: list[str]) -> list[str]:
@@ -49,19 +67,28 @@ def score_case(case: dict[str, Any], output: str) -> dict[str, Any]:
     sentences = _sentence_count(output)
     max_sentences = case.get("max_sentences")
     sentences_ok = max_sentences is None or sentences <= max_sentences
+    forbidden_words = _word_matches(output, case.get("forbidden_words", []))
+    ratio = devanagari_ratio(output)
+    script_ok = ratio <= case.get("max_devanagari_ratio", 1.0) and ratio >= case.get(
+        "min_devanagari_ratio", 0.0
+    )
     return {
         "id": case["id"],
         "passed": required_ok
         and not forbidden
         and not forbidden_prefix
         and questions <= case["max_questions"]
-        and sentences_ok,
+        and sentences_ok
+        and not forbidden_words
+        and script_ok,
         "output": output,
         "required_match": required_ok,
         "forbidden_matches": forbidden,
         "forbidden_prefix_matches": forbidden_prefix,
         "question_count": questions,
         "sentence_count": sentences,
+        "forbidden_word_matches": forbidden_words,
+        "devanagari_ratio": round(ratio, 3),
     }
 
 

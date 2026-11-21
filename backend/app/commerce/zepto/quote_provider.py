@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -18,8 +19,10 @@ from app.commerce.zepto.checkout import (
     PROVIDER,
     ZeptoConfirmedOrder,
     parse_confirmed_cod_order,
+    ZeptoPreviewRefused,
     quote_from_cod_preview,
 )
+from app.commerce.zepto.diagnostics import log_preview_failure
 from app.commerce.zepto.errors import ZeptoSchemaError
 from app.shopping.errors import ApprovalRefused, ProviderUnavailable
 from app.shopping.models import Basket, BasketLine, Quote
@@ -60,12 +63,16 @@ class ZeptoQuoteProvider:
         """Prepare a quote while the shared checkout coordinator is held."""
 
         _require_zepto_basket(basket)
+        correlation_id = uuid.uuid4().hex
+        stage = "select_saved_address"
+        preview: object | None = None
         try:
             await self.client.call_tool(
                 "select_saved_address",
                 {"addressId": basket.address_id},
                 retry_on_auth=False,
             )
+            stage = "update_cart"
             await self.client.call_tool(
                 "update_cart",
                 {
@@ -75,22 +82,87 @@ class ZeptoQuoteProvider:
                 },
                 retry_on_auth=False,
             )
+            stage = "create_order"
             preview = await self.client.call_tool(
                 "create_order",
                 {"confirmOrder": False, "userAddressId": basket.address_id},
                 retry_on_auth=False,
             )
+            stage = "parse_preview"
             return quote_from_cod_preview(basket, preview, self.clock())
-        except ApprovalRefused:
+        except ApprovalRefused as exc:
+            if isinstance(exc, ZeptoPreviewRefused):
+                log_preview_failure(
+                    correlation_id=correlation_id,
+                    stage=stage,
+                    step=exc.step,
+                    outcome="refused",
+                    payload=preview,
+                    facts=exc.facts,
+                )
             raise
         except ZeptoSchemaError as exc:
+            step = getattr(exc, "step", "response")
+            log_preview_failure(
+                correlation_id=correlation_id,
+                stage=stage,
+                step=step,
+                outcome="invalid",
+                payload=preview,
+                facts=getattr(exc, "facts", None),
+            )
             raise ProviderUnavailable(
-                "Zepto returned an invalid cash-on-delivery preview. Please try again."
+                preview_failure_message(stage, step, correlation_id)
             ) from exc
         except Exception as exc:
+            log_preview_failure(
+                correlation_id=correlation_id,
+                stage=stage,
+                step="provider_error",
+                outcome=type(exc).__name__,
+                payload=None,
+            )
             raise ProviderUnavailable(
                 "Zepto could not prepare the cash-on-delivery bill. Please try again."
             ) from exc
+
+
+_STEP_LABELS: tuple[tuple[str, str], ...] = (
+    ("envelope.text", "Zepto sent the preview as text instead of structured data"),
+    ("envelope", "the preview format was not recognised"),
+    ("isPreview", "it did not come back as an unconfirmed preview"),
+    ("requiresConfirmation", "it did not come back as an unconfirmed preview"),
+    ("deliverable", "delivery availability was missing"),
+    ("paymentMethod", "the payment method was missing"),
+    ("deliveryAddress", "the delivery address details were incomplete"),
+    ("items", "the item details were invalid"),
+    ("totalItems", "the item count was invalid"),
+    ("freeDelivery", "the free-delivery details were inconsistent"),
+    ("deliveryFee", "the delivery fee details were inconsistent"),
+    ("otherFees", "the extra fees were invalid"),
+    ("payable.reconciliation", "the charges did not add up to Zepto's total"),
+    ("subTotal.scale", "the amounts were not in the expected unit"),
+)
+
+
+def preview_failure_message(stage: str, step: str, correlation_id: str) -> str:
+    """User-facing reason naming the failed check, never provider data."""
+
+    reference = correlation_id[:8]
+    if stage != "parse_preview":
+        step_name = stage.replace("_", " ")
+        return (
+            f"Zepto could not prepare the bill (the {step_name} step failed). "
+            f"Nothing was ordered. Please try again. Ref {reference}."
+        )
+    label = next(
+        (text for prefix, text in _STEP_LABELS if step == prefix or step.startswith(prefix)),
+        "the bill amounts were invalid",
+    )
+    return (
+        f"Zepto's bill preview could not be verified because {label}. "
+        f"Nothing was ordered. Ref {reference}."
+    )
 
 
 class ZeptoCodCheckoutGateway:

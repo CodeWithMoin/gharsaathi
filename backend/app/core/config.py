@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     live_backend_model: str = "gpt-6-luna"
     # native | tuned (option A) | smart_turn (option B); see docs/voice-turn-taking.md
     voice_turn_taking: Literal["native", "tuned", "smart_turn"] = "native"
+    # Dev diagnostic: log content-free sideband event summaries (type, id field names, timing).
+    voice_event_log: bool = False
     memory_extraction_model: str = "gpt-4o-mini"
     jev_api_key: SecretStr = SecretStr("")
     jev_base_url: str = "https://api.typesafe.ai/v1"
