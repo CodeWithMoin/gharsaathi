@@ -1,25 +1,7 @@
 "use client";
 
 import { Check, ClockCounterClockwise, ShieldCheck } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
-import { useApiRequest } from "./authenticated-api";
-
-type Permission = {
-  data_category: string;
-  purpose: string;
-  allowed: boolean;
-  retention_days: number | null;
-};
-
-type ImportResult = {
-  imported_orders: number;
-  imported_products: number;
-  imported_occurrences: number;
-  pruned_orders: number;
-  cached: boolean;
-};
-
-type ImportSummary = ImportResult & { providers: number; cachedProviders: number };
+import { usePurchaseHistoryImport } from "./purchase-history-import";
 
 type Props = {
   commerceMode: "demo" | "live";
@@ -28,121 +10,7 @@ type Props = {
 };
 
 export function PersonalizationOnboarding({ commerceMode, swiggyConnected, zeptoConnected }: Props) {
-  const request = useApiRequest();
-  const [permission, setPermission] = useState<Permission | null | undefined>(undefined);
-  const [retentionDays, setRetentionDays] = useState(90);
-  const [busy, setBusy] = useState<"enable" | "skip" | "refresh" | "disable" | null>(null);
-  const [result, setResult] = useState<ImportSummary | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    void request<Permission[]>("/api/memory/permissions")
-      .then((permissions) => {
-        if (!active) return;
-        const current = permissions.find((item) => item.data_category === "purchase_history" && item.purpose === "proactive_reorder") ?? null;
-        setPermission(current);
-        if (current?.retention_days) setRetentionDays(current.retention_days);
-      })
-      .catch((cause: unknown) => {
-        if (!active) return;
-        setPermission(null);
-        setError(cause instanceof Error ? cause.message : "Could not load personalization settings.");
-      });
-    return () => { active = false; };
-  }, [request]);
-
-  async function savePermission(allowed: boolean, days: number | null) {
-    return request<Permission>("/api/memory/permissions/purchase_history/proactive_reorder", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        allowed,
-        granularity: allowed ? "recent_order_items_and_purchase_timing" : "disabled",
-        retention_days: days,
-        sharing_scope: "agent_and_user",
-        user_control: "view_edit_delete",
-      }),
-    });
-  }
-
-  async function enable() {
-    setBusy("enable");
-    setError("");
-    try {
-      const saved = await savePermission(true, retentionDays);
-      setPermission(saved);
-      setResult(await syncConnectedProviders());
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not import your recent orders.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function skip() {
-    setBusy("skip");
-    setError("");
-    try {
-      setPermission(await savePermission(false, 0));
-      setResult(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save your choice.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function refresh() {
-    setBusy("refresh");
-    setError("");
-    try {
-      setResult(await syncConnectedProviders());
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not refresh your recent orders.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function syncConnectedProviders(): Promise<ImportSummary> {
-    const providers = [swiggyConnected ? "swiggy" : null, zeptoConnected ? "zepto" : null].filter((provider): provider is "swiggy" | "zepto" => provider !== null);
-    if (!providers.length) throw new Error("Connect at least one store before importing order history.");
-    const totals: ImportSummary = { imported_orders: 0, imported_products: 0, imported_occurrences: 0, pruned_orders: 0, cached: false, providers: 0, cachedProviders: 0 };
-    const failures: string[] = [];
-    for (const provider of providers) {
-      try {
-        const imported = await request<ImportResult>(`/api/memory/purchase-history/sync?provider=${provider}`, { method: "POST" });
-        totals.imported_orders += imported.imported_orders;
-        totals.imported_products += imported.imported_products;
-        totals.imported_occurrences += imported.imported_occurrences;
-        totals.pruned_orders += imported.pruned_orders;
-        totals.providers += 1;
-        totals.cachedProviders += Number(imported.cached);
-      } catch (cause) {
-        failures.push(`${provider === "swiggy" ? "Swiggy" : "Zepto"}: ${cause instanceof Error ? cause.message : "history unavailable"}`);
-      }
-    }
-    totals.cached = totals.providers > 0 && totals.cachedProviders === totals.providers;
-    if (!totals.providers) throw new Error(failures.join(" "));
-    if (failures.length) setError(`One store could not be updated. ${failures.join(" ")}`);
-    return totals;
-  }
-
-  async function disable() {
-    setBusy("disable");
-    setError("");
-    try {
-      const revoked = await savePermission(false, 0);
-      setPermission(revoked);
-      await request<null>("/api/memory/purchase-history", { method: "DELETE" });
-      setResult(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not remove personalization data.");
-    } finally {
-      setBusy(null);
-    }
-  }
+  const { permission, retentionDays, setRetentionDays, busy, result, error, enable, skip, refresh, disable } = usePurchaseHistoryImport({ swiggyConnected, zeptoConnected });
 
   if (permission === undefined) {
     return <div className="mt-7 h-32 animate-pulse rounded-2xl bg-[#eee2d8]" aria-label="Loading personalization settings" />;
