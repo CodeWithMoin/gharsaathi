@@ -64,7 +64,7 @@ export function PublicOnboarding() {
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]">
       <div className="flex h-10 items-center justify-between">
         {step > 0 ? <button type="button" onClick={() => setStep((current) => current - 1)} aria-label="Previous onboarding screen" className="grid size-10 place-items-center rounded-full border border-[#e1d0c4] bg-[#fffdf9] text-[#70584b] active:scale-[.96]"><ArrowLeft size={18} /></button> : <span />}
-        {step < authStep && <span className="text-[10px] font-semibold tracking-[.16em] text-[#9b8172]">{String(step + 1).padStart(2, "0")} / {String(authStep).padStart(2, "0")}</span>}
+        {isFeature && <span className="text-[10px] font-semibold tracking-[.16em] text-[#9b8172]">{String(step + 1).padStart(2, "0")} / {String(authStep).padStart(2, "0")}</span>}
         {isFeature && <button type="button" onClick={() => setStep(authStep)} className="px-2 py-2 text-xs font-semibold text-[#806f65]">Skip</button>}
         {step === 0 && <span className="w-10" aria-hidden="true" />}
       </div>
@@ -74,8 +74,7 @@ export function PublicOnboarding() {
           <LogoMark />
           <p className="font-display mt-5 text-[30px] font-semibold tracking-[-.05em]">GharSaathi</p>
           <h1 className="mt-7 text-[30px] font-semibold leading-[1.12] tracking-[-.045em]">Ghar ka shopping,<br />ab bas bolkar.</h1>
-          <p className="mt-4 max-w-[30ch] text-[15px] leading-6 text-[#806f65]">Aap boliye. Main products dhoondhkar basket taiyaar karungi.</p>
-          <p className="mt-3 text-[13px] font-semibold text-[#70584b]">Faisla hamesha aapka.</p>
+          <p className="mt-5 text-[13px] font-semibold text-[#70584b]">Faisla hamesha aapka.</p>
         </motion.section>}
 
         {feature && <motion.section key={feature.eyebrow} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: .22 }} className="flex min-h-0 flex-1 items-center justify-center text-center">
