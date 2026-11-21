@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     live_voice: str = "nira"
     live_backend_model: str = "gpt-6-luna"
     memory_extraction_model: str = "gpt-4o-mini"
+    jev_api_key: SecretStr = SecretStr("")
+    jev_base_url: str = "https://api.typesafe.ai/v1"
+    jev_model: str = "jev-latest"
+    jev_reranking_enabled: bool = False
     swiggy_rate_limit_fallback_seconds: int = Field(default=30, ge=1, le=300)
     swiggy_token_store_path: Path = Field(
         default=Path("backend/.data/swiggy_connection.enc")
