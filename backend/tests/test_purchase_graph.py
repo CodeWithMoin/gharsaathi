@@ -206,6 +206,7 @@ async def test_import_is_consent_gated_idempotent_and_generates_safe_suggestion(
     suggestions = await service.suggestions(actor, now=now)
     assert len(suggestions) == 1
     suggestion = suggestions[0]
+    assert suggestion.provider == "swiggy"
     assert suggestion.purchase_count == 3
     assert suggestion.model_version == "personal-hybrid-logistic-v1"
     assert {item.kind for item in suggestion.patterns} >= {

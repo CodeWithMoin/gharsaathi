@@ -178,7 +178,8 @@ call. Swiggy and Zepto can stay connected together; a shopping request searches 
 provider whose saved address is ready.
 
 The authenticated Zepto catalogue was inspected before enabling actions. This build
-exposes saved-address retrieval, product search, read-only cart/order history, and one
+exposes saved-address retrieval and explicit address creation, product search,
+read-only cart/order history, and one
 narrow cash-on-delivery checkout path. It keeps one serialized MCP
 session, caches the live tool catalogue for that session, reuses the selected address
 and past-order context, and caches an identical search briefly. A provider 429 starts
@@ -194,6 +195,16 @@ The preview response contract and cleanup were verified against a connected test
 account on 22 November 2026 without placing an order. The final confirmation parser is
 deliberately strict, but its success response cannot be live-verified without placing a
 real order; the first real checkout must therefore be treated as a supervised test.
+
+Zepto final-bill previews also expose conservative smart-savings guidance. The
+backend validates free-delivery progress and offer-card money as integer paise. It
+shows the remaining threshold, provider-confirmed benefit, and true net extra; locked
+bank offers never become a claimed saving. With explicit purchase-history consent,
+the user can tap one remembered Zepto item to check it. The backend then requires the
+same provider product ID, a current available variant and live price, a purchase in
+the last 90 days, and enough value for that item alone to unlock the benefit. History
+never adds an item by itself. Adding the suggestion is a separate action that
+invalidates the old approval and requires a fresh live bill and approval.
 
 ### Optional live preview diagnostic
 
@@ -245,9 +256,13 @@ is implemented.
 - `POST /api/zepto/disconnect`
 - `GET /api/zepto/addresses?refresh=false` — database snapshot by default; provider
   access only when `refresh=true`
+- `POST /api/zepto/addresses` — explicitly add a user-entered address and delivery
+  contact to the connected Zepto account, then refresh the local snapshot
 - `PUT /api/zepto/addresses/selected`
 - `POST /api/zepto/search` with
   `{"query":"milk and bread","address_id":"<saved-address-id>","page_number":0}`
+- `POST /api/zepto/offer-suggestions` — read-only exact live check for one
+  user-selected, consented usual against a provider-confirmed free-delivery threshold
 - `POST /api/zepto/checkout/cod` with an approved `approval_id`, its exact
   `fingerprint`, and an `Idempotency-Key` header — one-shot live COD submission
 

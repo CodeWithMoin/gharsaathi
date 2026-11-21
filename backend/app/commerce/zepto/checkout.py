@@ -13,7 +13,7 @@ from typing import Any
 
 from app.commerce.zepto.errors import ZeptoSchemaError
 from app.shopping.errors import ApprovalRefused
-from app.shopping.models import Basket, Charge, Quote
+from app.shopping.models import Basket, Charge, OfferOpportunity, Quote
 
 
 PROVIDER = "zepto"
@@ -68,11 +68,18 @@ def quote_from_cod_preview(basket: Basket, payload: dict[str, Any], quoted_at: d
     other_fees = _other_fees(data.get("otherFees"))
     eta_minutes = _nullable_nonnegative_int(data, "etaInMinutes")
     total_items = _nonnegative_int(data.get("totalItems"), "totalItems")
-    free_delivery = _free_delivery_unlocked(data.get("freeDelivery"))
+    free_delivery = _free_delivery_offer(
+        data.get("freeDelivery"),
+        subtotal,
+        delivery_fee,
+        delivery_fee_discount,
+        delivery_fee_before_discount,
+    )
+    offers = [free_delivery, *_offers(data.get("offers"), subtotal)]
 
     if delivery_fee_before_discount - delivery_fee_discount != delivery_fee:
         raise ZeptoSchemaError("Zepto delivery fees are inconsistent.")
-    if free_delivery != (delivery_fee == 0):
+    if free_delivery.unlocked != (delivery_fee == 0):
         raise ZeptoSchemaError("Zepto free-delivery status is inconsistent.")
     if total_items != sum(line.quantity for line in basket.lines):
         raise ApprovalRefused("Zepto preview has a different item quantity than the basket.")
@@ -96,6 +103,7 @@ def quote_from_cod_preview(basket: Basket, payload: dict[str, Any], quoted_at: d
         basket_revision=basket.revision,
         item_total_paise=subtotal,
         charges=charges,
+        offers=offers,
         payable_paise=payable,
         eta_text=f"{eta_minutes} min" if eta_minutes is not None else None,
         quoted_at=quoted_at,
@@ -202,16 +210,126 @@ def _other_fees(raw: object) -> list[Charge]:
     return charges
 
 
-def _free_delivery_unlocked(raw: object) -> bool:
-    """Validate the observed Zepto free-delivery progress object."""
+def _free_delivery_offer(
+    raw: object,
+    subtotal: int,
+    delivery_fee: int,
+    delivery_fee_discount: int,
+    delivery_fee_before_discount: int,
+) -> OfferOpportunity:
+    """Normalise Zepto's free-delivery progress object.
+
+    Zepto explicitly provides both the threshold and amount remaining.  We
+    reject a contradictory progress calculation because this drives the user
+    facing "add ₹X" recommendation.  The potential saving is the currently
+    charged *net* delivery fee only while the offer is locked; a discount
+    already present in the preview must not be counted a second time. After
+    unlock, the applied delivery discount is the only confirmed saving.
+    """
 
     if not isinstance(raw, dict):
         raise ZeptoSchemaError("Zepto preview has invalid freeDelivery.")
     unlocked = _required_bool(raw, "isUnlocked")
-    _required_str(raw, "message")
-    _money(raw, "minimumOrderValue")
-    _money(raw, "remainingAmountToUnlock")
-    return unlocked
+    message = _required_str(raw, "message")
+    minimum_order = _money(raw, "minimumOrderValue")
+    remaining = _money(raw, "remainingAmountToUnlock")
+    expected_remaining = max(0, minimum_order - subtotal)
+    if remaining != expected_remaining:
+        raise ZeptoSchemaError("Zepto free-delivery progress is inconsistent.")
+    if unlocked != (remaining == 0):
+        raise ZeptoSchemaError("Zepto free-delivery unlock state is inconsistent.")
+
+    return OfferOpportunity(
+        title=message,
+        kind="free_delivery",
+        minimum_order_paise=minimum_order,
+        remaining_paise=remaining,
+        potential_saving_paise=(
+            delivery_fee if not unlocked and delivery_fee > 0 else None
+        ),
+        net_extra_paise=(
+            max(0, remaining - delivery_fee)
+            if not unlocked and delivery_fee > 0
+            else None
+        ),
+        unlocked=unlocked,
+        applied=unlocked and delivery_fee_discount > 0,
+        provider_confirmed=True,
+    )
+
+
+def _offers(raw: object, subtotal: int) -> list[OfferOpportunity]:
+    """Parse only unambiguous provider offers without affecting checkout.
+
+    Offer cards are advisory metadata, not part of the price reconciliation.
+    A malformed card is therefore omitted rather than guessed at or allowed to
+    make a valid, exact checkout quote unavailable.  All accepted monetary
+    amounts remain integer paise.
+    """
+
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        return []
+
+    parsed: list[OfferOpportunity] = []
+    for value in raw:
+        offer = _offer(value, subtotal)
+        if offer is not None:
+            parsed.append(offer)
+    return parsed
+
+
+def _offer(raw: object, subtotal: int) -> OfferOpportunity | None:
+    if not isinstance(raw, dict):
+        return None
+    title = raw.get("title")
+    offer_type = raw.get("type")
+    minimum_order = raw.get("minimumOrderValue")
+    discount = raw.get("discountAmount")
+    unlocked = raw.get("isUnlocked")
+    applied = raw.get("isApplied")
+    auto_applicable = raw.get("isAutoApplicable")
+    if (
+        not isinstance(title, str)
+        or not title.strip()
+        or not isinstance(offer_type, str)
+        or not offer_type.strip()
+        or not _is_nonnegative_int(minimum_order)
+        or not _is_nonnegative_int(discount)
+        or not isinstance(unlocked, bool)
+        or not isinstance(applied, bool)
+        or not isinstance(auto_applicable, bool)
+    ):
+        return None
+
+    remaining = 0 if unlocked else max(0, minimum_order - subtotal)
+    # A provider-supplied positive discount is a potential, not a promise: a
+    # non-auto offer may still require a particular card or payment method.
+    # Bank offers are not actionable during a COD preview.  Do not turn a
+    # provider card into a savings claim until the selected context supports
+    # it (Zepto marks that with isAutoApplicable).
+    potential = discount if not applied and auto_applicable and discount > 0 else None
+    return OfferOpportunity(
+        title=title.strip(),
+        kind=_offer_kind(offer_type),
+        minimum_order_paise=minimum_order,
+        remaining_paise=remaining,
+        potential_saving_paise=potential,
+        net_extra_paise=(max(0, remaining - potential) if potential is not None else None),
+        unlocked=unlocked,
+        applied=applied,
+        provider_confirmed=auto_applicable and (applied or potential is not None),
+    )
+
+
+def _offer_kind(raw: str) -> str:
+    normalized = raw.strip().casefold().replace("-", "_").replace(" ", "_")
+    if "bank" in normalized or "card" in normalized:
+        return "bank_offer"
+    if "coupon" in normalized or "promo" in normalized:
+        return "promo"
+    return "other"
 
 
 def _required_bool(value: dict[str, Any], key: str) -> bool:
@@ -229,9 +347,13 @@ def _required_str(value: dict[str, Any], key: str) -> str:
 
 
 def _nonnegative_int(raw: object, label: str) -> int:
-    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
+    if not _is_nonnegative_int(raw):
         raise ZeptoSchemaError(f"Zepto preview has invalid {label}.")
     return raw
+
+
+def _is_nonnegative_int(raw: object) -> bool:
+    return not isinstance(raw, bool) and isinstance(raw, int) and raw >= 0
 
 
 def _money(value: dict[str, Any], key: str) -> int:

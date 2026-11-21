@@ -48,8 +48,9 @@ class CapabilitySummary(BaseModel):
     """The Zepto functionality this application deliberately exposes.
 
     ``remote_tool_names`` is a diagnostic view of the authenticated MCP
-    catalogue, not permission to invoke arbitrary tools. The only consequential
-    path exposed by the application is its approval-bound, one-shot COD flow.
+    catalogue, not permission to invoke arbitrary tools. Consequential paths
+    are narrowly typed: an explicit saved-address form and the approval-bound,
+    one-shot COD flow.
     """
 
     connected: bool

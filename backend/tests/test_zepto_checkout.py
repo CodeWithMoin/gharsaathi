@@ -17,8 +17,10 @@ from app.commerce.zepto.quote_provider import (
     ZeptoQuoteProvider,
     device_id_for,
 )
+from app.api.basket import approval_request_out
+from app.shopping.approval import ApprovalRequest
 from app.shopping.errors import ApprovalRefused, ProviderUnavailable
-from app.shopping.models import Basket, BasketLine, ProductRef
+from app.shopping.models import Approval, Basket, BasketLine, ProductRef
 
 
 NOW = datetime(2026, 11, 22, 10, 0, tzinfo=UTC)
@@ -84,6 +86,136 @@ def test_preview_is_an_exact_reconciled_cod_quote() -> None:
         ("Delivery fee", 3000),
         ("Packaging fee", 500),
     ]
+    assert quote.offers[0].model_dump() == {
+        "title": "Add more items to unlock free delivery",
+        "kind": "free_delivery",
+        "minimum_order_paise": 9900,
+        "remaining_paise": 8400,
+        "potential_saving_paise": 3000,
+        "net_extra_paise": 5400,
+        "unlocked": False,
+        "applied": False,
+        "provider_confirmed": True,
+    }
+
+
+def test_free_delivery_counts_only_the_remaining_fee_after_partial_discount() -> None:
+    value = preview()
+    value["data"]["deliveryFeePreDiscount"] = 3000
+    value["data"]["deliveryFeeDiscount"] = 1000
+    value["data"]["deliveryFee"] = 2000
+    value["data"]["toPayAmount"] = 4000
+
+    quote = quote_from_cod_preview(basket(), value, NOW)
+
+    assert quote.offers[0].potential_saving_paise == 2000
+    assert quote.offers[0].net_extra_paise == 6400
+
+
+def test_preview_normalises_provider_offer_cards_without_inventing_bank_discount() -> None:
+    value = preview()
+    value["data"]["offers"] = [
+        {
+            "title": "Get 10% off with Example Bank",
+            "type": "BANK_OFFER",
+            "minimumOrderValue": 9900,
+            "discountAmount": 0,
+            "isUnlocked": False,
+            "isApplied": False,
+            "isAutoApplicable": False,
+        },
+        {
+            "title": "₹20 off on this basket",
+            "type": "COUPON",
+            "minimumOrderValue": 1000,
+            "discountAmount": 2000,
+            "isUnlocked": True,
+            "isApplied": True,
+            "isAutoApplicable": True,
+        },
+        {
+            "title": "Not safe to parse",
+            "type": "BANK_OFFER",
+            "minimumOrderValue": 9900.0,
+            "discountAmount": 500,
+            "isUnlocked": False,
+            "isApplied": False,
+            "isAutoApplicable": False,
+        },
+    ]
+    value["data"]["discount"] = 2000
+    value["data"]["toPayAmount"] = 3000
+
+    quote = quote_from_cod_preview(basket(), value, NOW)
+
+    assert [offer.model_dump() for offer in quote.offers[1:]] == [
+        {
+            "title": "Get 10% off with Example Bank",
+            "kind": "bank_offer",
+            "minimum_order_paise": 9900,
+            "remaining_paise": 8400,
+            "potential_saving_paise": None,
+            "net_extra_paise": None,
+            "unlocked": False,
+            "applied": False,
+            "provider_confirmed": False,
+        },
+        {
+            "title": "₹20 off on this basket",
+            "kind": "promo",
+            "minimum_order_paise": 1000,
+            "remaining_paise": 0,
+            "potential_saving_paise": None,
+            "net_extra_paise": None,
+            "unlocked": True,
+            "applied": True,
+            "provider_confirmed": True,
+        },
+    ]
+
+
+def test_approval_response_exposes_structured_offer_money() -> None:
+    quote = quote_from_cod_preview(basket(), preview(), NOW)
+    approval = Approval(
+        id="approval_1",
+        basket_id="basket_zepto_1",
+        basket_revision=4,
+        fingerprint="a" * 64,
+        payable_paise=quote.payable_paise,
+        created_at=NOW,
+        expires_at=NOW,
+    )
+
+    response = approval_request_out(
+        ApprovalRequest(approval=approval, quote=quote, basket=basket())
+    )
+
+    assert response.quote.offers[0].model_dump() == {
+        "kind": "free_delivery",
+        "title": "Add more items to unlock free delivery",
+        "minimum_order_paise": 9900,
+        "remaining_paise": 8400,
+        "potential_saving_paise": 3000,
+        "net_extra_paise": 5400,
+        "unlocked": False,
+        "applied": False,
+        "provider_confirmed": True,
+    }
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda result: result["data"]["freeDelivery"].__setitem__("remainingAmountToUnlock", 1),
+        lambda result: result["data"]["freeDelivery"].__setitem__("isUnlocked", True),
+    ],
+)
+def test_preview_rejects_inconsistent_free_delivery_progress(mutate: Any) -> None:
+    value = preview()
+    mutate(value)
+
+    with pytest.raises(ZeptoSchemaError):
+        quote_from_cod_preview(basket(), value, NOW)
 
 
 @pytest.mark.parametrize(

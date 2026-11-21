@@ -86,8 +86,13 @@ async def capture(include_preview: bool) -> None:
         await close_cached_services()
 
 
-async def capture_with_test_item() -> None:
+async def capture_with_test_item(
+    order_tool: str = "create_order",
+) -> None:
     """Seed one milk item, capture an unconfirmed preview, then remove it."""
+
+    if order_tool not in {"create_order", "create_online_payment_order"}:
+        raise ValueError("Unsupported diagnostic order tool.")
 
     service = get_live_zepto_service()
     device_id = "gharsaathi-contract-capture"
@@ -140,7 +145,7 @@ async def capture_with_test_item() -> None:
             "get_payment_methods", {}, retry_on_auth=False
         )
         preview = await service.client.call_tool(
-            "create_order",
+            order_tool,
             {"confirmOrder": False, "userAddressId": address.id},
             retry_on_auth=False,
         )
@@ -157,6 +162,7 @@ async def capture_with_test_item() -> None:
                 "line_count": len(cart.items),
             },
             "payment_methods": redact(payment_methods),
+            "preview_tool": order_tool,
             "order_preview": redact(preview),
         }
     finally:
@@ -202,8 +208,20 @@ def main() -> None:
         action="store_true",
         help="Add one milk item, capture an unconfirmed preview, and remove it.",
     )
+    parser.add_argument(
+        "--seed-online-preview-cleanup",
+        action="store_true",
+        help=(
+            "Add one milk item, call "
+            "create_online_payment_order(confirmOrder=false), and remove it."
+        ),
+    )
     args = parser.parse_args()
-    if args.seed_preview_cleanup:
+    if args.seed_preview_cleanup and args.seed_online_preview_cleanup:
+        parser.error("Choose only one seeded preview mode.")
+    if args.seed_online_preview_cleanup:
+        asyncio.run(capture_with_test_item("create_online_payment_order"))
+    elif args.seed_preview_cleanup:
         asyncio.run(capture_with_test_item())
     else:
         asyncio.run(capture(args.preview))

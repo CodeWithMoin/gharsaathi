@@ -1,6 +1,7 @@
 import asyncio
 import re
 import time
+from typing import Any
 
 from app.commerce.query_guard import non_search_reason
 from app.commerce.relevance import refine_search_result
@@ -76,6 +77,7 @@ class ZeptoService:
                 "disconnect",
                 "inspect_catalogue",
                 "view_cart",
+                "add_saved_address",
                 "list_order_history",
                 "quote_cod_order",
                 "confirm_approved_cod_order",
@@ -88,6 +90,20 @@ class ZeptoService:
 
     async def addresses(self) -> AddressList:
         return parse_addresses(await self.client.call_tool("list_saved_addresses", {}))
+
+    async def add_address(self, arguments: dict[str, Any]) -> AddressList:
+        """Add one user-confirmed address, then fetch provider truth.
+
+        The mutation is never replayed after an authentication or transport
+        failure. If the outcome is unclear, callers should refresh the address
+        list instead of submitting the same address a second time.
+        """
+
+        await self.client.call_tool(
+            "add_saved_address", arguments, retry_on_auth=False
+        )
+        self._selected_address = None
+        return await self.addresses()
 
     async def cart(self) -> ZeptoCart:
         """Read the provider cart without replaying a failed MCP request."""

@@ -62,6 +62,7 @@ class PurchaseImportResult(BaseModel):
 class ReorderSuggestion(BaseModel):
     product_id: UUID
     product_name: str
+    provider: str
     provider_item_id: str | None
     purchase_count: int = Field(ge=2)
     total_quantity: int = Field(ge=2)
@@ -247,9 +248,11 @@ class PurchaseGraphService:
                 latest_dismissal[feedback.product_id] = created_at
 
         observations: list[PurchaseObservation] = []
+        product_providers: dict[UUID, str] = {}
         completed_order_ids: set[UUID] = set()
         for product, edge, order in rows:
             if order.status.casefold() in DELIVERED_STATUSES:
+                product_providers[product.id] = product.provider
                 completed_order_ids.add(order.id)
                 observations.append(
                     PurchaseObservation(
@@ -287,6 +290,7 @@ class PurchaseGraphService:
                 ReorderSuggestion(
                     product_id=pattern.product_id,
                     product_name=pattern.product_name,
+                    provider=product_providers[pattern.product_id],
                     provider_item_id=pattern.provider_item_id,
                     purchase_count=pattern.purchase_count,
                     total_quantity=pattern.total_quantity,

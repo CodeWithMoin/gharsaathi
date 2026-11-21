@@ -29,6 +29,7 @@ from app.shopping.models import (
     Basket,
     BasketLine,
     BasketStatus,
+    OfferOpportunity,
     ProductRef,
     ProviderName,
 )
@@ -131,12 +132,39 @@ class ChargeOut(BaseModel):
     amount: Money
 
 
+class OfferOut(BaseModel):
+    kind: str
+    title: str
+    minimum_order_paise: int
+    remaining_paise: int
+    potential_saving_paise: int | None
+    net_extra_paise: int | None
+    unlocked: bool
+    applied: bool
+    provider_confirmed: bool
+
+
 class QuoteOut(BaseModel):
     item_total: Money
     charges: list[ChargeOut]
+    offers: list[OfferOut]
     payable: Money
     eta_text: str | None
     quoted_at: datetime
+
+
+def offer_out(offer: OfferOpportunity) -> OfferOut:
+    return OfferOut(
+        kind=offer.kind,
+        title=offer.title,
+        minimum_order_paise=offer.minimum_order_paise,
+        remaining_paise=offer.remaining_paise,
+        potential_saving_paise=offer.potential_saving_paise,
+        net_extra_paise=offer.net_extra_paise,
+        unlocked=offer.unlocked,
+        applied=offer.applied,
+        provider_confirmed=offer.provider_confirmed,
+    )
 
 
 class ApprovalOut(BaseModel):
@@ -211,6 +239,7 @@ def approval_request_out(result: ApprovalRequest) -> ApprovalRequestOut:
                 ChargeOut(label=charge.label, amount=money(charge.amount_paise))
                 for charge in quote.charges
             ],
+            offers=[offer_out(offer) for offer in quote.offers],
             payable=money(quote.payable_paise),
             eta_text=quote.eta_text,
             quoted_at=quote.quoted_at,

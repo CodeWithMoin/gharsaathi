@@ -15,6 +15,7 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, useApiRequest } from "../authenticated-api";
+import { offerOpportunityCopy, visibleOfferOpportunities } from "./offer-opportunity.mjs";
 import { canConfirmZeptoCodOrder, checkoutStatusCopy } from "./zepto-checkout-state.mjs";
 
 const MAX_QUANTITY = 50;
@@ -64,9 +65,56 @@ export type ApprovalRequest = {
     charges: { label: string; amount: Money }[];
     payable: Money;
     eta_text?: string | null;
+    offers?: OfferOpportunity[];
   };
   basket: ShoppingBasket;
   item_total_matches: boolean;
+};
+
+export type OfferOpportunity = {
+  kind: "free_delivery" | "bank_offer" | "promo" | "other";
+  title: string;
+  minimum_order_paise: number;
+  remaining_paise: number;
+  potential_saving_paise: number | null;
+  net_extra_paise: number | null;
+  unlocked: boolean;
+  applied: boolean;
+  provider_confirmed: boolean;
+};
+
+type UsualSuggestion = {
+  product_id: string;
+  product_name: string;
+  provider: string;
+  provider_item_id?: string | null;
+  last_ordered_at: string;
+};
+
+type LiveUsualCandidate = {
+  line: AddBasketLine;
+  name: string;
+  price: Money;
+  confirmedSaving: Money;
+  netIncrementalCost: Money;
+};
+
+type OfferSuggestionResponse = {
+  line: {
+    ref: BasketLine["ref"];
+    name: string;
+    brand?: string | null;
+    pack_size?: string | null;
+    unit_price_paise: number;
+    mrp_paise?: number | null;
+    quantity: number;
+    available: boolean;
+  };
+  candidate_total_paise: number;
+  confirmed_benefit_paise: number;
+  net_incremental_cost_paise: number;
+  requires_explicit_add: true;
+  requires_fresh_quote: true;
 };
 
 type ZeptoCheckoutStatus = "dispatching" | "confirmed" | "outcome_unknown" | "rejected";
@@ -181,6 +229,9 @@ export function BasketPanel({
   const [action, setAction] = useState<string | null>("load");
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const [checkout, setCheckout] = useState<ZeptoCheckoutState | null>(null);
+  const [usuals, setUsuals] = useState<UsualSuggestion[] | null>(null);
+  const [usualCandidate, setUsualCandidate] = useState<LiveUsualCandidate | null>(null);
+  const [usualNotice, setUsualNotice] = useState<string | null>(null);
   const query = useMemo(() => providerQuery(provider), [provider]);
 
   const applyBasket = useCallback((next: ShoppingBasket) => {
@@ -226,6 +277,9 @@ export function BasketPanel({
   // A final-order result is valid only for the exact approved bill that created it.
   useEffect(() => {
     setCheckout(null);
+    setUsuals(null);
+    setUsualCandidate(null);
+    setUsualNotice(null);
   }, [approval?.fingerprint, approval?.id, commerceMode, provider]);
 
   useEffect(() => {
@@ -357,6 +411,99 @@ export function BasketPanel({
     }
   }, [apiRequest, approval, checkout, commerceMode, provider]);
 
+  const actionableFreeDelivery = request?.quote.offers?.find((offer) =>
+    offer.kind === "free_delivery"
+    && !offer.unlocked
+    && offer.remaining_paise > 0
+    && offer.potential_saving_paise != null
+    && offer.potential_saving_paise > 0
+    && offer.provider_confirmed,
+  ) ?? null;
+
+  const loadUsefulUsuals = useCallback(async () => {
+    if (!actionableFreeDelivery || provider !== "zepto") return;
+    setAction("offer-usuals");
+    setUsualCandidate(null);
+    setUsualNotice(null);
+    try {
+      const suggestions = await apiRequest<UsualSuggestion[]>("/api/memory/usual-suggestions?limit=5");
+      const zeptoUsuals = suggestions.filter((item) => item.provider === "zepto" && item.provider_item_id);
+      setUsuals(zeptoUsuals);
+      if (!zeptoUsuals.length) setUsualNotice("No consented Zepto usuals are ready to check. We won’t guess from unrelated history.");
+    } catch (cause) {
+      setUsualNotice(cause instanceof Error ? cause.message : "Could not load your usual items.");
+    } finally {
+      setAction(null);
+    }
+  }, [actionableFreeDelivery, apiRequest, provider]);
+
+  const reviewUsefulUsual = useCallback(async (usual: UsualSuggestion) => {
+    if (!actionableFreeDelivery || !addressId || !usual.provider_item_id) return;
+    setAction(`offer-usual-${usual.product_id}`);
+    setUsualCandidate(null);
+    setUsualNotice(null);
+    try {
+      const suggestion = await apiRequest<OfferSuggestionResponse | null>("/api/zepto/offer-suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          memory_product_id: usual.product_id,
+          address_id: addressId,
+          offer_id: "free_delivery",
+          offer_label: actionableFreeDelivery.title,
+          minimum_order_paise: actionableFreeDelivery.minimum_order_paise,
+          remaining_paise: actionableFreeDelivery.remaining_paise,
+          confirmed_benefit_paise: actionableFreeDelivery.potential_saving_paise,
+        }),
+      });
+      if (!suggestion) {
+        setUsualNotice(`${usual.product_name} is unavailable, stale, already in the basket, or would not unlock this offer by itself.`);
+        return;
+      }
+      setUsualCandidate({
+        name: suggestion.line.name,
+        price: { paise: suggestion.candidate_total_paise, display: `₹${(suggestion.candidate_total_paise / 100).toLocaleString("en-IN")}` },
+        confirmedSaving: { paise: suggestion.confirmed_benefit_paise, display: `₹${(suggestion.confirmed_benefit_paise / 100).toLocaleString("en-IN")}` },
+        netIncrementalCost: { paise: suggestion.net_incremental_cost_paise, display: `₹${Math.abs(suggestion.net_incremental_cost_paise / 100).toLocaleString("en-IN")}` },
+        line: {
+          ref: suggestion.line.ref,
+          name: suggestion.line.name,
+          brand: suggestion.line.brand,
+          pack_size: suggestion.line.pack_size,
+          unit_price_paise: suggestion.line.unit_price_paise,
+          mrp_paise: suggestion.line.mrp_paise,
+          quantity: suggestion.line.quantity,
+          available: suggestion.line.available,
+        },
+      });
+    } catch (cause) {
+      setUsualNotice(cause instanceof Error ? cause.message : "Could not check the current Zepto item.");
+    } finally {
+      setAction(null);
+    }
+  }, [actionableFreeDelivery, addressId, apiRequest]);
+
+  const addUsefulUsual = useCallback(async () => {
+    if (!usualCandidate) return;
+    setAction("offer-add");
+    try {
+      const next = await basketRequest<ShoppingBasket>(`/lines${query}`, {
+        method: "POST",
+        body: JSON.stringify(usualCandidate.line),
+      });
+      applyBasket(next);
+      clearQuote();
+      setUsuals(null);
+      setUsualCandidate(null);
+      setUsualNotice(null);
+      setNotice({ text: `${usualCandidate.name} added. Get a fresh live bill to confirm the offer and final payable.`, error: false });
+    } catch (cause) {
+      setUsualNotice(cause instanceof Error ? cause.message : "Could not add this item.");
+    } finally {
+      setAction(null);
+    }
+  }, [applyBasket, basketRequest, clearQuote, query, usualCandidate]);
+
   const lines = basket?.lines ?? [];
   const lineCount = lines.reduce((total, line) => total + line.quantity, 0);
   const locked = action !== null;
@@ -364,6 +511,7 @@ export function BasketPanel({
   const isApproved = approval?.status === "approved";
   const canConfirmZeptoCod = Boolean(approval && canConfirmZeptoCodOrder({ provider, commerceMode, approvalStatus: approval.status }));
   const providerLabel = provider === "swiggy_instamart" ? "Swiggy Instamart" : "Zepto";
+  const visibleOffers = request ? visibleOfferOpportunities(request.quote.offers ?? []) as OfferOpportunity[] : [];
 
   return (
     <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`overflow-hidden rounded-[26px] border border-[#e6d7cb] bg-[#fffdf9] shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] ${className}`} aria-label="Your basket" aria-busy={locked}>
@@ -447,6 +595,31 @@ export function BasketPanel({
                 {request.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`} className="flex justify-between gap-4 text-[#806f65]"><span>{charge.label}</span><span className="tabular-nums">{charge.amount.display}</span></li>)}
                 <li className="flex justify-between gap-4 pt-2 text-sm font-semibold text-[#35241c]"><span>Final payable</span><strong className="tabular-nums">{request.quote.payable.display}</strong></li>
               </ul>
+
+              {visibleOffers.length > 0 && (
+                <div className="mt-3 rounded-2xl border border-[#ded3ef] bg-[#f8f4ff] p-3.5" aria-label="Smart savings suggestions">
+                  <div className="flex items-start gap-2">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-[#ebe1fa] text-[#6f359f]"><Receipt size={16} weight="fill" /></span>
+                    <div>
+                      <p className="text-xs font-semibold text-[#4d2b69]">Smart savings — only if it helps</p>
+                      <p className="mt-0.5 text-[10px] leading-4 text-[#766381]">We won&apos;t add anything automatically. Any change gets a fresh live bill and needs approval again.</p>
+                    </div>
+                  </div>
+                  <ul className="mt-3 space-y-2">
+                    {visibleOffers.map((offer, index) => {
+                      const copy = offerOpportunityCopy(offer);
+                      return <li key={`${offer.kind}-${offer.title}-${index}`} className="rounded-xl bg-white/80 px-3 py-2.5"><p className="text-xs font-semibold text-[#493354]">{copy.title}</p><p className="mt-0.5 text-[10px] leading-4 text-[#766381]">{copy.detail}</p></li>;
+                    })}
+                  </ul>
+                  {actionableFreeDelivery && provider === "zepto" && (
+                    <div className="mt-3 border-t border-[#e5dcef] pt-3">
+                      {usuals === null ? <button type="button" onClick={() => void loadUsefulUsuals()} disabled={locked} className="rounded-full border border-[#cdb8df] bg-white px-3.5 py-2 text-[11px] font-semibold text-[#65358b] disabled:opacity-45">{action === "offer-usuals" ? "Checking…" : "Check a useful usual item"}</button> : usuals.length > 0 && <div><p className="text-[10px] leading-4 text-[#766381]">You bought these before. That does not mean you need them—tap one only if it&apos;s useful now.</p><div className="mt-2 flex flex-wrap gap-2">{usuals.map((usual) => <button type="button" key={usual.product_id} onClick={() => void reviewUsefulUsual(usual)} disabled={locked} className="rounded-full border border-[#d8c9e5] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#5f4173] disabled:opacity-45">{action === `offer-usual-${usual.product_id}` ? "Checking live price…" : usual.product_name}</button>)}</div></div>}
+                      {usualCandidate && <div className="mt-3 rounded-xl border border-[#d5c4e3] bg-white p-3"><p className="text-xs font-semibold text-[#493354]">{usualCandidate.name} · {usualCandidate.price.display} live</p><p className="mt-1 text-[10px] leading-4 text-[#766381]">This item unlocks the threshold. After the confirmed {usualCandidate.confirmedSaving.display} delivery saving, {usualCandidate.netIncrementalCost.paise < 0 ? `your bill could be ${usualCandidate.netIncrementalCost.display} lower` : `the net extra is ${usualCandidate.netIncrementalCost.display}`}.</p><button type="button" onClick={() => void addUsefulUsual()} disabled={locked} className="mt-2 rounded-full bg-[#6f359f] px-3.5 py-2 text-[11px] font-semibold text-white disabled:opacity-45">{action === "offer-add" ? "Adding…" : `Add ${usualCandidate.name}`}</button><p className="mt-1.5 text-[9px] leading-4 text-[#83718d]">Adding it cancels this approval. Zepto must return a fresh bill before you can approve again.</p></div>}
+                      {usualNotice && <p className="mt-2 text-[10px] leading-4 text-[#805d46]">{usualNotice}</p>}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {!request.item_total_matches && <p className="mt-3 flex gap-2 rounded-xl bg-[#fff0df] px-3 py-2.5 text-xs leading-5 text-[#8c5127]"><WarningCircle size={16} className="mt-0.5 shrink-0" />Store item prices changed. The final bill above is the amount you would approve.</p>}
               <p className="mt-3 text-[11px] leading-5 text-[#806f65]">{request.quote.eta_text ? `Delivery ${request.quote.eta_text} · ` : ""}Valid {expiryText(approval.expires_at)}.</p>

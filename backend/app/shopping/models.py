@@ -71,6 +71,25 @@ class Charge(BaseModel):
     amount_paise: int
 
 
+class OfferOpportunity(BaseModel):
+    """A provider-confirmed saving opportunity for the current basket.
+
+    Values describe the provider's current preview only.  In particular,
+    ``potential_saving_paise`` is omitted when Zepto does not state a
+    non-zero value; callers must not invent a discount for a bank offer.
+    """
+
+    title: str
+    kind: Literal["free_delivery", "bank_offer", "promo", "other"]
+    minimum_order_paise: int = Field(ge=0)
+    remaining_paise: int = Field(ge=0)
+    potential_saving_paise: int | None = Field(default=None, ge=0)
+    net_extra_paise: int | None = Field(default=None, ge=0)
+    unlocked: bool
+    applied: bool
+    provider_confirmed: bool
+
+
 class Quote(BaseModel):
     """The provider bill for one exact basket revision."""
 
@@ -79,6 +98,7 @@ class Quote(BaseModel):
     basket_revision: int
     item_total_paise: int
     charges: list[Charge] = Field(default_factory=list)
+    offers: list[OfferOpportunity] = Field(default_factory=list)
     payable_paise: int
     unavailable_refs: list[ProductRef] = Field(default_factory=list)
     eta_text: str | None = None
