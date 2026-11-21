@@ -8,7 +8,7 @@ import { mapRealtimeTranscriptEvent } from "./voice-transcript.mjs";
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 type VoiceStatus = "connecting" | "live" | "closing" | "error";
-type VoiceProduct = { product_id: string; sku_id: string; spin_id?: string; name: string; brand?: string; pack_size?: string; price: { mrp: number; offer_price: number }; available: boolean; image_url?: string; rating_value?: string };
+type VoiceProduct = { provider?: "swiggy_instamart" | "zepto"; provider_label?: string; product_id: string; sku_id: string; spin_id?: string; name: string; brand?: string; pack_size?: string; price: { mrp: number; offer_price: number }; available: boolean; image_url?: string; rating_value?: string };
 type LiveEvent = { type: string; error?: { message?: string }; [key: string]: unknown };
 export type VoiceTranscriptTurn = { id: string; role: "user" | "assistant"; content: string };
 type ToolEvent =
@@ -37,7 +37,7 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   });
 }
 
-export function VoicePanel({ addressId, onClose, onResults, onTranscriptTurn, onBasketTouched }: { addressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[]) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: () => void }) {
+export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[]) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: () => void }) {
   const [status, setStatus] = useState<VoiceStatus>("connecting");
   const [message, setMessage] = useState("Connecting to GharSaathi…");
   const [searching, setSearching] = useState(false);
@@ -102,7 +102,7 @@ export function VoicePanel({ addressId, onClose, onResults, onTranscriptTurn, on
         const event = JSON.parse(data) as ToolEvent;
         if (event.type === "tool.started" && event.name === "search_products") {
           setSearching(true);
-          setMessage("Instamart par dekh rahi hoon…");
+          setMessage("Connected stores par dekh rahi hoon…");
         } else if (event.type === "tool.started") {
           setBasketNotice("");
           setMessage("Basket update kar raha hoon…");
@@ -113,7 +113,7 @@ export function VoicePanel({ addressId, onClose, onResults, onTranscriptTurn, on
           onResults(event.query, event.products);
         } else if (event.type === "tool.not_connected") {
           setSearching(false);
-          setMessage("Swiggy connect karke delivery address choose kijiye.");
+          setMessage("Ek store connect karke delivery address choose kijiye.");
         } else if (event.type === "tool.error") {
           setSearching(false);
           setMessage(event.message);
@@ -195,7 +195,11 @@ export function VoicePanel({ addressId, onClose, onResults, onTranscriptTurn, on
       const response = await fetch(`${API}/api/voice/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sdp, swiggy_address_id: addressId || null }),
+        body: JSON.stringify({
+          sdp,
+          swiggy_address_id: addressId || null,
+          zepto_address_id: zeptoAddressId || null,
+        }),
       });
       const payload = await response.json().catch(() => null);
       if (attempt !== attemptRef.current) return;
@@ -209,7 +213,7 @@ export function VoicePanel({ addressId, onClose, onResults, onTranscriptTurn, on
       setMessage(denied ? "Microphone permission is needed for voice shopping." : error instanceof Error ? error.message : "Could not start voice.");
       cleanup();
     }
-  }, [addressId, cleanup, handleTranscriptEvent, listenForToolEvents, onClose]);
+  }, [addressId, cleanup, handleTranscriptEvent, listenForToolEvents, onClose, zeptoAddressId]);
 
   useEffect(() => {
     void start();
@@ -227,7 +231,7 @@ export function VoicePanel({ addressId, onClose, onResults, onTranscriptTurn, on
     onClose();
   }
 
-  const statusLabel = status === "connecting" ? "Starting voice…" : status === "error" ? "Voice unavailable" : searching ? "Searching Instamart…" : "Listening…";
+  const statusLabel = status === "connecting" ? "Starting voice…" : status === "error" ? "Voice unavailable" : searching ? "Searching stores…" : "Listening…";
 
   return <motion.section initial={{ opacity: 0, y: 12, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: .99 }} transition={{ duration: .2 }} className="mx-auto max-w-3xl rounded-[26px] border border-[#deccbf] bg-[#fffdf9] p-3 shadow-[0_24px_60px_-28px_rgba(70,40,24,.55),inset_0_1px_0_rgba(255,255,255,.9)]" aria-label="Voice conversation">
     <div className="flex items-center gap-3">

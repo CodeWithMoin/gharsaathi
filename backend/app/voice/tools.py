@@ -1,4 +1,6 @@
+import asyncio
 import json
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -10,6 +12,12 @@ from app.commerce.swiggy.errors import (
     SwiggyRateLimited,
 )
 from app.commerce.swiggy.models import Product, ProductSearchResult
+from app.commerce.zepto.errors import (
+    ZeptoAuthenticationRequired,
+    ZeptoConfigurationError,
+    ZeptoError,
+    ZeptoRateLimited,
+)
 from app.shopping.models import rupees_to_paise
 
 
@@ -19,8 +27,8 @@ SEARCH_PRODUCTS_TOOL: dict[str, Any] = {
     "type": "function",
     "name": "search_products",
     "description": (
-        "Search Swiggy Instamart for groceries or household products at the "
-        "user's selected delivery address. Read-only: it never changes a cart "
+        "Search each connected store with a selected delivery address for groceries "
+        "or household products. Read-only: it never changes a provider cart "
         "or places an order. Use a short product query in English or Hinglish, "
         "including brand and pack size when the user gave them, for example "
         "'Fortune sunflower oil 1 litre' or 'Aashirvaad atta 5 kg'."
@@ -58,6 +66,15 @@ class ProductSearcher(Protocol):
     async def search(
         self, query: str, address_id: str, offset: int
     ) -> ProductSearchResult: ...
+
+
+@dataclass(frozen=True)
+class ProviderSearchTarget:
+    provider: str
+    store: str
+    searcher: ProductSearcher
+    address_id: str | None
+    add_supported: bool = False
 
 
 class ToolOutcome(BaseModel):
@@ -193,3 +210,141 @@ class ShoppingToolExecutor:
                 "products": [p.model_dump() for p in products],
             },
         )
+
+
+class MultiProviderShoppingToolExecutor:
+    """Read-only voice search across ready stores with explicit provenance."""
+
+    def __init__(
+        self,
+        targets: list[ProviderSearchTarget],
+        options: dict[str, Product] | None = None,
+    ) -> None:
+        self.targets = targets
+        self.options = options if options is not None else {}
+
+    async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
+        if name != "search_products":
+            return ToolOutcome(
+                model_output={"status": "error", "message": f"Unknown tool {name}."}
+            )
+        try:
+            arguments = SearchProductsArguments.model_validate(json.loads(raw_arguments))
+        except (json.JSONDecodeError, ValidationError, TypeError):
+            return ToolOutcome(
+                model_output={
+                    "status": "error",
+                    "message": "Invalid arguments. Send a product query of 2 to 120 characters.",
+                }
+            )
+
+        ready = [target for target in self.targets if target.address_id]
+        if not ready:
+            return ToolOutcome(
+                model_output={
+                    "status": "not_connected",
+                    "message": "Connect at least one store and choose its saved delivery address on screen.",
+                },
+                ui_event={"type": "tool.not_connected", "query": arguments.query},
+            )
+
+        outcomes = await asyncio.gather(
+            *(self._search_target(target, arguments.query) for target in ready)
+        )
+        successful = [outcome for outcome in outcomes if outcome["status"] == "ok"]
+        if not successful:
+            statuses = {str(outcome["status"]) for outcome in outcomes}
+            status = "rate_limited" if "rate_limited" in statuses else "not_connected" if statuses == {"not_connected"} else "error"
+            return ToolOutcome(
+                model_output={
+                    "status": status,
+                    "query": arguments.query,
+                    "providers": [
+                        {key: value for key, value in outcome.items() if key not in {"target", "products"}}
+                        for outcome in outcomes
+                    ],
+                    "message": "No connected store returned product results. Do not guess price or availability.",
+                },
+                ui_event={
+                    "type": "tool.not_connected" if status == "not_connected" else "tool.error",
+                    "query": arguments.query,
+                    "message": "Connected stores could not be searched right now.",
+                },
+            )
+
+        model_results: list[dict[str, Any]] = []
+        ui_products: list[dict[str, Any]] = []
+        stores: list[str] = []
+        per_store_limit = max(1, MAX_RESULTS_FOR_MODEL // len(successful))
+        for outcome in successful:
+            target = outcome["target"]
+            assert isinstance(target, ProviderSearchTarget)
+            products = outcome["products"]
+            assert isinstance(products, list)
+            stores.append(target.store)
+            for product in products[:per_store_limit]:
+                assert isinstance(product, Product)
+                entry = {
+                    "provider": target.store,
+                    "add_supported": target.add_supported,
+                    **_product_for_model(product),
+                }
+                if target.add_supported:
+                    option_id = f"opt{len(self.options) + 1}"
+                    self.options[option_id] = product
+                    entry["option_id"] = option_id
+                model_results.append(entry)
+            ui_products.extend(
+                {
+                    **product.model_dump(),
+                    "provider": target.provider,
+                    "provider_label": target.store,
+                }
+                for product in products
+            )
+
+        return ToolOutcome(
+            model_output={
+                "status": "ok",
+                "stores_checked": stores,
+                "query": arguments.query,
+                "total_variants": len(ui_products),
+                "results": model_results,
+                "provider_statuses": [
+                    {key: value for key, value in outcome.items() if key not in {"target", "products"}}
+                    for outcome in outcomes
+                ],
+                "note": (
+                    "Current item prices only; nothing was added. Only results with an "
+                    "option_id can be added to a local basket. Zepto is search-only."
+                ),
+            },
+            ui_event={
+                "type": "tool.results",
+                "query": arguments.query,
+                "store": " + ".join(stores),
+                "products": ui_products,
+            },
+        )
+
+    async def _search_target(
+        self, target: ProviderSearchTarget, query: str
+    ) -> dict[str, Any]:
+        assert target.address_id is not None
+        try:
+            result = await target.searcher.search(query, target.address_id, 0)
+        except (SwiggyAuthenticationRequired, SwiggyConfigurationError, ZeptoAuthenticationRequired, ZeptoConfigurationError):
+            return {"status": "not_connected", "store": target.store, "target": target, "products": []}
+        except SwiggyRateLimited as exc:
+            return {
+                "status": "rate_limited",
+                "store": target.store,
+                "retry_after_seconds": exc.retry_after_seconds,
+                "target": target,
+                "products": [],
+            }
+        except ZeptoRateLimited:
+            return {"status": "rate_limited", "store": target.store, "target": target, "products": []}
+        except (SwiggyError, ZeptoError):
+            return {"status": "error", "store": target.store, "target": target, "products": []}
+        return {"status": "ok", "store": target.store, "target": target, "products": result.products}

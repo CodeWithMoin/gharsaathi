@@ -11,7 +11,11 @@ from app.commerce.swiggy.errors import (
 )
 from app.commerce.swiggy.models import Price, Product, ProductSearchResult
 from app.voice.sideband import FINISHED, SessionChannel, SidebandRunner
-from app.voice.tools import ShoppingToolExecutor
+from app.voice.tools import (
+    MultiProviderShoppingToolExecutor,
+    ProviderSearchTarget,
+    ShoppingToolExecutor,
+)
 
 
 def product(name: str, offer: float, mrp: float, available: bool = True) -> Product:
@@ -120,6 +124,59 @@ async def test_rate_limit_is_not_misreported_as_unclear_availability() -> None:
     assert outcome.model_output["retry_after_seconds"] == 45
     assert "No stock result" in outcome.model_output["message"]
     assert "results" not in outcome.model_output
+
+
+@pytest.mark.asyncio
+async def test_multi_provider_search_labels_results_and_keeps_zepto_read_only() -> None:
+    swiggy = FakeSearcher(ProductSearchResult(products=[product("Swiggy Milk", 70, 72)]))
+    zepto = FakeSearcher(ProductSearchResult(products=[product("Zepto Milk", 68, 72)]))
+    options: dict[str, Product] = {}
+    executor = MultiProviderShoppingToolExecutor(
+        [
+            ProviderSearchTarget(
+                "swiggy_instamart", "Swiggy Instamart", swiggy, "swiggy-home", True
+            ),
+            ProviderSearchTarget("zepto", "Zepto", zepto, "zepto-home"),
+        ],
+        options,
+    )
+
+    outcome = await executor.execute(
+        "search_products", json.dumps({"query": "Amul milk 1 litre"})
+    )
+
+    assert swiggy.calls == [("Amul milk 1 litre", "swiggy-home", 0)]
+    assert zepto.calls == [("Amul milk 1 litre", "zepto-home", 0)]
+    assert outcome.model_output["stores_checked"] == ["Swiggy Instamart", "Zepto"]
+    swiggy_result, zepto_result = outcome.model_output["results"]
+    assert swiggy_result["option_id"] == "opt1"
+    assert swiggy_result["add_supported"] is True
+    assert "option_id" not in zepto_result
+    assert zepto_result["add_supported"] is False
+    assert list(options) == ["opt1"]
+    assert outcome.ui_event is not None
+    assert {item["provider"] for item in outcome.ui_event["products"]} == {
+        "swiggy_instamart",
+        "zepto",
+    }
+
+
+@pytest.mark.asyncio
+async def test_multi_provider_search_calls_only_ready_provider() -> None:
+    swiggy = FakeSearcher(OIL)
+    zepto = FakeSearcher(ProductSearchResult(products=[product("Zepto Atta", 250, 280)]))
+    executor = MultiProviderShoppingToolExecutor(
+        [
+            ProviderSearchTarget("swiggy_instamart", "Swiggy Instamart", swiggy, None, True),
+            ProviderSearchTarget("zepto", "Zepto", zepto, "zepto-home"),
+        ]
+    )
+
+    outcome = await executor.execute("search_products", json.dumps({"query": "atta"}))
+
+    assert swiggy.calls == []
+    assert zepto.calls == [("atta", "zepto-home", 0)]
+    assert outcome.model_output["stores_checked"] == ["Zepto"]
 
 
 class FakeConnection:

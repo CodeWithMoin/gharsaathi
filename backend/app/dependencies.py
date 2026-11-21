@@ -149,6 +149,7 @@ def get_voice_service() -> LiveSessionService:
         get_sideband_hub(),
         baskets=get_basket_service(),
         approvals=get_approval_service(),
+        zepto_searcher=get_zepto_service(),
     )
 
 

@@ -15,7 +15,7 @@ from app.voice.service import (
     VoiceProviderError,
 )
 from app.voice.prompts import BACKEND_INSTRUCTIONS, GREETING_INSTRUCTION, LIVE_INSTRUCTIONS
-from app.voice.tools import ShoppingToolExecutor
+from app.voice.tools import MultiProviderShoppingToolExecutor, ShoppingToolExecutor
 from tests.shopping_fakes import World
 
 
@@ -115,6 +115,32 @@ async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_routes_selected_addresses_to_both_read_only_searchers() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            201,
+            json={"session": {"id": "live_multi"}, "transport": {"type": "webrtc", "sdp": "answer"}},
+        )
+
+    hub = RecordingHub()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await LiveSessionService(
+            settings(),
+            NoSearch(),
+            hub,
+            client,
+            zepto_searcher=NoSearch(),
+        ).create(OFFER, "swiggy-home", "zepto-home")
+
+    executor = hub.started[0][1]
+    assert isinstance(executor, MultiProviderShoppingToolExecutor)
+    assert [(target.store, target.address_id) for target in executor.targets] == [
+        ("Swiggy Instamart", "swiggy-home"),
+        ("Zepto", "zepto-home"),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_missing_api_key_never_calls_openai() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError("OpenAI must not be called without a key")
@@ -142,7 +168,13 @@ async def test_openai_error_message_is_surfaced_without_secrets() -> None:
 
 
 class FakeVoiceService:
-    async def create(self, offer_sdp: str, swiggy_address_id: str | None = None) -> LiveSession:
+    async def create(
+        self,
+        offer_sdp: str,
+        swiggy_address_id: str | None = None,
+        zepto_address_id: str | None = None,
+    ) -> LiveSession:
+        del offer_sdp, swiggy_address_id, zepto_address_id
         return LiveSession(session_id="live_fake", sdp="answer")
 
 

@@ -21,6 +21,7 @@ KEEPALIVE_SECONDS = 15
 class SessionRequest(BaseModel):
     sdp: str = Field(min_length=1, max_length=64 * 1024)
     swiggy_address_id: str | None = Field(default=None, min_length=1, max_length=256)
+    zepto_address_id: str | None = Field(default=None, min_length=1, max_length=256)
 
     @field_validator("sdp")
     @classmethod
@@ -41,7 +42,11 @@ async def create_session(
 ) -> LiveSession:
     _check_origin(request)
     try:
-        return await service.create(body.sdp, body.swiggy_address_id)
+        return await service.create(
+            body.sdp,
+            body.swiggy_address_id,
+            body.zepto_address_id,
+        )
     except VoiceConfigurationError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except VoiceProviderError as exc:
