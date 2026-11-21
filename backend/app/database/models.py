@@ -240,6 +240,40 @@ class ShoppingApprovalRecord(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ZeptoCheckoutAttemptRecord(Base):
+    """Durable one-shot claim for a consequential Zepto order submission."""
+
+    __tablename__ = "zepto_checkout_attempts"
+    __table_args__ = (
+        UniqueConstraint("approval_id", name="uq_zepto_checkout_attempt_approval"),
+        UniqueConstraint(
+            "household_id",
+            "idempotency_key_hash",
+            name="uq_zepto_checkout_household_idempotency",
+        ),
+        Index("ix_zepto_checkout_attempt_basket", "basket_id"),
+        Index("ix_zepto_checkout_attempt_status", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    approval_id: Mapped[str] = mapped_column(
+        ForeignKey("shopping_approvals.id", ondelete="RESTRICT")
+    )
+    basket_id: Mapped[str] = mapped_column(
+        ForeignKey("shopping_baskets.id", ondelete="RESTRICT")
+    )
+    household_id: Mapped[str] = mapped_column(String(128))
+    idempotency_key_hash: Mapped[str] = mapped_column(String(64))
+    payable_paise: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(32))
+    provider_order_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    provider_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class PurchaseOrderNode(Base):
     """A minimal provider order node; deliberately excludes address/payment PII."""
 

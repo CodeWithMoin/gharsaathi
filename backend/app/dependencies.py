@@ -1,3 +1,4 @@
+import asyncio
 from functools import lru_cache
 from typing import Annotated
 
@@ -25,8 +26,14 @@ from app.core.local_secrets import get_or_create_local_encryption_key
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.shopping.database import DatabaseApprovalRepository, DatabaseBasketRepository
+from app.shopping.checkout import (
+    CheckoutService,
+    DatabaseCheckoutAttemptRepository,
+    ZeptoCodGateway,
+)
 from app.database.session import get_session_factory
-from app.shopping.models import ProviderName
+from app.shopping.errors import ProviderUnavailable
+from app.shopping.models import Basket, ProviderName, Quote
 from app.shopping.ports import QuoteProvider
 from app.shopping.providers import ProviderRegistry, get_provider_registry
 from app.support.service import SupportService
@@ -118,6 +125,8 @@ def get_quote_provider_registry() -> ProviderRegistry:
     registry.register(get_swiggy_quote_provider())
     if get_settings().commerce_mode == "demo":
         registry.register(DemoZeptoQuoteProvider())
+    else:
+        registry.register(get_zepto_quote_provider())
     return registry
 
 
@@ -152,6 +161,23 @@ def get_zepto_service() -> ZeptoService | DemoZeptoService:
 ZeptoServiceDependency = Annotated[
     ZeptoService | DemoZeptoService, Depends(get_zepto_service)
 ]
+
+
+@lru_cache
+def get_zepto_checkout_lock() -> asyncio.Lock:
+    """Serialize the provider cart preview through final confirmation."""
+
+    return asyncio.Lock()
+
+
+@lru_cache
+def get_zepto_quote_provider() -> QuoteProvider:
+    from app.commerce.zepto.quote_provider import ZeptoQuoteProvider
+
+    return ZeptoQuoteProvider(
+        get_live_zepto_service().client,
+        checkout_lock=get_zepto_checkout_lock(),
+    )
 
 
 @lru_cache
@@ -193,12 +219,68 @@ def get_basket_service() -> BasketService:
 @lru_cache
 def get_approval_service() -> ApprovalService:
     return ApprovalService(
-        get_basket_repository(), get_approval_repository(), get_live_quote_provider
+        get_basket_repository(),
+        get_approval_repository(),
+        get_live_quote_provider,
+        workflow_lock=get_zepto_checkout_lock(),
     )
 
 
 BasketServiceDependency = Annotated[BasketService, Depends(get_basket_service)]
 ApprovalServiceDependency = Annotated[ApprovalService, Depends(get_approval_service)]
+
+
+class _DisabledZeptoCheckout:
+    async def quote(self, basket: Basket) -> Quote:
+        raise ProviderUnavailable(
+            "Real Zepto checkout is unavailable while COMMERCE_MODE=demo."
+        )
+
+    async def confirm_cod(self, basket: Basket) -> object:
+        raise ProviderUnavailable(
+            "Real Zepto checkout is unavailable while COMMERCE_MODE=demo."
+        )
+
+
+@lru_cache
+def get_zepto_checkout_service() -> CheckoutService:
+    attempts = DatabaseCheckoutAttemptRepository(get_session_factory())
+    if get_settings().commerce_mode == "demo":
+        disabled = _DisabledZeptoCheckout()
+        return CheckoutService(
+            get_basket_repository(),
+            get_approval_repository(),
+            attempts,
+            disabled,
+            disabled,
+        )
+
+    # Imported lazily so the non-consequential shopping API remains available
+    # if a deployment intentionally omits live checkout configuration.
+    from app.commerce.zepto.quote_provider import (
+        ZeptoCodCheckoutGateway,
+        ZeptoQuoteProvider,
+    )
+
+    client = get_live_zepto_service().client
+    checkout_lock = get_zepto_checkout_lock()
+    quote_provider = get_zepto_quote_provider()
+    gateway: ZeptoCodGateway = ZeptoCodCheckoutGateway(
+        client, checkout_lock=checkout_lock
+    )
+    return CheckoutService(
+        get_basket_repository(),
+        get_approval_repository(),
+        attempts,
+        quote_provider,
+        gateway,
+        checkout_lock=checkout_lock,
+    )
+
+
+CheckoutServiceDependency = Annotated[
+    CheckoutService, Depends(get_zepto_checkout_service)
+]
 
 
 @lru_cache

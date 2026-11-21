@@ -77,9 +77,13 @@ class ZeptoService:
                 "inspect_catalogue",
                 "view_cart",
                 "list_order_history",
+                "quote_cod_order",
+                "confirm_approved_cod_order",
             ],
+            cart_actions_exposed=True,
             cart_read_exposed=True,
             order_history_exposed=True,
+            checkout_exposed=True,
         )
 
     async def addresses(self) -> AddressList:

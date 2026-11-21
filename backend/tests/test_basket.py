@@ -57,6 +57,20 @@ async def test_changes_supersede_open_approval() -> None:
     assert stored is not None and stored.status == ApprovalStatus.SUPERSEDED
 
 
+async def test_checkout_pending_basket_is_reused_and_cannot_be_mutated() -> None:
+    world = World()
+    basket = await world.ready_basket()
+    basket.status = BasketStatus.CHECKOUT_PENDING
+    await world.basket_repo.save(basket)
+
+    active = await world.baskets.active(HOUSEHOLD, PROVIDER)
+    assert active.id == basket.id
+    with pytest.raises(InvalidBasketChange, match="Checkout already started"):
+        await world.baskets.set_quantity(HOUSEHOLD, PROVIDER, "spin1", 2)
+
+    assert (await world.basket_repo.get(basket.id)).status == BasketStatus.CHECKOUT_PENDING
+
+
 async def test_totals_and_savings_are_integer_paise() -> None:
     world = World()
     await world.baskets.add_line(HOUSEHOLD, PROVIDER, line(price=15400, quantity=3))

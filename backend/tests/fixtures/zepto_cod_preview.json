@@ -1,0 +1,39 @@
+{
+  "data": {
+    "deliverable": true,
+    "deliveryAddress": {
+      "id": "addr_home",
+      "label": "Home",
+      "addressLine": "<redacted>"
+    },
+    "deliveryFee": 3000,
+    "deliveryFeeDiscount": 0,
+    "deliveryFeePreDiscount": 3000,
+    "discount": 0,
+    "etaInMinutes": 12,
+    "freeDelivery": {
+      "isUnlocked": false,
+      "message": "Add more items to unlock free delivery",
+      "minimumOrderValue": 9900,
+      "remainingAmountToUnlock": 8400
+    },
+    "isPreview": true,
+    "items": [
+      {
+        "name": "Test Milk 500 ml",
+        "price": 1500,
+        "productVariantId": "pvid_milk",
+        "quantity": 1,
+        "storeProductId": "spid_milk"
+      }
+    ],
+    "otherFees": [],
+    "packagingFee": 500,
+    "paymentMethod": "COD",
+    "requiresConfirmation": true,
+    "subTotal": 1500,
+    "taxes": null,
+    "toPayAmount": 5000,
+    "totalItems": 1
+  }
+}

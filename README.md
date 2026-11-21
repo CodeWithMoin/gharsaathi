@@ -2,7 +2,8 @@
 
 The local app starts in a safe static-demo mode. It can exercise address selection,
 product search, baskets, deterministic fees, and exact-bill approval without calling
-Swiggy or Zepto. It cannot check out or place an order.
+Swiggy or Zepto. Live mode additionally supports an approval-bound Zepto
+cash-on-delivery checkout; demo mode never places orders.
 
 ## Safe demo versus live commerce
 
@@ -95,6 +96,21 @@ prices, user IDs, or order data.
 Requirements for demo mode: Python 3.11+, Node.js 20+, and PostgreSQL. Live mode also
 requires provider accounts and a browser for the providers' phone/OTP pages.
 
+The common local flows have shell wrappers:
+
+```bash
+make setup          # create missing local env files and install dependencies
+make dev            # safe demo frontend + backend
+make dev-live       # deliberately enable connected providers
+make swiggy-doctor # read-only Swiggy readiness check
+make zepto-doctor  # read-only Zepto and callback-bridge readiness check
+make check          # backend + frontend tests, lint, and type-check
+make check-full     # same checks plus a production frontend build
+```
+
+These wrappers preserve existing environment files. Doctor and verification scripts
+do not make OAuth, MCP, cart, checkout, payment, or order calls.
+
 1. Create the root environment file and encryption key:
 
    ```bash
@@ -144,6 +160,15 @@ cd backend
 sudo uvicorn app.local_callback_bridge:app --host 127.0.0.1 --port 80 --no-access-log
 ```
 
+Before opening OAuth, use the safe readiness wrapper:
+
+```bash
+make zepto-doctor
+```
+
+It checks only local prerequisites and the callback bridge; it does not open OAuth,
+call Zepto, change a cart, preview, pay, or order anything.
+
 Then use `GET /api/zepto/oauth/start` (the UI's **Connect Zepto** action) and
 complete the phone/OTP flow only on Zepto's site. The callback bridge forwards the
 result to the backend, which validates OAuth state and keeps the token encrypted
@@ -153,18 +178,54 @@ call. Swiggy and Zepto can stay connected together; a shopping request searches 
 provider whose saved address is ready.
 
 The authenticated Zepto catalogue was inspected before enabling actions. This build
-exposes only saved-address retrieval and product search. It keeps one serialized MCP
+exposes saved-address retrieval, product search, read-only cart/order history, and one
+narrow cash-on-delivery checkout path. It keeps one serialized MCP
 session, caches the live tool catalogue for that session, reuses the selected address
 and past-order context, and caches an identical search briefly. A provider 429 starts
 a local cooldown so repeated UI actions do not keep extending the block. Zepto cart,
-payment, checkout, and order tools remain unavailable through this app. The scope is
-fixed to `tools:read`.
+payment, and order tools are not exposed generically. The COD flow replaces the Zepto
+cart with the exact local basket, obtains `create_order(confirmOrder=false)`, strictly
+reconciles the returned integer-paise bill, requires exact bill approval, then exposes
+a separate one-shot `confirmOrder=true` action. It persists an idempotent attempt before
+dispatch and treats any ambiguous result as outcome-unknown without retrying. The OAuth
+scope remains fixed to `tools:read`, matching the verified live catalogue.
+
+The preview response contract and cleanup were verified against a connected test
+account on 22 November 2026 without placing an order. The final confirmation parser is
+deliberately strict, but its success response cannot be live-verified without placing a
+real order; the first real checkout must therefore be treated as a supervised test.
+
+### Optional live preview diagnostic
+
+After connecting Zepto, a supervised developer can capture a privacy-redacted,
+**unconfirmed** checkout preview without manually preparing a cart:
+
+```bash
+COMMERCE_MODE=live ./scripts/zepto-preview.sh --seed-preview-cleanup
+```
+
+The script requires typing `PREVIEW` (or an explicit `--yes` for supervised
+automation), selects the first saved address, adds one inexpensive milk item, calls
+`create_order(confirmOrder=false)`, and removes its own item in cleanup. It never
+calls `confirmOrder=true`, never pays, and never places an order. `make zepto-preview`
+opens the same guarded flow. If cleanup reports a failure, inspect the Zepto cart
+manually before any further provider action.
+
+The current encrypted Zepto connection file is deployment-global, not user-scoped.
+Consequently, live Zepto checkout is **local single-user testing only** and must not be
+enabled in a multi-user deployment. Production use requires a separate encrypted Zepto
+connection and provider session for each authenticated user. The in-process coordinator
+also serializes this app's preview-through-confirm flow, but it cannot make undocumented
+guarantees about provider state changed outside this MCP session.
 
 ## Local token storage
 
 The single-user connection is encrypted with Fernet and stored at `backend/.data/swiggy_connection.enc` by default. The file is created with mode `0600`, excluded from Git, and never returned to the browser or logged. If `APP_ENCRYPTION_KEY` is not set, local development creates a private key once at `backend/.data/app_encryption.key` and reuses it across backend restarts. The application redacts OAuth callback query parameters from Uvicorn logs; the documented development command also disables access logs as defense in depth. Keep the configured encryption key stable across backend restarts. Changing or deleting it makes the existing encrypted connection unreadable; delete the local encrypted connection file and reconnect if you intentionally rotate the key.
 
-For a multi-user deployment, replace this file store with per-user encrypted database or vault storage and complete Swiggy's delegated-auth/enterprise onboarding.
+For a multi-user deployment, replace both provider file stores with per-user encrypted
+database or vault storage and complete each provider's supported delegated-auth or
+enterprise onboarding. Do not expose the Zepto checkout route before that account binding
+is implemented.
 
 ## API surface
 
@@ -187,6 +248,8 @@ For a multi-user deployment, replace this file store with per-user encrypted dat
 - `PUT /api/zepto/addresses/selected`
 - `POST /api/zepto/search` with
   `{"query":"milk and bread","address_id":"<saved-address-id>","page_number":0}`
+- `POST /api/zepto/checkout/cod` with an approved `approval_id`, its exact
+  `fingerprint`, and an `Idempotency-Key` header — one-shot live COD submission
 
 ## Person-scoped memory
 
@@ -255,4 +318,6 @@ npx tsc --noEmit
 npm run build
 ```
 
-Automated tests mock OAuth and MCP results. They never call cart, checkout, payment, or order tools. A real end-to-end address/search verification requires completing Swiggy OAuth in a browser with a test account.
+Automated tests mock OAuth and MCP results. They never call live cart, checkout,
+payment, or order tools. Live provider verification is always a deliberate manual step;
+never use `confirmOrder=true` merely to test the integration.

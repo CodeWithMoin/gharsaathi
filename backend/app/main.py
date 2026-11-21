@@ -9,6 +9,7 @@ from app.api.swiggy import router as swiggy_router
 from app.api.support import router as support_router
 from app.api.tracking import router as tracking_router
 from app.api.zepto import router as zepto_router
+from app.api.zepto_checkout import router as zepto_checkout_router
 from app.api.memory import router as memory_router
 from app.api.purchase_memory import router as purchase_memory_router
 from app.api.voice import router as voice_router
@@ -47,7 +48,7 @@ app.add_middleware(
     allow_origins=settings.allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
     expose_headers=["Retry-After"],
 )
 app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])
@@ -58,6 +59,11 @@ app.include_router(
 )
 app.include_router(swiggy_router, prefix="/api/swiggy", tags=["Swiggy Instamart"])
 app.include_router(zepto_router, prefix="/api/zepto", tags=["Zepto"])
+app.include_router(
+    zepto_checkout_router,
+    prefix="/api/zepto/checkout",
+    tags=["Zepto Checkout"],
+)
 app.include_router(voice_router, prefix="/api/voice", tags=["Voice"])
 app.include_router(basket_router, prefix="/api/basket", tags=["Basket"])
 app.include_router(support_router, prefix="/api/support", tags=["Customer Support"])

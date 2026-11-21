@@ -48,9 +48,8 @@ class CapabilitySummary(BaseModel):
     """The Zepto functionality this application deliberately exposes.
 
     ``remote_tool_names`` is a diagnostic view of the authenticated MCP
-    catalogue, not permission to invoke one of those tools.  In particular,
-    this application exposes only read-only cart and order-history views. It
-    has no Zepto cart mutation, payment, checkout, or order endpoint.
+    catalogue, not permission to invoke arbitrary tools. The only consequential
+    path exposed by the application is its approval-bound, one-shot COD flow.
     """
 
     connected: bool
