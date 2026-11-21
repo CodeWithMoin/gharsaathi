@@ -4,6 +4,7 @@ import Image from "next/image";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
 
 type Address = {
   id: string;
@@ -37,10 +38,23 @@ type SearchResponse = {
   products: Product[];
   similar_products: Product[];
   next_offset?: string;
+  applied_memories?: Array<{ id: string; memory_type: string; text: string }>;
+  provider_query?: string;
+  excluded_product_count?: number;
+};
+
+type MemoryProposal = {
+  id: string;
+  memory_type: string;
+  text: string;
+  value: Record<string, string>;
+  status: "proposed" | "confirmed" | "rejected";
 };
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API}${path}`, { cache: "no-store", ...init });
+  const headers = new Headers(init?.headers);
+  headers.set("X-User-Id", DEV_USER_ID);
+  const response = await fetch(`${API}${path}`, { cache: "no-store", ...init, headers });
   const payload = response.status === 204 ? null : await response.json();
   if (!response.ok) {
     const detail = payload && typeof payload.detail === "string" ? payload.detail : "Request failed.";
@@ -55,7 +69,10 @@ export default function Home() {
   const [addressId, setAddressId] = useState("");
   const [query, setQuery] = useState("Fortune cooking oil 1 litre");
   const [results, setResults] = useState<Product[]>([]);
-  const [loading, setLoading] = useState<"connection" | "addresses" | "search" | "disconnect" | null>("connection");
+  const [preference, setPreference] = useState("I prefer Fortune oil in 1 litre packs.");
+  const [memoryProposals, setMemoryProposals] = useState<MemoryProposal[]>([]);
+  const [appliedMemories, setAppliedMemories] = useState<SearchResponse["applied_memories"]>([]);
+  const [loading, setLoading] = useState<"connection" | "addresses" | "search" | "disconnect" | "memory" | null>("connection");
   const [searched, setSearched] = useState(false);
   const [message, setMessage] = useState("Checking your Swiggy connection…");
 
@@ -113,6 +130,7 @@ export default function Home() {
       setAddresses([]);
       setAddressId("");
       setResults([]);
+      setAppliedMemories([]);
       setSearched(false);
       setMessage("Swiggy has been disconnected.");
     } catch (error) {
@@ -131,20 +149,65 @@ export default function Home() {
     setLoading("search");
     setSearched(false);
     setResults([]);
+    setAppliedMemories([]);
     setMessage("Searching live Instamart availability…");
     try {
-      const data = await apiRequest<SearchResponse>("/api/swiggy/search", {
+      const data = await apiRequest<SearchResponse>("/api/swiggy/search/personalized", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, address_id: addressId, offset: 0 }),
       });
       setResults(data.products);
+      setAppliedMemories(data.applied_memories ?? []);
       setSearched(true);
       setMessage(data.products.length ? `${data.products.length} variants found.` : "No matching products found at this address.");
     } catch (error) {
       const text = error instanceof Error ? error.message : "Search failed.";
       if (text.toLowerCase().includes("connect")) setConnected(false);
       setMessage(text);
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function extractPreference(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading("memory");
+    setMessage("Checking for an explicit shopping preference…");
+    try {
+      const data = await apiRequest<{ proposals: MemoryProposal[] }>("/api/memory/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: preference, conversation_id: "web-preferences" }),
+      });
+      setMemoryProposals(data.proposals);
+      setMessage(data.proposals.length ? "Review before GharCart remembers anything." : "No durable preference found. Try saying “I prefer…” or “Never buy…”.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not extract a preference.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function decideMemory(memory: MemoryProposal, confirm: boolean) {
+    setLoading("memory");
+    try {
+      await apiRequest(`/api/memory/${memory.id}/${confirm ? "confirm" : "reject"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(confirm ? {} : { reason: "User rejected the proposal." }),
+      });
+      if (confirm) {
+        await apiRequest(`/api/memory/permissions/${encodeURIComponent(memory.memory_type)}/personalize_search`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ allowed: true, retention_days: 365 }),
+        });
+      }
+      setMemoryProposals((current) => current.filter((item) => item.id !== memory.id));
+      setMessage(confirm ? "Preference confirmed and enabled for relevant searches." : "Preference rejected and not used.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not update this preference.");
     } finally {
       setLoading(null);
     }
@@ -192,7 +255,28 @@ export default function Home() {
 
       {connected && addresses.length > 0 && (
         <section className="panel">
-          <p className="step">03 · SEARCH</p>
+          <p className="step">03 · MEMORY</p>
+          <h2>What should I remember?</h2>
+          <p>Only explicit shopping preferences are proposed. You approve each one before it can affect search.</p>
+          <form onSubmit={extractPreference} className="searchForm">
+            <label htmlFor="preference">Preference in English, Hindi, or Hinglish</label>
+            <div className="searchRow">
+              <input id="preference" value={preference} onChange={(event) => setPreference(event.target.value)} minLength={2} maxLength={4000} required />
+              <button type="submit" disabled={loading !== null}>{loading === "memory" ? "Checking…" : "Review preference"}</button>
+            </div>
+          </form>
+          {memoryProposals.length > 0 && <div className="memoryList">
+            {memoryProposals.map((memory) => <article className="memoryCard" key={memory.id}>
+              <div><small>{memory.memory_type.replaceAll("_", " ")}</small><strong>{memory.text}</strong><p>{Object.values(memory.value).join(" · ")}</p></div>
+              <div className="memoryActions"><button className="secondary" type="button" onClick={() => decideMemory(memory, false)} disabled={loading !== null}>Reject</button><button type="button" onClick={() => decideMemory(memory, true)} disabled={loading !== null}>Confirm & use</button></div>
+            </article>)}
+          </div>}
+        </section>
+      )}
+
+      {connected && addresses.length > 0 && (
+        <section className="panel">
+          <p className="step">04 · SEARCH</p>
           <h2>What do you need?</h2>
           <form onSubmit={search} className="searchForm">
             <label htmlFor="query">Product, brand, or category</label>
@@ -211,6 +295,7 @@ export default function Home() {
       {results.length > 0 && (
         <section className="results" aria-label="Instamart products">
           <div className="resultsHeading"><p className="step">LIVE RESULTS</p><h2>Available variants</h2></div>
+          {appliedMemories && appliedMemories.length > 0 && <p className="memoryApplied">Personalized using: {appliedMemories.map((memory) => memory.text).join(" · ")}</p>}
           <div className="productGrid">
             {results.map((product) => (
               <article className="product" key={`${product.product_id}-${product.sku_id}`}>
@@ -233,4 +318,3 @@ export default function Home() {
     </main>
   );
 }
-

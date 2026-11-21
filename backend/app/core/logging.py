@@ -7,6 +7,8 @@ OAUTH_CALLBACK_PATHS = {
     "/api/zepto/oauth/callback",
     "/callback",
 }
+# Backwards-compatible name used by existing tests and integrations.
+OAUTH_CALLBACK_PATH = "/api/swiggy/oauth/callback"
 
 
 class RedactOAuthCallbackFilter(logging.Filter):

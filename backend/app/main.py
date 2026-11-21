@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.swiggy import router as swiggy_router
 from app.api.zepto import router as zepto_router
+from app.api.memory import router as memory_router
 from app.core.config import get_settings
 from app.core.logging import install_sensitive_log_filters
 
@@ -13,9 +14,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-User-Id"],
 )
+app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])
 app.include_router(swiggy_router, prefix="/api/swiggy", tags=["Swiggy Instamart"])
 app.include_router(zepto_router, prefix="/api/zepto", tags=["Zepto"])
 

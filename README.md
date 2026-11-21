@@ -78,6 +78,53 @@ For a multi-user deployment, replace this file store with per-user encrypted dat
 - `GET /api/swiggy/tools` — authenticated live catalogue, for diagnostics
 - `GET /api/swiggy/addresses?page=1&pageSize=10`
 - `POST /api/swiggy/search` with `{"query":"Fortune cooking oil 1 litre","address_id":"<saved-address-id>","offset":0}`
+- `POST /api/swiggy/search/personalized` — applies only confirmed, permitted,
+  category-relevant memories and returns which memories were used
+
+## Person-scoped memory
+
+The backend includes a PostgreSQL-ready memory layer for explicit user preferences,
+corrections, and purpose-specific consent. Conversation state and durable memory are
+kept separate. A memory must be confirmed before retrieval, and retrieval requires
+both an allowed purpose on the memory and a matching active permission.
+
+Configure the database and run migrations:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+Memory endpoints currently require `X-User-Id`. This header is only a local-development
+identity boundary; replace it with the authenticated application's user ID before any
+multi-user deployment.
+
+- `POST /api/memory/proposals`
+- `POST /api/memory/extract` — extracts evidence-backed proposals from one user message
+- `GET /api/memory`
+- `POST /api/memory/{memory_id}/confirm`
+- `POST /api/memory/{memory_id}/reject`
+- `POST /api/memory/{memory_id}/correct`
+- `DELETE /api/memory/{memory_id}`
+- `PUT /api/memory/permissions/{data_category}/{purpose}`
+- `GET /api/memory/permissions`
+- `POST /api/memory/retrieve`
+
+The initial policy blocks memory purposes related to differential pricing, credit,
+eligibility, employment, housing, insurance, and pressure targeting. Corrections
+create a new confirmed record and retain the superseded record and audit events.
+
+Memory extraction uses the versioned structured-output prompt in
+`backend/app/memory/prompts.py`. If `OPENAI_API_KEY` is configured, the backend uses
+the Responses API with a strict Pydantic output schema and the model selected by
+`MEMORY_EXTRACTION_MODEL`. Without a key, it falls back to a high-precision local
+English/Hinglish ruleset. Model output never becomes confirmed memory automatically:
+the evidence must occur verbatim in the user's message, and the UI asks the user to
+**Confirm & use** or reject each proposal.
+
+The first extraction version recognizes brand, pack-size, quantity, dietary, and
+product-avoidance preferences. It deliberately excludes demographics, precise
+location, financial profiling, health conditions, relationships, and business data.
 
 ## Verification
 
@@ -86,6 +133,7 @@ Backend:
 ```bash
 cd backend
 pytest -q
+python -m evaluation.run_memory_extraction
 ```
 
 Frontend:

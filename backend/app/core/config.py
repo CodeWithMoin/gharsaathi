@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     cors_origins: str = "http://localhost:3000"
     app_encryption_key: str = ""
+    database_url: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/equal_ai"
+    )
+    openai_api_key: str = Field(default="", repr=False)
+    memory_extraction_model: str = "gpt-4o-mini"
     swiggy_token_store_path: Path = Field(
         default=Path("backend/.data/swiggy_connection.enc")
     )

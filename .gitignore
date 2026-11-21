@@ -1,12 +1,13 @@
 .env
 .env.*
 !.env.example
+!frontend/.env.local.example
 frontend/.env.local
 backend/.data/
 backend/.pytest_cache/
 backend/.venv/
 frontend/.next/
 frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
 __pycache__/
 *.py[cod]
-

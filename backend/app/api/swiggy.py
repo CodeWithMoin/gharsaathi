@@ -12,12 +12,18 @@ from app.commerce.swiggy.errors import (
 )
 from app.commerce.swiggy.models import (
     AddressList,
+    AppliedMemory,
     ConnectionStatus,
+    PersonalizedProductSearchResult,
     ProductSearchResult,
     ToolDescription,
 )
 from app.core.config import get_settings
 from app.dependencies import SwiggyServiceDependency
+from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
+from app.memory.personalization import excludes_product, personalize_search_query
+from app.memory.schemas import MemoryRetrieveRequest
+from app.memory.service import MemoryService
 
 
 router = APIRouter()
@@ -134,3 +140,68 @@ async def search(
         _raise_http(exc)
         raise AssertionError("unreachable")
 
+
+@router.post("/search/personalized", response_model=PersonalizedProductSearchResult)
+async def personalized_search(
+    body: SearchRequest,
+    service: SwiggyServiceDependency,
+    session: DbSessionDependency,
+    actor: MemoryActorDependency,
+) -> PersonalizedProductSearchResult:
+    try:
+        memories = await MemoryService(session).retrieve(
+            actor,
+            MemoryRetrieveRequest(
+                purpose="personalize_search",
+                memory_types=[
+                    "brand_preference",
+                    "pack_size_preference",
+                    "quantity_preference",
+                    "dietary_preference",
+                    "product_avoidance",
+                ],
+            ),
+        )
+        personalization = personalize_search_query(body.query, memories)
+        result = await service.search(
+            personalization.provider_query,
+            body.address_id,
+            body.offset,
+        )
+        products = [
+            product
+            for product in result.products
+            if not excludes_product(product, personalization.avoid_terms)
+        ]
+        similar_products = [
+            product
+            for product in result.similar_products
+            if not excludes_product(product, personalization.avoid_terms)
+        ]
+        applied_by_id = {
+            memory.id: AppliedMemory(
+                id=memory.id,
+                memory_type=memory.memory_type,
+                text=memory.text,
+            )
+            for memory in memories
+            if memory.id in personalization.applied_memory_ids
+        }
+        excluded_count = (
+            len(result.products)
+            + len(result.similar_products)
+            - len(products)
+            - len(similar_products)
+        )
+        return PersonalizedProductSearchResult(
+            products=products,
+            similar_products=similar_products,
+            next_offset=result.next_offset,
+            original_query=body.query,
+            provider_query=personalization.provider_query,
+            applied_memories=list(applied_by_id.values()),
+            excluded_product_count=excluded_count,
+        )
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")

@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -75,6 +76,19 @@ class ProductSearchResult(BaseModel):
     next_offset: str | None = None
 
 
+class AppliedMemory(BaseModel):
+    id: UUID
+    memory_type: str
+    text: str
+
+
+class PersonalizedProductSearchResult(ProductSearchResult):
+    original_query: str
+    provider_query: str
+    applied_memories: list[AppliedMemory] = Field(default_factory=list)
+    excluded_product_count: int = 0
+
+
 class ToolDescription(BaseModel):
     name: str
     description: str | None = None
@@ -87,4 +101,3 @@ class OAuthTokenResponse(BaseModel):
     token_type: Literal["Bearer", "bearer"] = "Bearer"
     expires_in: int = Field(gt=0)
     scope: str | None = None
-
