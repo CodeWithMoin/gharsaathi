@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import re
@@ -10,13 +11,71 @@ from app.core.config import get_settings
 from app.voice.prompts import VOICE_PROMPT_VERSION, VOICE_SYSTEM_PROMPT
 
 
+SUITE_PATH = Path(__file__).with_name("voice_prompt_cases.json")
+_SENTENCE_END = re.compile(r"[.!?\u0964\uff1f]+(?:\s|$)")
+
+
 def _matches_any(text: str, patterns: list[str]) -> bool:
     return any(re.search(re.escape(pattern), text, re.IGNORECASE) for pattern in patterns)
 
 
-async def main() -> None:
+def _question_count(text: str) -> int:
+    return text.count("?") + text.count("\uff1f")
+
+
+def _sentence_count(text: str) -> int:
+    pieces = [piece for piece in _SENTENCE_END.split(text.strip()) if piece.strip()]
+    return len(pieces)
+
+
+def _starts_with_any(text: str, prefixes: list[str]) -> list[str]:
+    opening = text.lstrip(" \t\n\"'\u201c\u2018").casefold()
+    return [prefix for prefix in prefixes if opening.startswith(prefix.casefold())]
+
+
+def build_input(case: dict[str, Any]) -> str | list[dict[str, str]]:
+    """Return the user turn, preceded by any scripted conversation history."""
+    history = case.get("history") or []
+    if not history:
+        return case["user"]
+    return [*history, {"role": "user", "content": case["user"]}]
+
+
+def score_case(case: dict[str, Any], output: str) -> dict[str, Any]:
+    required_ok = _matches_any(output, case["required_any"])
+    forbidden = [item for item in case["forbidden_any"] if _matches_any(output, [item])]
+    forbidden_prefix = _starts_with_any(output, case.get("forbidden_prefix", []))
+    questions = _question_count(output)
+    sentences = _sentence_count(output)
+    max_sentences = case.get("max_sentences")
+    sentences_ok = max_sentences is None or sentences <= max_sentences
+    return {
+        "id": case["id"],
+        "passed": required_ok
+        and not forbidden
+        and not forbidden_prefix
+        and questions <= case["max_questions"]
+        and sentences_ok,
+        "output": output,
+        "required_match": required_ok,
+        "forbidden_matches": forbidden,
+        "forbidden_prefix_matches": forbidden_prefix,
+        "question_count": questions,
+        "sentence_count": sentences,
+    }
+
+
+def load_suite(path: Path = SUITE_PATH) -> dict[str, Any]:
+    suite: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    if suite["version"] != VOICE_PROMPT_VERSION:
+        raise SystemExit("Evaluation suite and voice prompt versions do not match.")
+    return suite
+
+
+async def main(case_ids: list[str] | None = None, model: str | None = None) -> None:
     settings = get_settings()
-    if not settings.openai_api_key.strip():
+    api_key = settings.openai_api_key.get_secret_value().strip()
+    if not api_key:
         print(
             json.dumps(
                 {
@@ -29,42 +88,29 @@ async def main() -> None:
         )
         return
 
-    suite_path = Path(__file__).with_name("voice_prompt_cases.json")
-    suite: dict[str, Any] = json.loads(suite_path.read_text(encoding="utf-8"))
-    if suite["version"] != VOICE_PROMPT_VERSION:
-        raise SystemExit("Evaluation suite and voice prompt versions do not match.")
+    suite = load_suite()
+    selected = set(case_ids or [])
+    cases = [case for case in suite["cases"] if not selected or case["id"] in selected]
+    if selected - {case["id"] for case in cases}:
+        raise SystemExit(f"Unknown case ids: {sorted(selected - {c['id'] for c in cases})}")
 
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    model = model or settings.live_backend_model
+    client = AsyncOpenAI(api_key=api_key)
     results: list[dict[str, Any]] = []
-    for case in suite["cases"]:
+    for case in cases:
         response = await client.responses.create(
-            model=settings.voice_evaluation_model,
+            model=model,
             instructions=VOICE_SYSTEM_PROMPT,
-            input=case["user"],
+            input=build_input(case),  # type: ignore[arg-type]
             max_output_tokens=300,
             store=False,
         )
-        output = response.output_text.strip()
-        required_ok = _matches_any(output, case["required_any"])
-        forbidden = [
-            item for item in case["forbidden_any"] if _matches_any(output, [item])
-        ]
-        questions_ok = output.count("?") <= case["max_questions"]
-        results.append(
-            {
-                "id": case["id"],
-                "passed": required_ok and not forbidden and questions_ok,
-                "output": output,
-                "required_match": required_ok,
-                "forbidden_matches": forbidden,
-                "question_count": output.count("?"),
-            }
-        )
+        results.append(score_case(case, response.output_text.strip()))
 
     passed = sum(1 for result in results if result["passed"])
     report = {
         "prompt_version": VOICE_PROMPT_VERSION,
-        "model": settings.voice_evaluation_model,
+        "model": model,
         "passed": passed,
         "total": len(results),
         "results": results,
@@ -75,4 +121,8 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--case", action="append", dest="cases", help="Run only this case id.")
+    parser.add_argument("--model", help="Responses model; defaults to LIVE_BACKEND_MODEL.")
+    args = parser.parse_args()
+    asyncio.run(main(args.cases, args.model))

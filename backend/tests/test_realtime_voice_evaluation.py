@@ -33,9 +33,36 @@ def test_language_checks_accept_feminine_target_phrase() -> None:
     assert checks == {
         "masculine_self_forms": [],
         "feminine_self_forms": ["kar rahi hoon"],
+        "search_filler_forms": [],
+        "customer_echo": False,
         "pronunciation_target_in_transcript": True,
         "question_count": 0,
     }
+
+
+def test_language_checks_flag_filler_and_customer_echo_on_repeat_back() -> None:
+    checks = _language_checks(
+        "Ek second, dekh rahi hoon. Mujhe Amul Taaza 1 litre chahiye.",
+        ["Amul"],
+    )
+
+    assert checks["search_filler_forms"] == ["ek second", "dekh rahi hoon"]
+    assert checks["customer_echo"] is True
+
+
+def test_language_checks_accept_assistant_voice_repeat_back() -> None:
+    checks = _language_checks(
+        "Maine suna: Amul Taaza Toned Milk, 1 litre, ek pack. Sahi hai?",
+        ["Amul"],
+    )
+
+    assert checks["search_filler_forms"] == []
+    assert checks["customer_echo"] is False
+    assert checks["question_count"] == 1
+
+
+def test_language_checks_flag_hindi_customer_echo() -> None:
+    assert _language_checks("मुझे अमूल दूध चाहिए।", ["अमूल"])["customer_echo"] is True
 
 
 def test_variant_prompts_exercise_different_response_structures() -> None:
