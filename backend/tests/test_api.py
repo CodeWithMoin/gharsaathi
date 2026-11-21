@@ -56,6 +56,13 @@ def test_health() -> None:
     assert client.get("/health").json() == {"status": "ok"}
 
 
+def test_browser_can_read_retry_after_header() -> None:
+    response = client.get(
+        "/health", headers={"Origin": "http://localhost:3000"}
+    )
+    assert response.headers["access-control-expose-headers"] == "Retry-After"
+
+
 def test_addresses_are_typed() -> None:
     response = client.get("/api/swiggy/addresses?page=1&pageSize=10")
     assert response.status_code == 200
@@ -92,4 +99,3 @@ def test_authentication_required_is_401() -> None:
         assert response.json()["detail"] == "Connect your Swiggy account first."
     finally:
         fake_service.authenticated = True
-

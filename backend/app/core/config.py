@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     )
     openai_api_key: str = Field(default="", repr=False)
     memory_extraction_model: str = "gpt-4o-mini"
+    swiggy_rate_limit_fallback_seconds: int = Field(default=30, ge=1, le=300)
+    swiggy_retry_budget_seconds: int = Field(default=30, ge=1, le=120)
+    swiggy_tool_schema_cache_seconds: int = Field(default=300, ge=0, le=3600)
     swiggy_token_store_path: Path = Field(
         default=Path("backend/.data/swiggy_connection.enc")
     )

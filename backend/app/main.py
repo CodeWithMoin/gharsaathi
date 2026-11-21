@@ -16,6 +16,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-User-Id"],
+    expose_headers=["Retry-After"],
 )
 app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])
 app.include_router(swiggy_router, prefix="/api/swiggy", tags=["Swiggy Instamart"])
