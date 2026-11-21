@@ -39,7 +39,7 @@ class ApiError extends Error {
   }
 }
 
-const suggestions = ["Monthly groceries", "Atta, oil aur chai", "Breakfast essentials"];
+const suggestions = ["Monthly groceries", "Shampoo and batteries", "Pet supplies"];
 
 export default function Home() {
   const [voiceOpen, setVoiceOpen] = useState(false);

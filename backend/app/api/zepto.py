@@ -281,7 +281,7 @@ async def search(
     if non_search_reason(body.query) is not None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "That is a chat message, not a product query. Ask for a grocery or household item.",
+            "That is a chat message, not a product query. Ask for a product sold by the connected store.",
         )
     try:
         return await service.search(body.query, body.address_id, body.page_number)

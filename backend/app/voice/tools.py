@@ -28,11 +28,12 @@ SEARCH_PRODUCTS_TOOL: dict[str, Any] = {
     "type": "function",
     "name": "search_products",
     "description": (
-        "Search each connected store with a selected delivery address for groceries "
-        "or household products. Read-only: it never changes a provider cart "
+        "Search each connected quick-commerce store for any provider-listed product, "
+        "including groceries, personal care, household goods, stationery, pet supplies, "
+        "toys, small electronics and accessories. Read-only: it never changes a provider cart "
         "or places an order. Use a short product query in English or Hinglish, "
         "including brand and pack size when the user gave them, for example "
-        "'Fortune sunflower oil 1 litre' or 'Aashirvaad atta 5 kg'."
+        "'Fortune sunflower oil 1 litre', 'Aashirvaad atta 5 kg', or 'USB-C cable'."
     ),
     "parameters": {
         "type": "object",

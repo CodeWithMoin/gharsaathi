@@ -35,7 +35,7 @@ export function conversationIntent(value) {
 export function conversationReply(value, { swiggyConnected, zeptoConnected }) {
   const intent = conversationIntent(value);
   if (intent === "greeting") return "Namaste! Ghar ke liye kya mangwana hai? Product, brand aur pack size bol dijiye.";
-  if (intent === "capabilities") return "Main Swiggy aur Zepto par groceries dhoondh aur compare kar sakti hoon, selected items ka basket prepare kar sakti hoon, aur har purchase se pehle aapki approval leti hoon.";
+  if (intent === "capabilities") return "Main Swiggy aur Zepto ke poore available catalogue mein products dhoondh aur compare kar sakti hoon—groceries ke saath personal care, stationery, pet supplies, accessories aur bahut kuch. Selected items ka basket prepare karti hoon, aur har purchase se pehle aapki approval leti hoon.";
   if (intent === "connection_status") {
     const connected = [swiggyConnected ? "Swiggy" : null, zeptoConnected ? "Zepto" : null].filter(Boolean);
     return connected.length ? `${connected.join(" aur ")} connected ${connected.length > 1 ? "hain" : "hai"}. Main selected address par products check kar sakti hoon.` : "Abhi koi store connected nahi hai. Manage stores se Swiggy ya Zepto connect kijiye.";

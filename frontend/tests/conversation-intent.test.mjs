@@ -21,6 +21,9 @@ test("real product requests continue to search", () => {
   assert.equal(conversationIntent("Amul Taaza milk 1 litre"), null);
   assert.equal(conversationIntent("Fortune oil milega?"), null);
   assert.equal(conversationIntent("milk"), null);
+  assert.equal(conversationIntent("USB-C cable"), null);
+  assert.equal(conversationIntent("dog treats"), null);
+  assert.equal(conversationIntent("notebook and pens"), null);
 });
 
 test("brand-only order requests ask for the missing product", () => {

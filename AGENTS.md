@@ -8,7 +8,12 @@ The product should do the work; the user should make important decisions. Do not
 
 ## Product principles and confirmed decisions
 
-- Audience: households and working families; groceries and household essentials.
+- Audience: households and working families using quick-commerce catalogues.
+- Catalogue scope: support any legitimate product category exposed by connected
+  Swiggy Instamart or Zepto tools—not only groceries. This includes personal
+  care, household goods, stationery, pet supplies, toys, small electronics and
+  accessories when the provider returns them. Stay a shopping agent; this does
+  not make the product a general-purpose assistant.
 - Languages: Hinglish is first-class, with Hindi and English support.
 - UX: voice-first conversational interface, with visible chat transcript, confirmations, and action summaries.
 - User preference: notifications/messages for meaningful updates, not unsolicited voice calls.

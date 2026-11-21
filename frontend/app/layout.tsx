@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "GharSaathi · Your AI household shopping agent",
-  description: "Speak naturally to search for household essentials in English, Hindi, or Hinglish.",
+  description: "Speak naturally to search products across connected quick-commerce stores in English, Hindi, or Hinglish.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

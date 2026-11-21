@@ -18,6 +18,9 @@ from app.commerce.swiggy.service import SwiggyService
         ("Amul", "ambiguous_brand"),
         ("Amul milk 1 litre", None),
         ("milk", None),
+        ("USB-C cable", None),
+        ("dog treats", None),
+        ("notebook and pens", None),
         ("Fortune oil milega?", None),
     ],
 )
