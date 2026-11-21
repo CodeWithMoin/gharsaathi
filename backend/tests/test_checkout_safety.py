@@ -42,7 +42,7 @@ async def test_an_approved_bill_is_superseded_if_the_basket_changes() -> None:
     assert stored is not None and stored.status == ApprovalStatus.SUPERSEDED
 
 
-def test_public_api_exposes_no_order_or_checkout_operation() -> None:
+def test_public_api_exposes_no_checkout_or_order_mutation_operation() -> None:
     schema = app.openapi()
     exposed = [
         f"{method.upper()} {path}"
@@ -51,7 +51,11 @@ def test_public_api_exposes_no_order_or_checkout_operation() -> None:
         if method.lower() in {"get", "post", "put", "patch", "delete"}
     ]
     assert all("checkout" not in operation.lower() for operation in exposed)
-    assert all("order" not in operation.lower() for operation in exposed)
+    order_operations = [
+        operation for operation in exposed if "order" in operation.lower()
+    ]
+    assert order_operations
+    assert all(operation.startswith("GET ") for operation in order_operations)
 
 
 def test_local_zepto_bridge_only_forwards_oauth_fields_to_fixed_backend() -> None:
