@@ -1,0 +1,54 @@
+{
+  "version": "swiggy-instamart-official-workflows-v1",
+  "source": "https://github.com/Swiggy/swiggy-mcp-server-manifest/blob/main/README.md#instamart-workflows",
+  "cases": [
+    {
+      "id": "recipe-to-cart",
+      "title": "Recipe to cart",
+      "example": "Thai green curry for 4 people. Help with the ingredients and prepare the basket.",
+      "required_capabilities": ["multi_item_search", "basket_add", "basket_review"],
+      "known_gaps": ["recipe_planning_is_model_generated"],
+      "expected_readiness": "partial"
+    },
+    {
+      "id": "dietary-compliant-shopping",
+      "title": "Dietary-compliant shopping",
+      "example": "Help me find low-carb items for a keto shopping list.",
+      "required_capabilities": ["multi_item_search", "basket_add", "basket_review"],
+      "known_gaps": ["dietary_claims_are_not_independently_verified"],
+      "expected_readiness": "partial"
+    },
+    {
+      "id": "weekly-meal-prep",
+      "title": "Weekly meal prep",
+      "example": "Find chicken breast, broccoli, bell peppers, quinoa, brown rice, olive oil and basic spices for five days.",
+      "required_capabilities": ["multi_item_search", "basket_add", "basket_review"],
+      "known_gaps": [],
+      "expected_readiness": "supported_with_confirmation"
+    },
+    {
+      "id": "party-shopping",
+      "title": "Party shopping",
+      "example": "Prepare options for snacks, beverages, frozen appetisers, desserts, plates, cups and napkins for 15 people.",
+      "required_capabilities": ["multi_item_search", "basket_add", "basket_review"],
+      "known_gaps": ["serving_quantities_need_user_confirmation"],
+      "expected_readiness": "partial"
+    },
+    {
+      "id": "budget-shopping",
+      "title": "Budget shopping",
+      "example": "Keep noodles, bread, jam, peanut butter, eggs, milk and snacks within a 500 rupee budget.",
+      "required_capabilities": ["multi_item_search", "basket_add", "deterministic_basket_total", "basket_review"],
+      "known_gaps": ["automatic_budget_optimisation_is_not_implemented"],
+      "expected_readiness": "partial"
+    },
+    {
+      "id": "brand-comparison",
+      "title": "Brand comparison",
+      "example": "Compare Tata, Brooke Bond and Red Label tea; Fortune and Sundrop oil; Amul, Mother Dairy and Nandini milk.",
+      "required_capabilities": ["multi_item_search", "provider_price_fields", "basket_review"],
+      "known_gaps": [],
+      "expected_readiness": "supported_with_confirmation"
+    }
+  ]
+}
