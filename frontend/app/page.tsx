@@ -31,6 +31,16 @@ const suggestions = [
   { label: "Pet supplies", query: "Pet supplies" },
 ];
 
+function conversationTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const today = new Date();
+  const sameDay = date.toDateString() === today.toDateString();
+  return sameDay
+    ? new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit" }).format(date)
+    : new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(date);
+}
+
 export default function Home() {
   return <FirstRunOnboarding>{({ justCompleted, firstName }) => <ShoppingChat startWithSetupOpen={justCompleted} userName={firstName} />}</FirstRunOnboarding>;
 }
@@ -617,26 +627,41 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     <AnimatePresence>
       {chatDrawerOpen && <>
         <motion.button type="button" aria-label="Close chats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setChatDrawerOpen(false)} className="fixed inset-0 z-40 bg-[#2f2019]/30 backdrop-blur-[2px]" />
-        <motion.aside initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", stiffness: 360, damping: 36 }} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-50 flex w-[min(88vw,370px)] flex-col border-r border-[#e4d3c7] bg-[#fffaf5] shadow-[24px_0_60px_-32px_rgba(61,38,27,.55)]">
-          <div className="flex items-center gap-3 border-b border-[#eaded5] px-4 py-4">
+        <motion.aside initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", stiffness: 360, damping: 36 }} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-50 flex w-[min(92vw,390px)] flex-col border-r border-[#e4d3c7] bg-[#fbf7f2] shadow-[24px_0_60px_-32px_rgba(61,38,27,.45)]">
+          <div className="flex items-center gap-3 px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
             <Brand />
-            <button type="button" onClick={() => setChatDrawerOpen(false)} aria-label="Close chats" className="ml-auto grid size-10 place-items-center rounded-full text-[#806f65] transition hover:bg-[#f2e5dc]"><X size={20} /></button>
+            <button type="button" onClick={() => setChatDrawerOpen(false)} aria-label="Close chats" className="ml-auto grid size-10 place-items-center rounded-full text-[#806f65] transition hover:bg-[#efe5dc] active:scale-[.96]"><X size={20} /></button>
           </div>
-          <div className="px-4 pt-4">
-            <button type="button" onClick={() => void startNewChat()} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#d95617] px-4 text-sm font-semibold text-white shadow-[0_14px_28px_-18px_rgba(198,83,29,.8)] transition hover:bg-[#c94d12] active:scale-[.99]"><Plus size={18} weight="bold" /> New shopping chat</button>
-            <label className="mt-3 flex h-11 items-center gap-2 rounded-2xl border border-[#e5d5ca] bg-white px-3 text-[#806f65] focus-within:border-[#c98d6c]">
+          <div className="border-b border-[#eaded5] px-5 pb-5 pt-2">
+            <button type="button" onClick={() => void startNewChat()} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#35241c] px-4 text-sm font-semibold text-white transition hover:bg-[#49352b] active:scale-[.99]"><Plus size={18} weight="bold" /> New chat</button>
+            <label className="mt-3 flex h-11 items-center gap-2 rounded-xl border border-[#e3d5cb] bg-white px-3 text-[#806f65] transition focus-within:border-[#c98d6c] focus-within:ring-2 focus-within:ring-[#efd8ca]">
               <MagnifyingGlass size={18} />
               <input value={chatSearch} onChange={(event) => setChatSearch(event.target.value)} placeholder="Search chats" className="min-w-0 flex-1 bg-transparent text-sm text-[#35241c] outline-none placeholder:text-[#a18c80]" />
+              {chatSearch && <button type="button" onClick={() => setChatSearch("")} aria-label="Clear chat search" className="grid size-7 place-items-center rounded-lg text-[#9a8579] hover:bg-[#f4ebe4]"><X size={14} /></button>}
             </label>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-5">
-            <p className="px-2 text-[10px] font-bold uppercase tracking-[.18em] text-[#9b8172]">Recents</p>
-            <div className="mt-2 space-y-1">
-              {recentChatsLoading && <p className="px-2 py-5 text-sm text-[#806f65]">Loading your chats…</p>}
-              {!recentChatsLoading && !filteredRecentChats.length && <p className="px-2 py-5 text-sm leading-6 text-[#806f65]">{chatSearch.trim() ? "No matching chats." : "Your shopping chats will appear here."}</p>}
-              {!recentChatsLoading && filteredRecentChats.map((chat) => <button type="button" key={chat.id} onClick={() => void openSavedChat(chat.id)} className={`block w-full rounded-2xl px-3 py-3 text-left transition hover:bg-[#f2e5dc] ${chat.is_active ? "bg-[#f5e8de]" : ""}`}>
-                <span className="block truncate text-sm font-semibold text-[#3d2b23]">{chat.title}</span>
-                <span className="mt-1 block truncate text-xs text-[#8b7569]">{chat.preview}</span>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#9b8172]">Recent chats</p>
+              {!recentChatsLoading && recentChats.length > 0 && <span className="text-[10px] font-medium text-[#a18c80]">{recentChats.length}</span>}
+            </div>
+            <div className="mt-3">
+              {recentChatsLoading && <div className="space-y-2" aria-label="Loading chats">{[0, 1, 2].map((item) => <div key={item} className="animate-pulse border-b border-[#eaded5] px-1 py-4"><span className="block h-3 w-2/3 rounded bg-[#e9ddd4]" /><span className="mt-2 block h-2.5 w-5/6 rounded bg-[#efe6df]" /></div>)}</div>}
+              {!recentChatsLoading && !filteredRecentChats.length && <div className="flex flex-col items-center px-5 pb-8 pt-16 text-center">
+                <span className="grid size-14 place-items-center rounded-2xl border border-[#e4d5ca] bg-white text-[#b65a2e]"><ChatCircleDots size={25} weight="duotone" /></span>
+                <p className="mt-5 text-[15px] font-semibold text-[#3d2b23]">{chatSearch.trim() ? "Koi matching chat nahi mili" : "Abhi koi shopping chat nahi"}</p>
+                <p className="mt-2 max-w-[26ch] text-[13px] leading-5 text-[#806f65]">{chatSearch.trim() ? "Search badal kar dekhein." : "Jo bhi mangwana ho, bolkar shuru karein. Chat yahin save hogi."}</p>
+              </div>}
+              {!recentChatsLoading && filteredRecentChats.map((chat) => <button type="button" key={chat.id} onClick={() => void openSavedChat(chat.id)} className={`group relative flex w-full items-start gap-3 border-b border-[#eaded5] px-1 py-3.5 text-left transition hover:bg-[#f3eae3] ${chat.is_active ? "bg-[#f3e7dd]" : ""}`}>
+                {chat.is_active && <span className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-[#c6531d]" aria-hidden="true" />}
+                <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl bg-white text-[#9a6d58] ring-1 ring-[#eaded5]"><ChatCircleDots size={17} weight={chat.is_active ? "fill" : "regular"} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline gap-2">
+                    <span className="block min-w-0 flex-1 truncate text-[13px] font-semibold text-[#3d2b23]">{chat.title}</span>
+                    <span className="shrink-0 text-[10px] text-[#a18c80]">{conversationTime(chat.updated_at)}</span>
+                  </span>
+                  <span className="mt-1 block truncate text-[11px] leading-4 text-[#8b7569]">{chat.preview}</span>
+                </span>
               </button>)}
             </div>
           </div>
