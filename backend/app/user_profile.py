@@ -6,6 +6,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.database.models import UserProfileRecord
@@ -71,6 +72,17 @@ def profile_for(record: UserProfileRecord | None) -> UserProfile:
 
 
 async def update_profile(
+    session: AsyncSession, user_id: str, update: UserProfileUpdate
+) -> UserProfileRecord:
+    try:
+        return await _apply_update(session, user_id, update)
+    except IntegrityError:
+        # A concurrent first save created the row; apply this update to it.
+        await session.rollback()
+        return await _apply_update(session, user_id, update)
+
+
+async def _apply_update(
     session: AsyncSession, user_id: str, update: UserProfileUpdate
 ) -> UserProfileRecord:
     record = await get_profile_record(session, user_id)

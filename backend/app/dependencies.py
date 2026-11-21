@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from app.commerce.provider_state import SavedAddressDirectory
 from app.commerce.swiggy.adapter import SwiggyInstamartAdapter
 from app.commerce.jev import JevProductReranker
 from app.commerce.swiggy.client import SwiggyMcpClient
@@ -199,6 +200,7 @@ def get_voice_service() -> LiveSessionService:
         zepto_connection=get_zepto_service(),
         preference_recall=DatabasePreferenceRecaller(get_session_factory()),
         profile_reader=DatabaseProfileReader(get_session_factory()),
+        addresses=SavedAddressDirectory(get_session_factory()),
     )
 
 

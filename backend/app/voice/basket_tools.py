@@ -6,11 +6,13 @@ derived only from the corresponding stored search result.
 """
 
 import json
+import logging
 from dataclasses import dataclass
-from typing import Any, get_args
+from typing import Any, Protocol, get_args
 
 from pydantic import BaseModel, Field, ValidationError
 
+from app.commerce.provider_state import SavedAddressSummary
 from app.commerce.swiggy.models import Product
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService, format_rupees, item_total_paise
@@ -18,6 +20,8 @@ from app.shopping.errors import ShoppingError
 from app.shopping.models import Basket, BasketLine, ProductRef, ProviderName, rupees_to_paise
 from app.voice.tools import SearchOption, ToolOutcome
 
+
+logger = logging.getLogger(__name__)
 
 STORE_IDS: tuple[ProviderName, ...] = get_args(ProviderName)
 
@@ -73,8 +77,9 @@ BASKET_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "name": "view_basket",
         "description": (
-            "Show local baskets and their exact item totals, one per store. Use store null "
-            "to see every store's basket. Fees are not included."
+            "Show local baskets and their exact item totals, one per store, with the "
+            "selected delivery_address when known. Use store null to see every store's "
+            "basket. Fees are not included."
         ),
         "parameters": {
             "type": "object",
@@ -115,6 +120,12 @@ class BasketStore:
     address_id: str | None
 
 
+class AddressDescriber(Protocol):
+    async def describe(
+        self, external_user_id: str, provider: str, address_id: str
+    ) -> SavedAddressSummary | None: ...
+
+
 class AddArguments(BaseModel):
     option_id: str = Field(min_length=1, max_length=64)
     quantity: int = Field(ge=1, le=50)
@@ -130,10 +141,24 @@ class StoreArguments(BaseModel):
     store: ProviderName | None = None
 
 
-def basket_for_model(basket: Basket, store: BasketStore) -> dict[str, Any]:
+def address_for_model(summary: SavedAddressSummary | None) -> dict[str, Any]:
+    """The selected saved address, only when the server-side snapshot has it."""
+
+    if summary is None:
+        return {}
+    address: dict[str, str] = {"address": summary.short_address}
+    if summary.label:
+        address["label"] = summary.label
+    return {"delivery_address": address}
+
+
+def basket_for_model(
+    basket: Basket, store: BasketStore, address: SavedAddressSummary | None = None
+) -> dict[str, Any]:
     return {
         "store": store.label,
         "store_id": store.provider,
+        **address_for_model(address),
         "items": [
             {
                 "item_id": line.ref.variant_id,
@@ -182,12 +207,15 @@ class BasketToolExecutor:
         options: dict[str, SearchOption],
         stores: list[BasketStore],
         household_id: str,
+        addresses: AddressDescriber | None = None,
     ) -> None:
         self.baskets = baskets
         self.approvals = approvals
         self.options = options
         self.stores = {store.provider: store for store in stores}
         self.household_id = household_id
+        self.addresses = addresses
+        self._address_cache: dict[tuple[str, str], SavedAddressSummary | None] = {}
 
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
         try:
@@ -217,6 +245,25 @@ class BasketToolExecutor:
     async def _active(self, store: BasketStore) -> Basket:
         return await self.baskets.active(self.household_id, store.provider)
 
+    async def _address(self, store: BasketStore) -> SavedAddressSummary | None:
+        if self.addresses is None or not store.address_id:
+            return None
+        key = (store.provider, store.address_id)
+        if key not in self._address_cache:
+            try:
+                self._address_cache[key] = await self.addresses.describe(
+                    self.household_id, store.provider, store.address_id
+                )
+            except Exception:
+                logger.warning(
+                    "event=voice_address_lookup_failed provider=%s", store.provider
+                )
+                return None
+        return self._address_cache[key]
+
+    async def _outcome(self, basket: Basket, store: BasketStore, status: str) -> ToolOutcome:
+        return _basket_outcome(basket, store, status, await self._address(store))
+
     async def _add(self, arguments: AddArguments) -> ToolOutcome:
         option = self.options.get(arguments.option_id)
         if option is None:
@@ -234,7 +281,7 @@ class BasketToolExecutor:
             store.provider,
             _line_from_product(store.provider, product, arguments.quantity),
         )
-        return _basket_outcome(basket, store, "added")
+        return await self._outcome(basket, store, "added")
 
     async def _set_quantity(self, arguments: QuantityArguments) -> ToolOutcome:
         if arguments.store is not None:
@@ -255,23 +302,26 @@ class BasketToolExecutor:
         basket = await self.baskets.set_quantity(
             self.household_id, store.provider, arguments.item_id, arguments.quantity
         )
-        return _basket_outcome(basket, store, "updated")
+        return await self._outcome(basket, store, "updated")
 
     async def _view(self, arguments: StoreArguments) -> ToolOutcome:
         if arguments.store is not None:
             store = self._store(arguments.store)
             if store is None:
                 return _not_connected(arguments.store)
-            return _basket_outcome(await self._active(store), store, "ok")
+            return await self._outcome(await self._active(store), store, "ok")
         if len(self.stores) == 1:
             store = next(iter(self.stores.values()))
-            return _basket_outcome(await self._active(store), store, "ok")
+            return await self._outcome(await self._active(store), store, "ok")
         views = [(store, await self._active(store)) for store in self.stores.values()]
         filled = [(store, basket) for store, basket in views if basket.lines]
         return ToolOutcome(
             model_output={
                 "status": "ok",
-                "baskets": [basket_for_model(basket, store) for store, basket in views],
+                "baskets": [
+                    basket_for_model(basket, store, await self._address(store))
+                    for store, basket in views
+                ],
                 "note": BASKET_NOTE + " Each store has its own basket and bill.",
             },
             ui_event=(
@@ -308,11 +358,15 @@ class BasketToolExecutor:
             return _error(f"The {store.label} basket is empty.")
         result = await self.approvals.request(basket.id)
         quote = result.quote
+        # Imported here: app.api.basket -> app.dependencies -> app.voice is a cycle.
+        from app.api.basket import approval_request_out
+
         return ToolOutcome(
             model_output={
                 "status": "awaiting_user_approval",
                 "store": store.label,
                 "store_id": store.provider,
+                **address_for_model(await self._address(store)),
                 "payable": format_rupees(quote.payable_paise),
                 "charges": [
                     {"label": charge.label, "amount": format_rupees(charge.amount_paise)}
@@ -345,6 +399,9 @@ class BasketToolExecutor:
                     "eta_text": quote.eta_text,
                 },
                 "basket": _basket_ui(result.basket, store),
+                # Same shape as POST /api/basket/approval so the basket panel can
+                # show this exact bill without requesting (and superseding) a new one.
+                "request": approval_request_out(result).model_dump(mode="json"),
             },
         )
 
@@ -365,9 +422,18 @@ def _basket_ui(basket: Basket, store: BasketStore) -> dict[str, Any]:
     }
 
 
-def _basket_outcome(basket: Basket, store: BasketStore, status: str) -> ToolOutcome:
+def _basket_outcome(
+    basket: Basket,
+    store: BasketStore,
+    status: str,
+    address: SavedAddressSummary | None = None,
+) -> ToolOutcome:
     return ToolOutcome(
-        model_output={"status": status, **basket_for_model(basket, store), "note": BASKET_NOTE},
+        model_output={
+            "status": status,
+            **basket_for_model(basket, store, address),
+            "note": BASKET_NOTE,
+        },
         ui_event={"type": "basket.updated", "provider": store.provider, "basket": _basket_ui(basket, store)},
     )
 

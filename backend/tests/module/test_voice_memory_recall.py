@@ -28,7 +28,7 @@ from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS
 from app.voice.toolbox import VOICE_TOOL_DEFINITIONS, VoiceToolbox
 from tests.shopping_fakes import World
 
-FIXTURE = Path(__file__).parent / "fixtures" / "sample_households.json"
+FIXTURE = Path(__file__).parents[1] / "fixtures" / "sample_households.json"
 
 
 @pytest_asyncio.fixture

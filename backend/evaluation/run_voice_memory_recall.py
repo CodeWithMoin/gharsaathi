@@ -1,4 +1,4 @@
-"""Live check of the delegated voice backend: household memory recall before search.
+"""Live check of the delegated voice backend: memory recall before search and user address form.
 
 Drives the real backend model through the OpenAI Responses API with the exact
 delegation instructions and voice tools, executing tool calls through
@@ -43,6 +43,7 @@ from app.memory.service import MemoryService
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.shopping.memory import InMemoryApprovalRepository, InMemoryBasketRepository
+from app.user_profile import UserProfile
 from app.voice.prompts import BACKEND_INSTRUCTIONS, VOICE_PROMPT_VERSION
 from app.voice.service import build_session_config
 from app.voice.toolbox import VOICE_TOOL_DEFINITIONS, VoiceToolbox
@@ -51,6 +52,8 @@ from app.voice.tools import ProductSearcher
 DEFAULT_REPORT_PATH = Path(__file__).with_name("voice_memory_recall_report.json")
 MAX_TOOL_ROUNDS = 8
 MASCULINE_SELF = re.compile(r"\b(?:raha|gaya|sakta|karta|dunga|lunga|karunga)\s+hoon\b", re.IGNORECASE)
+MASCULINE_USER = re.compile(r"\b(?:sakte|rahe|chahte|karte|dekhte|lete)\s+hain\b", re.IGNORECASE)
+FEMININE_USER = re.compile(r"\b(?:sakti|rahi|chahti|karti|dekhti|leti)\s+hain\b", re.IGNORECASE)
 NEED_CLAIM = re.compile(r"\b(?:khatam|khatm|finish|out of stock|low hai|chahiye hoga)\b", re.IGNORECASE)
 
 AXE_PRODUCTS = [
@@ -79,6 +82,17 @@ SCENARIOS: list[dict[str, Any]] = [
             {
                 "user": "deo order karna hai",
                 "expect": {"no_search": True, "asks_brand_and_size": True},
+            }
+        ],
+    },
+    {
+        "id": "masculine_profile_user_forms",
+        "household": None,
+        "profile": {"first_name": "Aarav", "address_form": "masculine", "language": "hinglish"},
+        "turns": [
+            {
+                "user": "Kya main Instamart aur Zepto dono par price compare kar sakta hoon?",
+                "expect": {"masculine_user_forms": True},
             }
         ],
     },
@@ -232,6 +246,11 @@ def check_turn(expect: dict[str, Any], reply: str, calls: list[dict[str, Any]]) 
     if expect.get("asks_brand_and_size"):
         if "brand" not in lowered or not re.search(r"size|ml|pack", lowered) or "?" not in reply:
             failures.append("Did not ask for brand and size.")
+    if expect.get("masculine_user_forms"):
+        if not MASCULINE_USER.search(reply):
+            failures.append("No masculine user-directed form such as 'aap kar sakte hain'.")
+        if FEMININE_USER.search(reply):
+            failures.append("Feminine user-directed form despite a masculine profile.")
     for name in expect.get("tools_required", []):
         if name not in names:
             failures.append(f"Expected {name} (called {names}).")
@@ -245,6 +264,11 @@ def check_turn(expect: dict[str, Any], reply: str, calls: list[dict[str, Any]]) 
 async def run_scenario(
     client: AsyncOpenAI, delegation: dict[str, Any], scenario: dict[str, Any], workdir: Path
 ) -> dict[str, Any]:
+    if "profile" in scenario:
+        profile = UserProfile.model_validate(scenario["profile"])
+        delegation = build_session_config(get_settings(), VOICE_TOOL_DEFINITIONS, profile)[
+            "delegation"
+        ]["responses"]
     toolbox = await build_toolbox(scenario["household"], workdir / f"{scenario['id']}.db")
     previous: str | None = None
     turns: list[dict[str, Any]] = []

@@ -11,6 +11,7 @@ from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.voice.address_tools import ZeptoConnectionChecker
 from app.voice.profile_context import with_profile
+from app.voice.basket_tools import AddressDescriber
 from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS
 from app.voice.sideband import SidebandHub
 from app.voice.toolbox import ToolExecutor, VOICE_TOOL_DEFINITIONS, VoiceToolbox
@@ -81,6 +82,7 @@ class LiveSessionService:
         zepto_connection: ZeptoConnectionChecker | None = None,
         preference_recall: PreferenceRecaller | None = None,
         profile_reader: ProfileReader | None = None,
+        addresses: AddressDescriber | None = None,
     ) -> None:
         self.settings = settings
         self.searcher = searcher
@@ -91,6 +93,7 @@ class LiveSessionService:
         self.zepto_connection = zepto_connection
         self.preference_recall = preference_recall
         self.profile_reader = profile_reader
+        self.addresses = addresses
         self._http_client = http_client
 
     @property
@@ -114,6 +117,7 @@ class LiveSessionService:
                 household_id,
                 zepto_connection=self.zepto_connection,
                 preference_recall=self.preference_recall,
+                addresses=self.addresses,
             )
         if self.zepto_searcher is not None:
             return MultiProviderShoppingToolExecutor(

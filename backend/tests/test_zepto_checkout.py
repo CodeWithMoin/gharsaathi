@@ -136,7 +136,7 @@ def test_preview_normalises_provider_offer_cards_without_inventing_bank_discount
         {
             "title": "Not safe to parse",
             "type": "BANK_OFFER",
-            "minimumOrderValue": 9900.0,
+            "minimumOrderValue": 9900.5,
             "discountAmount": 500,
             "isUnlocked": False,
             "isApplied": False,
@@ -228,7 +228,7 @@ def test_preview_rejects_inconsistent_free_delivery_progress(mutate: Any) -> Non
         (lambda result: result["data"]["items"][0].__setitem__("quantity", 2), ApprovalRefused),
         (lambda result: result["data"]["items"][0].__setitem__("storeProductId", "other"), ApprovalRefused),
         (lambda result: result["data"].__setitem__("toPayAmount", 4999), ZeptoSchemaError),
-        (lambda result: result["data"].__setitem__("totalItems", 1.0), ZeptoSchemaError),
+        (lambda result: result["data"].__setitem__("totalItems", 1.5), ZeptoSchemaError),
         (lambda result: result["data"].__setitem__("freeDelivery", False), ZeptoSchemaError),
     ],
 )
@@ -267,7 +267,7 @@ def test_preview_reconciles_strict_other_fees() -> None:
         ("Small cart fee", 100),
     ]
 
-    value["data"]["otherFees"] = [{"label": "Small cart fee", "amount": 100.0}]
+    value["data"]["otherFees"] = [{"label": "Small cart fee", "amount": 100.5}]
     with pytest.raises(ZeptoSchemaError):
         quote_from_cod_preview(basket(), value, NOW)
 
@@ -321,7 +321,7 @@ async def test_quote_converts_bad_provider_shape_to_safe_failure() -> None:
         }
     )
 
-    with pytest.raises(ProviderUnavailable, match="invalid cash-on-delivery preview"):
+    with pytest.raises(ProviderUnavailable, match="preview could not be verified because the item details were invalid"):
         await ZeptoQuoteProvider(fake).quote(basket())
 
 

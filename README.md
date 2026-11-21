@@ -355,6 +355,36 @@ permissions if they are not already on. Seeded orders use `sample-` order ids an
 memories use the `sample-household-seed` source, so the unseed command removes only
 them; it leaves permissions for you to change in settings.
 
+## Voice transcript turns and event diagnostics
+
+GPT-Live transcript events (`session.input_transcript.delta`,
+`session.output_transcript.delta`) have no item id and no done event; each
+fragment carries `start_ms`/`end_ms` on the session timeline, and the app
+chooses message boundaries
+([Live conversations: transcript deltas](https://developers.openai.com/api/docs/guides/live-conversations#transcript-deltas)).
+`frontend/app/voice-transcript-turns.mjs` closes a speaker's bubble after a
+1.8 s timeline silence, when the other speaker talks for 0.9 s or more during
+that silence, on Realtime lifecycle events (`input_audio_buffer.speech_*`,
+`response.created/done`) or `session.paused`, and when the other speaker's turn
+closes after this speaker had already stopped. A short backchannel does not
+split an ongoing sentence.
+
+To see which events a real session actually delivers, turn on the content-free
+event recorder. It records event type, the names of id fields that are present,
+timing values and text lengths. It never records transcript text, tool arguments
+or id values.
+
+- Browser (data channel and tool SSE), outside production builds: run
+  `localStorage.setItem("gharsaathi:voice-event-log", "1")` in the console, then
+  start voice. Or set `NEXT_PUBLIC_VOICE_EVENT_LOG=1` before `npm run dev`/`build`.
+  Entries are logged with `console.debug("[voice-event]", …)` and kept in
+  `window.__gharsaathiVoiceEvents`. Copy them with
+  `copy(JSON.stringify(window.__gharsaathiVoiceEvents))`. To turn it off, run
+  `localStorage.removeItem("gharsaathi:voice-event-log")`.
+- Backend sideband: set `VOICE_EVENT_LOG=true` in `.env` and restart the backend.
+  Lines are logged at WARNING (so they show without extra logging setup) as
+  `Voice sideband event {...}`.
+
 ## Verification
 
 Backend:

@@ -109,7 +109,11 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="select_address",
         title="List and select a saved delivery address",
-        voice=S(M, "Voice uses whichever address is selected on screen when the session starts; no tool."),
+        voice=S(
+            M,
+            "Voice uses whichever address is selected on screen when the session starts; "
+            "basket tools report it (label + short line from the saved snapshot). No selection tool.",
+        ),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
         ui=S(W, "Radio list per store in the setup sheet."),
         backend=S(W),
@@ -505,6 +509,20 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "no_memory",
         "purchase_history",
         "confirmed_preference",
+        # Fields, statuses and enum values shown in the backend few-shot examples.
+        "swiggy_instamart",
+        "price_rupees",
+        "pack_size",
+        "line_total",
+        "item_total",
+        "awaiting_user_approval",
+        "form_opened",
+        "prefilled_fields",
+        "address_type",
+        "flat_details",
+        "building_name",
+        "formatted_address",
+        "contact_name",
     }
 )
 

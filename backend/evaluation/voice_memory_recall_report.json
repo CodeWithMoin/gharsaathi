@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-21T23:19:06.958161+00:00",
+  "generated_at": "2026-11-21T23:25:54.293949+00:00",
   "model": "gpt-6-luna",
-  "prompt_version": "1.7.0",
+  "prompt_version": "1.8.0",
   "blocked_lookups": [],
   "runs": [
     {
@@ -136,6 +136,36 @@
         }
       ],
       "finished_at": "2026-11-21T23:19:06.957820+00:00",
+      "run": 2
+    },
+    {
+      "id": "masculine_profile_user_forms",
+      "passed": false,
+      "turns": [
+        {
+          "user": "Kya main Instamart aur Zepto dono par price compare kar sakta hoon?",
+          "reply": "Haan, dono connected hain to main Instamart aur Zepto ke prices compare karke dikha sakti hoon. Kaunsa product dekhna hai?",
+          "tool_calls": [],
+          "failures": [
+            "No masculine user-directed form such as 'aap kar sakte hain'."
+          ]
+        }
+      ],
+      "finished_at": "2026-11-21T23:25:38.925593+00:00",
+      "run": 1
+    },
+    {
+      "id": "masculine_profile_user_forms",
+      "passed": true,
+      "turns": [
+        {
+          "user": "Kya main Instamart aur Zepto dono par price compare kar sakta hoon?",
+          "reply": "Haan, aap Instamart aur Zepto dono par price compare kar sakte hain. Kaunsa product dekhna hai?",
+          "tool_calls": [],
+          "failures": []
+        }
+      ],
+      "finished_at": "2026-11-21T23:25:54.293670+00:00",
       "run": 2
     }
   ]
