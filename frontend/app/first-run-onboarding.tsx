@@ -34,22 +34,19 @@ const featureSlides = [
   {
     eyebrow: "YOUR HOUSEHOLD",
     title: "Aapki pasand, mujhe yaad rahegi.",
-    description: "Aapki permission se brands aur pack sizes yaad rakhungi.",
-    note: "Dobara batana nahi padega.",
+    note: "Sirf aapki permission se.",
     icon: <Brain size={38} weight="duotone" />,
   },
   {
     eyebrow: "SMART SHOPPING",
     title: "Har jagah dekhein. Behtar chunein.",
-    description: "Swiggy aur Zepto ke available options compare karungi.",
-    note: "Ek jagah comparison. Faisla aapka.",
+    note: "Prices, fees aur delivery ek saath.",
     icon: <Calculator size={38} weight="duotone" />,
   },
   {
     eyebrow: "BEYOND CHECKOUT",
     title: "Order se delivery tak, main saath hoon.",
-    description: "Tracking mile toh updates yahin. Issue ho toh support details ready.",
-    note: "Control hamesha aapka.",
+    note: "Updates aur issue details, yahin.",
     icon: <BellRinging size={38} weight="duotone" />,
   },
 ];
@@ -82,8 +79,7 @@ export function PublicOnboarding() {
             <div className="grid size-20 place-items-center rounded-[26px] border border-[#e4c9b8] bg-[#fff8f2] text-[#c6531d] shadow-[0_24px_50px_-34px_rgba(101,52,27,.65)]">{feature.icon}</div>
             <p className="mt-9 text-[10px] font-semibold tracking-[.18em] text-[#c6531d]">{feature.eyebrow}</p>
             <h1 className="font-display mt-3 max-w-[14ch] text-[34px] font-semibold leading-[1.12] tracking-[-.05em]">{feature.title}</h1>
-            <p className="mt-7 max-w-[31ch] text-[15px] leading-6 text-[#806f65]">{feature.description}</p>
-            <p className="mt-3 max-w-[31ch] text-[13px] font-semibold leading-5 text-[#70584b]">{feature.note}</p>
+            <p className="mt-7 max-w-[31ch] text-[14px] font-semibold leading-5 text-[#70584b]">{feature.note}</p>
           </div>
         </motion.section>}
 
