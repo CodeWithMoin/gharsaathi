@@ -1,12 +1,13 @@
-"""Voice tools that change the local basket, never the provider cart.
+"""Voice tools that change local per-store baskets, never a provider cart.
 
 The model is deliberately constrained to opaque ``option_id`` values issued by
-the search tool. Provider product identifiers and prices are derived only from
-the corresponding stored search result.
+the search tool. The store, provider product identifiers and prices are
+derived only from the corresponding stored search result.
 """
 
 import json
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, get_args
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -14,20 +15,29 @@ from app.commerce.swiggy.models import Product
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService, format_rupees, item_total_paise
 from app.shopping.errors import ShoppingError
-from app.shopping.models import Basket, BasketLine, ProductRef, rupees_to_paise
-from app.voice.tools import ToolOutcome
+from app.shopping.models import Basket, BasketLine, ProductRef, ProviderName, rupees_to_paise
+from app.voice.tools import SearchOption, ToolOutcome
 
 
-PROVIDER = "swiggy_instamart"
+STORE_IDS: tuple[ProviderName, ...] = get_args(ProviderName)
+
+_STORE_PARAMETER: dict[str, Any] = {
+    "type": ["string", "null"],
+    "enum": [*STORE_IDS, None],
+    "description": (
+        "store_id of the basket (swiggy_instamart or zepto). Use null only when "
+        "the user did not say which store."
+    ),
+}
 
 BASKET_TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "name": "add_to_basket",
         "description": (
-            "Add an option from this conversation's latest product results to the local "
-            "household basket. Use only option_id returned by search_products. This does "
-            "not change a provider cart or place an order."
+            "Add an option from this conversation's product results to its store's local "
+            "basket. Use only option_id returned by search_products; the store comes from "
+            "that option. This does not change a provider cart or place an order."
         ),
         "parameters": {
             "type": "object",
@@ -44,7 +54,7 @@ BASKET_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "name": "set_basket_quantity",
         "description": (
-            "Change a local basket line's quantity. Use item_id from view_basket. "
+            "Change a local basket line's quantity. Use item_id and store_id from view_basket. "
             "Quantity zero removes the item. This never places an order."
         ),
         "parameters": {
@@ -52,8 +62,9 @@ BASKET_TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "properties": {
                 "item_id": {"type": "string", "description": "item_id from view_basket."},
                 "quantity": {"type": "integer", "description": "New quantity, from 0 to 50."},
+                "store": _STORE_PARAMETER,
             },
-            "required": ["item_id", "quantity"],
+            "required": ["item_id", "quantity", "store"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -61,24 +72,47 @@ BASKET_TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "name": "view_basket",
-        "description": "Show the current local basket and its exact item total. Fees are not included.",
-        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        "description": (
+            "Show local baskets and their exact item totals, one per store. Use store null "
+            "to see every store's basket. Fees are not included."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"store": _STORE_PARAMETER},
+            "required": ["store"],
+            "additionalProperties": False,
+        },
         "strict": True,
     },
     {
         "type": "function",
         "name": "request_approval",
         "description": (
-            "Request the provider's final bill for the current basket and show it for on-screen "
-            "review. Use only when the user says the basket is ready. This does not approve, "
-            "checkout, or place an order."
+            "Request one store's final bill for its current basket and show it for on-screen "
+            "review. Use only when the user says the basket is ready. If baskets at more "
+            "than one store have items, pass the store the user chose. This does not "
+            "approve, checkout, or place an order."
         ),
-        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        "parameters": {
+            "type": "object",
+            "properties": {"store": _STORE_PARAMETER},
+            "required": ["store"],
+            "additionalProperties": False,
+        },
         "strict": True,
     },
 ]
 
 BASKET_TOOL_NAMES = frozenset(tool["name"] for tool in BASKET_TOOL_DEFINITIONS)
+
+
+@dataclass(frozen=True)
+class BasketStore:
+    """A store whose local basket voice may change in this session."""
+
+    provider: ProviderName
+    label: str
+    address_id: str | None
 
 
 class AddArguments(BaseModel):
@@ -89,10 +123,17 @@ class AddArguments(BaseModel):
 class QuantityArguments(BaseModel):
     item_id: str = Field(min_length=1, max_length=256)
     quantity: int = Field(ge=0, le=50)
+    store: ProviderName | None = None
 
 
-def basket_for_model(basket: Basket) -> dict[str, Any]:
+class StoreArguments(BaseModel):
+    store: ProviderName | None = None
+
+
+def basket_for_model(basket: Basket, store: BasketStore) -> dict[str, Any]:
     return {
+        "store": store.label,
+        "store_id": store.provider,
         "items": [
             {
                 "item_id": line.ref.variant_id,
@@ -105,16 +146,20 @@ def basket_for_model(basket: Basket) -> dict[str, Any]:
             for line in basket.lines
         ],
         "item_total": format_rupees(item_total_paise(basket)),
-        "note": "Item total only. Fees and the final payable amount require an approval quote. Nothing was ordered.",
     }
 
 
-def _line_from_product(product: Product, quantity: int) -> BasketLine:
+BASKET_NOTE = "Item totals only. Fees and the final payable amount require an approval quote. Nothing was ordered."
+
+
+def _line_from_product(provider: ProviderName, product: Product, quantity: int) -> BasketLine:
+    """Build the same line the on-screen Add button sends for this product."""
+
     unit_price = rupees_to_paise(product.price.offer_price)
     mrp = rupees_to_paise(product.price.mrp)
     return BasketLine(
         ref=ProductRef(
-            provider=PROVIDER,
+            provider=provider,
             product_id=product.product_id,
             variant_id=product.spin_id,
             sku_id=product.sku_id,
@@ -134,14 +179,14 @@ class BasketToolExecutor:
         self,
         baskets: BasketService,
         approvals: ApprovalService,
-        options: dict[str, Product],
-        address_id: str | None,
+        options: dict[str, SearchOption],
+        stores: list[BasketStore],
         household_id: str,
     ) -> None:
         self.baskets = baskets
         self.approvals = approvals
         self.options = options
-        self.address_id = address_id
+        self.stores = {store.provider: store for store in stores}
         self.household_id = household_id
 
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
@@ -157,45 +202,117 @@ class BasketToolExecutor:
             if name == "set_basket_quantity":
                 return await self._set_quantity(QuantityArguments.model_validate(arguments))
             if name == "view_basket":
-                return _basket_outcome(await self.baskets.active(self.household_id, PROVIDER), "ok")
+                return await self._view(StoreArguments.model_validate(arguments))
             if name == "request_approval":
-                return await self._request_approval()
+                return await self._request_approval(StoreArguments.model_validate(arguments))
         except ValidationError:
             return _error("Invalid arguments for this tool.")
         except ShoppingError as exc:
             return _error(str(exc))
         return _error(f"Unknown tool {name}.")
 
+    def _store(self, provider: ProviderName) -> BasketStore | None:
+        return self.stores.get(provider)
+
+    async def _active(self, store: BasketStore) -> Basket:
+        return await self.baskets.active(self.household_id, store.provider)
+
     async def _add(self, arguments: AddArguments) -> ToolOutcome:
-        product = self.options.get(arguments.option_id)
-        if product is None:
+        option = self.options.get(arguments.option_id)
+        if option is None:
             return _error("Unknown option_id. Search again and use an option_id from the results.")
+        store = self._store(option.provider)
+        if store is None:
+            return _error(f"{option.store} is not connected for voice, so nothing was added.")
+        product = option.product
         if not product.available:
             return _error(f"{product.name} is unavailable right now, so it was not added.")
-        if self.address_id:
-            await self.baskets.set_address(self.household_id, PROVIDER, self.address_id)
+        if store.address_id:
+            await self.baskets.set_address(self.household_id, store.provider, store.address_id)
         basket = await self.baskets.add_line(
-            self.household_id, PROVIDER, _line_from_product(product, arguments.quantity)
+            self.household_id,
+            store.provider,
+            _line_from_product(store.provider, product, arguments.quantity),
         )
-        return _basket_outcome(basket, "added")
+        return _basket_outcome(basket, store, "added")
 
     async def _set_quantity(self, arguments: QuantityArguments) -> ToolOutcome:
+        if arguments.store is not None:
+            store = self._store(arguments.store)
+            if store is None:
+                return _not_connected(arguments.store)
+        else:
+            matches = [
+                store
+                for store in self.stores.values()
+                if any(line.ref.variant_id == arguments.item_id for line in (await self._active(store)).lines)
+            ]
+            if not matches:
+                return _error("Unknown item_id. Use view_basket and pass an item_id from it.")
+            if len(matches) > 1:
+                return _ambiguous("Which store's basket should change", matches)
+            store = matches[0]
         basket = await self.baskets.set_quantity(
-            self.household_id, PROVIDER, arguments.item_id, arguments.quantity
+            self.household_id, store.provider, arguments.item_id, arguments.quantity
         )
-        return _basket_outcome(basket, "updated")
+        return _basket_outcome(basket, store, "updated")
 
-    async def _request_approval(self) -> ToolOutcome:
-        if not self.address_id:
-            return _error("No delivery address is selected. Ask the user to choose one on screen.")
-        basket = await self.baskets.set_address(self.household_id, PROVIDER, self.address_id)
+    async def _view(self, arguments: StoreArguments) -> ToolOutcome:
+        if arguments.store is not None:
+            store = self._store(arguments.store)
+            if store is None:
+                return _not_connected(arguments.store)
+            return _basket_outcome(await self._active(store), store, "ok")
+        if len(self.stores) == 1:
+            store = next(iter(self.stores.values()))
+            return _basket_outcome(await self._active(store), store, "ok")
+        views = [(store, await self._active(store)) for store in self.stores.values()]
+        filled = [(store, basket) for store, basket in views if basket.lines]
+        return ToolOutcome(
+            model_output={
+                "status": "ok",
+                "baskets": [basket_for_model(basket, store) for store, basket in views],
+                "note": BASKET_NOTE + " Each store has its own basket and bill.",
+            },
+            ui_event=(
+                {
+                    "type": "basket.updated",
+                    "provider": filled[0][0].provider,
+                    "basket": _basket_ui(filled[0][1], filled[0][0]),
+                }
+                if len(filled) == 1
+                else None
+            ),
+        )
+
+    async def _request_approval(self, arguments: StoreArguments) -> ToolOutcome:
+        if arguments.store is not None:
+            store = self._store(arguments.store)
+            if store is None:
+                return _not_connected(arguments.store)
+        else:
+            filled = [
+                store for store in self.stores.values() if (await self._active(store)).lines
+            ]
+            if not filled:
+                return _error("The basket is empty.")
+            if len(filled) > 1:
+                return _ambiguous("Which store's bill should be prepared", filled)
+            store = filled[0]
+        if not store.address_id:
+            return _error(
+                f"No {store.label} delivery address is selected. Ask the user to choose one on screen."
+            )
+        basket = await self.baskets.set_address(self.household_id, store.provider, store.address_id)
         if not basket.lines:
-            return _error("The basket is empty.")
+            return _error(f"The {store.label} basket is empty.")
         result = await self.approvals.request(basket.id)
         quote = result.quote
         return ToolOutcome(
             model_output={
                 "status": "awaiting_user_approval",
+                "store": store.label,
+                "store_id": store.provider,
                 "payable": format_rupees(quote.payable_paise),
                 "charges": [
                     {"label": charge.label, "amount": format_rupees(charge.amount_paise)}
@@ -208,6 +325,8 @@ class BasketToolExecutor:
             },
             ui_event={
                 "type": "basket.approval_requested",
+                "provider": store.provider,
+                "store": store.label,
                 "approval": {
                     "id": result.approval.id,
                     "basket_id": result.approval.basket_id,
@@ -225,14 +344,16 @@ class BasketToolExecutor:
                     ],
                     "eta_text": quote.eta_text,
                 },
-                "basket": _basket_ui(basket),
+                "basket": _basket_ui(result.basket, store),
             },
         )
 
 
-def _basket_ui(basket: Basket) -> dict[str, Any]:
+def _basket_ui(basket: Basket, store: BasketStore) -> dict[str, Any]:
     return {
         "id": basket.id,
+        "provider": store.provider,
+        "store": store.label,
         "revision": basket.revision,
         "status": basket.status.value,
         "item_count": sum(line.quantity for line in basket.lines),
@@ -244,11 +365,27 @@ def _basket_ui(basket: Basket) -> dict[str, Any]:
     }
 
 
-def _basket_outcome(basket: Basket, status: str) -> ToolOutcome:
+def _basket_outcome(basket: Basket, store: BasketStore, status: str) -> ToolOutcome:
     return ToolOutcome(
-        model_output={"status": status, **basket_for_model(basket)},
-        ui_event={"type": "basket.updated", "basket": _basket_ui(basket)},
+        model_output={"status": status, **basket_for_model(basket, store), "note": BASKET_NOTE},
+        ui_event={"type": "basket.updated", "provider": store.provider, "basket": _basket_ui(basket, store)},
     )
+
+
+def _ambiguous(question: str, stores: list[BasketStore]) -> ToolOutcome:
+    labels = " or ".join(store.label for store in stores)
+    return ToolOutcome(
+        model_output={
+            "status": "needs_store",
+            "stores": [{"store": store.label, "store_id": store.provider} for store in stores],
+            "message": f"{question}: {labels}? Ask the user, then call again with that store_id.",
+        }
+    )
+
+
+def _not_connected(provider: ProviderName) -> ToolOutcome:
+    label = "Zepto" if provider == "zepto" else "Swiggy Instamart"
+    return _error(f"{label} is not connected for voice. Ask the user to connect it on screen.")
 
 
 def _error(message: str) -> ToolOutcome:
