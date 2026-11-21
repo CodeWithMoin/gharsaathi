@@ -11,6 +11,7 @@ import { PersonalizationOnboarding } from "./personalization-onboarding";
 import { SupportPanel } from "./support-panel";
 import { VoicePanel, type VoiceTranscriptTurn } from "./voice-panel";
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
+import { FirstRunOnboarding } from "./first-run-onboarding";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
@@ -40,15 +41,23 @@ class ApiError extends Error {
   }
 }
 
-const suggestions = ["Monthly groceries", "Shampoo and batteries", "Pet supplies"];
+const suggestions = [
+  { label: "Monthly list", query: "Monthly groceries" },
+  { label: "Shampoo + batteries", query: "Shampoo and batteries" },
+  { label: "Pet supplies", query: "Pet supplies" },
+];
 
 export default function Home() {
+  return <FirstRunOnboarding>{(justCompleted) => <ShoppingChat startWithSetupOpen={justCompleted} />}</FirstRunOnboarding>;
+}
+
+function ShoppingChat({ startWithSetupOpen = false }: { startWithSetupOpen?: boolean }) {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [basketOpen, setBasketOpen] = useState(false);
   const [basket, setBasket] = useState<ShoppingBasket | null>(null);
   const [basketProvider, setBasketProvider] = useState<ProviderName>("swiggy_instamart");
   const [addingSku, setAddingSku] = useState<string | null>(null);
-  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(startWithSetupOpen);
   const [supportOpen, setSupportOpen] = useState(false);
   const [trackingOpen, setTrackingOpen] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -585,11 +594,11 @@ export default function Home() {
 
     <section className={`mx-auto flex min-h-[100dvh] max-w-4xl flex-col overflow-x-clip px-4 pt-[96px] sm:px-6 ${voiceOpen ? "pb-64 sm:pb-60" : "pb-40 sm:pb-44"}`}>
       <div className="flex-1">
-        <div className="mb-8 flex items-center gap-3"><span className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#9b8172]">Today</span><span className="h-px flex-1 bg-[#e8dcd2]" /></div>
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mr-8 sm:mr-12">
+        <div className="mb-5 flex items-center gap-3 sm:mb-8"><span className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#9b8172]">Today</span><span className="h-px flex-1 bg-[#e8dcd2]" /></div>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mr-7 sm:mr-12">
           <div className="min-w-0 max-w-[620px]">
-            <div className="rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4 shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)]"><p className="text-[15px] leading-7 sm:text-base">Hello, Moin. <strong className="font-semibold">Aaj ghar ke liye kya mangwana hai?</strong></p><p className="mt-1.5 text-sm leading-6 text-[#806f65]">Bas bol dijiye—main ready stores par saath mein check karungi.</p><button type="button" onClick={() => setSetupOpen(true)} className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-semibold"><span className={`rounded-full px-2.5 py-1 ${connected ? "bg-[#e7f2e8] text-[#397144]" : "bg-[#f3e9e2] text-[#8a7569]"}`}>Swiggy {commerceMode === "demo" ? "demo" : connected ? "live" : "connect"}</span><span className={`rounded-full px-2.5 py-1 ${commerceMode === "demo" || zeptoSearchReady ? "bg-[#e7f2e8] text-[#397144]" : "bg-[#f3e9e2] text-[#8a7569]"}`}>Zepto {commerceMode === "demo" ? "demo" : zeptoSearchReady ? "live" : zeptoConnected ? "linked" : "connect"}</span><span className="text-[#a15b36]">Manage</span></button></div>
-            {!hasChat && <div className="mt-3 flex flex-wrap gap-2">{suggestions.map((suggestion) => <button key={suggestion} onClick={() => void runSearch(suggestion)} disabled={loading === "search"} className="rounded-full border border-[#dfcbbd] bg-[#fffaf5]/70 px-3.5 py-2 text-xs font-medium text-[#70584b] transition hover:border-[#c99e84] hover:bg-white active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">{suggestion}</button>)}</div>}
+            <div className="rounded-[7px_20px_20px_20px] border border-[#ebddd2] bg-[#fffdf9] px-4 py-3.5 shadow-[0_16px_40px_-34px_rgba(74,43,27,.7)] sm:px-5 sm:py-4"><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hello, Moin. <strong className="font-semibold">Aaj ghar ke liye kya mangwana hai?</strong></p><p className="mt-1 text-[13px] leading-5 text-[#806f65] sm:mt-1.5 sm:text-sm sm:leading-6">Bas bol dijiye—main ready stores par saath mein check karungi.</p></div>
+            {!hasChat && <div className="mt-3 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">{suggestions.map((suggestion) => <button key={suggestion.query} onClick={() => void runSearch(suggestion.query)} disabled={loading === "search"} className="min-h-10 rounded-2xl border border-[#dfcbbd] bg-[#fffaf5]/75 px-2 py-2 text-[11px] font-medium leading-4 text-[#70584b] transition hover:border-[#c99e84] hover:bg-white active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-0 sm:rounded-full sm:px-3.5 sm:text-xs">{suggestion.label}</button>)}</div>}
           </div>
         </motion.div>
 
