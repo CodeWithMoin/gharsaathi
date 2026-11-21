@@ -149,36 +149,66 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    swiggyConnectionRequest ??= apiRequest<{ connected: boolean; mode?: CommerceMode }>("/api/swiggy/connection");
-    swiggyConnectionRequest
-      .then((data) => {
-        if (!active) return;
-        setConnected(data.connected);
-        const mode = data.mode ?? "live";
-        setCommerceMode(mode);
-        setMessage(mode === "demo" ? "Demo mode is ready. No commerce API or MCP calls." : data.connected ? "Swiggy is connected." : "Connect Swiggy for live product search.");
-        if (data.connected) void loadAddresses();
-      })
-      .catch((cause: unknown) => {
-        if (!active) return;
-        setConnected(false);
-        setMessage(cause instanceof Error ? cause.message : "Could not check connection.");
-      })
-      .finally(() => { if (active) setLoading((value) => value === "connection" ? null : value); });
-    return () => { active = false; };
+    let generation = 0;
+    const checkConnection = (force = false) => {
+      const currentGeneration = ++generation;
+      if (force) swiggyConnectionRequest = null;
+      swiggyConnectionRequest ??= apiRequest<{ connected: boolean; mode?: CommerceMode }>("/api/swiggy/connection");
+      void swiggyConnectionRequest
+        .then((data) => {
+          if (!active || currentGeneration !== generation) return;
+          setConnected(data.connected);
+          const mode = data.mode ?? "live";
+          setCommerceMode(mode);
+          setMessage(mode === "demo" ? "Demo mode is ready. No commerce API or MCP calls." : data.connected ? "Swiggy is connected." : "Connect Swiggy for live product search.");
+          if (data.connected) void loadAddresses();
+        })
+        .catch((cause: unknown) => {
+          if (!active || currentGeneration !== generation) return;
+          setConnected(false);
+          setMessage(cause instanceof Error ? cause.message : "Could not check connection.");
+        })
+        .finally(() => {
+          if (active && currentGeneration === generation) {
+            setLoading((value) => value === "connection" ? null : value);
+          }
+        });
+    };
+    const callbackReturned = new URL(window.location.href).searchParams.get("swiggy") === "connected";
+    checkConnection(callbackReturned);
+    const handleFocus = () => checkConnection(true);
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [loadAddresses]);
 
   useEffect(() => {
     let active = true;
-    zeptoConnectionRequest ??= apiRequest<{ connected: boolean; mode?: CommerceMode }>("/api/zepto/connection");
-    zeptoConnectionRequest
-      .then((data) => {
-        if (!active) return;
-        setZeptoConnected(data.connected);
-        if (data.connected) void loadZeptoAddresses();
-      })
-      .catch(() => { if (active) setZeptoConnected(false); });
-    return () => { active = false; };
+    let generation = 0;
+    const checkConnection = (force = false) => {
+      const currentGeneration = ++generation;
+      if (force) zeptoConnectionRequest = null;
+      zeptoConnectionRequest ??= apiRequest<{ connected: boolean; mode?: CommerceMode }>("/api/zepto/connection");
+      void zeptoConnectionRequest
+        .then((data) => {
+          if (!active || currentGeneration !== generation) return;
+          setZeptoConnected(data.connected);
+          if (data.connected) void loadZeptoAddresses();
+        })
+        .catch(() => {
+          if (active && currentGeneration === generation) setZeptoConnected(false);
+        });
+    };
+    const callbackReturned = new URL(window.location.href).searchParams.get("zepto") === "connected";
+    checkConnection(callbackReturned);
+    const handleFocus = () => checkConnection(true);
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [loadZeptoAddresses]);
 
   useEffect(() => {
