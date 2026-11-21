@@ -1,7 +1,7 @@
 from typing import Any
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.config import Settings
 from app.shopping.approval import ApprovalService
@@ -11,6 +11,7 @@ from app.voice.basket_tools import AddressDescriber
 from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS
 from app.voice.sideband import SidebandHub
 from app.voice.toolbox import ToolExecutor, VOICE_TOOL_DEFINITIONS, VoiceToolbox
+from app.voice.turn_taking import client_turn_taking, live_instructions
 from app.voice.tools import (
     TOOL_DEFINITIONS,
     MultiProviderShoppingToolExecutor,
@@ -37,6 +38,7 @@ class VoiceProviderError(VoiceError):
 class LiveSession(BaseModel):
     session_id: str
     sdp: str
+    turn_taking: dict[str, str] = Field(default_factory=lambda: {"mode": "native"})
 
 
 def build_session_config(
@@ -44,7 +46,7 @@ def build_session_config(
 ) -> dict[str, Any]:
     return {
         "model": settings.live_model,
-        "instructions": LIVE_INSTRUCTIONS,
+        "instructions": live_instructions(LIVE_INSTRUCTIONS, settings.voice_turn_taking),
         "audio": {"output": {"voice": settings.live_voice}},
         "delegation": {
             "type": "responses",
@@ -161,7 +163,11 @@ class LiveSessionService:
             session_id,
             self._tool_executor(swiggy_address_id, zepto_address_id, household_id),
         )
-        return LiveSession(session_id=session_id, sdp=answer_sdp)
+        return LiveSession(
+            session_id=session_id,
+            sdp=answer_sdp,
+            turn_taking=client_turn_taking(self.settings.voice_turn_taking),
+        )
 
 
 def _error_message(response: httpx.Response) -> str:

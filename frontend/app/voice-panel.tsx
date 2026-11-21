@@ -11,11 +11,12 @@ import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
 import { sanitizeAddressPrefill } from "./voice-address-prefill.mjs";
 import { voiceApprovalFromToolEvent } from "./voice-approval.mjs";
 import type { ZeptoAddressPrefill } from "./zepto-address-form";
+import { SmartTurnController, loadSmartTurnModel } from "./smart-turn";
 
 type VoiceStatus = "connecting" | "live" | "closing" | "error";
 type VoiceStore = "swiggy_instamart" | "zepto";
 type VoiceProduct = { provider?: VoiceStore; provider_label?: string; product_id: string; sku_id: string; spin_id?: string; name: string; brand?: string; pack_size?: string; price: { mrp: number; offer_price: number }; available: boolean; image_url?: string; rating_value?: string };
-type LiveEvent = { type: string; error?: { message?: string }; [key: string]: unknown };
+type LiveEvent = { type: string; error?: { message?: string; client_event_id?: string }; [key: string]: unknown };
 export type VoiceTranscriptTurn = { id: string; role: "user" | "assistant"; content: string };
 type ToolEvent =
   | { type: "tool.started"; name: string }
@@ -35,6 +36,9 @@ const ADDRESS_UNAVAILABLE_MESSAGES: Record<string, string> = {
   demo_mode: "Demo mode mein naya address add nahi hota.",
   swiggy_unsupported: "Swiggy address Swiggy app mein add kijiye.",
 };
+
+const YIELD_EVENT_PREFIX = "smart_turn_yield_";
+const MIC_CONSTRAINTS: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
 
 declare global {
   interface Window { __gharsaathiVoiceEvents?: unknown[] }
@@ -78,6 +82,8 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
   const [searching, setSearching] = useState(false);
   const [hasResults, setHasResults] = useState(false);
   const [basketNotice, setBasketNotice] = useState("");
+  const smartTurnRef = useRef<SmartTurnController | null>(null);
+  const assistantStreamRef = useRef<MediaStream | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
   const micRef = useRef<MediaStream | null>(null);
@@ -96,6 +102,10 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     peerRef.current = null;
     eventsRef.current?.close();
     eventsRef.current = null;
+    smartTurnRef.current?.stop();
+    smartTurnRef.current = null;
+    assistantStreamRef.current = null;
+    if (audioRef.current) audioRef.current.muted = false;
     if (audioRef.current) audioRef.current.srcObject = null;
   }, []);
 
@@ -163,6 +173,31 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     });
   }, [onAddressForm, onApprovalRequested, onBasketTouched, onResults]);
 
+  const startSmartTurn = useCallback(async (attempt: number, mic: MediaStream, yieldInstruction: string) => {
+    try {
+      const model = await loadSmartTurnModel();
+      if (attempt !== attemptRef.current) return;
+      const controller = new SmartTurnController(model, {
+        onHold: () => { if (audioRef.current) audioRef.current.muted = true; },
+        onRelease: () => { if (audioRef.current) audioRef.current.muted = false; },
+        onYield: () => {
+          const channel = channelRef.current;
+          if (channel?.readyState !== "open") return;
+          channel.send(JSON.stringify({ type: "session.instructions.append", event_id: `${YIELD_EVENT_PREFIX}${Date.now()}`, delegation_id: null, content: yieldInstruction }));
+        },
+      });
+      smartTurnRef.current = controller;
+      await controller.start(mic, assistantStreamRef.current);
+    } catch {
+      if (attempt !== attemptRef.current) return;
+      // Fall back to the tuned GPT-Live session (option A): no local gating.
+      smartTurnRef.current?.stop();
+      smartTurnRef.current = null;
+      if (audioRef.current) audioRef.current.muted = false;
+      setMessage("Smart listening load nahi hui—main normal tarah sun rahi hoon.");
+    }
+  }, []);
+
   const start = useCallback(async () => {
     const attempt = attemptRef.current + 1;
     attemptRef.current = attempt;
@@ -176,7 +211,10 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       peerRef.current = peer;
       peer.addEventListener("track", (event) => {
         if (!audioRef.current) return;
-        audioRef.current.srcObject = new MediaStream([event.track]);
+        const assistantStream = new MediaStream([event.track]);
+        assistantStreamRef.current = assistantStream;
+        smartTurnRef.current?.attachAssistant(assistantStream);
+        audioRef.current.srcObject = assistantStream;
         audioRef.current.play().catch(() => setMessage("Awaaz sunne ke liye ek baar tap kijiye."));
       });
       peer.addEventListener("connectionstatechange", () => {
@@ -188,7 +226,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         }
       });
 
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
       if (attempt !== attemptRef.current) {
         mic.getTracks().forEach((track) => track.stop());
         peer.close();
@@ -208,6 +246,8 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
             setMessage("Listening—boliye kya chahiye.");
           } else if (handleTranscriptEvent(event)) {
             // The main chat renders and persists spoken turns.
+          } else if (event.type === "error" && event.error?.client_event_id?.startsWith(YIELD_EVENT_PREFIX)) {
+            // A rejected yield request is not fatal; GPT-Live keeps its native turn-taking.
           } else if (event.type === "error") {
             setStatus("error");
             setMessage("Voice session ruk gaya. Phir se try kijiye.");
@@ -237,6 +277,9 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       if (!response.ok) throw new Error(payload && typeof payload.detail === "string" ? payload.detail : "GharSaathi voice shuru nahi ho paya. Phir se try kijiye.");
       await peer.setRemoteDescription({ type: "answer", sdp: payload.sdp });
       listenForToolEvents(payload.session_id);
+      if (payload.turn_taking?.mode === "smart_turn" && typeof payload.turn_taking.yield_instruction === "string") {
+        void startSmartTurn(attempt, mic, payload.turn_taking.yield_instruction);
+      }
     } catch (error) {
       if (attempt !== attemptRef.current) return;
       const denied = error instanceof DOMException && error.name === "NotAllowedError";
@@ -244,7 +287,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       setMessage(denied ? "Voice shopping ke liye mic permission chahiye." : error instanceof Error ? error.message : "Voice shuru nahi ho paya. Phir se try kijiye.");
       cleanup();
     }
-  }, [addressId, authenticatedFetch, cleanup, handleTranscriptEvent, listenForToolEvents, onClose, zeptoAddressId]);
+  }, [addressId, authenticatedFetch, cleanup, handleTranscriptEvent, listenForToolEvents, onClose, startSmartTurn, zeptoAddressId]);
 
   useEffect(() => {
     void start();

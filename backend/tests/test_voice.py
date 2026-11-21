@@ -193,7 +193,7 @@ def test_session_endpoint_returns_answer_for_allowed_origin() -> None:
         headers={"Origin": "http://localhost:3003"},
     )
     assert response.status_code == 201
-    assert response.json() == {"session_id": "live_fake", "sdp": "answer"}
+    assert response.json() == {"session_id": "live_fake", "sdp": "answer", "turn_taking": {"mode": "native"}}
 
 
 def test_session_endpoint_rejects_unknown_origin() -> None:

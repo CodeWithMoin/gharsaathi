@@ -413,18 +413,29 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="voice_turn_taking",
         title="Voice turn-taking and barge-in (interrupting the assistant)",
         voice=S(
-            P,
-            "Relies on the OpenAI Live session defaults: build_session_config (voice/service.py) "
-            "sets no turn detection; the semantic_vad config in voice/client.py is unused. "
-            "No Hinglish smart-turn model in main; only an uncommitted frontend/app/smart-turn.ts "
-            "in the smart-turn-hinglish worktree.",
-            "codex/smart-turn-hinglish (uncommitted)",
+            IP,
+            "GPT-Live has no turn_detection/VAD/commit controls; VOICE_TURN_TAKING selects native "
+            "(default, unchanged), tuned (option A: interruption + Hinglish patience policy appended "
+            "to the Live instructions) or smart_turn (option B: tuned + browser Hinglish end-of-turn "
+            "model that holds playback mid-thought and stops it on barge-in). Measured in "
+            "docs/voice-turn-taking.md; not yet verified in a real browser session.",
+            "codex/smart-turn-options",
         ),
         typed_chat=S(U, "Not applicable to typed chat."),
-        ui=S(M, "No client-side end-of-turn or interruption handling in voice-panel.tsx."),
-        backend=S(P, "Session config only; no turn-detection settings sent."),
+        ui=S(
+            IP,
+            "voice-panel.tsx starts SmartTurnController (smart-turn.ts) only when the session reports "
+            "smart_turn; the model is lazy-loaded, SHA-256 verified, and falls back to option A.",
+            "codex/smart-turn-options",
+        ),
+        backend=S(
+            IP,
+            "Setting voice_turn_taking; voice/turn_taking.py builds the instructions and the "
+            "session response's turn_taking field.",
+            "codex/smart-turn-options",
+        ),
         voice_session_behavior=True,
-        ui_files=("frontend/app/voice-panel.tsx",),
+        ui_files=("frontend/app/voice-panel.tsx", "frontend/app/smart-turn.ts"),
     ),
     Capability(
         id="voice_transcript",
