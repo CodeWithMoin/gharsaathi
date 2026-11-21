@@ -1,7 +1,7 @@
 """Add person-scoped purchase history graph.
 
-Revision ID: 20261121_0002
-Revises: 20261121_0001
+Revision ID: 20261121_0004
+Revises: 20261121_0003
 Create Date: 2026-11-21
 """
 
@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "20261121_0002"
-down_revision: str | None = "20261121_0001"
+revision: str = "20261121_0004"
+down_revision: str | None = "20261121_0003"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
