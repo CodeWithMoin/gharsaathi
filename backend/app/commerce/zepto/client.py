@@ -291,7 +291,9 @@ class ZeptoMcpClient:
                         if is_error:
                             if _value_is_rate_limited(text):
                                 raise ZeptoRateLimited(RATE_LIMIT_MESSAGE)
-                            raise ZeptoProviderError(text)
+                            raise ZeptoProviderError(
+                                "Zepto could not complete the request."
+                            )
                         # Some Zepto read tools currently return successful MCP
                         # text content without structuredContent. Preserve it in
                         # a typed envelope instead of treating success as a

@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import math
 import secrets
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
@@ -167,7 +168,7 @@ class SwiggyOAuthClient:
             headers={"Accept": "application/json"},
         )
         if response.status_code in {400, 401, 419}:
-            await self.store.clear()
+            await self.store.clear_tokens()
             raise SwiggyAuthenticationRequired("Your Swiggy session expired. Connect again.")
         return await self._save_token_response(
             response, connection.client_id, connection.refresh_token
@@ -186,7 +187,9 @@ class SwiggyOAuthClient:
             return 0
         return max(
             0,
-            int((connection.rate_limited_until - datetime.now(UTC)).total_seconds()),
+            math.ceil(
+                (connection.rate_limited_until - datetime.now(UTC)).total_seconds()
+            ),
         )
 
     async def record_rate_limit(self, seconds: int) -> None:
@@ -205,4 +208,4 @@ class SwiggyOAuthClient:
                 )
             except httpx.HTTPError:
                 pass
-        await self.store.clear()
+        await self.store.clear_tokens()

@@ -80,6 +80,15 @@ async def test_zepto_oauth_uses_pkce_resource_and_encrypted_storage(
     restarted_oauth = ZeptoOAuthClient(settings, store)
     assert await restarted_oauth.rate_limit_remaining() > 0
 
+    await store.clear_tokens()
+    disconnected = await store.load()
+    assert disconnected is not None
+    assert disconnected.client_id == "zepto-dynamic-client"
+    assert disconnected.access_token is None
+    assert disconnected.refresh_token is None
+    assert disconnected.pending_authorizations == {}
+    assert disconnected.rate_limited_until is None
+
 
 @pytest.mark.asyncio
 async def test_zepto_oauth_rejects_wrong_issuer_before_token_exchange(

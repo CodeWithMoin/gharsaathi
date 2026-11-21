@@ -68,6 +68,15 @@ async def test_oauth_pkce_state_and_encrypted_persistence(tmp_path: Path) -> Non
     restarted_oauth = SwiggyOAuthClient(app_settings, store)
     assert await restarted_oauth.rate_limit_remaining() > 0
 
+    await store.clear_tokens()
+    disconnected = await store.load()
+    assert disconnected is not None
+    assert disconnected.client_id == "dynamic-client"
+    assert disconnected.access_token is None
+    assert disconnected.refresh_token is None
+    assert disconnected.pending_authorizations == {}
+    assert disconnected.rate_limited_until is None
+
 
 @pytest.mark.asyncio
 async def test_oauth_rejects_unknown_state_before_token_exchange(tmp_path: Path) -> None:

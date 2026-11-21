@@ -53,16 +53,16 @@ class EncryptedConnectionStore:
     async def save(self, connection: StoredConnection) -> None:
         async with self._lock:
             current = await asyncio.to_thread(self._read_sync)
-            if current is not None and not connection.pending_authorizations:
-                connection = connection.model_copy(
-                    update={
-                        "pending_authorizations": current.pending_authorizations,
-                        "rate_limited_until": (
-                            connection.rate_limited_until
-                            or current.rate_limited_until
-                        ),
-                    }
-                )
+            if current is not None:
+                preserved: dict[str, object] = {}
+                if not connection.pending_authorizations:
+                    preserved["pending_authorizations"] = (
+                        current.pending_authorizations
+                    )
+                if connection.rate_limited_until is None:
+                    preserved["rate_limited_until"] = current.rate_limited_until
+                if preserved:
+                    connection = connection.model_copy(update=preserved)
             await asyncio.to_thread(self._write_sync, connection)
 
     async def save_pending(
@@ -106,3 +106,15 @@ class EncryptedConnectionStore:
         async with self._lock:
             if self.path.exists():
                 await asyncio.to_thread(self.path.unlink)
+
+    async def clear_tokens(self) -> None:
+        """Remove account/session data while retaining the public OAuth client ID."""
+
+        async with self._lock:
+            connection = await asyncio.to_thread(self._read_sync)
+            if connection is None:
+                return
+            await asyncio.to_thread(
+                self._write_sync,
+                StoredConnection(client_id=connection.client_id),
+            )
