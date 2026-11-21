@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview check check-full test clean-run
+.PHONY: help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household check check-full test clean-run
 
 help:
 	@echo "GharSaathi local commands"
@@ -17,6 +17,8 @@ help:
 	@echo "  make zepto-bridge  Run Zepto's port-80 OAuth bridge (asks for Mac password)"
 	@echo "  make zepto-doctor  Read-only Zepto local setup and callback readiness check"
 	@echo "  make zepto-preview Run a temporary-item, unconfirmed live preview (explicit opt-in)"
+	@echo "  make seed-sample-household   Demo only: load fictional sample orders + memories for your user"
+	@echo "  make unseed-sample-household Remove only that seeded sample data"
 	@echo "  make check         Lint, type-check, and run backend tests"
 	@echo "  make check-full    Tests, lint, type-check, and production frontend build"
 
@@ -58,6 +60,12 @@ zepto-doctor:
 
 zepto-preview:
 	@./scripts/zepto-preview.sh --seed-preview-cleanup
+
+seed-sample-household:
+	@cd backend && uv run --with-requirements requirements.txt python -m app.memory.sample_seed $(if $(USER_ID),--user-id $(USER_ID)) $(if $(HOUSEHOLD),--household $(HOUSEHOLD))
+
+unseed-sample-household:
+	@cd backend && uv run --with-requirements requirements.txt python -m app.memory.sample_seed --remove $(if $(USER_ID),--user-id $(USER_ID))
 
 check:
 	@./scripts/verify.sh

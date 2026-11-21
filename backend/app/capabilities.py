@@ -275,7 +275,12 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="usual_items",
         title="Suggest the household's usual items from purchase history",
-        voice=S(M, "No voice tool."),
+        voice=S(
+            P,
+            "Only on request: recall_household_preferences returns consented past purchases "
+            "of the item the user asked for; no proactive suggestions by voice.",
+        ),
+        voice_tools=("recall_household_preferences",),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
         ui=S(P, "Listed inside Zepto offer suggestions; dismiss/review routes have no frontend caller."),
         backend=S(W),
@@ -304,7 +309,12 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="preference_memory",
         title="Remember explicit household preferences (brand, size, corrections)",
-        voice=S(M, "No voice tool."),
+        voice=S(
+            P,
+            "Recall only: recall_household_preferences reads confirmed preferences before a "
+            "broad item search. Saving or correcting a preference by voice is not supported.",
+        ),
+        voice_tools=("recall_household_preferences",),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
         ui=S(M, "No frontend file calls these memory routes."),
         backend=S(W, "Extract/propose, confirm/correct/reject, retrieve, delete."),
@@ -467,7 +477,16 @@ UNMOUNTED_ROUTERS: dict[str, str] = {
 # (tool result fields and statuses). Anything else snake_case in a prompt must
 # be a defined voice tool.
 PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
-    {"option_id", "item_id", "store_id", "not_connected", "needs_store"}
+    {
+        "option_id",
+        "item_id",
+        "store_id",
+        "not_connected",
+        "needs_store",
+        "no_memory",
+        "purchase_history",
+        "confirmed_preference",
+    }
 )
 
 

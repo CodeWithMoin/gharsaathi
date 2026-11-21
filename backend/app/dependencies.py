@@ -46,6 +46,7 @@ from app.tracking.adapters import (
 from app.tracking.models import TrackingProvider
 from app.tracking.service import OrderTrackingService
 from app.tracking.store import OrderTrackingStore
+from app.memory.recall import DatabasePreferenceRecaller
 from app.voice.service import LiveSessionService
 from app.voice.sideband import SidebandHub
 
@@ -195,6 +196,7 @@ def get_voice_service() -> LiveSessionService:
         approvals=get_approval_service(),
         zepto_searcher=get_zepto_service(),
         zepto_connection=get_zepto_service(),
+        preference_recall=DatabasePreferenceRecaller(get_session_factory()),
     )
 
 

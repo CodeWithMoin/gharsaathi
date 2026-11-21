@@ -4,6 +4,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.core.config import Settings
+from app.memory.recall import PreferenceRecaller
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.voice.address_tools import ZeptoConnectionChecker
@@ -70,6 +71,7 @@ class LiveSessionService:
         approvals: ApprovalService | None = None,
         zepto_searcher: ProductSearcher | None = None,
         zepto_connection: ZeptoConnectionChecker | None = None,
+        preference_recall: PreferenceRecaller | None = None,
     ) -> None:
         self.settings = settings
         self.searcher = searcher
@@ -78,6 +80,7 @@ class LiveSessionService:
         self.approvals = approvals
         self.zepto_searcher = zepto_searcher
         self.zepto_connection = zepto_connection
+        self.preference_recall = preference_recall
         self._http_client = http_client
 
     @property
@@ -100,6 +103,7 @@ class LiveSessionService:
                 zepto_address_id,
                 household_id,
                 zepto_connection=self.zepto_connection,
+                preference_recall=self.preference_recall,
             )
         if self.zepto_searcher is not None:
             return MultiProviderShoppingToolExecutor(

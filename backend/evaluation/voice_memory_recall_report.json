@@ -1,0 +1,142 @@
+{
+  "generated_at": "2026-11-21T23:19:06.958161+00:00",
+  "model": "gpt-6-luna",
+  "prompt_version": "1.7.0",
+  "blocked_lookups": [],
+  "runs": [
+    {
+      "id": "recall_axe_from_history",
+      "passed": true,
+      "turns": [
+        {
+          "user": "deo order karna hai",
+          "reply": "Pichli baar aapne AXE Dark Temptation 150 ml liya tha, wahi chahiye?",
+          "tool_calls": [
+            {
+              "name": "recall_household_preferences",
+              "arguments": {
+                "item": "deodorant"
+              },
+              "status": "ok"
+            }
+          ],
+          "failures": []
+        },
+        {
+          "user": "haan wahi",
+          "reply": "AXE Dark Temptation 150 ml, ₹199 ka, Swiggy Instamart basket mein add kar diya hai.",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "AXE Dark Temptation deodorant body spray 150 ml"
+              },
+              "status": "ok"
+            },
+            {
+              "name": "add_to_basket",
+              "arguments": {
+                "option_id": "opt1",
+                "quantity": 1
+              },
+              "status": "added"
+            }
+          ],
+          "failures": []
+        }
+      ],
+      "finished_at": "2026-11-21T23:18:25.052746+00:00",
+      "run": 1
+    },
+    {
+      "id": "empty_memory_asks_brand_and_size",
+      "passed": false,
+      "turns": [
+        {
+          "user": "deo order karna hai",
+          "reply": "Kaunsa brand aur size chahiye? Pichle orders se yaad rakhun? Settings mein history import on kar sakte hain.",
+          "tool_calls": [
+            {
+              "name": "recall_household_preferences",
+              "arguments": {
+                "item": "deodorant"
+              },
+              "status": "no_memory"
+            }
+          ],
+          "failures": [
+            "More than one question."
+          ]
+        }
+      ],
+      "finished_at": "2026-11-21T23:18:30.442822+00:00",
+      "run": 1
+    },
+    {
+      "id": "recall_axe_from_history",
+      "passed": true,
+      "turns": [
+        {
+          "user": "deo order karna hai",
+          "reply": "Pichli baar aapne AXE Dark Temptation 150 ml liya tha, wahi chahiye?",
+          "tool_calls": [
+            {
+              "name": "recall_household_preferences",
+              "arguments": {
+                "item": "deodorant"
+              },
+              "status": "ok"
+            }
+          ],
+          "failures": []
+        },
+        {
+          "user": "haan wahi",
+          "reply": "AXE Dark Temptation deodorant body spray 150 ml Swiggy Instamart ki basket mein ₹199 mein add kar diya hai.",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "AXE Dark Temptation deodorant body spray 150 ml"
+              },
+              "status": "ok"
+            },
+            {
+              "name": "add_to_basket",
+              "arguments": {
+                "option_id": "opt1",
+                "quantity": 1
+              },
+              "status": "added"
+            }
+          ],
+          "failures": []
+        }
+      ],
+      "finished_at": "2026-11-21T23:19:01.338195+00:00",
+      "run": 2
+    },
+    {
+      "id": "empty_memory_asks_brand_and_size",
+      "passed": true,
+      "turns": [
+        {
+          "user": "deo order karna hai",
+          "reply": "Kaunsa brand aur size chahiye? Chahein to Settings mein history import on kar sakte hain, phir pichli pasand yaad rahegi.",
+          "tool_calls": [
+            {
+              "name": "recall_household_preferences",
+              "arguments": {
+                "item": "deodorant"
+              },
+              "status": "no_memory"
+            }
+          ],
+          "failures": []
+        }
+      ],
+      "finished_at": "2026-11-21T23:19:06.957820+00:00",
+      "run": 2
+    }
+  ]
+}

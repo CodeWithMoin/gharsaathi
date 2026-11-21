@@ -1,0 +1,69 @@
+{
+  "version": "1.0.0",
+  "description": "Fictional sample households for memory-recall tests, voice delegation scenarios and the demo-only seed command. Converted from the synthetic household profile dataset (Users, Swiggy Orders, Memory sheets); finance, contact, location, device, caller and business fields are dropped. Only Instamart orders and explicit brand/pack-size memories are kept. Entries with origin=harness_addition are not in the source dataset and exist only to exercise a scenario.",
+  "source": "synthetic_household_profile_dataset.xlsx (all records fictional)",
+  "timezone": "+05:30",
+  "households": [
+    {
+      "sample_id": "USR-001",
+      "first_name": "Aarav",
+      "preferred_languages": ["English", "Hinglish"],
+      "memories": [
+        {
+          "source_id": "MEM-001",
+          "memory_type": "brand_preference",
+          "value": {"brand": "Fortune", "product_category": "cooking oil", "pack_size": "1 litre"},
+          "text": "Prefers Fortune cooking oil in 1 litre packs."
+        }
+      ],
+      "orders": [
+        {
+          "source_id": "ORD-1001",
+          "ordered_at_local": "2026-10-04T19:12:00",
+          "status": "delivered",
+          "items": ["Fortune Sunlite Oil 1 L", "Aashirvaad Atta 5 kg"]
+        },
+        {
+          "source_id": "ORD-1003",
+          "ordered_at_local": "2026-11-11T21:05:00",
+          "status": "delivered",
+          "items": ["Amul Taaza Milk 1 L", "eggs 12 pack", "bananas"]
+        },
+        {
+          "source_id": "ORD-H001",
+          "origin": "harness_addition",
+          "ordered_at_local": "2026-11-08T18:40:00",
+          "status": "delivered",
+          "items": ["AXE Dark Temptation Deodorant Body Spray 150 ml"]
+        }
+      ]
+    },
+    {
+      "sample_id": "USR-006",
+      "first_name": "Meera",
+      "preferred_languages": ["Tamil", "English"],
+      "memories": [
+        {
+          "source_id": "MEM-012",
+          "memory_type": "brand_preference",
+          "value": {"brand": "Aavin", "alternative_brand": "Nandini", "product_category": "milk"},
+          "text": "Prefers Aavin or Nandini milk when available."
+        }
+      ],
+      "orders": [
+        {
+          "source_id": "ORD-1016",
+          "ordered_at_local": "2026-10-08T07:42:00",
+          "status": "delivered",
+          "items": ["Aavin milk 2 L", "idli batter 1 kg", "coconut"]
+        },
+        {
+          "source_id": "ORD-1018",
+          "ordered_at_local": "2026-11-16T12:11:00",
+          "status": "delivered",
+          "items": ["ponni rice 5 kg", "toor dal 2 kg", "sesame oil"]
+        }
+      ]
+    }
+  ]
+}
