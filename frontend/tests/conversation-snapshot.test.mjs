@@ -12,7 +12,26 @@ test("passes a normal voice conversation through unchanged", () => {
     searched: true,
     messages,
     results_after_message_id: "voice-1",
+    timeline: { seq: 0, results_seq: 0, live: [], summaries: [] },
   });
+});
+
+test("saves the timeline so a reopened chat keeps basket cards in place", () => {
+  const messages = [message(0, "Diet Coke add karo"), message(1, "Add kar diya.")];
+  const timeline = { seq: 2, resultsSeq: 0, live: [{ provider: "zepto", afterMessageId: "voice-1", seq: 2 }], summaries: [{ provider: "zepto", afterMessageId: "voice-0", seq: 1, stage: "updated", itemCount: 1, itemTotalPaise: 5000 }] };
+  const snapshot = conversationSnapshot({ submittedQuery: "", products: [], searched: false, messages, resultsAfterMessageId: null, timeline });
+  assert.deepEqual(snapshot.timeline, {
+    seq: 2,
+    results_seq: 0,
+    live: [{ provider: "zepto", after_message_id: "voice-1", seq: 2 }],
+    summaries: [{ provider: "zepto", after_message_id: "voice-0", seq: 1, stage: "updated", item_count: 1, item_total_paise: 5000 }],
+  });
+});
+
+test("saves spoken turns without non-speech annotations", () => {
+  const typed = { ...message(2, "Pack [2 x 100g] [laughs]"), modality: "text" };
+  const snapshot = conversationSnapshot({ submittedQuery: "", products: [], searched: false, messages: [message(1, "[sniff] Main to bas check kar rahi thi."), message(3, "[breath]"), typed], resultsAfterMessageId: null });
+  assert.deepEqual(snapshot.messages.map((item) => item.content), ["Main to bas check kar rahi thi.", "Pack [2 x 100g] [laughs]"]);
 });
 
 test("keeps every field within the backend limits so a save is never rejected", () => {
