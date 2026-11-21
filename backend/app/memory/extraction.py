@@ -1,8 +1,6 @@
 import re
 from typing import Protocol
 
-from openai import AsyncOpenAI
-
 from app.memory.prompts import MEMORY_EXTRACTION_SYSTEM_PROMPT
 from app.memory.schemas import (
     ExtractedMemoryCandidate,
@@ -21,6 +19,8 @@ class OpenAIMemoryExtractor:
     name = "openai"
 
     def __init__(self, api_key: str, model: str) -> None:
+        from openai import AsyncOpenAI
+
         self.client = AsyncOpenAI(api_key=api_key)
         self.model = model
 

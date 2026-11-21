@@ -89,6 +89,37 @@ class PersonalizedProductSearchResult(ProductSearchResult):
     excluded_product_count: int = 0
 
 
+class OrderItem(BaseModel):
+    name: str
+    quantity: int = Field(ge=1)
+    item_id: str | None = None
+
+
+class OrderSummary(BaseModel):
+    order_id: str
+    status: str
+    current_status: str
+    history_status: str
+    status_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    estimated_delivery_time: str | None = None
+    item_count: int = Field(ge=0)
+    total_paise: int = Field(ge=0)
+    payment_method: str | None = None
+    payment_status: str | None = None
+    refund_status: str | None = None
+    order_type: str
+    is_active: bool
+    store_name: str | None = None
+    items: list[OrderItem]
+
+
+class OrderList(BaseModel):
+    orders: list[OrderSummary]
+    has_more: bool = False
+
+
 class ToolDescription(BaseModel):
     name: str
     description: str | None = None

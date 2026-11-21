@@ -1,8 +1,10 @@
 from app.commerce.swiggy.adapter import SwiggyInstamartAdapter
 from app.commerce.swiggy.client import SwiggyMcpClient
+from app.commerce.swiggy.history import SwiggyOrderHistoryAdapter
 from app.commerce.swiggy.models import (
     AddressList,
     ConnectionStatus,
+    OrderList,
     ProductSearchResult,
     ToolDescription,
 )
@@ -19,6 +21,7 @@ class SwiggyService:
         self.oauth = oauth
         self.client = client
         self.adapter = adapter
+        self.history = SwiggyOrderHistoryAdapter(client)
 
     async def connection_status(self) -> ConnectionStatus:
         return await self.oauth.status()
@@ -46,3 +49,5 @@ class SwiggyService:
     ) -> ProductSearchResult:
         return await self.adapter.search_products(query, address_id, offset)
 
+    async def orders(self, count: int, active_only: bool) -> OrderList:
+        return await self.history.orders(count, active_only)
