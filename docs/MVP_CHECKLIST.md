@@ -42,7 +42,7 @@ features start.
 |---|---|---|---|---|
 | 2026-11-22 | 2 | Memory only used after the user asked "mera pichla order" | `codex/voice-recall-offers` | |
 | 2026-11-22 | 4 | Devanagari words in assistant bubbles ("डेढ़ sau", "ली थी") | `codex/voice-recall-offers` | |
-| 2026-11-22 | 6 | Basket card stuck at the bottom; new messages above it | `codex/chat-layout-bill` | |
-| 2026-11-22 | 7 | False "Store item prices changed" (MRP subtotal vs offer total) | `codex/chat-layout-bill` | |
+| 2026-11-22 | 6 | Basket card stuck at the bottom; new messages above it | `codex/chat-layout-bill` (merged) | |
+| 2026-11-22 | 7 | False "Store item prices changed" (MRP subtotal vs offer total) | `codex/chat-layout-bill` (merged) | |
 | 2026-11-22 | 8 | Promo question drifted into "samaan poora mila?" | `codex/voice-recall-offers` | |
 | 2026-11-22 | 9 | Typed text only runs a keyword search | `codex/typed-chat-assistant` | |
