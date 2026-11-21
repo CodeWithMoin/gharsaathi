@@ -630,11 +630,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     return <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><div className="mb-2 w-fit max-w-full rounded-[18px] bg-[#fffdf9] px-4 py-3 shadow-[0_14px_34px_-32px_rgba(74,43,27,.65)]"><p className="text-[13px] leading-5"><strong>{productCount === 1 ? "1 relevant option mila." : `${productCount} relevant options mile.`}</strong> {productCount > 1 ? (commerceMode === "demo" ? "Add karte hi agla item khulega." : `${zeptoSearchReady ? "Swiggy aur Zepto" : "Swiggy Instamart"} ke options compare karein.`) : "Best matching option neeche hai."}</p></div><ProductComparison products={products} commerceMode={commerceMode} addingSku={addingSku} onAdd={addProduct} /><p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p></motion.div>;
   })() : null;
 
-  return <main className="grain min-h-[100dvh] bg-[#f8f2ea] text-[#35241c]">
+  return <main className="grain min-h-[100dvh] overflow-hidden bg-[#f8f2ea] text-[#35241c]">
     <AnimatePresence>
       {chatDrawerOpen && <>
-        <motion.button type="button" aria-label="Close chats" initial={{ opacity: 0, x: -28 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -28 }} transition={{ type: "spring", stiffness: 360, damping: 36 }} onClick={() => setChatDrawerOpen(false)} className="fixed inset-y-0 right-0 left-[min(75%,360px)] z-40 rounded-l-[88px] bg-[#3b2a22]/20 [corner-shape:squircle]" />
-        <motion.aside initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", stiffness: 360, damping: 36 }} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-50 flex w-3/4 max-w-[360px] flex-col bg-[#fffaf5]">
+        <motion.aside initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -24, opacity: 0 }} transition={{ type: "spring", stiffness: 360, damping: 36 }} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-20 flex w-3/4 max-w-[360px] flex-col bg-[#f8f2ea]">
           <div className="flex items-center gap-2 px-3 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
             <Brand dense />
             <button type="button" onClick={() => setChatDrawerOpen(false)} aria-label="Close chats" className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#806f65] transition hover:bg-[#efe5dc] active:scale-[.96]"><X size={18} /></button>
@@ -671,7 +670,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
               </button>)}
             </div>
           </div>
-          <div className="bg-[#fbf7f2] px-3 pb-[max(3.375rem,env(safe-area-inset-bottom))] pt-4">
+          <div className="bg-[#f8f2ea] px-3 pb-[max(3.375rem,env(safe-area-inset-bottom))] pt-4">
             <AnimatePresence initial={false}>
               {accountMenuOpen && <motion.div id="account-menu" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: .16 }} className="mb-2 rounded-xl border border-[#e3d5cb] bg-white p-2 shadow-[0_14px_34px_-28px_rgba(61,38,27,.55)]">
                 <div className="px-2 pb-2 pt-1"><p className="truncate text-[12px] font-semibold text-[#3d2b23]">{userName}</p><p className="mt-0.5 text-[10px] text-[#8b7569]">GharSaathi account</p></div>
@@ -687,6 +686,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
           </div>
         </motion.aside>
       </>}
+    </AnimatePresence>
+    <motion.div animate={{ x: chatDrawerOpen ? "min(75vw, 360px)" : "0px" }} transition={{ type: "spring", stiffness: 360, damping: 36 }} className={`relative z-30 min-h-[100dvh] bg-[#f8f2ea] ${chatDrawerOpen ? "overflow-hidden rounded-l-[88px] [corner-shape:squircle]" : ""}`}>
+    <AnimatePresence>
+      {chatDrawerOpen && <motion.button type="button" aria-label="Close chats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setChatDrawerOpen(false)} className="fixed inset-0 z-40 bg-[#3b2a22]/20" />}
     </AnimatePresence>
     <header className="fixed inset-x-0 top-0 z-30 bg-[#fffdf9]/92 shadow-[0_10px_35px_-30px_rgba(73,42,28,.7)] backdrop-blur-xl">
       <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
@@ -771,5 +774,6 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         </motion.div>
       )}
     </AnimatePresence>
+    </motion.div>
   </main>;
 }
