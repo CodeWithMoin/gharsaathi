@@ -5,6 +5,15 @@ from app.auth import require_user_id
 from app.main import app
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--run-live",
+        action="store_true",
+        default=False,
+        help="Allow opt-in live provider smoke tests (also needs GHARSAATHI_LIVE_SMOKE=1).",
+    )
+
+
 @pytest.fixture(autouse=True)
 def verified_test_identity():
     """Unit/API tests bypass Clerk with an explicit dependency override only."""

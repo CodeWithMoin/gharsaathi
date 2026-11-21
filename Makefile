@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview check check-full test clean-run
+.PHONY: help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview check check-full test clean-run live-smoke live-smoke-cart
 
 help:
 	@echo "GharSaathi local commands"
@@ -19,6 +19,8 @@ help:
 	@echo "  make zepto-preview Run a temporary-item, unconfirmed live preview (explicit opt-in)"
 	@echo "  make check         Lint, type-check, and run backend tests"
 	@echo "  make check-full    Tests, lint, type-check, and production frontend build"
+	@echo "  make live-smoke    Opt-in READ-ONLY real-provider smoke (owner consent; docs/LIVE_SMOKE.md)"
+	@echo "  make live-smoke-cart Opt-in CART-MUTATING Zepto preview smoke (never confirms an order)"
 
 setup:
 	@./scripts/setup.sh
@@ -67,6 +69,12 @@ check-full:
 
 test:
 	@cd backend && uv run --with-requirements requirements.txt pytest -q
+
+live-smoke:
+	@./scripts/live-smoke.sh
+
+live-smoke-cart:
+	@./scripts/live-smoke.sh --cart
 
 clean-run:
 	@./scripts/app.sh clean
