@@ -18,6 +18,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-User-Id"],
+    expose_headers=["Retry-After"],
 )
 app.include_router(
     purchase_memory_router,

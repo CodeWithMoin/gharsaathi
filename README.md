@@ -18,6 +18,33 @@ References: [authentication](https://mcp.swiggy.com/builders/docs/start/authenti
 
 The backend still calls `tools/list` for the authenticated user and validates each tool call against the returned live JSON Schema. Swiggy notes that a user's live catalogue may differ from the public reference.
 
+## Swiggy rate limits
+
+Swiggy does not publish fixed request caps or remaining-quota headers. Its gateway
+can return HTTP `429` with `Retry-After`; at the MCP layer the corresponding error
+code is `-32000`. See Swiggy's official [rate-limit guidance](https://mcp.swiggy.com/builders/docs/operate/rate-limits/).
+
+The backend captures `Retry-After` before the MCP SDK can wrap the transport error,
+also recognizes JSON-RPC and proxy-style 429 messages, and applies one shared
+cooldown for the local user. A retry is attempted only when the provider's delay
+fits inside Swiggy's recommended 30-second user-facing retry budget. Otherwise the
+API immediately returns `429` with its own `Retry-After` header and a clear message.
+When an MCP bridge hides the header, the safe fallback is 30 seconds. Read calls
+are serialized, and the live tool schema is cached for five minutes to avoid an
+extra `tools/list` request on every search. Automatic 429 retries are allowlisted
+to `get_addresses` and `search_products`; future consequential tools do not inherit
+blind retries.
+
+Each MCP attempt also logs a generated correlation ID, operation name, outcome,
+duration, and rate-limit delay/source. Tokens, response bodies, address data, and
+search text are not logged. Use the correlation ID and timestamp when escalating a
+persistent provider-side 429 to Swiggy.
+
+The fallback, retry budget, and schema-cache duration can be adjusted with
+`SWIGGY_RATE_LIMIT_FALLBACK_SECONDS`, `SWIGGY_RETRY_BUDGET_SECONDS`, and
+`SWIGGY_TOOL_SCHEMA_CACHE_SECONDS`. Do not lower the fallback merely to probe the
+provider more frequently; repeated calls can prolong a gateway cooldown.
+
 ## Local setup
 
 Requirements: Python 3.11+, Node.js 20+, a Swiggy account with a saved delivery address, and a browser for Swiggy's phone/OTP page.
