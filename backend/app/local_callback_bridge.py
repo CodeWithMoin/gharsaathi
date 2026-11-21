@@ -11,6 +11,11 @@ install_sensitive_log_filters()
 app = FastAPI(title="GharSaathi local OAuth callback bridge", docs_url=None, redoc_url=None)
 
 
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok", "service": "oauth-callback-bridge"}
+
+
 @app.get("/callback", response_class=RedirectResponse)
 async def zepto_callback(
     state: Annotated[str, Query(min_length=20, max_length=512)],

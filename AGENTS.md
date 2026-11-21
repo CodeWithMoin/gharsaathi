@@ -18,6 +18,7 @@ The product should do the work; the user should make important decisions. Do not
 - Memory: learn explicit household preferences such as brands, sizes, quantities, and corrections. Purchase history does not prove current stock or consumption.
 - Approval: every purchase requires explicit user approval. Approval is bound to the exact basket and price; material changes require renewed approval.
 - Account linking: use provider-authorised OAuth/login flows. Never ask users to paste passwords or OTPs into chat.
+- Before opening any Swiggy or Zepto OAuth page, verify the configured callback listener and full return path are reachable. Refuse to begin OAuth with a clear setup error if the callback is unavailable. For local Zepto development, this includes the privileged port-80 callback bridge.
 - Support: allow users to return to the same conversation, explain an issue in voice/text, and attach photos/videos. Support channels are used only when officially supported and permitted.
 - If an AI support call is ever implemented, identify as AI, obtain user approval, do not impersonate the user, fabricate facts, or commit to charges or financial terms.
 

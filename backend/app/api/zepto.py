@@ -33,6 +33,7 @@ from app.commerce.zepto.models import (
 from app.core.config import get_settings
 from app.dependencies import ZeptoServiceDependency
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
+from app.oauth_readiness import local_callback_is_ready
 
 
 router = APIRouter()
@@ -81,7 +82,18 @@ async def connection(service: ZeptoServiceDependency) -> ConnectionStatus:
 @router.get("/oauth/start", response_class=RedirectResponse)
 async def oauth_start(service: ZeptoServiceDependency) -> RedirectResponse:
     try:
+        settings = get_settings()
+        if not await local_callback_is_ready(
+            settings.zepto_oauth_redirect_uri,
+            expected_service="oauth-callback-bridge",
+        ):
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "Zepto's local OAuth callback bridge is not running. Run `make zepto-bridge` first.",
+            )
         return RedirectResponse(await service.authorization_url(), status_code=302)
+    except HTTPException:
+        raise
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")

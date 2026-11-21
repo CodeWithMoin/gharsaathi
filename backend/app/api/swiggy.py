@@ -33,6 +33,7 @@ from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 from app.memory.personalization import excludes_product, personalize_search_query
 from app.memory.schemas import MemoryRetrieveRequest
 from app.memory.service import MemoryService
+from app.oauth_readiness import local_callback_is_ready
 
 
 router = APIRouter()
@@ -92,7 +93,15 @@ async def connection(service: SwiggyServiceDependency) -> ConnectionStatus:
 @router.get("/oauth/start", response_class=RedirectResponse)
 async def oauth_start(service: SwiggyServiceDependency) -> RedirectResponse:
     try:
+        settings = get_settings()
+        if not await local_callback_is_ready(settings.swiggy_oauth_redirect_uri):
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "Swiggy's OAuth callback is not reachable. Start the backend before connecting.",
+            )
         return RedirectResponse(await service.authorization_url(), status_code=302)
+    except HTTPException:
+        raise
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")
