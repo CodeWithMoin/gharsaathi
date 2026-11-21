@@ -71,6 +71,11 @@ show_status() {
   else
     echo "Frontend: unavailable"
   fi
+  if curl -fsS http://127.0.0.1/health | grep -q 'oauth-callback-bridge'; then
+    echo "Zepto OAuth bridge: healthy · http://localhost/callback"
+  else
+    echo "Zepto OAuth bridge: unavailable · run make zepto-bridge"
+  fi
 }
 
 case "${1:-help}" in

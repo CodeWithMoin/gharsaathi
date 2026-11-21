@@ -99,6 +99,22 @@ async def oauth_start(service: ZeptoServiceDependency) -> RedirectResponse:
         raise AssertionError("unreachable")
 
 
+@router.get("/oauth/readiness")
+async def oauth_readiness() -> dict[str, bool | str]:
+    ready = await local_callback_is_ready(
+        get_settings().zepto_oauth_redirect_uri,
+        expected_service="oauth-callback-bridge",
+    )
+    return {
+        "ready": ready,
+        "message": (
+            "Zepto is ready to connect."
+            if ready
+            else "Start `make zepto-bridge` and keep that terminal open before connecting Zepto."
+        ),
+    }
+
+
 @router.get("/oauth/callback", response_class=RedirectResponse)
 async def oauth_callback(
     service: ZeptoServiceDependency,

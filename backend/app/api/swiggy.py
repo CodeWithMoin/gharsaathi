@@ -107,6 +107,19 @@ async def oauth_start(service: SwiggyServiceDependency) -> RedirectResponse:
         raise AssertionError("unreachable")
 
 
+@router.get("/oauth/readiness")
+async def oauth_readiness() -> dict[str, bool | str]:
+    ready = await local_callback_is_ready(get_settings().swiggy_oauth_redirect_uri)
+    return {
+        "ready": ready,
+        "message": (
+            "Swiggy is ready to connect."
+            if ready
+            else "Swiggy's OAuth callback is unavailable. Start the backend first."
+        ),
+    }
+
+
 @router.get("/oauth/callback", response_class=RedirectResponse)
 async def oauth_callback(
     service: SwiggyServiceDependency,

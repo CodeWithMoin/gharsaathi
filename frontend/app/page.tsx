@@ -450,6 +450,24 @@ export default function Home() {
     }
   }
 
+  async function beginProviderConnection(provider: "swiggy" | "zepto") {
+    if (provider === "zepto") setZeptoBusy(true);
+    else setLoading("connection");
+    try {
+      const readiness = await apiRequest<{ ready: boolean; message: string }>(`/api/${provider}/oauth/readiness`);
+      if (!readiness.ready) {
+        setMessage(readiness.message);
+        return;
+      }
+      window.location.assign(`${API}/api/${provider}/oauth/start`);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : `Could not prepare ${provider} login.`);
+    } finally {
+      if (provider === "zepto") setZeptoBusy(false);
+      else setLoading((value) => value === "connection" ? null : value);
+    }
+  }
+
   const connectionLabel = commerceMode === "demo" ? "Safe demo · no live calls" : connected && zeptoConnected ? "Swiggy + Zepto linked" : connected && selectedAddress ? selectedAddress.tag || selectedAddress.category || "Swiggy ready" : zeptoConnected ? "Zepto linked" : connected ? "Choose address" : "Connect stores";
   const basketCount = basket?.lines.reduce((total, line) => total + line.quantity, 0) ?? 0;
   const hasChat = Boolean(submittedQuery || chatMessages.length);
@@ -525,12 +543,12 @@ export default function Home() {
             <div className="mt-6 space-y-3">
               <section className="rounded-2xl border border-[#e7d8cd] bg-[#fffaf5] p-4" aria-label="Swiggy Instamart connection">
                 <div className="flex gap-3"><span className={`mt-1 size-2.5 shrink-0 rounded-full ${connected ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Swiggy Instamart</h3><span className={`text-[10px] font-semibold ${connected ? "text-[#397144]" : "text-[#806f65]"}`}>{connected === null ? "Checking…" : commerceMode === "demo" ? "Demo data" : connected ? "Connected" : "Not connected"}</span></div><p className="mt-1 text-xs leading-5 text-[#806f65]">{commerceMode === "demo" ? "Static products and deterministic bills. Your Swiggy account and cart are untouched." : "Live search and final-bill review are available here."}</p></div></div>
-                {commerceMode === "demo" ? <p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">Provider calls are disabled. Launch <strong>make dev-live</strong> only when you intentionally want live data.</p> : connected ? <button onClick={disconnect} disabled={loading === "disconnect"} className="mt-3 text-xs font-semibold text-[#9e4536] disabled:opacity-45">{loading === "disconnect" ? "Disconnecting…" : "Disconnect Swiggy"}</button> : <button onClick={() => window.location.assign(`${API}/api/swiggy/oauth/start`)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3 text-sm font-semibold text-white active:scale-[.98]">Connect Swiggy securely <ArrowRight size={17} /></button>}
+                {commerceMode === "demo" ? <p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">Provider calls are disabled. Launch <strong>make dev-live</strong> only when you intentionally want live data.</p> : connected ? <button onClick={disconnect} disabled={loading === "disconnect"} className="mt-3 text-xs font-semibold text-[#9e4536] disabled:opacity-45">{loading === "disconnect" ? "Disconnecting…" : "Disconnect Swiggy"}</button> : <button onClick={() => void beginProviderConnection("swiggy")} disabled={loading === "connection"} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3 text-sm font-semibold text-white active:scale-[.98] disabled:opacity-45">{loading === "connection" ? "Checking callback…" : "Connect Swiggy securely"} <ArrowRight size={17} /></button>}
               </section>
 
               <section className="rounded-2xl border border-[#e7d8cd] bg-[#fffaf5] p-4" aria-label="Zepto connection">
                 <div className="flex gap-3"><span className={`mt-1 size-2.5 shrink-0 rounded-full ${zeptoConnected ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Zepto</h3><span className={`text-[10px] font-semibold ${zeptoConnected ? "text-[#397144]" : "text-[#806f65]"}`}>{zeptoConnected === null ? "Checking…" : commerceMode === "demo" ? "Demo safe" : zeptoSearchReady ? "Search ready" : zeptoConnected ? "Connected" : "Not connected"}</span></div><p className="mt-1 text-xs leading-5 text-[#806f65]">{commerceMode === "demo" ? "Static Zepto results are available without provider calls." : "Live product search uses one persistent MCP session and a cached tool catalogue."}</p></div></div>
-                {commerceMode === "demo" ? <p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">No Zepto OAuth, cart, payment, or order call is made in this mode.</p> : zeptoConnected ? <><p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">Search only. Cart sync, payment, and real order tools remain disabled.</p><button onClick={() => void disconnectZepto()} disabled={zeptoBusy} className="mt-3 text-xs font-semibold text-[#9e4536] disabled:opacity-45">{zeptoBusy ? "Disconnecting…" : "Disconnect Zepto"}</button></> : <button onClick={() => window.location.assign(`${API}/api/zepto/oauth/start`)} disabled={zeptoBusy} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-[#d7a182] bg-white px-5 py-3 text-sm font-semibold text-[#8f421b] transition hover:bg-[#fff5ed] active:scale-[.98] disabled:opacity-45">Connect Zepto securely <ArrowRight size={17} /></button>}
+                {commerceMode === "demo" ? <p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">No Zepto OAuth, cart, payment, or order call is made in this mode.</p> : zeptoConnected ? <><p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">Search only. Cart sync, payment, and real order tools remain disabled.</p><button onClick={() => void disconnectZepto()} disabled={zeptoBusy} className="mt-3 text-xs font-semibold text-[#9e4536] disabled:opacity-45">{zeptoBusy ? "Disconnecting…" : "Disconnect Zepto"}</button></> : <button onClick={() => void beginProviderConnection("zepto")} disabled={zeptoBusy} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-[#d7a182] bg-white px-5 py-3 text-sm font-semibold text-[#8f421b] transition hover:bg-[#fff5ed] active:scale-[.98] disabled:opacity-45">{zeptoBusy ? "Checking callback…" : "Connect Zepto securely"} <ArrowRight size={17} /></button>}
               </section>
             </div>
 

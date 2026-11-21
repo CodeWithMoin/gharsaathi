@@ -50,7 +50,10 @@ make the new `.app` domain fail because `.app` requires HTTPS.
 
 The first deployment intentionally sets `COMMERCE_MODE=demo`. Swiggy and Zepto
 OAuth must not be enabled until the exact production callbacks in
-`docs/production-mcp-access.md` are allowlisted by their respective providers.
+`docs/production-mcp-access.md` are allowlisted by their respective providers
+and the listed identity, durable token-storage, and multi-task safety gates are
+complete. The local encrypted token files and `X-User-Id` development identity
+are not a production multi-user design.
 
 These runtime resources are persistent and billable. Review the AWS account,
 region, parameter values, and estimated cost before deploying the stack.

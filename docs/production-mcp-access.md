@@ -17,11 +17,13 @@ Zepto callback bridge in production.
 
 ## Swiggy
 
-Swiggy supports hosted web integrations, but production access is reviewed.
-Apply through Swiggy Builders Club and provide the HTTPS callback, expected
-traffic, architecture, and a demo video. Swiggy's documentation says localhost
-is allowed for development; production redirects require HTTPS and explicit
-allowlisting.
+Swiggy's official MCP manifest currently says third-party application
+development is not permitted while its security and compliance review is in
+progress. Its published redirect allowlist includes localhost and known MCP
+clients, but not `gharsaathi.app`. Do not enable hosted Swiggy access unless
+Swiggy explicitly approves the application and the exact HTTPS callback. Apply
+through Swiggy Builders Club and provide the callback, expected traffic,
+architecture, and a demo video.
 
 ## Zepto
 
@@ -41,3 +43,31 @@ or logged.
 The public site should remain in `COMMERCE_MODE=demo` until each provider has
 approved its callback independently. One provider can be enabled without
 enabling the other.
+
+## Internal production gates
+
+Provider approval alone is not enough. Before enabling live commerce on AWS:
+
+- replace the development `X-User-Id` header with real authenticated user and
+  household identity;
+- replace the single-user encrypted token files with per-user encrypted
+  provider connections in PostgreSQL or another durable store backed by KMS;
+- persist support/tracking state outside container `/tmp` and define retention
+  and deletion policies;
+- keep OAuth state, provider cooldowns, and tokens shared across tasks before
+  scaling the backend above one ECS task;
+- run the complete OAuth and read-only search acceptance suite against the
+  approved production callbacks; and
+- keep cart, payment, checkout, and order placement disabled until their
+  separate approval and non-replay review is complete.
+
+The current CloudFormation template deliberately hard-codes
+`COMMERCE_MODE=demo`. Do not turn that into a parameter until these gates are
+implemented and reviewed.
+
+## Current official references
+
+- Swiggy MCP manifest and redirect allowlist:
+  https://github.com/Swiggy/swiggy-mcp-server-manifest
+- Zepto MCP redirect allowlist and real-order warning:
+  https://github.com/zeptonow/mcp
