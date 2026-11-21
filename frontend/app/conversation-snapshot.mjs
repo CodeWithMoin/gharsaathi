@@ -4,19 +4,24 @@
  * field would otherwise reject the whole save, and every later save with it.
  */
 
+import { emptyTimeline, timelineSnapshot } from "./chat-timeline.mjs";
+import { stripNonSpeechAnnotations } from "./transcript-annotations.mjs";
+
 export const MAX_SUBMITTED_QUERY_CHARS = 120;
 export const MAX_PRODUCTS = 100;
 export const MAX_CHAT_MESSAGES = 1000;
 export const MAX_CHAT_MESSAGE_CHARS = 20000;
 
 /**
- * @template {{ content: string }} M
+ * Spoken turns are saved without non-speech annotations like "[sniff]".
+ *
+ * @template {{ content: string, modality?: string }} M
  * @template P
- * @param {{ submittedQuery: string, products: P[], searched: boolean, messages: M[], resultsAfterMessageId: string | null }} state
+ * @param {{ submittedQuery: string, products: P[], searched: boolean, messages: M[], resultsAfterMessageId: string | null, timeline?: import("./chat-timeline.mjs").ChatTimeline }} state
  */
 export function conversationSnapshot(state) {
   const messages = state.messages
-    .map((message) => ({ ...message, content: message.content.trim().slice(0, MAX_CHAT_MESSAGE_CHARS) }))
+    .map((message) => ({ ...message, content: (message.modality === "voice" ? stripNonSpeechAnnotations(message.content) : message.content).trim().slice(0, MAX_CHAT_MESSAGE_CHARS) }))
     .filter((message) => message.content)
     .slice(-MAX_CHAT_MESSAGES);
   return {
@@ -25,5 +30,6 @@ export function conversationSnapshot(state) {
     searched: state.searched,
     messages,
     results_after_message_id: state.resultsAfterMessageId,
+    timeline: timelineSnapshot(state.timeline ?? emptyTimeline()),
   };
 }

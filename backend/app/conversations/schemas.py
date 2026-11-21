@@ -48,12 +48,50 @@ class ChatMessageSnapshot(BaseModel):
         return value.strip()
 
 
+MAX_TIMELINE_SUMMARIES = 50
+
+StoreName = Literal["swiggy_instamart", "zepto"]
+
+
+class TimelineCardSnapshot(BaseModel):
+    """A basket card placed after a chat message, ordered by ``seq``."""
+
+    provider: StoreName
+    after_message_id: str | None = Field(default=None, max_length=128)
+    seq: int = Field(ge=0)
+
+
+class TimelineSummarySnapshot(TimelineCardSnapshot):
+    """A collapsed, non-interactive record of an earlier basket card."""
+
+    stage: Literal["updated", "bill_ready", "bill_approved", "ordered"]
+    item_count: int | None = Field(default=None, ge=0)
+    item_total_paise: int | None = Field(default=None, ge=0)
+
+
+class ChatTimelineSnapshot(BaseModel):
+    seq: int = Field(default=0, ge=0)
+    results_seq: int = Field(default=0, ge=0)
+    live: list[TimelineCardSnapshot] = Field(default_factory=list, max_length=2)
+    summaries: list[TimelineSummarySnapshot] = Field(
+        default_factory=list, max_length=MAX_TIMELINE_SUMMARIES
+    )
+
+    @field_validator("live")
+    @classmethod
+    def one_live_card_per_store(cls, value: list[TimelineCardSnapshot]) -> list[TimelineCardSnapshot]:
+        if len({card.provider for card in value}) != len(value):
+            raise ValueError("only one live basket card per store")
+        return value
+
+
 class ConversationStateUpsert(BaseModel):
     submitted_query: str = Field(default="", max_length=120)
     products: list[ProductSnapshot] = Field(default_factory=list, max_length=100)
     searched: bool = False
     messages: list[ChatMessageSnapshot] = Field(default_factory=list, max_length=MAX_CHAT_MESSAGES)
     results_after_message_id: str | None = Field(default=None, max_length=128)
+    timeline: ChatTimelineSnapshot = Field(default_factory=ChatTimelineSnapshot)
 
     @field_validator("submitted_query")
     @classmethod

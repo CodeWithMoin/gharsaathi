@@ -8,6 +8,8 @@ import { Brand } from "./brand";
 import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, type Approval, type ApprovalRequest, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
 import { groupProductsForComparison, INITIAL_COMPARISON_GROUPS, ProductComparison, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
+import { basketSummary, collapseBasketCard, emptyTimeline, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordResults, restoreTimeline, summaryText, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
+import { stripNonSpeechAnnotations } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
 import { PersonalizationOnboarding } from "./personalization-onboarding";
 import { SupportPanel } from "./support-panel";
@@ -23,7 +25,7 @@ const LEGACY_CHAT_STORAGE_KEY = "gharsaathi:conversation:v1";
 type Address = { id: string; address_line: string; category?: string; tag?: string };
 type CommerceMode = "demo" | "live";
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string };
-type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; updated_at: string };
+type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; timeline?: unknown; updated_at: string };
 type ConversationSummary = { id: string; title: string; preview: string; updated_at: string; is_active: boolean };
 type LegacyConversation = { submittedQuery?: string; products?: Product[]; searched?: boolean };
 let swiggyConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
@@ -55,8 +57,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const apiRequest = useApiRequest();
   const addBasketLine = useAddBasketLine();
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const [basketOpen, setBasketOpen] = useState(false);
-  const [basket, setBasket] = useState<ShoppingBasket | null>(null);
+  const [timeline, setTimeline] = useState<ChatTimeline>(emptyTimeline);
+  const [baskets, setBaskets] = useState<Partial<Record<ProviderName, ShoppingBasket>>>({});
   const [basketProvider, setBasketProvider] = useState<ProviderName>("swiggy_instamart");
   const [voiceApproval, setVoiceApproval] = useState<{ provider: ProviderName; request: ApprovalRequest } | null>(null);
   const [chatSaveFailed, setChatSaveFailed] = useState(false);
@@ -102,20 +104,45 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const closeVoice = useCallback(() => setVoiceOpen(false), []);
   const basketProviderRef = useRef<ProviderName>(basketProvider);
   useEffect(() => { basketProviderRef.current = basketProvider; }, [basketProvider]);
-  const handleBasketTouched = useCallback((provider?: ProviderName) => {
-    if (provider && provider !== basketProviderRef.current) setBasketProvider(provider);
-    else window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
-    setBasketOpen(true);
+  const followScrollRef = useRef(true);
+  const scrollAnimatingRef = useRef(false);
+  // What each store's card shows, read when a card collapses into its summary.
+  const basketsRef = useRef<Partial<Record<ProviderName, ShoppingBasket>>>({});
+  const billStageRef = useRef<Partial<Record<ProviderName, SummaryStage>>>({});
+  const pendingBillStageRef = useRef<Partial<Record<ProviderName, SummaryStage>>>({});
+  const handleBasketChange = useCallback((next: ShoppingBasket) => {
+    basketsRef.current = { ...basketsRef.current, [next.provider]: next };
+    setBaskets(basketsRef.current);
   }, []);
+  // The store's live card moves to now; the card it leaves becomes a summary.
+  const showBasketAtLatest = useCallback((provider: ProviderName, stage: SummaryStage = "updated") => {
+    const previous = basketSummary(basketsRef.current[provider], billStageRef.current[provider]);
+    const afterMessageId = latestMessageId(chatMessagesRef.current);
+    setTimeline((current) => moveBasketCard(current, { provider, afterMessageId, previous }));
+    billStageRef.current = { ...billStageRef.current, [provider]: stage };
+    setBasketProvider(provider);
+  }, []);
+  const handleBasketTouched = useCallback((provider?: ProviderName) => {
+    const store = provider ?? basketProviderRef.current;
+    window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
+    const stage = pendingBillStageRef.current[store] ?? "updated";
+    pendingBillStageRef.current = { ...pendingBillStageRef.current, [store]: undefined };
+    showBasketAtLatest(store, stage);
+  }, [showBasketAtLatest]);
+  const handleBillStep = useCallback((provider: ProviderName, stage: "bill_ready" | "bill_approved") => {
+    showBasketAtLatest(provider, stage);
+  }, [showBasketAtLatest]);
   const handleVoiceApproval = useCallback((provider: ProviderName, request: ApprovalRequest) => {
+    pendingBillStageRef.current = { ...pendingBillStageRef.current, [provider]: "bill_ready" };
     setVoiceApproval({ provider, request });
   }, []);
   const handleApprovalChange = useCallback((approval: Approval | null) => {
     if (!approval) setVoiceApproval(null);
   }, []);
-  const hideBasket = useCallback(() => {
-    setBasketOpen(false);
-    setVoiceApproval(null);
+  const hideBasket = useCallback((provider: ProviderName) => {
+    const summary = basketSummary(basketsRef.current[provider], billStageRef.current[provider]);
+    setTimeline((current) => collapseBasketCard(current, provider, summary));
+    setVoiceApproval((current) => current?.provider === provider ? null : current);
   }, []);
   // Read through a ref so the voice callback stays stable and never restarts the live session.
   const addressFormGateRef = useRef({ commerceMode, zeptoConnected });
@@ -141,18 +168,21 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     setProducts(foundProducts);
     setSearched(true);
     setResultsAfterMessageId(chatMessagesRef.current.at(-1)?.id ?? null);
+    setTimeline(recordResults);
     setMessage(`${foundProducts.length} ${commerceMode === "demo" ? "demo" : "live"} options found.`);
   }, [commerceMode]);
   const handleVoiceTranscript = useCallback((turn: VoiceTranscriptTurn) => {
+    const content = stripNonSpeechAnnotations(turn.content);
     setChatMessages((current) => {
       const index = current.findIndex((item) => item.id === turn.id);
+      if (!content) return current;
       if (index === -1) {
-        const next = [...current, { ...turn, modality: "voice" as const, created_at: new Date().toISOString() }];
+        const next = [...current, { ...turn, content, modality: "voice" as const, created_at: new Date().toISOString() }];
         chatMessagesRef.current = next;
         return next;
       }
       const next = [...current];
-      next[index] = { ...next[index], role: turn.role, content: turn.content };
+      next[index] = { ...next[index], role: turn.role, content };
       chatMessagesRef.current = next;
       return next;
     });
@@ -165,6 +195,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       : conversationReply(conversation.submitted_query, { swiggyConnected: false, zeptoConnected: false });
     const restoredMessages = conversation.messages?.length
       ? conversation.messages
+        .map((item) => item.modality === "voice" ? { ...item, content: stripNonSpeechAnnotations(item.content) } : item)
+        .filter((item) => item.content)
       : conversation.submitted_query
         ? [{ id: `migrated-${conversation.id}`, role: "user" as const, content: conversation.submitted_query, modality: "text" as const, created_at: conversation.updated_at }]
         : [];
@@ -178,6 +210,14 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     setChatMessages(repairedMessages);
     chatMessagesRef.current = repairedMessages;
     setResultsAfterMessageId(localReply ? null : conversation.results_after_message_id ?? fallbackResultAnchor);
+    const restoredTimeline = restoreTimeline(conversation.timeline);
+    setTimeline(restoredTimeline);
+    const newest = [...restoredTimeline.live].sort((a, b) => b.seq - a.seq)[0];
+    if (newest) setBasketProvider(newest.provider);
+    billStageRef.current = {};
+    pendingBillStageRef.current = {};
+    setVoiceApproval(null);
+    followScrollRef.current = true;
   }, []);
 
   const loadRecentChats = useCallback(async () => {
@@ -365,21 +405,23 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
   useEffect(() => {
     let active = true;
-    void apiRequest<ShoppingBasket>("/api/basket?provider=swiggy_instamart")
-      .then((savedBasket) => {
-        if (active) setBasket(savedBasket);
-      })
-      .catch(() => {
-        // The basket panel will show a detailed error if the user opens it.
-      });
+    for (const provider of ["swiggy_instamart", "zepto"] as const) {
+      void apiRequest<ShoppingBasket>(`/api/basket?provider=${provider}`)
+        .then((savedBasket) => {
+          if (active && !basketsRef.current[provider]) handleBasketChange(savedBasket);
+        })
+        .catch(() => {
+          // The basket panel will show a detailed error if the user opens it.
+        });
+    }
     return () => { active = false; };
-  }, [apiRequest]);
+  }, [apiRequest, handleBasketChange]);
 
   useEffect(() => {
     if (!chatHydrated || (!submittedQuery && !chatMessages.length)) return;
     const timer = window.setTimeout(() => {
       conversationSaveTimerRef.current = null;
-      const snapshot = conversationSnapshot({ submittedQuery, products, searched, messages: chatMessages, resultsAfterMessageId });
+      const snapshot = conversationSnapshot({ submittedQuery, products, searched, messages: chatMessages, resultsAfterMessageId, timeline });
       conversationSaveQueueRef.current = conversationSaveQueueRef.current
         .catch(() => undefined)
         .then(async () => {
@@ -404,10 +446,29 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       window.clearTimeout(timer);
       if (conversationSaveTimerRef.current === timer) conversationSaveTimerRef.current = null;
     };
-  }, [apiRequest, chatHydrated, chatMessages, products, resultsAfterMessageId, searched, submittedQuery]);
+  }, [apiRequest, chatHydrated, chatMessages, products, resultsAfterMessageId, searched, submittedQuery, timeline]);
 
   useEffect(() => {
-    if (!chatHydrated || (!submittedQuery && !chatMessages.length && !basketOpen && !voiceOpen && !supportOpen && !trackingOpen)) return;
+    const updateFollow = () => {
+      if (scrollAnimatingRef.current) return;
+      followScrollRef.current = isNearBottom({ scrollTop: window.scrollY, viewportHeight: window.innerHeight, scrollHeight: document.documentElement.scrollHeight });
+    };
+    // A wheel, touch or key scroll by the reader stops any auto-scroll in progress.
+    const yieldToReader = (event: Event) => {
+      if (event.type === "keydown" && event.target instanceof HTMLElement && event.target.closest("input, textarea, [contenteditable]")) return;
+      scrollAnimatingRef.current = false;
+    };
+    window.addEventListener("scroll", updateFollow, { passive: true });
+    for (const name of ["wheel", "touchstart", "keydown"] as const) window.addEventListener(name, yieldToReader, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", updateFollow);
+      for (const name of ["wheel", "touchstart", "keydown"] as const) window.removeEventListener(name, yieldToReader);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!chatHydrated || (!submittedQuery && !chatMessages.length && !timeline.live.length && !voiceOpen && !supportOpen && !trackingOpen)) return;
+    if (!followScrollRef.current) return;
     let frame = window.requestAnimationFrame(() => {
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const destination = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
@@ -420,18 +481,24 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       const distance = destination - origin;
       const duration = 700;
       const startedAt = window.performance.now();
+      scrollAnimatingRef.current = true;
       const animate = (now: number) => {
+        if (!scrollAnimatingRef.current) return;
         const progress = Math.min(1, (now - startedAt) / duration);
         const eased = progress < 0.5
           ? 4 * progress * progress * progress
           : 1 - Math.pow(-2 * progress + 2, 3) / 2;
         window.scrollTo(0, origin + distance * eased);
         if (progress < 1) frame = window.requestAnimationFrame(animate);
+        else scrollAnimatingRef.current = false;
       };
       frame = window.requestAnimationFrame(animate);
     });
-    return () => window.cancelAnimationFrame(frame);
-  }, [basketOpen, chatHydrated, chatMessages, loading, products, submittedQuery, supportOpen, trackingOpen, voiceOpen]);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      scrollAnimatingRef.current = false;
+    };
+  }, [chatHydrated, chatMessages, loading, products, submittedQuery, supportOpen, timeline, trackingOpen, voiceOpen]);
 
   async function startNewChat() {
     if (conversationSaveTimerRef.current !== null) {
@@ -445,6 +512,11 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     setChatMessages([]);
     chatMessagesRef.current = [];
     setResultsAfterMessageId(null);
+    setTimeline(emptyTimeline());
+    billStageRef.current = {};
+    pendingBillStageRef.current = {};
+    setVoiceApproval(null);
+    followScrollRef.current = true;
     setQuery("");
     try {
       await conversationSaveQueueRef.current;
@@ -522,6 +594,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     if (!clean) return;
     const localReply = conversationReply(clean, { swiggyConnected: connected === true, zeptoConnected: zeptoConnected === true });
     if (localReply) {
+      followScrollRef.current = true;
       const now = new Date().toISOString();
       setChatMessages((current) => {
         const next = [
@@ -545,6 +618,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     if (lastSearch?.key === searchKey && now - lastSearch.at < 800) return;
     lastSearchRef.current = { key: searchKey, at: now };
 
+    followScrollRef.current = true;
     setSubmittedQuery(clean);
     const userMessageId = `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     setChatMessages((current) => {
@@ -559,6 +633,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       return next;
     });
     setResultsAfterMessageId(userMessageId);
+    setTimeline(recordResults);
     setQuery("");
     setVoiceOpen(false);
     setProducts([]);
@@ -620,9 +695,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         quantity: 1,
         available: product.available,
       });
-      setBasketProvider(provider);
-      setBasket(next);
-      setBasketOpen(false);
+      showBasketAtLatest(provider);
+      handleBasketChange(next);
       setMessage(`${product.name} basket mein add ho gaya.`);
       return true;
     } catch (cause) {
@@ -679,13 +753,14 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
   const connectionLabel = commerceMode === "demo" ? "Safe demo · no live calls" : connected && zeptoConnected ? "Swiggy + Zepto linked" : connected && selectedAddress ? selectedAddress.tag || selectedAddress.category || "Swiggy ready" : zeptoConnected ? "Zepto linked" : connected ? "Choose address" : "Connect stores";
   const readyStoreCount = Number(connected === true && Boolean(selectedAddress)) + Number(zeptoSearchReady);
-  const basketCount = basket?.lines.reduce((total, line) => total + line.quantity, 0) ?? 0;
+  const basketCount = Object.values(baskets).reduce((total, basket) => total + (basket?.lines.reduce((sum, line) => sum + line.quantity, 0) ?? 0), 0);
+  const headerCard = liveCard(timeline, basketProvider);
+  const headerCardIsNewest = headerCard !== null && headerCard.seq === timeline.seq && headerCard.afterMessageId === latestMessageId(chatMessages);
   const hasChat = Boolean(submittedQuery || chatMessages.length);
   const filteredRecentChats = recentChats.filter((chat) => {
     const needle = chatSearch.trim().toLocaleLowerCase();
     return !needle || chat.title.toLocaleLowerCase().includes(needle) || chat.preview.toLocaleLowerCase().includes(needle);
   });
-  const resultAnchorExists = resultsAfterMessageId !== null && chatMessages.some((item) => item.id === resultsAfterMessageId);
   const searchOutcome = loading === "search" ? (
     <motion.div key="searching-response" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex items-center gap-1.5" aria-label="GharSaathi is searching">{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">{commerceMode === "demo" ? "Static demo catalogue mein dekh rahi hoon" : zeptoSearchReady ? "Swiggy aur Zepto par dekh rahi hoon" : "Swiggy Instamart par dekh rahi hoon"}</span></div></div></motion.div>
   ) : searched && !products.length ? (
@@ -754,7 +829,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
         <button type="button" onClick={() => setChatDrawerOpen(true)} aria-label="Open shopping chats" className="grid size-10 shrink-0 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><List size={21} /></button>
         <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
-          {basketCount > 0 && <button onClick={() => (basketOpen ? hideBasket() : setBasketOpen(true))} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
+          {basketCount > 0 && <button onClick={() => { if (headerCardIsNewest) { hideBasket(basketProvider); return; } followScrollRef.current = true; showBasketAtLatest(basketProvider, billStageRef.current[basketProvider] ?? "updated"); }} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
           <button type="button" onClick={() => setSupportOpen((open) => !open)} aria-label="Get help with an order" className={`grid size-10 place-items-center rounded-full transition active:scale-[.96] ${supportOpen ? "bg-[#f1dfd2] text-[#9f451d]" : "bg-white/70 text-[#70584b] hover:bg-[#f6ece4]"}`}><ChatCircleDots size={21} weight={supportOpen ? "fill" : "regular"} /></button>
           <button onClick={() => setAccountSettingsOpen(true)} aria-label={`Open account and store settings. ${connectionLabel}`} className={`relative ml-0.5 grid size-10 place-items-center rounded-full transition active:scale-[.98] ${accountSettingsOpen ? "bg-[#f4e2d6] text-[#8f421b]" : "bg-white/70 text-[#5c463b] hover:bg-[#f6ece4]"}`}><Storefront size={18} className="text-[#c6531d]" /><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} aria-hidden="true" /></button>
         </nav>
@@ -772,25 +847,30 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         </motion.div>
 
         <AnimatePresence initial={false}>
-          {chatMessages.map((chatMessage) => (
-            <div key={chatMessage.id} className="contents">
-              {chatMessage.role === "user" ? (
-                <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 flex justify-end pl-8 sm:pl-12">
-                  <div className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[22px_8px_22px_22px] bg-[#3b2a22] px-5 py-3.5 text-[15px] leading-6 text-[#fffaf5] shadow-[0_18px_36px_-24px_rgba(53,36,28,.8)]">{chatMessage.content}</div>
-                </motion.div>
-              ) : (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
-                  <div className="max-w-[620px] whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 text-[15px] leading-7 shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] sm:text-base">{chatMessage.content}</div>
-                </motion.div>
-              )}
-              {chatMessage.id === resultsAfterMessageId && searchOutcome}
-            </div>
-          ))}
-          {!resultAnchorExists && searchOutcome}
+          {placeTimelineItems({ messages: chatMessages, resultsAfterMessageId, timeline, showResults: searchOutcome !== null }).map((item) => {
+            if (item.kind === "results") return <div key="search-outcome" className="contents">{searchOutcome}</div>;
+            if (item.kind === "basket-summary") {
+              const { card } = item;
+              return <motion.div key={`basket-summary-${card.provider}-${card.seq}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12"><p className="flex max-w-full items-center gap-2 truncate rounded-full bg-[#efe5dc] px-3 py-1.5 text-[11px] font-medium text-[#806f65]"><ShoppingCartSimple size={13} className="shrink-0 text-[#a6876f]" /><span className="shrink-0 font-semibold text-[#6b5446]">{card.provider === "zepto" ? "Zepto" : "Instamart"}</span><span className="truncate">{summaryText(card)}</span></p></motion.div>;
+            }
+            if (item.kind === "basket") {
+              const { provider } = item.card;
+              return <motion.div key={`basket-${provider}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><BasketPanel provider={provider} addressId={provider === "zepto" ? zeptoAddressId : addressId} commerceMode={commerceMode} incomingRequest={voiceApproval?.provider === provider ? voiceApproval.request : null} onBasketChange={handleBasketChange} onApprovalChange={handleApprovalChange} onBillStep={handleBillStep} /><button type="button" onClick={() => hideBasket(provider)} className="mx-auto mt-3 block text-xs font-semibold text-[#806f65] transition hover:text-[#3b2a22]">Hide basket</button></motion.div>;
+            }
+            const chatMessage = item.message;
+            return chatMessage.role === "user" ? (
+              <motion.div key={chatMessage.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 flex justify-end pl-8 sm:pl-12">
+                <div className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[22px_8px_22px_22px] bg-[#3b2a22] px-5 py-3.5 text-[15px] leading-6 text-[#fffaf5] shadow-[0_18px_36px_-24px_rgba(53,36,28,.8)]">{chatMessage.content}</div>
+              </motion.div>
+            ) : (
+              <motion.div key={chatMessage.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
+                <div className="max-w-[620px] whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 text-[15px] leading-7 shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] sm:text-base">{chatMessage.content}</div>
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
         {chatSaveFailed && <p role="status" className="mt-6 text-center text-[11px] leading-4 text-[#9e4536]">Ye chat abhi save nahi hui. Agla message aate hi phir koshish hogi.</p>}
 
-        <AnimatePresence>{basketOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><BasketPanel provider={basketProvider} addressId={basketProvider === "zepto" ? zeptoAddressId : addressId} commerceMode={commerceMode} incomingRequest={voiceApproval?.provider === basketProvider ? voiceApproval.request : null} onBasketChange={setBasket} onApprovalChange={handleApprovalChange} /><button type="button" onClick={hideBasket} className="mx-auto mt-3 block text-xs font-semibold text-[#806f65] transition hover:text-[#3b2a22]">Hide basket</button></motion.div>}</AnimatePresence>
         <AnimatePresence>{supportOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><SupportPanel onClose={() => setSupportOpen(false)} onTrackOrder={() => { setSupportOpen(false); setTrackingOpen(true); }} /></motion.div>}</AnimatePresence>
         <AnimatePresence>{trackingOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><LiveOrderTracking initialAddressId={addressId || undefined} onClose={() => setTrackingOpen(false)} /></motion.div>}</AnimatePresence>
       </div>

@@ -151,6 +151,8 @@ type BasketPanelProps = {
   incomingRequest?: ApprovalRequest | null;
   onBasketChange?: (basket: ShoppingBasket) => void;
   onApprovalChange?: (approval: Approval | null) => void;
+  /** Called before a new bill or approval is shown, so the chat can move this card to now. */
+  onBillStep?: (provider: ProviderName, stage: "bill_ready" | "bill_approved") => void;
   className?: string;
 };
 
@@ -215,6 +217,7 @@ export function BasketPanel({
   incomingRequest = null,
   onBasketChange,
   onApprovalChange,
+  onBillStep,
   className = "",
 }: BasketPanelProps) {
   const apiRequest = useApiRequest();
@@ -325,6 +328,7 @@ export function BasketPanel({
     setNotice(null);
     try {
       const next = await basketRequest<ApprovalRequest>(`/approval${query}`, { method: "POST" });
+      onBillStep?.(provider, "bill_ready");
       applyBasket(next.basket);
       setRequest(next);
       setApproval(next.approval);
@@ -334,7 +338,7 @@ export function BasketPanel({
     } finally {
       setAction(null);
     }
-  }, [applyBasket, basketRequest, onApprovalChange, query]);
+  }, [applyBasket, basketRequest, onApprovalChange, onBillStep, provider, query]);
 
   const approve = useCallback(async () => {
     if (!approval) return;
@@ -344,6 +348,7 @@ export function BasketPanel({
         method: "POST",
         body: JSON.stringify({ fingerprint: approval.fingerprint }),
       });
+      onBillStep?.(provider, "bill_approved");
       setApproval(next);
       onApprovalChange?.(next);
       setNotice({ text: "Approved. Your basket and final bill are locked for the next step.", error: false });
@@ -352,7 +357,7 @@ export function BasketPanel({
     } finally {
       setAction(null);
     }
-  }, [approval, basketRequest, onApprovalChange]);
+  }, [approval, basketRequest, onApprovalChange, onBillStep, provider]);
 
   const reject = useCallback(async () => {
     if (!approval) return;
@@ -627,7 +632,7 @@ export function BasketPanel({
               {isApproved ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-2xl border border-[#cce2d0] bg-[#eff8f0] px-3.5 py-3 text-sm text-[#2d6638]"><CheckCircle size={20} weight="fill" /><span><strong>Bill approved.</strong> {canConfirmZeptoCod ? "Review the final COD action below." : "No order has been placed."}</span></div>{canConfirmZeptoCod ? (
                 checkout ? <ZeptoCheckoutOutcome checkout={checkout.result} /> : <div className="space-y-2 rounded-2xl border border-[#e8cbb9] bg-[#fff5ee] p-3.5"><p className="text-sm font-semibold text-[#5f3421]">One final step: place a Zepto cash-on-delivery order</p><p className="text-xs leading-5 text-[#80533c]">This submits the exact approved bill to Zepto. It cannot be undone here.</p><button type="button" onClick={() => void confirmZeptoCodOrder()} disabled={locked} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#9b3d17] px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_rgba(119,41,15,.8)] transition hover:bg-[#833212] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">{action === "checkout" ? <><CircleNotch size={17} className="animate-spin" /> Submitting COD order…</> : `Place Zepto COD order · ${request.quote.payable.display}`}</button></div>
               ) : <div className="flex gap-2 rounded-xl bg-[#fff0df] px-3 py-2.5 text-[11px] leading-5 text-[#8c5127]" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0" /><p>A separate, explicit order confirmation would still be required before anything can be submitted to {providerLabel}. That final action is not enabled here.</p></div>}</div> : <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => void reject()} disabled={locked} className="rounded-full border border-[#d8c4b7] bg-white px-4 py-3 text-sm font-semibold text-[#684f42] transition hover:bg-[#fbf1eb] active:scale-[.98] disabled:opacity-45">{action === "reject" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : "Reject"}</button><button type="button" onClick={() => void approve()} disabled={locked} className="rounded-full bg-[#c6531d] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.98] disabled:opacity-45">{action === "approve" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : `Approve bill · ${request.quote.payable.display}`}</button></div>}
-              {!isApproved && <p className="mt-3 text-center text-[10px] leading-4 text-[#89766a]">This confirms the shown bill only—not checkout. A separate final order confirmation would still be required.</p>}
+              {!isApproved && <p className="mt-3 text-center text-[10px] leading-4 text-[#89766a]">Ye sirf upar dikhaya bill approve karta hai—checkout nahi. Order ke liye alag se final confirmation lagega.</p>}
             </div>
           </motion.div>
         )}

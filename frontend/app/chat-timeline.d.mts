@@ -1,0 +1,31 @@
+export type Store = "swiggy_instamart" | "zepto";
+export type SummaryStage = "updated" | "bill_ready" | "bill_approved" | "ordered";
+export type BasketCard = { provider: Store; afterMessageId: string | null; seq: number };
+export type BasketSummary = { stage: SummaryStage; itemCount: number | null; itemTotalPaise: number | null };
+export type SummaryCard = BasketCard & BasketSummary;
+export type ChatTimeline = { seq: number; resultsSeq: number; live: BasketCard[]; summaries: SummaryCard[] };
+export type TimelineItem<M> = { kind: "message"; message: M } | { kind: "results" } | { kind: "basket"; card: BasketCard } | { kind: "basket-summary"; card: SummaryCard };
+export type TimelineSnapshot = {
+  seq: number;
+  results_seq: number;
+  live: { provider: Store; after_message_id: string | null; seq: number }[];
+  summaries: { provider: Store; after_message_id: string | null; seq: number; stage: SummaryStage; item_count: number | null; item_total_paise: number | null }[];
+};
+
+export const STORES: readonly Store[];
+export const SUMMARY_STAGES: readonly SummaryStage[];
+export const MAX_SUMMARIES: number;
+export const NEAR_BOTTOM_PX: number;
+export function emptyTimeline(): ChatTimeline;
+export function latestMessageId(messages: { id: string }[]): string | null;
+export function recordResults(timeline: ChatTimeline): ChatTimeline;
+export function liveCard(timeline: ChatTimeline, provider: Store): BasketCard | null;
+export function moveBasketCard(timeline: ChatTimeline, change: { provider: Store; afterMessageId: string | null; previous: BasketSummary | null }): ChatTimeline;
+export function collapseBasketCard(timeline: ChatTimeline, provider: Store, summary: BasketSummary | null): ChatTimeline;
+export function placeTimelineItems<M extends { id: string }>(state: { messages: M[]; resultsAfterMessageId: string | null; timeline: ChatTimeline; showResults: boolean }): TimelineItem<M>[];
+export function basketSummary(basket: { status: string; lines: { quantity: number }[]; item_total: { paise: number } } | null | undefined, stage: SummaryStage | null | undefined): BasketSummary | null;
+export function formatRupees(paise: number): string;
+export function summaryText(summary: BasketSummary): string;
+export function timelineSnapshot(timeline: ChatTimeline): TimelineSnapshot;
+export function restoreTimeline(raw: unknown): ChatTimeline;
+export function isNearBottom(metrics: { scrollTop: number; viewportHeight: number; scrollHeight: number }, threshold?: number): boolean;
