@@ -56,6 +56,7 @@ class PurchaseImportResult(BaseModel):
     imported_products: int = Field(ge=0)
     imported_occurrences: int = Field(ge=0)
     pruned_orders: int = Field(ge=0)
+    cached: bool = False
 
 
 class ReorderSuggestion(BaseModel):
@@ -91,7 +92,19 @@ class PurchaseGraphService:
     ) -> PurchaseImportResult:
         permission = await self._permission(actor)
         sync_state = await self._sync_state(actor.id, provider)
-        sync_state.last_attempt_at = datetime.now(UTC)
+        now = datetime.now(UTC)
+        if (
+            sync_state.last_success_at is not None
+            and now - self._as_utc(sync_state.last_success_at) < timedelta(minutes=10)
+        ):
+            return PurchaseImportResult(
+                imported_orders=0,
+                imported_products=0,
+                imported_occurrences=0,
+                pruned_orders=0,
+                cached=True,
+            )
+        sync_state.last_attempt_at = now
         try:
             orders = await reader.orders(count=count, active_only=False)
         except Exception as exc:

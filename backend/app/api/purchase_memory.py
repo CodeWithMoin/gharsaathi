@@ -1,14 +1,16 @@
 """Consent-gated purchase graph APIs. No endpoint places or mutates an order."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.swiggy import _raise_http
-from app.commerce.demo import DemoSwiggyService
+from app.api.swiggy import _raise_http as _raise_swiggy_http
+from app.api.zepto import _raise_http as _raise_zepto_http
+from app.commerce.demo import DemoSwiggyService, DemoZeptoService
 from app.commerce.swiggy.history import SwiggyOrderHistoryAdapter
-from app.dependencies import SwiggyServiceDependency
+from app.commerce.zepto.purchase_history import ZeptoPurchaseHistoryAdapter
+from app.dependencies import SwiggyServiceDependency, ZeptoServiceDependency
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 from app.memory.errors import MemoryNotFoundError, MemoryPermissionError
 from app.memory.purchase_graph import (
@@ -26,14 +28,24 @@ async def sync_purchase_history(
     session: DbSessionDependency,
     actor: MemoryActorDependency,
     swiggy: SwiggyServiceDependency,
+    zepto: ZeptoServiceDependency,
+    provider: Annotated[Literal["swiggy", "zepto"], Query()] = "swiggy",
 ) -> PurchaseImportResult:
     """Explicitly sync recent read-only history; never called automatically."""
-    if isinstance(swiggy, DemoSwiggyService):
+    if (provider == "swiggy" and isinstance(swiggy, DemoSwiggyService)) or (
+        provider == "zepto" and isinstance(zepto, DemoZeptoService)
+    ):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "Order-history import is unavailable in safe demo mode.",
         )
     try:
+        if provider == "zepto":
+            return await PurchaseGraphService(session).sync(
+                actor,
+                ZeptoPurchaseHistoryAdapter(zepto),
+                provider="zepto",
+            )
         return await PurchaseGraphService(session).sync(
             actor,
             SwiggyOrderHistoryAdapter(swiggy.client),
@@ -42,7 +54,9 @@ async def sync_purchase_history(
     except MemoryPermissionError as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
     except Exception as exc:
-        _raise_http(exc)
+        if provider == "zepto":
+            _raise_zepto_http(exc)
+        _raise_swiggy_http(exc)
         raise AssertionError("unreachable")
 
 
