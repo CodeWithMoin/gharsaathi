@@ -46,6 +46,22 @@ def headers(user_id: str) -> dict[str, str]:
     return {"X-User-Id": user_id}
 
 
+class ReadOnlyHistoryClient:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def call_tool(
+        self, name: str, arguments: dict[str, object], **_: object
+    ) -> dict[str, object]:
+        self.calls.append((name, arguments))
+        return {"data": {"orders": [], "hasMore": False}}
+
+
+class HistoryService:
+    def __init__(self, client: ReadOnlyHistoryClient) -> None:
+        self.client = client
+
+
 def proposal(
     text: str = "Prefers Fortune oil in one litre packs.",
     allowed_purposes: list[str] | None = None,
@@ -178,6 +194,45 @@ async def test_memory_requires_confirmation_and_permission_for_retrieval(
         json={"purpose": "personalize_search"},
     )
     assert after_revocation.json()["memories"] == []
+
+
+@pytest.mark.asyncio
+async def test_purchase_history_sync_is_explicit_and_consent_gated(
+    memory_client: AsyncClient,
+) -> None:
+    history_client = ReadOnlyHistoryClient()
+    app.dependency_overrides[get_swiggy_service] = lambda: HistoryService(
+        history_client
+    )
+    try:
+        denied = await memory_client.post(
+            "/api/memory/purchase-history/sync",
+            headers=headers("history-user"),
+        )
+        assert denied.status_code == 403
+        assert history_client.calls == []
+
+        permission = await memory_client.put(
+            "/api/memory/permissions/purchase_history/proactive_reorder",
+            headers=headers("history-user"),
+            json={"allowed": True, "retention_days": 90},
+        )
+        assert permission.status_code == 200
+
+        synced = await memory_client.post(
+            "/api/memory/purchase-history/sync",
+            headers=headers("history-user"),
+        )
+        assert synced.status_code == 200
+        assert synced.json() == {
+            "imported_orders": 0,
+            "imported_products": 0,
+            "imported_occurrences": 0,
+            "pruned_orders": 0,
+        }
+        assert history_client.calls == [("get_orders", {"count": 15})]
+    finally:
+        app.dependency_overrides.pop(get_swiggy_service, None)
 
 
 @pytest.mark.asyncio

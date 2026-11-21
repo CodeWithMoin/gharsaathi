@@ -7,6 +7,7 @@ import { Brand } from "./brand";
 import { addBasketLine, BasketPanel, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
 import { groupProductsForComparison, ProductComparison, type Product } from "./product-comparison";
 import { LiveOrderTracking } from "./order-tracking";
+import { PersonalizationOnboarding } from "./personalization-onboarding";
 import { SupportPanel } from "./support-panel";
 import { VoicePanel, type VoiceTranscriptTurn } from "./voice-panel";
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
@@ -182,6 +183,12 @@ export default function Home() {
         });
     };
     const callbackReturned = new URL(window.location.href).searchParams.get("swiggy") === "connected";
+    if (callbackReturned) {
+      setSetupOpen(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("swiggy");
+      window.history.replaceState({}, "", url);
+    }
     checkConnection(callbackReturned);
     const handleFocus = () => checkConnection(true);
     window.addEventListener("focus", handleFocus);
@@ -209,6 +216,12 @@ export default function Home() {
         });
     };
     const callbackReturned = new URL(window.location.href).searchParams.get("zepto") === "connected";
+    if (callbackReturned) {
+      setSetupOpen(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("zepto");
+      window.history.replaceState({}, "", url);
+    }
     checkConnection(callbackReturned);
     const handleFocus = () => checkConnection(true);
     window.addEventListener("focus", handleFocus);
@@ -615,7 +628,7 @@ export default function Home() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSetupOpen(false); }} className="fixed inset-0 z-40 flex items-end justify-end bg-[#35241c]/30 backdrop-blur-sm md:p-4">
           <motion.section initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} transition={{ type: "spring", stiffness: 100, damping: 20 }} className="max-h-[88dvh] w-full overflow-y-auto rounded-t-[2rem] bg-[#fffdf9] p-6 shadow-[0_30px_80px_-30px_rgba(53,36,28,.5)] md:max-w-md md:rounded-[2rem]">
             <header className="flex items-start">
-              <div><p className="text-[10px] font-semibold tracking-[.18em] text-[#c6531d]">SHOPPING CONNECTIONS</p><h2 className="font-display mt-2 text-3xl font-semibold tracking-[-.04em]">Near-home shopping</h2></div>
+              <div><p className="text-[10px] font-semibold tracking-[.18em] text-[#c6531d]">SET UP GHARSAATHI</p><h2 className="font-display mt-2 text-3xl font-semibold tracking-[-.04em]">Ready for your home</h2></div>
               <button onClick={() => setSetupOpen(false)} className="ml-auto grid size-10 place-items-center rounded-full border border-[#e9dbcf]" aria-label="Close shopping connections"><X size={19} /></button>
             </header>
             <p className="mt-4 text-sm leading-relaxed text-[#806f65]">{commerceMode === "demo" ? "Safe demo mode uses local sample data. Search, basket, and bill flows make zero Swiggy or Zepto API/MCP calls." : "Connect both once. They stay available together—every request checks all ready stores, with no provider switch. GharSaathi never asks for your password or OTP."}</p>
@@ -634,6 +647,7 @@ export default function Home() {
 
             {connected && <section className="mt-7"><div className="flex items-center"><div><h3 className="font-display font-semibold">{commerceMode === "demo" ? "Demo delivery address" : "Swiggy delivery address"}</h3><p className="mt-1 text-[10px] text-[#8e796d]">{commerceMode === "demo" ? "Local fixture only" : "Reload uses the saved snapshot"}</p></div><button onClick={() => void loadAddresses(true)} disabled={loading === "addresses"} className="ml-auto text-xs font-semibold text-[#c6531d] disabled:cursor-not-allowed disabled:opacity-45">{loading === "addresses" ? "Refreshing…" : commerceMode === "demo" ? "Reset demo" : "Refresh from Swiggy"}</button></div>{loading === "addresses" ? <div className="mt-3 h-20 animate-pulse rounded-2xl bg-[#eee2d8]" /> : <div className="mt-3 divide-y divide-[#e9dbcf]">{addresses.map((address) => <label key={address.id} className="flex cursor-pointer items-start gap-3 py-4"><input type="radio" checked={addressId === address.id} onChange={() => void selectAddress(address.id)} className="mt-1 accent-[#c6531d]" /><span className="flex-1"><strong className="block text-sm">{address.tag || address.category || "Saved address"}</strong><small className="mt-1 block leading-relaxed text-[#806f65]">{address.address_line}</small></span>{addressId === address.id && <Check size={17} className="text-[#c6531d]" />}</label>)}</div>}{!addresses.length && loading !== "addresses" && <p className="mt-3 rounded-2xl bg-[#f7ede5] px-4 py-3 text-xs leading-5 text-[#806f65]">{message}</p>}<button onClick={() => setSetupOpen(false)} disabled={!addressId} className="mt-5 w-full rounded-full bg-[#c6531d] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Use this address</button></section>}
             {zeptoConnected && <section className="mt-7 border-t border-[#eaded5] pt-6"><div className="flex items-center"><div><h3 className="font-display font-semibold">{commerceMode === "demo" ? "Zepto demo address" : "Zepto delivery address"}</h3><p className="mt-1 text-[10px] text-[#8e796d]">{commerceMode === "demo" ? "Local fixture only" : "Reload uses the saved snapshot—no MCP call"}</p></div><button onClick={() => void loadZeptoAddresses(true)} disabled={zeptoBusy} className="ml-auto text-xs font-semibold text-[#7b3fc4] disabled:cursor-not-allowed disabled:opacity-45">{zeptoBusy ? "Refreshing…" : commerceMode === "demo" ? "Reset demo" : "Refresh from Zepto"}</button></div>{zeptoBusy && !zeptoAddresses.length ? <div className="mt-3 h-20 animate-pulse rounded-2xl bg-[#eee2d8]" /> : <div className="mt-3 divide-y divide-[#e9dbcf]">{zeptoAddresses.map((address) => <label key={address.id} className="flex cursor-pointer items-start gap-3 py-4"><input type="radio" checked={zeptoAddressId === address.id} onChange={() => void selectZeptoAddress(address.id)} className="mt-1 accent-[#7b3fc4]" /><span className="flex-1"><strong className="block text-sm">{address.tag || address.category || "Saved address"}</strong><small className="mt-1 block leading-relaxed text-[#806f65]">{address.address_line}</small></span>{zeptoAddressId === address.id && <Check size={17} className="text-[#7b3fc4]" />}</label>)}</div>}{!zeptoAddresses.length && !zeptoBusy && <p className="mt-3 rounded-2xl bg-[#f7ede5] px-4 py-3 text-xs leading-5 text-[#806f65]">Refresh once to save your Zepto addresses. Reloads after that stay local.</p>}<button onClick={() => setSetupOpen(false)} disabled={!zeptoAddressId} className="mt-5 w-full rounded-full bg-[#5f2e91] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Use Zepto address</button></section>}
+            <PersonalizationOnboarding commerceMode={commerceMode} swiggyConnected={connected === true} />
           </motion.section>
         </motion.div>
       )}

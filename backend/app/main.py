@@ -10,6 +10,7 @@ from app.api.support import router as support_router
 from app.api.tracking import router as tracking_router
 from app.api.zepto import router as zepto_router
 from app.api.memory import router as memory_router
+from app.api.purchase_memory import router as purchase_memory_router
 from app.api.voice import router as voice_router
 from app.core.config import get_settings
 from app.core.logging import install_sensitive_log_filters
@@ -50,6 +51,11 @@ app.add_middleware(
     expose_headers=["Retry-After"],
 )
 app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])
+app.include_router(
+    purchase_memory_router,
+    prefix="/api/memory",
+    tags=["Purchase Memory"],
+)
 app.include_router(swiggy_router, prefix="/api/swiggy", tags=["Swiggy Instamart"])
 app.include_router(zepto_router, prefix="/api/zepto", tags=["Zepto"])
 app.include_router(voice_router, prefix="/api/voice", tags=["Voice"])

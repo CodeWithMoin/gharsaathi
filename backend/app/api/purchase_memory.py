@@ -6,6 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.swiggy import _raise_http
+from app.commerce.demo import DemoSwiggyService
+from app.commerce.swiggy.history import SwiggyOrderHistoryAdapter
 from app.dependencies import SwiggyServiceDependency
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 from app.memory.errors import MemoryNotFoundError, MemoryPermissionError
@@ -26,8 +28,17 @@ async def sync_purchase_history(
     swiggy: SwiggyServiceDependency,
 ) -> PurchaseImportResult:
     """Explicitly sync recent read-only history; never called automatically."""
+    if isinstance(swiggy, DemoSwiggyService):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Order-history import is unavailable in safe demo mode.",
+        )
     try:
-        return await PurchaseGraphService(session).sync(actor, swiggy)
+        return await PurchaseGraphService(session).sync(
+            actor,
+            SwiggyOrderHistoryAdapter(swiggy.client),
+            provider="swiggy",
+        )
     except MemoryPermissionError as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
     except Exception as exc:
@@ -43,7 +54,7 @@ async def purge_purchase_history(
     await PurchaseGraphService(session).purge(actor)
 
 
-@router.get("/reorder-suggestions", response_model=list[ReorderSuggestion])
+@router.get("/usual-suggestions", response_model=list[ReorderSuggestion])
 async def reorder_suggestions(
     session: DbSessionDependency,
     actor: MemoryActorDependency,
@@ -63,7 +74,7 @@ async def reorder_suggestions(
 
 
 @router.post(
-    "/reorder-suggestions/{product_id}/dismiss",
+    "/usual-suggestions/{product_id}/dismiss",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def dismiss_reorder_suggestion(
@@ -85,7 +96,7 @@ async def dismiss_reorder_suggestion(
 
 
 @router.post(
-    "/reorder-suggestions/{product_id}/review",
+    "/usual-suggestions/{product_id}/review",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def review_reorder_suggestion(
