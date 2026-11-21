@@ -30,6 +30,25 @@ _EVENT_ID_FIELDS = (
     "call_id",
 )
 _EVENT_TIMING_FIELDS = ("start_ms", "end_ms", "offset_ms")
+# Per delegation: tool-continuation rounds and product searches the backend
+# model may use before it must answer with what it already has.
+MAX_CONTINUATION_ROUNDS = 6
+MAX_SEARCHES_PER_DELEGATION = 2
+SEARCH_TOOL = "search_products"
+SEARCH_LIMIT_OUTPUT = {
+    "status": "limit_reached",
+    "message": (
+        "Search limit for this request reached; no new search was run. Answer the user now "
+        "with the results you already have, or ask one short question."
+    ),
+}
+ROUND_LIMIT_OUTPUT = {
+    "status": "limit_reached",
+    "message": (
+        "Tool limit for this request reached; this tool was not run. Answer the user now "
+        "with what you already have."
+    ),
+}
 
 
 def describe_event(event: dict[str, Any]) -> dict[str, Any]:
@@ -107,6 +126,8 @@ class SidebandRunner:
         self._pending: dict[str, list[asyncio.Task[None]]] = {}
         self._continuations: set[asyncio.Task[None]] = set()
         self._round = 0
+        self._delegation_rounds: dict[str, int] = {}
+        self._delegation_searches: dict[str, int] = {}
         self._send_lock = asyncio.Lock()
 
     async def send(self, event: dict[str, Any]) -> None:
@@ -159,7 +180,12 @@ class SidebandRunner:
                 self._start_call(delegation_id, item)
         elif inner_type in {"response.completed", "response.incomplete", "response.failed"}:
             tasks = self._pending.pop(delegation_id, [])
-            if tasks:
+            if tasks and self._delegation_rounds.get(delegation_id, 0) >= MAX_CONTINUATION_ROUNDS:
+                logger.warning("event=voice_delegation_round_cap rounds=%s", MAX_CONTINUATION_ROUNDS)
+            elif tasks:
+                self._delegation_rounds[delegation_id] = (
+                    self._delegation_rounds.get(delegation_id, 0) + 1
+                )
                 continuation = asyncio.create_task(self._continue_after(delegation_id, tasks))
                 self._continuations.add(continuation)
                 continuation.add_done_callback(self._continuations.discard)
@@ -172,13 +198,22 @@ class SidebandRunner:
         if not isinstance(call_id, str) or call_id in self._handled_call_ids:
             return
         self._handled_call_ids.add(call_id)
-        task = asyncio.create_task(
-            self._run_call(
-                call_id,
-                name if isinstance(name, str) else "",
-                arguments if isinstance(arguments, str) else "",
+        name = name if isinstance(name, str) else ""
+        limited: dict[str, Any] | None = None
+        if self._delegation_rounds.get(delegation_id, 0) >= MAX_CONTINUATION_ROUNDS:
+            limited = ROUND_LIMIT_OUTPUT
+        elif name == SEARCH_TOOL:
+            searches = self._delegation_searches.get(delegation_id, 0)
+            if searches >= MAX_SEARCHES_PER_DELEGATION:
+                limited = SEARCH_LIMIT_OUTPUT
+            else:
+                self._delegation_searches[delegation_id] = searches + 1
+        if limited is not None:
+            task = asyncio.create_task(self._send_output(call_id, limited))
+        else:
+            task = asyncio.create_task(
+                self._run_call(call_id, name, arguments if isinstance(arguments, str) else "")
             )
-        )
         self._pending.setdefault(delegation_id, []).append(task)
 
     async def _run_call(self, call_id: str, name: str, arguments: str) -> None:
@@ -192,6 +227,9 @@ class SidebandRunner:
             logger.exception("Voice tool %s failed", name)
             model_output = {"status": "error", "message": "The tool failed unexpectedly."}
             self.publish({"type": "tool.error", "message": "Search mein kuch gadbad ho gayi. Ek baar phir boliye."})
+        await self._send_output(call_id, model_output)
+
+    async def _send_output(self, call_id: str, model_output: dict[str, Any]) -> None:
         await self.send(
             {
                 "type": "response.item.create",

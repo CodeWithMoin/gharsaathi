@@ -5,6 +5,7 @@ import { ArrowRight, Microphone, ShieldCheck, Stop, X } from "@phosphor-icons/re
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mapRealtimeBoundaryEvent, mapRealtimeTranscriptEvent } from "./voice-transcript.mjs";
 import { createTranscriptTurnTracker } from "./voice-transcript-turns.mjs";
+import { romanizeAssistantCaption } from "./hinglish-romanize.mjs";
 import { createVoiceEventRecorder, voiceEventLogEnabled } from "./voice-event-recorder.mjs";
 import type { ApprovalRequest } from "./basket/BasketPanel";
 import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
@@ -90,6 +91,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const eventsRef = useRef<EventSource | null>(null);
   const transcriptTurnsRef = useRef(createTranscriptTurnTracker());
+  const assistantScriptRef = useRef<"roman" | "native">("roman");
   const eventRecorderRef = useRef<ReturnType<typeof voiceEventRecorder> | null>(null);
   const attemptRef = useRef(0);
 
@@ -116,7 +118,11 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     const transcript = mapRealtimeTranscriptEvent(event);
     if (!transcript) return false;
     const turn = transcriptTurnsRef.current.apply(transcript);
-    if (turn) onTranscriptTurn(turn);
+    if (turn) {
+      onTranscriptTurn(turn.role === "assistant"
+        ? { ...turn, content: romanizeAssistantCaption(turn.content, { script: assistantScriptRef.current }) }
+        : turn);
+    }
     return true;
   }, [onTranscriptTurn]);
 
@@ -276,6 +282,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       if (attempt !== attemptRef.current) return;
       if (!response.ok) throw new Error(payload && typeof payload.detail === "string" ? payload.detail : "GharSaathi voice shuru nahi ho paya. Phir se try kijiye.");
       await peer.setRemoteDescription({ type: "answer", sdp: payload.sdp });
+      assistantScriptRef.current = payload.assistant_transcript_script === "native" ? "native" : "roman";
       listenForToolEvents(payload.session_id, payload.events_token);
       if (payload.turn_taking?.mode === "smart_turn" && typeof payload.turn_taking.yield_instruction === "string") {
         void startSmartTurn(attempt, mic, payload.turn_taking.yield_instruction);

@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
+  "version": "1.9.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -276,6 +276,50 @@
       "max_questions": 0,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "branded_item_delegates_without_confirm",
+      "user": "Diet Coke chahiye.",
+      "required_any": ["dekh rahi", "check kar rahi", "dhoondh rahi", "Ek second", "Pichli baar", "330"],
+      "forbidden_any": ["chahiye kya", "chahiye na?", "Diet Coke chahiye?", "₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "promo_answered_from_bill_offers_no_drift",
+      "history": [
+        {"role": "user", "content": "Zepto ka bill bana do."},
+        {"role": "assistant", "content": "Zepto ka final bill screen par hai; Free Delivery aur ek discount bill mein lag chuke hain, wahin review kijiye."}
+      ],
+      "user": "कुछ promo code है क्या?",
+      "required_any": ["Free Delivery", "free delivery", "promo code", "discount"],
+      "forbidden_any": ["mil gaya", "poora mila", "deliver ho", "pahunch", "feedback", "order aa", "WELCOME", "code hai:", "₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "misheard_product_confirms_closest_grocery",
+      "user": "Bed cook chahiye.",
+      "required_any": ["Diet Coke", "Coke"],
+      "forbidden_any": ["mattress", "gadda", "bedsheet", "bed sheet", "bedding", "takiya"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "mixed_hinglish_numbers_and_verbs_stay_roman",
+      "history": [
+        {"role": "user", "content": "Diet Coke ke options batao."},
+        {"role": "assistant", "content": "Zepto par Diet Coke 330 ml can aur teen can ka pack hai."}
+      ],
+      "user": "तीन वाला कितने का है, और पिछली बार मैंने कौनसा लिया था?",
+      "required_any": ["rupaye", "pichli", "Pichli", "pichhli", "Pichhli", "liya", "li thi", "dekh"],
+      "forbidden_any": ["₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.0
     }
   ]
 }

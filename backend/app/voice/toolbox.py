@@ -78,9 +78,15 @@ class VoiceToolbox:
                     add_supported=True,
                 )
             )
-        self.search = MultiProviderShoppingToolExecutor(targets, options)
         if not household_id:
             raise ValueError("A verified household identity is required for voice baskets.")
+        memory = preference_recall if callable(getattr(preference_recall, "household_memory", None)) else None
+        self.search = MultiProviderShoppingToolExecutor(
+            targets,
+            options,
+            memory=memory,  # type: ignore[arg-type]
+            household_id=household_id,
+        )
         stores = [BasketStore(target.provider, target.store, target.address_id) for target in targets]
         self.basket = BasketToolExecutor(
             baskets, approvals, options, stores, household_id, addresses

@@ -41,6 +41,10 @@ REGRESSION_CASE_IDS = {
     "gender_neutral_user_address",
     "price_spoken_in_words",
     "explicit_add_same_item_two_stores_picks_cheaper",
+    "branded_item_delegates_without_confirm",
+    "promo_answered_from_bill_offers_no_drift",
+    "misheard_product_confirms_closest_grocery",
+    "mixed_hinglish_numbers_and_verbs_stay_roman",
 }
 
 
@@ -193,6 +197,26 @@ def test_build_input_appends_latest_turn_after_history() -> None:
             "Instamart par sasta hai, paanch sau unchaas rupaye; wahin add kar rahi hoon.",
             "Surf Excel Matic 2 kg dono par hai, kaunse store ke basket mein add karun?",
         ),
+        (
+            "branded_item_delegates_without_confirm",
+            "Ek second, dekh rahi hoon.",
+            "Diet Coke chahiye kya aapko?",
+        ),
+        (
+            "promo_answered_from_bill_offers_no_drift",
+            "Zepto ne is bill mein Free Delivery aur ek discount lagaya hai; alag promo code daalne ka option abhi mere paas nahi hai.",
+            "Main to bas ye soch rahi thi ki aapne jo samaan liya tha, woh aapko poora mil gaya?",
+        ),
+        (
+            "misheard_product_confirms_closest_grocery",
+            "Diet Coke?",
+            "Bed ke liye mattress chahiye ya bedsheet?",
+        ),
+        (
+            "mixed_hinglish_numbers_and_verbs_stay_roman",
+            "Teen can ka pack dedh sau rupaye ka hai; pichhli baar aapne single can li thi.",
+            "Teen can ka pack डेढ़ sau rupaye ka hai; pichhli baar aapne single can ली थी।",
+        ),
     ],
 )
 def test_regression_cases_score_good_and_bad_replies(
@@ -300,7 +324,7 @@ def test_few_shot_examples_are_labelled_and_roman_except_explicit_hindi(
                 assert ratio >= 0.3, line
             else:
                 assert ratio == 0.0, line
-    assert 6 <= assistant_lines <= 14
+    assert 6 <= assistant_lines <= 18
     assert hindi_replies == 1
 
 
@@ -366,6 +390,7 @@ _SPOKEN_PRICES = {
     "do sau unchaas rupaye": 249,
     "paanch sau unchaas rupaye": 549,
     "ek sau sattanave rupaye": 197,
+    "chaalis rupaye": 40,
     "one hundred and ninety-nine rupees": 199,
     "अट्ठाईस रुपये": 28,
 }
