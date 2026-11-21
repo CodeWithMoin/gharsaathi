@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 import hashlib
 import json
@@ -77,6 +78,13 @@ class ReorderSuggestion(BaseModel):
     requires_approval: Literal[True] = True
     assumes_current_stock: Literal[False] = False
     ranking_features: dict[str, float] = Field(exclude=True, repr=False)
+
+
+class RecalledPurchase(BaseModel):
+    product_name: str
+    provider: str
+    last_purchased_at: datetime
+    purchase_count: int = Field(ge=1)
 
 
 class PurchaseGraphService:
@@ -313,6 +321,67 @@ class PurchaseGraphService:
             suggestions,
             key=lambda item: (item.score, item.pattern_confidence, item.last_ordered_at),
             reverse=True,
+        )[:limit]
+
+    async def has_history_permission(self, actor: MemorySubject) -> bool:
+        try:
+            await self._permission(actor)
+        except MemoryPermissionError:
+            return False
+        return True
+
+    async def recent_purchases(
+        self,
+        actor: MemorySubject,
+        matches: Callable[[str], bool],
+        limit: int = 3,
+        now: datetime | None = None,
+    ) -> list[RecalledPurchase]:
+        """Read-only: delivered, retained products of this person whose name matches."""
+        await self._permission(actor)
+        now = now or datetime.now(UTC)
+        rows = (
+            await self.session.execute(
+                select(PurchaseProductNode, PurchaseOccurrenceEdge, PurchaseOrderNode)
+                .join(
+                    PurchaseOccurrenceEdge,
+                    PurchaseOccurrenceEdge.product_id == PurchaseProductNode.id,
+                )
+                .join(
+                    PurchaseOrderNode,
+                    PurchaseOrderNode.id == PurchaseOccurrenceEdge.order_id,
+                )
+                .where(
+                    PurchaseProductNode.subject_id == actor.id,
+                    PurchaseOccurrenceEdge.subject_id == actor.id,
+                    PurchaseOrderNode.subject_id == actor.id,
+                    PurchaseOrderNode.is_active.is_(False),
+                    PurchaseOrderNode.retention_expires_at > now,
+                )
+            )
+        ).all()
+        found: dict[UUID, RecalledPurchase] = {}
+        for product, edge, order in rows:
+            if order.status.casefold() not in DELIVERED_STATUSES or not matches(product.name):
+                continue
+            observed = self._as_utc(edge.observed_at)
+            current = found.get(product.id)
+            if current is None:
+                found[product.id] = RecalledPurchase(
+                    product_name=product.name,
+                    provider=product.provider,
+                    last_purchased_at=observed,
+                    purchase_count=1,
+                )
+            else:
+                found[product.id] = RecalledPurchase(
+                    product_name=current.product_name,
+                    provider=current.provider,
+                    last_purchased_at=max(current.last_purchased_at, observed),
+                    purchase_count=current.purchase_count + 1,
+                )
+        return sorted(
+            found.values(), key=lambda item: item.last_purchased_at, reverse=True
         )[:limit]
 
     async def dismiss_suggestion(

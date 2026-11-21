@@ -37,6 +37,15 @@ class MemoryRepository:
         await self.session.flush()
         return subject
 
+    async def find_person(self, external_id: str) -> MemorySubject | None:
+        result = await self.session.execute(
+            select(MemorySubject).where(
+                MemorySubject.subject_type == SubjectType.PERSON,
+                MemorySubject.external_id == external_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def get_memory(self, memory_id: UUID, subject_id: UUID) -> MemoryItem | None:
         result = await self.session.execute(
             select(MemoryItem).where(

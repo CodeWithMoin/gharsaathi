@@ -1,12 +1,16 @@
+import logging
 from typing import Any
 
 import httpx
 from pydantic import BaseModel, Field
 
 from app.core.config import Settings
+from app.memory.recall import PreferenceRecaller
+from app.user_profile import ProfileReader, UserProfile
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.voice.address_tools import ZeptoConnectionChecker
+from app.voice.profile_context import with_profile
 from app.voice.basket_tools import AddressDescriber
 from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS
 from app.voice.sideband import SidebandHub
@@ -19,6 +23,9 @@ from app.voice.tools import (
     ProviderSearchTarget,
     ShoppingToolExecutor,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class VoiceError(Exception):
@@ -42,17 +49,21 @@ class LiveSession(BaseModel):
 
 
 def build_session_config(
-    settings: Settings, tool_definitions: list[dict[str, Any]] | None = None
+    settings: Settings,
+    tool_definitions: list[dict[str, Any]] | None = None,
+    profile: UserProfile | None = None,
 ) -> dict[str, Any]:
     return {
         "model": settings.live_model,
-        "instructions": live_instructions(LIVE_INSTRUCTIONS, settings.voice_turn_taking),
+        "instructions": with_profile(
+            live_instructions(LIVE_INSTRUCTIONS, settings.voice_turn_taking), profile
+        ),
         "audio": {"output": {"voice": settings.live_voice}},
         "delegation": {
             "type": "responses",
             "responses": {
                 "model": settings.live_backend_model,
-                "instructions": BACKEND_INSTRUCTIONS,
+                "instructions": with_profile(BACKEND_INSTRUCTIONS, profile),
                 "tools": tool_definitions if tool_definitions is not None else TOOL_DEFINITIONS,
                 "tool_choice": "auto",
                 "parallel_tool_calls": True,
@@ -73,6 +84,8 @@ class LiveSessionService:
         approvals: ApprovalService | None = None,
         zepto_searcher: ProductSearcher | None = None,
         zepto_connection: ZeptoConnectionChecker | None = None,
+        preference_recall: PreferenceRecaller | None = None,
+        profile_reader: ProfileReader | None = None,
         addresses: AddressDescriber | None = None,
     ) -> None:
         self.settings = settings
@@ -82,6 +95,8 @@ class LiveSessionService:
         self.approvals = approvals
         self.zepto_searcher = zepto_searcher
         self.zepto_connection = zepto_connection
+        self.preference_recall = preference_recall
+        self.profile_reader = profile_reader
         self.addresses = addresses
         self._http_client = http_client
 
@@ -105,6 +120,7 @@ class LiveSessionService:
                 zepto_address_id,
                 household_id,
                 zepto_connection=self.zepto_connection,
+                preference_recall=self.preference_recall,
                 addresses=self.addresses,
             )
         if self.zepto_searcher is not None:
@@ -115,6 +131,15 @@ class LiveSessionService:
                 ]
             )
         return ShoppingToolExecutor(self.searcher, address_id)
+
+    async def _profile(self, household_id: str) -> UserProfile | None:
+        if self.profile_reader is None or not household_id:
+            return None
+        try:
+            return await self.profile_reader.read(household_id)
+        except Exception as exc:  # noqa: BLE001 - a missing profile must not block voice
+            logger.warning("Voice profile read failed: %s", type(exc).__name__)
+            return None
 
     async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
         if self._http_client is not None:
@@ -132,6 +157,7 @@ class LiveSessionService:
         api_key = self.settings.openai_api_key.get_secret_value().strip()
         if not api_key:
             raise VoiceConfigurationError("Set OPENAI_API_KEY in .env to enable voice.")
+        profile = await self._profile(household_id)
         try:
             response = await self._post(
                 f"{self.settings.openai_base_url.rstrip('/')}/live/sessions",
@@ -139,6 +165,7 @@ class LiveSessionService:
                     "session": build_session_config(
                         self.settings,
                         VOICE_TOOL_DEFINITIONS if self.basket_enabled else TOOL_DEFINITIONS,
+                        profile,
                     ),
                     "transport": {"type": "webrtc", "sdp": offer_sdp},
                 },
