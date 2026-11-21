@@ -110,7 +110,8 @@ async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
     tools = json.loads(seen[0].content)["session"]["delegation"]["responses"]["tools"]
     names = {tool["name"] for tool in tools}
     assert names == {
-        "search_products", "add_to_basket", "set_basket_quantity", "view_basket", "request_approval"
+        "search_products", "add_to_basket", "set_basket_quantity", "view_basket", "request_approval",
+        "open_address_form",
     }
     assert all("order" not in name and "checkout" not in name for name in names)
 
