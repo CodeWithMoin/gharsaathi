@@ -15,7 +15,7 @@ import {
   stepBefore,
   validateProfileDraft,
   withOnboardingProgress,
-} from "../app/onboarding-flow.mjs";
+} from "../../app/onboarding-flow.mjs";
 
 const fresh = { decisions: {}, completedAt: null, legacyComplete: false };
 
