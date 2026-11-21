@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.swiggy import router as swiggy_router
 from app.api.zepto import router as zepto_router
 from app.api.memory import router as memory_router
+from app.api.voice import router as voice_router
 from app.core.config import get_settings
 from app.core.logging import install_sensitive_log_filters
 
@@ -20,6 +21,7 @@ app.add_middleware(
 app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])
 app.include_router(swiggy_router, prefix="/api/swiggy", tags=["Swiggy Instamart"])
 app.include_router(zepto_router, prefix="/api/zepto", tags=["Zepto"])
+app.include_router(voice_router, prefix="/api/voice", tags=["Voice"])
 
 
 @app.get("/health", tags=["System"])

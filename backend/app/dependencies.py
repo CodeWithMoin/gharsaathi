@@ -13,6 +13,7 @@ from app.commerce.zepto.oauth import ZeptoOAuthClient
 from app.commerce.zepto.service import ZeptoService
 from app.commerce.zepto.store import EncryptedZeptoConnectionStore
 from app.core.config import get_settings
+from app.voice.client import RealtimeSessionClient
 
 
 @lru_cache
@@ -42,3 +43,13 @@ def get_zepto_service() -> ZeptoService:
 
 
 ZeptoServiceDependency = Annotated[ZeptoService, Depends(get_zepto_service)]
+
+
+@lru_cache
+def get_voice_session_client() -> RealtimeSessionClient:
+    return RealtimeSessionClient(get_settings())
+
+
+VoiceSessionDependency = Annotated[
+    RealtimeSessionClient, Depends(get_voice_session_client)
+]

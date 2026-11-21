@@ -8,7 +8,7 @@ from app.core.logging import install_sensitive_log_filters
 
 
 install_sensitive_log_filters()
-app = FastAPI(title="GharCart local OAuth callback bridge", docs_url=None, redoc_url=None)
+app = FastAPI(title="GharSaathi local OAuth callback bridge", docs_url=None, redoc_url=None)
 
 
 @app.get("/callback", response_class=RedirectResponse)

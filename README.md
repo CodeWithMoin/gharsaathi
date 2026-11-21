@@ -1,4 +1,4 @@
-# GharCart — Household Shopping Agent
+# GharSaathi — Household Shopping Agent
 
 This milestone connects one local test user to Swiggy and supports only two read-only Instamart actions: list saved delivery addresses and search products at the selected address. It cannot mutate a cart, check out, or place an order.
 
@@ -80,6 +80,70 @@ For a multi-user deployment, replace this file store with per-user encrypted dat
 - `POST /api/swiggy/search` with `{"query":"Fortune cooking oil 1 litre","address_id":"<saved-address-id>","offset":0}`
 - `POST /api/swiggy/search/personalized` — applies only confirmed, permitted,
   category-relevant memories and returns which memories were used
+- `POST /api/voice/session` — creates a 60-second OpenAI Realtime client secret
+  with the versioned voice prompt; requires the local-development `X-User-Id`
+  header and never returns the server API key
+
+## Voice prompt and Realtime sessions
+
+The backend-owned prompt in `backend/app/voice/prompts.py` defines a feminine,
+Hinglish-native shopping persona. Hindi/Hinglish self-reference must use feminine
+agreement such as `karti hoon`, `karungi`, and `dekh rahi hoon`; user gender is
+never guessed. It also keeps spoken turns short, makes language switching depend
+on substantive speech rather than accent, and enforces the product's search-only,
+approval, authentication, truthfulness, and prompt-injection boundaries.
+Its compact pronunciation reference makes Romanised grocery words use their Hindi
+sound—for example, `atta` is voiced as `आटा` (`aa-taa`), not English
+`at-ta`—without putting phonetic notation into normal spoken responses. Few-shot
+catalogue examples teach a general classification pattern: preserve provider and
+brand names, apply Hindi phonology to Hindi product terms, retain Indian-English
+descriptors, and expand units naturally. The policy applies to unseen Swiggy
+Instamart and Zepto catalogue titles rather than acting as a fixed word dictionary.
+
+`POST /api/voice/session` calls OpenAI's GA
+`POST /v1/realtime/client_secrets` endpoint from the backend. The browser receives
+only the short-lived `ek_...` credential. Configure `OPENAI_API_KEY` and the
+`VOICE_*` values from `.env.example`; do not put the API key in a frontend env
+file. The frontend WebRTC transport is intentionally outside this prompt-focused
+change.
+
+Run the optional API-backed behavioral evaluation with:
+
+```bash
+cd backend
+python -m evaluation.run_voice_prompt
+```
+
+It uses `VOICE_EVALUATION_MODEL`, spends API credits only when `OPENAI_API_KEY` is
+configured, and otherwise reports a clean skip. This text-model smoke evaluation
+checks grammar and policy behavior.
+
+Run the real OpenAI Realtime audio and variance evaluation with:
+
+```bash
+cd backend
+python -m evaluation.run_realtime_voice
+```
+
+This creates three independent takes for each of 12 realistic Instamart/Zepto
+catalogue titles with the configured Realtime model and voice. It rejects clear
+masculine self-reference, missing product targets, excessive questions, invalid
+audio, and overly long turns; it also reports response/opening diversity and
+within-item similarity. Each turn has a 45-second timeout and one retry. The 24 kHz
+mono MP3 files and manifest are written to `frontend/public/voice-qa-openai/`.
+
+For local mock-audio QA on macOS, generate the curated Instamart/Zepto fixture set:
+
+```bash
+cd backend
+python -m evaluation.run_voice_diversity --generate-audio
+```
+
+This uses the installed Hindi `Lekha` system voice, validates 24 kHz mono MP3
+output, and computes lexical/opening diversity. The internal
+[voice QA page](http://localhost:3000/voice-qa) displays the real OpenAI Realtime
+corpus first and the local mock corpus separately, so reviewers can compare actual
+pronunciation, feminine grammar, pacing, and repetition without confusing the two.
 
 ## Person-scoped memory
 

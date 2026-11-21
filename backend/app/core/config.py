@@ -31,7 +31,13 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://postgres:postgres@localhost:5432/equal_ai"
     )
     openai_api_key: str = Field(default="", repr=False)
+    openai_api_base_url: str = "https://api.openai.com"
     memory_extraction_model: str = "gpt-4o-mini"
+    voice_realtime_model: str = "gpt-realtime-2.1"
+    voice_name: str = "marin"
+    voice_speed: float = Field(default=1.0, ge=0.25, le=1.5)
+    voice_max_output_tokens: int = Field(default=300, ge=1, le=4096)
+    voice_evaluation_model: str = "gpt-4.1-mini"
     swiggy_token_store_path: Path = Field(
         default=Path("backend/.data/swiggy_connection.enc")
     )

@@ -1,0 +1,21 @@
+{
+  "suite_version": "1.0.0",
+  "source": "curated mock catalogue fixtures",
+  "metrics": {
+    "case_count": 12,
+    "utterance_count": 36,
+    "unique_response_ratio": 1.0,
+    "unique_opener_ratio": 0.9722,
+    "distinct_1": 0.2379,
+    "distinct_2": 0.5478,
+    "mean_within_case_jaccard": 0.2849,
+    "max_within_case_jaccard": 0.4118
+  },
+  "audio": {
+    "generated": true,
+    "voice": "Lekha (macOS hi-IN mock TTS)",
+    "file_count": 36,
+    "total_duration_seconds": 179.64
+  },
+  "errors": []
+}

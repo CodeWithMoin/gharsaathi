@@ -59,7 +59,7 @@ class ZeptoOAuthClient:
             "POST",
             f"{self.settings.zepto_authorization_server_url}/register",
             json={
-                "client_name": "GharCart local proof of concept",
+                "client_name": "GharSaathi local proof of concept",
                 "redirect_uris": [self.settings.zepto_oauth_redirect_uri],
                 "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"],

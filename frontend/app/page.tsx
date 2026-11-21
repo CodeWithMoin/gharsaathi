@@ -181,7 +181,7 @@ export default function Home() {
         body: JSON.stringify({ message: preference, conversation_id: "web-preferences" }),
       });
       setMemoryProposals(data.proposals);
-      setMessage(data.proposals.length ? "Review before GharCart remembers anything." : "No durable preference found. Try saying “I prefer…” or “Never buy…”.");
+      setMessage(data.proposals.length ? "Review before GharSaathi remembers anything." : "No durable preference found. Try saying “I prefer…” or “Never buy…”.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not extract a preference.");
     } finally {
@@ -216,7 +216,7 @@ export default function Home() {
   return (
     <main>
       <header className="hero">
-        <p className="eyebrow">GHARCART · INSTAMART SEARCH</p>
+        <p className="eyebrow">GHARSAATHI · INSTAMART SEARCH</p>
         <h1>Ghar ka samaan, <span>seedha dhoondo.</span></h1>
         <p className="lede">Connect your Swiggy account, pick a saved address, and compare live product variants. Nothing is added to a cart and no order can be placed.</p>
       </header>
@@ -225,7 +225,7 @@ export default function Home() {
         <div>
           <p className="step">01 · ACCOUNT</p>
           <h2>{connected ? "Swiggy connected" : "Connect Swiggy"}</h2>
-          <p>Sign-in happens on Swiggy. GharCart never asks for or sees your OTP.</p>
+          <p>Sign-in happens on Swiggy. GharSaathi never asks for or sees your OTP.</p>
         </div>
         {connected ? (
           <button className="secondary" onClick={disconnect} disabled={loading !== null}>Disconnect</button>
