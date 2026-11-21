@@ -221,6 +221,20 @@ class ZeptoOAuthClient:
             expires_at=connection.expires_at if connection and connection.access_token else None,
         )
 
+    async def rate_limit_remaining(self) -> int:
+        connection = await self.store.load()
+        if connection is None or connection.rate_limited_until is None:
+            return 0
+        return max(
+            0,
+            int((connection.rate_limited_until - datetime.now(UTC)).total_seconds()),
+        )
+
+    async def record_rate_limit(self, seconds: int) -> None:
+        await self.store.set_rate_limited_until(
+            datetime.now(UTC) + timedelta(seconds=max(1, seconds))
+        )
+
     async def disconnect(self) -> None:
         connection = await self.store.load()
         if connection and connection.access_token:

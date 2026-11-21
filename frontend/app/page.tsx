@@ -70,6 +70,8 @@ export default function Home() {
   const zeptoAddressRequestRef = useRef<Promise<void> | null>(null);
   const searchRequestsRef = useRef(new Map<string, Promise<void>>());
   const lastSearchRef = useRef<{ key: string; at: number } | null>(null);
+  const conversationSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const conversationSaveTimerRef = useRef<number | null>(null);
   const selectedAddress = useMemo(() => addresses.find((address) => address.id === addressId), [addresses, addressId]);
   const closeVoice = useCallback(() => setVoiceOpen(false), []);
   const handleBasketTouched = useCallback(() => setBasketOpen(true), []);
@@ -230,21 +232,26 @@ export default function Home() {
 
   useEffect(() => {
     if (!chatHydrated || (!submittedQuery && !chatMessages.length)) return;
-    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void apiRequest<PersistedConversation>("/api/conversations/current", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submitted_query: submittedQuery, products, searched, messages: chatMessages }),
-        signal: controller.signal,
-      }).catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === "AbortError") return;
-        setMessage(cause instanceof Error ? cause.message : "Could not save this chat.");
-      });
+      conversationSaveTimerRef.current = null;
+      const snapshot = { submitted_query: submittedQuery, products, searched, messages: chatMessages };
+      conversationSaveQueueRef.current = conversationSaveQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          await apiRequest<PersistedConversation>("/api/conversations/current", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(snapshot),
+          });
+        })
+        .catch((cause: unknown) => {
+          setMessage(cause instanceof Error ? cause.message : "Could not save this chat.");
+        });
     }, 250);
+    conversationSaveTimerRef.current = timer;
     return () => {
       window.clearTimeout(timer);
-      controller.abort();
+      if (conversationSaveTimerRef.current === timer) conversationSaveTimerRef.current = null;
     };
   }, [chatHydrated, chatMessages, products, searched, submittedQuery]);
 
@@ -276,12 +283,17 @@ export default function Home() {
   }, [basketOpen, chatHydrated, chatMessages, loading, products, submittedQuery, supportOpen, trackingOpen, voiceOpen]);
 
   async function startNewChat() {
+    if (conversationSaveTimerRef.current !== null) {
+      window.clearTimeout(conversationSaveTimerRef.current);
+      conversationSaveTimerRef.current = null;
+    }
     setSubmittedQuery("");
     setProducts([]);
     setSearched(false);
     setChatMessages([]);
     setQuery("");
     try {
+      await conversationSaveQueueRef.current;
       await apiRequest<null>("/api/conversations/new", { method: "POST" });
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Could not start a new chat.");

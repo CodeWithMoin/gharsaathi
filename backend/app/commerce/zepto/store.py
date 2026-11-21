@@ -57,6 +57,10 @@ class EncryptedZeptoConnectionStore:
                 connection = connection.model_copy(
                     update={
                         "pending_authorizations": current.pending_authorizations,
+                        "rate_limited_until": (
+                            connection.rate_limited_until
+                            or current.rate_limited_until
+                        ),
                     }
                 )
             await asyncio.to_thread(self._write_sync, connection)
@@ -87,6 +91,16 @@ class EncryptedZeptoConnectionStore:
             pending = connection.pending_authorizations.pop(state, None)
             await asyncio.to_thread(self._write_sync, connection)
             return pending
+
+    async def set_rate_limited_until(self, until: datetime) -> None:
+        async with self._lock:
+            connection = await asyncio.to_thread(self._read_sync)
+            if connection is None:
+                return
+            current = connection.rate_limited_until
+            if current is None or until > current:
+                connection.rate_limited_until = until
+                await asyncio.to_thread(self._write_sync, connection)
 
     async def clear(self) -> None:
         async with self._lock:

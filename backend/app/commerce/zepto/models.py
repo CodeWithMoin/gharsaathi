@@ -17,6 +17,7 @@ class StoredConnection(BaseModel):
     token_type: str = "Bearer"
     scope: str | None = None
     expires_at: datetime | None = None
+    rate_limited_until: datetime | None = None
     pending_authorizations: dict[str, PendingAuthorization] = Field(
         default_factory=dict,
         repr=False,

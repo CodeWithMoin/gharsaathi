@@ -76,6 +76,10 @@ async def test_zepto_oauth_uses_pkce_resource_and_encrypted_storage(
     assert settings.zepto_token_store_path.stat().st_mode & 0o777 == 0o600
     assert [request.url.path for request in seen] == ["/register", "/token"]
 
+    await oauth.record_rate_limit(60)
+    restarted_oauth = ZeptoOAuthClient(settings, store)
+    assert await restarted_oauth.rate_limit_remaining() > 0
+
 
 @pytest.mark.asyncio
 async def test_zepto_oauth_rejects_wrong_issuer_before_token_exchange(

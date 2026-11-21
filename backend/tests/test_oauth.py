@@ -64,6 +64,10 @@ async def test_oauth_pkce_state_and_encrypted_persistence(tmp_path: Path) -> Non
     assert app_settings.swiggy_token_store_path.stat().st_mode & 0o777 == 0o600
     assert [request.url.path for request in seen] == ["/auth/register", "/auth/token"]
 
+    await oauth.record_rate_limit(60)
+    restarted_oauth = SwiggyOAuthClient(app_settings, store)
+    assert await restarted_oauth.rate_limit_remaining() > 0
+
 
 @pytest.mark.asyncio
 async def test_oauth_rejects_unknown_state_before_token_exchange(tmp_path: Path) -> None:

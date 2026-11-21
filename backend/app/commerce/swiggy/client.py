@@ -107,14 +107,17 @@ class SwiggyMcpClient:
         async with self._operation_lock:
             correlation_id = str(uuid.uuid4())
             self._rate_limit_observation.reset()
-            remaining_cooldown = self._rate_limited_until - time.monotonic()
+            remaining_cooldown = max(
+                self._rate_limited_until - time.monotonic(),
+                await self._persisted_rate_limit_remaining(),
+            )
             if remaining_cooldown > 0:
                 raise _rate_limit_error(math.ceil(remaining_cooldown))
             access_token = await self.oauth.access_token()
             try:
                 return await self._run_session(access_token, operation)
             except SwiggyRateLimited as exc:
-                self._register_rate_limit(
+                await self._register_rate_limit(
                     exc.retry_after_seconds,
                     operation_name=operation_name,
                     correlation_id=correlation_id,
@@ -132,7 +135,7 @@ class SwiggyMcpClient:
                         retry_after
                         or self.settings.swiggy_rate_limit_fallback_seconds
                     )
-                    self._register_rate_limit(
+                    await self._register_rate_limit(
                         retry_after,
                         operation_name=operation_name,
                         correlation_id=correlation_id,
@@ -155,7 +158,7 @@ class SwiggyMcpClient:
                     return await self._retry_after_reconnect(access_token, operation)
                 raise SwiggyProviderError("Swiggy MCP request failed.") from exc
 
-    def _register_rate_limit(
+    async def _register_rate_limit(
         self,
         retry_after_seconds: int,
         *,
@@ -167,6 +170,9 @@ class SwiggyMcpClient:
             self._rate_limited_until,
             time.monotonic() + retry_after_seconds,
         )
+        record = getattr(self.oauth, "record_rate_limit", None)
+        if record is not None:
+            await record(retry_after_seconds)
         logger.warning(
             "event=swiggy_mcp_call operation=%s correlation_id=%s "
             "status=rate_limited retry_after_seconds=%d retry_after_source=%s",
@@ -175,6 +181,10 @@ class SwiggyMcpClient:
             retry_after_seconds,
             source,
         )
+
+    async def _persisted_rate_limit_remaining(self) -> int:
+        remaining = getattr(self.oauth, "rate_limit_remaining", None)
+        return await remaining() if remaining is not None else 0
 
     async def _run_session(
         self, access_token: str, operation: Callable[[ClientSession], Awaitable[T]]
@@ -192,7 +202,7 @@ class SwiggyMcpClient:
         try:
             return await self._run_session(refreshed, operation)
         except SwiggyRateLimited as exc:
-            self._register_rate_limit(
+            await self._register_rate_limit(
                 exc.retry_after_seconds,
                 operation_name="oauth_refresh_retry",
                 correlation_id=str(uuid.uuid4()),
@@ -209,7 +219,7 @@ class SwiggyMcpClient:
                 retry_after = (
                     retry_after or self.settings.swiggy_rate_limit_fallback_seconds
                 )
-                self._register_rate_limit(
+                await self._register_rate_limit(
                     retry_after,
                     operation_name="oauth_refresh_retry",
                     correlation_id=str(uuid.uuid4()),
@@ -231,7 +241,7 @@ class SwiggyMcpClient:
         try:
             return await self._run_session(access_token, operation)
         except SwiggyRateLimited as exc:
-            self._register_rate_limit(
+            await self._register_rate_limit(
                 exc.retry_after_seconds,
                 operation_name="session_reconnect_retry",
                 correlation_id=str(uuid.uuid4()),
@@ -248,7 +258,7 @@ class SwiggyMcpClient:
                 retry_after = (
                     retry_after or self.settings.swiggy_rate_limit_fallback_seconds
                 )
-                self._register_rate_limit(
+                await self._register_rate_limit(
                     retry_after,
                     operation_name="session_reconnect_retry",
                     correlation_id=str(uuid.uuid4()),

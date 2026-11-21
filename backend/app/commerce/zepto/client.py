@@ -68,21 +68,20 @@ class ZeptoMcpClient:
         retry_on_auth: bool = True,
     ) -> T:
         async with self._operation_lock:
-            if time.monotonic() < self._rate_limited_until:
+            persisted_cooldown = await self._persisted_rate_limit_remaining()
+            if time.monotonic() < self._rate_limited_until or persisted_cooldown > 0:
                 raise ZeptoRateLimited(RATE_LIMIT_MESSAGE)
             access_token = await self.oauth.access_token()
             try:
                 return await self._run_session(access_token, operation)
             except ZeptoRateLimited:
-                self._rate_limited_until = (
-                    time.monotonic() + RATE_LIMIT_COOLDOWN_SECONDS
-                )
+                await self._record_rate_limit()
                 raise
             except ZeptoError:
                 raise
             except Exception as exc:
                 if _is_rate_limited(exc):
-                    self._rate_limited_until = time.monotonic() + RATE_LIMIT_COOLDOWN_SECONDS
+                    await self._record_rate_limit()
                     raise ZeptoRateLimited(RATE_LIMIT_MESSAGE) from exc
                 if _is_authentication_failure(exc):
                     if not retry_on_auth:
@@ -117,7 +116,7 @@ class ZeptoMcpClient:
             raise
         except Exception as retry_exc:
             if _is_rate_limited(retry_exc):
-                self._rate_limited_until = time.monotonic() + RATE_LIMIT_COOLDOWN_SECONDS
+                await self._record_rate_limit()
                 raise ZeptoRateLimited(RATE_LIMIT_MESSAGE) from retry_exc
             raise ZeptoProviderError(
                 "Zepto rejected the refreshed session. Connect again."
@@ -135,7 +134,7 @@ class ZeptoMcpClient:
             raise
         except Exception as retry_exc:
             if _is_rate_limited(retry_exc):
-                self._rate_limited_until = time.monotonic() + RATE_LIMIT_COOLDOWN_SECONDS
+                await self._record_rate_limit()
                 raise ZeptoRateLimited(RATE_LIMIT_MESSAGE) from retry_exc
             raise ZeptoProviderError("Zepto MCP session could not be restored.") from retry_exc
 
@@ -223,11 +222,25 @@ class ZeptoMcpClient:
         async with self._operation_lock:
             await self._invalidate_session()
 
+    async def _record_rate_limit(self) -> None:
+        self._rate_limited_until = max(
+            self._rate_limited_until,
+            time.monotonic() + RATE_LIMIT_COOLDOWN_SECONDS,
+        )
+        record = getattr(self.oauth, "record_rate_limit", None)
+        if record is not None:
+            await record(RATE_LIMIT_COOLDOWN_SECONDS)
+
+    async def _persisted_rate_limit_remaining(self) -> int:
+        remaining = getattr(self.oauth, "rate_limit_remaining", None)
+        return await remaining() if remaining is not None else 0
+
     async def prepare_session(self) -> int:
         """Ensure one authenticated transport exists without listing or calling tools."""
 
         async with self._operation_lock:
-            if time.monotonic() < self._rate_limited_until:
+            persisted_cooldown = await self._persisted_rate_limit_remaining()
+            if time.monotonic() < self._rate_limited_until or persisted_cooldown > 0:
                 raise ZeptoRateLimited(RATE_LIMIT_MESSAGE)
             access_token = await self.oauth.access_token()
             await self._session_for(access_token)
