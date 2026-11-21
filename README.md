@@ -238,6 +238,19 @@ database or vault storage and complete each provider's supported delegated-auth 
 enterprise onboarding. Do not expose the Zepto checkout route before that account binding
 is implemented.
 
+## Capability matrix
+
+[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) lists every user-facing capability
+against voice, typed chat, on-screen UI and backend, with status and reasons. It is
+generated from `backend/app/capabilities.py`, and `backend/tests/test_capabilities.py`
+fails when a route or voice tool is added without a registry entry. When you add or
+wire up a feature:
+
+1. Update the capability (status per surface, `voice_tools`, `routes`) in
+   `backend/app/capabilities.py`.
+2. From `backend/`: `uv run --with-requirements requirements.txt python -m app.capabilities --write`
+3. Run `uv run --with-requirements requirements.txt pytest tests/test_capabilities.py -q`.
+
 ## API surface
 
 - `GET /health`
