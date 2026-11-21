@@ -48,10 +48,10 @@ const suggestions = [
 ];
 
 export default function Home() {
-  return <FirstRunOnboarding>{(justCompleted) => <ShoppingChat startWithSetupOpen={justCompleted} />}</FirstRunOnboarding>;
+  return <FirstRunOnboarding>{({ justCompleted, firstName }) => <ShoppingChat startWithSetupOpen={justCompleted} userName={firstName} />}</FirstRunOnboarding>;
 }
 
-function ShoppingChat({ startWithSetupOpen = false }: { startWithSetupOpen?: boolean }) {
+function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetupOpen?: boolean; userName: string }) {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [basketOpen, setBasketOpen] = useState(false);
   const [basket, setBasket] = useState<ShoppingBasket | null>(null);
@@ -597,7 +597,7 @@ function ShoppingChat({ startWithSetupOpen = false }: { startWithSetupOpen?: boo
         <div className="mb-5 flex items-center gap-3 sm:mb-8"><span className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#9b8172]">Today</span><span className="h-px flex-1 bg-[#e8dcd2]" /></div>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mr-7 sm:mr-12">
           <div className="min-w-0 max-w-[620px]">
-            <div className="rounded-[7px_20px_20px_20px] border border-[#ebddd2] bg-[#fffdf9] px-4 py-3.5 shadow-[0_16px_40px_-34px_rgba(74,43,27,.7)] sm:px-5 sm:py-4"><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hello, Moin. <strong className="font-semibold">Aaj ghar ke liye kya mangwana hai?</strong></p><p className="mt-1 text-[13px] leading-5 text-[#806f65] sm:mt-1.5 sm:text-sm sm:leading-6">Bas bol dijiye—main ready stores par saath mein check karungi.</p></div>
+            <div className="rounded-[7px_20px_20px_20px] border border-[#ebddd2] bg-[#fffdf9] px-4 py-3.5 shadow-[0_16px_40px_-34px_rgba(74,43,27,.7)] sm:px-5 sm:py-4"><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hello, {userName}. <strong className="font-semibold">Aaj ghar ke liye kya mangwana hai?</strong></p><p className="mt-1 text-[13px] leading-5 text-[#806f65] sm:mt-1.5 sm:text-sm sm:leading-6">Bas bol dijiye—main ready stores par saath mein check karungi.</p></div>
             {!hasChat && <div className="mt-3 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">{suggestions.map((suggestion) => <button key={suggestion.query} onClick={() => void runSearch(suggestion.query)} disabled={loading === "search"} className="min-h-10 rounded-2xl border border-[#dfcbbd] bg-[#fffaf5]/75 px-2 py-2 text-[11px] font-medium leading-4 text-[#70584b] transition hover:border-[#c99e84] hover:bg-white active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-0 sm:rounded-full sm:px-3.5 sm:text-xs">{suggestion.label}</button>)}</div>}
           </div>
         </motion.div>

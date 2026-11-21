@@ -50,7 +50,7 @@ function WelcomeScreen() {
   </main>;
 }
 
-export function FirstRunOnboarding({ children }: { children: (justCompleted: boolean) => ReactNode }) {
+export function FirstRunOnboarding({ children }: { children: (profile: { justCompleted: boolean; firstName: string }) => ReactNode }) {
   const { isLoaded, isSignedIn, user } = useUser();
   const savedProfile = useMemo(() => user?.unsafeMetadata.gharsaathiProfile as { language?: Language; complete?: boolean } | undefined, [user?.unsafeMetadata]);
   const [name, setName] = useState("");
@@ -61,7 +61,7 @@ export function FirstRunOnboarding({ children }: { children: (justCompleted: boo
 
   if (!isLoaded) return <LoadingSplash />;
   if (!isSignedIn || !user) return <WelcomeScreen />;
-  if (savedProfile?.complete || justCompleted) return <>{children(justCompleted)}</>;
+  if (savedProfile?.complete || justCompleted) return <>{children({ justCompleted, firstName: user.firstName?.trim() || "there" })}</>;
 
   const activeUser = user;
   const displayName = name || activeUser.firstName || "";
@@ -99,13 +99,13 @@ export function FirstRunOnboarding({ children }: { children: (justCompleted: boo
       </div>
 
       <div className="mt-12">
-        <h1 className="font-display text-[34px] font-semibold leading-[1.1] tracking-[-.05em]">Aapko kya<br />bulaun?</h1>
+        <h1 className="font-display whitespace-nowrap text-[32px] font-semibold leading-[1.1] tracking-[-.05em] sm:text-[34px]">Aapko kya bulaun?</h1>
         <p className="mt-3 max-w-[30ch] text-sm leading-6 text-[#806f65]">Bas naam aur preferred language. Stores aur order-history consent agle step mein honge.</p>
       </div>
 
       <form onSubmit={completeProfile} className="mt-10 flex flex-1 flex-col">
         <label htmlFor="first-name" className="text-xs font-semibold text-[#70584b]">Your name</label>
-        <input id="first-name" value={displayName} onChange={(event) => setName(event.target.value)} autoComplete="given-name" autoFocus className="mt-2 w-full rounded-2xl border border-[#ddc8ba] bg-[#fffdf9] px-4 py-3.5 text-base outline-none transition placeholder:text-[#aa978d] focus:border-[#c6531d] focus:ring-2 focus:ring-[#c6531d]/15" placeholder="Moin" />
+        <input id="first-name" value={displayName} onChange={(event) => setName(event.target.value)} autoComplete="given-name" autoFocus className="mt-2 w-full rounded-2xl border border-[#ddc8ba] bg-[#fffdf9] px-4 py-3.5 text-base outline-none transition placeholder:text-[#aa978d] focus:border-[#c6531d] focus:ring-2 focus:ring-[#c6531d]/15" placeholder="Your name" />
 
         <fieldset className="mt-7">
           <legend className="text-xs font-semibold text-[#70584b]">I prefer</legend>
