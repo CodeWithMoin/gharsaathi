@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.tracking import router as tracking_router
+from app.auth import require_user_id
 from app.tracking.errors import TrackingProviderError
 from app.tracking.models import StartTrackingRequest, TrackingProvider, TrackingSnapshot, TrackingStatus
 from app.tracking.service import OrderTrackingService
@@ -146,6 +147,7 @@ def test_opaque_monitor_api_never_puts_order_ids_in_a_route(tmp_path: Path) -> N
     clock = FakeClock()
     provider = FakeProvider([TrackingSnapshot(status=TrackingStatus.CONFIRMED)])
     app.state.order_tracking_service = build_service(tmp_path, provider, clock)
+    app.dependency_overrides[require_user_id] = lambda: "home"
 
     with TestClient(app) as client:
         created = client.post(

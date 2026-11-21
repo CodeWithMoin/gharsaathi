@@ -105,7 +105,7 @@ async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
         await LiveSessionService(
             settings(), NoSearch(), RecordingHub(), client,
             baskets=world.baskets, approvals=world.approvals,
-        ).create(OFFER, "addr_home")
+        ).create(OFFER, "addr_home", household_id="test-user")
 
     tools = json.loads(seen[0].content)["session"]["delegation"]["responses"]["tools"]
     names = {tool["name"] for tool in tools}
@@ -174,8 +174,9 @@ class FakeVoiceService:
         offer_sdp: str,
         swiggy_address_id: str | None = None,
         zepto_address_id: str | None = None,
+        household_id: str = "",
     ) -> LiveSession:
-        del offer_sdp, swiggy_address_id, zepto_address_id
+        del offer_sdp, swiggy_address_id, zepto_address_id, household_id
         return LiveSession(session_id="live_fake", sdp="answer")
 
 

@@ -18,7 +18,6 @@ from app.shopping.models import Basket, BasketLine, ProductRef, rupees_to_paise
 from app.voice.tools import ToolOutcome
 
 
-HOUSEHOLD_ID = "local-household"
 PROVIDER = "swiggy_instamart"
 
 BASKET_TOOL_DEFINITIONS: list[dict[str, Any]] = [
@@ -137,11 +136,13 @@ class BasketToolExecutor:
         approvals: ApprovalService,
         options: dict[str, Product],
         address_id: str | None,
+        household_id: str,
     ) -> None:
         self.baskets = baskets
         self.approvals = approvals
         self.options = options
         self.address_id = address_id
+        self.household_id = household_id
 
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
         try:
@@ -156,7 +157,7 @@ class BasketToolExecutor:
             if name == "set_basket_quantity":
                 return await self._set_quantity(QuantityArguments.model_validate(arguments))
             if name == "view_basket":
-                return _basket_outcome(await self.baskets.active(HOUSEHOLD_ID, PROVIDER), "ok")
+                return _basket_outcome(await self.baskets.active(self.household_id, PROVIDER), "ok")
             if name == "request_approval":
                 return await self._request_approval()
         except ValidationError:
@@ -172,22 +173,22 @@ class BasketToolExecutor:
         if not product.available:
             return _error(f"{product.name} is unavailable right now, so it was not added.")
         if self.address_id:
-            await self.baskets.set_address(HOUSEHOLD_ID, PROVIDER, self.address_id)
+            await self.baskets.set_address(self.household_id, PROVIDER, self.address_id)
         basket = await self.baskets.add_line(
-            HOUSEHOLD_ID, PROVIDER, _line_from_product(product, arguments.quantity)
+            self.household_id, PROVIDER, _line_from_product(product, arguments.quantity)
         )
         return _basket_outcome(basket, "added")
 
     async def _set_quantity(self, arguments: QuantityArguments) -> ToolOutcome:
         basket = await self.baskets.set_quantity(
-            HOUSEHOLD_ID, PROVIDER, arguments.item_id, arguments.quantity
+            self.household_id, PROVIDER, arguments.item_id, arguments.quantity
         )
         return _basket_outcome(basket, "updated")
 
     async def _request_approval(self) -> ToolOutcome:
         if not self.address_id:
             return _error("No delivery address is selected. Ask the user to choose one on screen.")
-        basket = await self.baskets.set_address(HOUSEHOLD_ID, PROVIDER, self.address_id)
+        basket = await self.baskets.set_address(self.household_id, PROVIDER, self.address_id)
         if not basket.lines:
             return _error("The basket is empty.")
         result = await self.approvals.request(basket.id)

@@ -24,7 +24,8 @@ from app.core.config import get_settings
 from app.core.local_secrets import get_or_create_local_encryption_key
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
-from app.shopping.memory import InMemoryApprovalRepository, InMemoryBasketRepository
+from app.shopping.database import DatabaseApprovalRepository, DatabaseBasketRepository
+from app.database.session import get_session_factory
 from app.shopping.models import ProviderName
 from app.shopping.ports import QuoteProvider
 from app.shopping.providers import ProviderRegistry, get_provider_registry
@@ -175,13 +176,13 @@ SidebandHubDependency = Annotated[SidebandHub, Depends(get_sideband_hub)]
 
 
 @lru_cache
-def get_basket_repository() -> InMemoryBasketRepository:
-    return InMemoryBasketRepository()
+def get_basket_repository() -> DatabaseBasketRepository:
+    return DatabaseBasketRepository(get_session_factory())
 
 
 @lru_cache
-def get_approval_repository() -> InMemoryApprovalRepository:
-    return InMemoryApprovalRepository()
+def get_approval_repository() -> DatabaseApprovalRepository:
+    return DatabaseApprovalRepository(get_session_factory())
 
 
 @lru_cache

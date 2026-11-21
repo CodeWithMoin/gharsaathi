@@ -17,9 +17,8 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
 const POLL_INTERVAL_MS = 45_000;
 
 type Provider = "swiggy" | "zepto";
@@ -148,6 +147,7 @@ function StatusIcon({ status, active }: { status?: TrackingStatus; active: boole
 }
 
 export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId = "", initialAddressId, onClose }: OrderTrackingProps) {
+  const authenticatedFetch = useAuthenticatedFetch();
   const [provider, setProvider] = useState<Provider>(initialProvider);
   const [orderId, setOrderId] = useState(initialOrderId);
   const [monitorId, setMonitorId] = useState<string | null>(null);
@@ -166,10 +166,9 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${API}/api/tracking/monitors/${encodeURIComponent(nextMonitorId)}${force ? "/refresh" : ""}`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/tracking/monitors/${encodeURIComponent(nextMonitorId)}${force ? "/refresh" : ""}`, {
         method: force ? "POST" : "GET",
         cache: "no-store",
-        headers: { "X-User-Id": DEV_USER_ID },
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.detail || "No saved tracking update is available yet.");
@@ -187,14 +186,13 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
       requestInFlight.current = false;
       setLoading(false);
     }
-  }, [monitorId]);
+  }, [authenticatedFetch, monitorId]);
 
   useEffect(() => {
     if (initialOrderId) return;
     let active = true;
-    void fetch(`${API}/api/tracking/monitors?active_only=true`, {
+    void authenticatedFetch(`${API_BASE_URL}/api/tracking/monitors?active_only=true`, {
       cache: "no-store",
-      headers: { "X-User-Id": DEV_USER_ID },
     }).then(async (response) => {
       if (!response.ok || !active) return;
       const watches = await response.json() as TrackingOrder[];
@@ -210,7 +208,7 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
       // Starting a new monitor remains available if no saved watch can be restored.
     });
     return () => { active = false; };
-  }, [initialOrderId]);
+  }, [authenticatedFetch, initialOrderId]);
 
   useEffect(() => {
     if (!tracking || !monitorId) return;
@@ -230,10 +228,10 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
     setData(null);
     setLastChange("");
     try {
-      const response = await fetch(`${API}/api/tracking/monitors`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/tracking/monitors`, {
         method: "POST",
         cache: "no-store",
-        headers: { "Content-Type": "application/json", "X-User-Id": DEV_USER_ID },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider,
           order_id: cleanedOrderId,
@@ -264,10 +262,9 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${API}/api/tracking/monitors/${encodeURIComponent(monitorId)}`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/tracking/monitors/${encodeURIComponent(monitorId)}`, {
         method: "DELETE",
         cache: "no-store",
-        headers: { "X-User-Id": DEV_USER_ID },
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.detail || "Could not stop this order watch.");

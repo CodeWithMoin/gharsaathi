@@ -43,7 +43,7 @@ async def memory_client(memory_db: AsyncSession) -> AsyncIterator[AsyncClient]:
 
 
 def headers(user_id: str) -> dict[str, str]:
-    return {"X-User-Id": user_id}
+    return {"X-Test-User-Id": user_id}
 
 
 class ReadOnlyHistoryClient:

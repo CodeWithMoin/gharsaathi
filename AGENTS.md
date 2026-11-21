@@ -58,14 +58,14 @@ The product should do the work; the user should make important decisions. Do not
 
 ## Current repository status
 
-The initial scaffold contains:
-- `frontend/`: minimal Next.js app with a product search UI.
-- `backend/`: FastAPI app with health and Swiggy MCP endpoints.
-- `backend/app/commerce/swiggy/client.py`: MCP Streamable HTTP client.
-- `.env.example`: backend environment template.
-- `README.md`: local setup notes.
+- `frontend/`: authenticated, mobile-first shopping chat with text/voice transcripts, product comparisons, baskets, support preparation, tracking, onboarding, and a server-backed recent-chat drawer.
+- `backend/`: FastAPI app with Clerk token verification, PostgreSQL-backed conversations/preferences/memory/baskets/approvals, and provider adapters for Swiggy and Zepto.
+- Conversation history is user-scoped. New chat archives the current conversation; recent chats can be searched and reopened. Do not add a second browser-only history store.
+- Browser API requests use Clerk bearer tokens. Never restore `NEXT_PUBLIC_DEV_USER_ID` or trust a browser-supplied user ID in production code.
+- Swiggy and Zepto OAuth tokens are still stored as one encrypted local connection per provider deployment. This must become encrypted per-user storage before multi-user production deployment.
+- `.env.example`, frontend environment examples, and `README.md` contain current local setup notes.
 
-The scaffold is a starting point, not verified production code. Inspect it before extending it. Validate dependency/API compatibility and fix errors rather than assuming it runs.
+The codebase has moved beyond the initial scaffold, but provider capabilities remain schema-driven and safety-gated. Inspect and test the current implementation before extending it; never assume a provider tool or response shape.
 
 ## First milestone: Swiggy Instamart product search
 

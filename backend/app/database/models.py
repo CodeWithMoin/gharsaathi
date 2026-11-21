@@ -206,6 +206,40 @@ class MemoryEvent(Base):
     memory: Mapped[MemoryItem] = relationship(back_populates="events")
 
 
+class ShoppingBasketRecord(Base):
+    __tablename__ = "shopping_baskets"
+    __table_args__ = (
+        Index("ix_shopping_baskets_household_provider", "household_id", "provider"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    household_id: Mapped[str] = mapped_column(String(128), index=True)
+    provider: Mapped[str] = mapped_column(String(32))
+    address_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    lines: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class ShoppingApprovalRecord(Base):
+    __tablename__ = "shopping_approvals"
+    __table_args__ = (Index("ix_shopping_approvals_basket", "basket_id"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    basket_id: Mapped[str] = mapped_column(
+        ForeignKey("shopping_baskets.id", ondelete="CASCADE")
+    )
+    basket_revision: Mapped[int] = mapped_column(Integer)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    payable_paise: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class PurchaseOrderNode(Base):
     """A minimal provider order node; deliberately excludes address/payment PII."""
 

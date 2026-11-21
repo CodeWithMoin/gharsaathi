@@ -1,10 +1,10 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Basket, ChatCircleDots, Check, Microphone, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
+import { ArrowRight, Basket, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
-import { addBasketLine, BasketPanel, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
+import { BasketPanel, useAddBasketLine, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
 import { groupProductsForComparison, ProductComparison, type Product } from "./product-comparison";
 import { LiveOrderTracking } from "./order-tracking";
 import { PersonalizationOnboarding } from "./personalization-onboarding";
@@ -12,34 +12,18 @@ import { SupportPanel } from "./support-panel";
 import { VoicePanel, type VoiceTranscriptTurn } from "./voice-panel";
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
 import { FirstRunOnboarding } from "./first-run-onboarding";
+import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
 const LEGACY_CHAT_STORAGE_KEY = "gharsaathi:conversation:v1";
 
 type Address = { id: string; address_line: string; category?: string; tag?: string };
 type CommerceMode = "demo" | "live";
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string };
 type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; updated_at: string };
+type ConversationSummary = { id: string; title: string; preview: string; updated_at: string; is_active: boolean };
 type LegacyConversation = { submittedQuery?: string; products?: Product[]; searched?: boolean };
 let swiggyConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
 let zeptoConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
-
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set("X-User-Id", DEV_USER_ID);
-  const response = await fetch(`${API}${path}`, { cache: "no-store", ...init, headers });
-  const payload = response.status === 204 ? null : await response.json();
-  if (!response.ok) throw new ApiError(payload && typeof payload.detail === "string" ? payload.detail : "Request failed.", response.status);
-  return payload as T;
-}
-
-class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
-    this.name = "ApiError";
-  }
-}
 
 const suggestions = [
   { label: "Monthly list", query: "Monthly groceries" },
@@ -52,6 +36,8 @@ export default function Home() {
 }
 
 function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetupOpen?: boolean; userName: string }) {
+  const apiRequest = useApiRequest();
+  const addBasketLine = useAddBasketLine();
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [basketOpen, setBasketOpen] = useState(false);
   const [basket, setBasket] = useState<ShoppingBasket | null>(null);
@@ -73,6 +59,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
+  const [recentChats, setRecentChats] = useState<ConversationSummary[]>([]);
+  const [chatSearch, setChatSearch] = useState("");
+  const [recentChatsLoading, setRecentChatsLoading] = useState(false);
   const [resultsAfterMessageId, setResultsAfterMessageId] = useState<string | null>(null);
   const [loading, setLoading] = useState<"connection" | "addresses" | "search" | "disconnect" | null>("connection");
   const [searched, setSearched] = useState(false);
@@ -110,6 +100,39 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     });
   }, []);
 
+  const applyConversation = useCallback((conversation: PersistedConversation) => {
+    const restoredIntent = conversationIntent(conversation.submitted_query);
+    const localReply = restoredIntent === "connection_status"
+      ? "Manage stores mein current Swiggy aur Zepto connection status dikh raha hai."
+      : conversationReply(conversation.submitted_query, { swiggyConnected: false, zeptoConnected: false });
+    const restoredMessages = conversation.messages?.length
+      ? conversation.messages
+      : conversation.submitted_query
+        ? [{ id: `migrated-${conversation.id}`, role: "user" as const, content: conversation.submitted_query, modality: "text" as const, created_at: conversation.updated_at }]
+        : [];
+    const repairedMessages = localReply && restoredMessages.at(-1)?.content !== localReply
+      ? [...restoredMessages, { id: `local-reply-${Date.now().toString(36)}`, role: "assistant" as const, content: localReply, modality: "text" as const, created_at: new Date().toISOString() }]
+      : restoredMessages;
+    const fallbackResultAnchor = [...repairedMessages].reverse().find((item) => item.role === "user")?.id ?? null;
+    setSubmittedQuery(localReply ? "" : conversation.submitted_query);
+    setProducts(localReply ? [] : conversation.products);
+    setSearched(localReply ? false : conversation.searched);
+    setChatMessages(repairedMessages);
+    chatMessagesRef.current = repairedMessages;
+    setResultsAfterMessageId(localReply ? null : conversation.results_after_message_id ?? fallbackResultAnchor);
+  }, []);
+
+  const loadRecentChats = useCallback(async () => {
+    setRecentChatsLoading(true);
+    try {
+      setRecentChats(await apiRequest<ConversationSummary[]>("/api/conversations?limit=30"));
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Could not load recent chats.");
+    } finally {
+      setRecentChatsLoading(false);
+    }
+  }, [apiRequest]);
+
   const loadAddresses = useCallback(async (refresh = false) => {
     if (addressRequestRef.current) return addressRequestRef.current;
 
@@ -135,7 +158,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       if (addressRequestRef.current === request) addressRequestRef.current = null;
     });
     return request;
-  }, [commerceMode]);
+  }, [apiRequest, commerceMode]);
 
   const loadZeptoAddresses = useCallback(async (refresh = false) => {
     if (zeptoAddressRequestRef.current) return zeptoAddressRequestRef.current;
@@ -162,7 +185,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       if (zeptoAddressRequestRef.current === request) zeptoAddressRequestRef.current = null;
     });
     return request;
-  }, []);
+  }, [apiRequest]);
 
   useEffect(() => {
     let active = true;
@@ -205,7 +228,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       active = false;
       window.removeEventListener("focus", handleFocus);
     };
-  }, [loadAddresses]);
+  }, [apiRequest, loadAddresses]);
 
   useEffect(() => {
     let active = true;
@@ -238,7 +261,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       active = false;
       window.removeEventListener("focus", handleFocus);
     };
-  }, [loadZeptoAddresses]);
+  }, [apiRequest, loadZeptoAddresses]);
 
   useEffect(() => {
     let active = true;
@@ -246,21 +269,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       .then((conversation) => {
         if (!active) return;
         if (conversation) {
-          const restoredIntent = conversationIntent(conversation.submitted_query);
-          const localReply = restoredIntent === "connection_status"
-            ? "Manage stores mein current Swiggy aur Zepto connection status dikh raha hai."
-            : conversationReply(conversation.submitted_query, { swiggyConnected: false, zeptoConnected: false });
-          const restoredMessages = conversation.messages?.length ? conversation.messages : conversation.submitted_query ? [{ id: `migrated-${conversation.id}`, role: "user" as const, content: conversation.submitted_query, modality: "text" as const, created_at: conversation.updated_at }] : [];
-          const repairedMessages = localReply && restoredMessages.at(-1)?.content !== localReply
-            ? [...restoredMessages, { id: `local-reply-${Date.now().toString(36)}`, role: "assistant" as const, content: localReply, modality: "text" as const, created_at: new Date().toISOString() }]
-            : restoredMessages;
-          const fallbackResultAnchor = [...repairedMessages].reverse().find((item) => item.role === "user")?.id ?? null;
-          setSubmittedQuery(localReply ? "" : conversation.submitted_query);
-          setProducts(localReply ? [] : conversation.products);
-          setSearched(localReply ? false : conversation.searched);
-          setChatMessages(repairedMessages);
-          chatMessagesRef.current = repairedMessages;
-          setResultsAfterMessageId(localReply ? null : conversation.results_after_message_id ?? fallbackResultAnchor);
+          applyConversation(conversation);
           window.localStorage.removeItem(LEGACY_CHAT_STORAGE_KEY);
           return;
         }
@@ -286,7 +295,12 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       })
       .finally(() => { if (active) setChatHydrated(true); });
     return () => { active = false; };
-  }, []);
+  }, [apiRequest, applyConversation]);
+
+  useEffect(() => {
+    if (!chatDrawerOpen) return;
+    void loadRecentChats();
+  }, [chatDrawerOpen, loadRecentChats]);
 
   useEffect(() => {
     let active = true;
@@ -298,7 +312,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         // The basket panel will show a detailed error if the user opens it.
       });
     return () => { active = false; };
-  }, []);
+  }, [apiRequest]);
 
   useEffect(() => {
     if (!chatHydrated || (!submittedQuery && !chatMessages.length)) return;
@@ -323,7 +337,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       window.clearTimeout(timer);
       if (conversationSaveTimerRef.current === timer) conversationSaveTimerRef.current = null;
     };
-  }, [chatHydrated, chatMessages, products, resultsAfterMessageId, searched, submittedQuery]);
+  }, [apiRequest, chatHydrated, chatMessages, products, resultsAfterMessageId, searched, submittedQuery]);
 
   useEffect(() => {
     if (!chatHydrated || (!submittedQuery && !chatMessages.length && !basketOpen && !voiceOpen && !supportOpen && !trackingOpen)) return;
@@ -367,8 +381,26 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     try {
       await conversationSaveQueueRef.current;
       await apiRequest<null>("/api/conversations/new", { method: "POST" });
+      setChatDrawerOpen(false);
+      setRecentChats([]);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Could not start a new chat.");
+    }
+  }
+
+  async function openSavedChat(conversationId: string) {
+    if (conversationSaveTimerRef.current !== null) {
+      window.clearTimeout(conversationSaveTimerRef.current);
+      conversationSaveTimerRef.current = null;
+    }
+    try {
+      await conversationSaveQueueRef.current;
+      const conversation = await apiRequest<PersistedConversation>(`/api/conversations/${conversationId}/open`, { method: "POST" });
+      applyConversation(conversation);
+      setQuery("");
+      setChatDrawerOpen(false);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Could not open that chat.");
     }
   }
 
@@ -554,7 +586,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         setMessage(readiness.message);
         return;
       }
-      window.location.assign(`${API}/api/${provider}/oauth/start`);
+      window.location.assign(`${API_BASE_URL}/api/${provider}/oauth/start`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : `Could not prepare ${provider} login.`);
     } finally {
@@ -567,6 +599,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   const readyStoreCount = Number(connected === true && Boolean(selectedAddress)) + Number(zeptoSearchReady);
   const basketCount = basket?.lines.reduce((total, line) => total + line.quantity, 0) ?? 0;
   const hasChat = Boolean(submittedQuery || chatMessages.length);
+  const filteredRecentChats = recentChats.filter((chat) => {
+    const needle = chatSearch.trim().toLocaleLowerCase();
+    return !needle || chat.title.toLocaleLowerCase().includes(needle) || chat.preview.toLocaleLowerCase().includes(needle);
+  });
   const resultAnchorExists = resultsAfterMessageId !== null && chatMessages.some((item) => item.id === resultsAfterMessageId);
   const searchOutcome = loading === "search" ? (
     <motion.div key="searching-response" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4"><div className="flex items-center gap-1.5" aria-label="GharSaathi is searching">{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">{commerceMode === "demo" ? "Static demo catalogue mein dekh rahi hoon" : zeptoSearchReady ? "Swiggy aur Zepto par dekh rahi hoon" : "Swiggy Instamart par dekh rahi hoon"}</span></div></div></motion.div>
@@ -578,13 +614,42 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   })() : null;
 
   return <main className="grain min-h-[100dvh] bg-[#f8f2ea] text-[#35241c]">
+    <AnimatePresence>
+      {chatDrawerOpen && <>
+        <motion.button type="button" aria-label="Close chats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setChatDrawerOpen(false)} className="fixed inset-0 z-40 bg-[#2f2019]/30 backdrop-blur-[2px]" />
+        <motion.aside initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", stiffness: 360, damping: 36 }} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-50 flex w-[min(88vw,370px)] flex-col border-r border-[#e4d3c7] bg-[#fffaf5] shadow-[24px_0_60px_-32px_rgba(61,38,27,.55)]">
+          <div className="flex items-center gap-3 border-b border-[#eaded5] px-4 py-4">
+            <Brand />
+            <button type="button" onClick={() => setChatDrawerOpen(false)} aria-label="Close chats" className="ml-auto grid size-10 place-items-center rounded-full text-[#806f65] transition hover:bg-[#f2e5dc]"><X size={20} /></button>
+          </div>
+          <div className="px-4 pt-4">
+            <button type="button" onClick={() => void startNewChat()} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#d95617] px-4 text-sm font-semibold text-white shadow-[0_14px_28px_-18px_rgba(198,83,29,.8)] transition hover:bg-[#c94d12] active:scale-[.99]"><Plus size={18} weight="bold" /> New shopping chat</button>
+            <label className="mt-3 flex h-11 items-center gap-2 rounded-2xl border border-[#e5d5ca] bg-white px-3 text-[#806f65] focus-within:border-[#c98d6c]">
+              <MagnifyingGlass size={18} />
+              <input value={chatSearch} onChange={(event) => setChatSearch(event.target.value)} placeholder="Search chats" className="min-w-0 flex-1 bg-transparent text-sm text-[#35241c] outline-none placeholder:text-[#a18c80]" />
+            </label>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-5">
+            <p className="px-2 text-[10px] font-bold uppercase tracking-[.18em] text-[#9b8172]">Recents</p>
+            <div className="mt-2 space-y-1">
+              {recentChatsLoading && <p className="px-2 py-5 text-sm text-[#806f65]">Loading your chats…</p>}
+              {!recentChatsLoading && !filteredRecentChats.length && <p className="px-2 py-5 text-sm leading-6 text-[#806f65]">{chatSearch.trim() ? "No matching chats." : "Your shopping chats will appear here."}</p>}
+              {!recentChatsLoading && filteredRecentChats.map((chat) => <button type="button" key={chat.id} onClick={() => void openSavedChat(chat.id)} className={`block w-full rounded-2xl px-3 py-3 text-left transition hover:bg-[#f2e5dc] ${chat.is_active ? "bg-[#f5e8de]" : ""}`}>
+                <span className="block truncate text-sm font-semibold text-[#3d2b23]">{chat.title}</span>
+                <span className="mt-1 block truncate text-xs text-[#8b7569]">{chat.preview}</span>
+              </button>)}
+            </div>
+          </div>
+        </motion.aside>
+      </>}
+    </AnimatePresence>
     <header className="fixed inset-x-0 top-0 z-30 border-b border-[#e9dbcf]/70 bg-[#fffdf9]/92 shadow-[0_10px_35px_-30px_rgba(73,42,28,.7)] backdrop-blur-xl">
       <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
         <div className="flex min-w-0 items-center">
           <Brand />
         </div>
         <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
-          {hasChat && <button onClick={() => void startNewChat()} disabled={loading === "search"} aria-label="Start a new chat" className="grid size-10 place-items-center rounded-full text-[#806f65] transition hover:bg-[#f4e7dc] hover:text-[#35241c] active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-40"><Plus size={19} /></button>}
+          <button type="button" onClick={() => setChatDrawerOpen(true)} aria-label="Open shopping chats" className="grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><List size={21} /></button>
           {basketCount > 0 && <button onClick={() => setBasketOpen((open) => !open)} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
           <button type="button" onClick={() => setSupportOpen((open) => !open)} aria-label="Get help with an order" className={`grid size-10 place-items-center rounded-full border transition active:scale-[.96] ${supportOpen ? "border-[#c98d6c] bg-[#f1dfd2] text-[#9f451d]" : "border-[#e4d3c7] bg-white text-[#70584b] hover:border-[#d8bbaa] hover:bg-[#fffaf5]"}`}><ChatCircleDots size={21} weight={supportOpen ? "fill" : "regular"} /></button>
           <button onClick={() => setSetupOpen(true)} aria-label={`Manage stores. ${connectionLabel}`} className={`relative ml-0.5 flex h-10 items-center justify-center gap-2 rounded-full border px-2.5 text-xs font-semibold transition active:scale-[.98] md:max-w-[190px] md:px-3 ${setupOpen ? "border-[#c98d6c] bg-[#f4e2d6] text-[#8f421b]" : "border-[#e4d3c7] bg-white text-[#5c463b] hover:border-[#d8bbaa]"}`}><Storefront size={18} className="shrink-0 text-[#c6531d]" /><span className="hidden truncate md:block">{connectionLabel}</span><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} aria-hidden="true" /></button>

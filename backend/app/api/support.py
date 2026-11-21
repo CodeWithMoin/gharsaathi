@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 from app.dependencies import SupportServiceDependency
+from app.auth import UserIdDependency
 from app.support.agent_tools import (
     AgentToolCall,
     AgentToolResult,
@@ -40,10 +41,10 @@ async def agent_tools() -> list[dict]:
 
 @router.post("/agent/execute", response_model=AgentToolResult)
 async def execute_agent_tool(
-    body: AgentToolCall, service: SupportServiceDependency
+    body: AgentToolCall, service: SupportServiceDependency, user_id: UserIdDependency
 ) -> AgentToolResult:
     try:
-        return execute_tool(service, body)
+        return execute_tool(service, user_id, body)
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")
@@ -51,17 +52,17 @@ async def execute_agent_tool(
 
 @router.post("/complaints", response_model=Complaint, status_code=status.HTTP_201_CREATED)
 async def create_complaint(
-    body: ComplaintCreate, service: SupportServiceDependency
+    body: ComplaintCreate, service: SupportServiceDependency, user_id: UserIdDependency
 ) -> Complaint:
-    return service.create(body)
+    return service.create(user_id, body)
 
 
 @router.get("/complaints/{complaint_id}", response_model=Complaint)
 async def get_complaint(
-    complaint_id: str, service: SupportServiceDependency
+    complaint_id: str, service: SupportServiceDependency, user_id: UserIdDependency
 ) -> Complaint:
     try:
-        return service.get(complaint_id)
+        return service.get(user_id, complaint_id)
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")
@@ -71,10 +72,11 @@ async def get_complaint(
 async def add_evidence(
     complaint_id: str,
     service: SupportServiceDependency,
+    user_id: UserIdDependency,
     evidence: Annotated[UploadFile, File(description="JPEG, PNG, or WebP; maximum 8 MB")],
 ) -> Complaint:
     try:
-        return await service.add_evidence(complaint_id, evidence)
+        return await service.add_evidence(user_id, complaint_id, evidence)
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")
@@ -82,10 +84,10 @@ async def add_evidence(
 
 @router.post("/complaints/{complaint_id}/prepare", response_model=Complaint)
 async def prepare_complaint(
-    complaint_id: str, service: SupportServiceDependency
+    complaint_id: str, service: SupportServiceDependency, user_id: UserIdDependency
 ) -> Complaint:
     try:
-        return service.prepare(complaint_id)
+        return service.prepare(user_id, complaint_id)
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")
@@ -96,9 +98,10 @@ async def approve_complaint(
     complaint_id: str,
     body: ApproveComplaintRequest,
     service: SupportServiceDependency,
+    user_id: UserIdDependency,
 ) -> Complaint:
     try:
-        return service.approve(complaint_id, body.expected_revision)
+        return service.approve(user_id, complaint_id, body.expected_revision)
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")
@@ -106,9 +109,9 @@ async def approve_complaint(
 
 @router.post("/complaints/{complaint_id}/submit", status_code=status.HTTP_204_NO_CONTENT)
 async def submit_complaint(
-    complaint_id: str, service: SupportServiceDependency
+    complaint_id: str, service: SupportServiceDependency, user_id: UserIdDependency
 ) -> None:
     try:
-        service.submit(complaint_id)
+        service.submit(user_id, complaint_id)
     except Exception as exc:
         _raise_http(exc)

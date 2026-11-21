@@ -47,7 +47,7 @@ app.add_middleware(
     allow_origins=settings.allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-User-Id"],
+    allow_headers=["Authorization", "Content-Type"],
     expose_headers=["Retry-After"],
 )
 app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])

@@ -15,3 +15,4 @@ pytest-asyncio>=0.24,<2
 aiosqlite>=0.20,<1
 openai>=2.8,<4
 websockets>=15,<17
+clerk-backend-api>=6,<7

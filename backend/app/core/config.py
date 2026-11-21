@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3003"
     cors_origins: str = "http://localhost:3003,http://127.0.0.1:3003"
     app_encryption_key: str = ""
+    clerk_secret_key: SecretStr = SecretStr("")
+    clerk_jwt_key: str = ""
+    clerk_authorized_parties_csv: str = ""
     local_encryption_key_path: Path = Field(
         default=Path("backend/.data/app_encryption.key")
     )
@@ -90,6 +93,15 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def clerk_authorized_parties(self) -> list[str]:
+        configured = [
+            party.strip()
+            for party in self.clerk_authorized_parties_csv.split(",")
+            if party.strip()
+        ]
+        return configured or self.allowed_origins
 
 
 @lru_cache

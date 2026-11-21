@@ -2,9 +2,12 @@ import json
 
 from app.commerce.swiggy.models import Price, Product, ProductSearchResult
 from app.shopping.models import ApprovalStatus
-from app.voice.basket_tools import HOUSEHOLD_ID, PROVIDER
+from app.voice.basket_tools import PROVIDER
 from app.voice.toolbox import VoiceToolbox
 from tests.shopping_fakes import World
+
+
+TEST_HOUSEHOLD_ID = "user_test_voice"
 
 
 def product(name: str, offer: float, mrp: float, available: bool = True) -> Product:
@@ -30,7 +33,8 @@ class FakeSearcher:
 
 def toolbox(world: World, products: list[Product], address_id: str | None = "addr_home") -> VoiceToolbox:
     return VoiceToolbox(
-        FakeSearcher(products), world.baskets, world.approvals, address_id
+        FakeSearcher(products), world.baskets, world.approvals, address_id,
+        household_id=TEST_HOUSEHOLD_ID,
     )
 
 
@@ -49,7 +53,7 @@ async def test_voice_add_uses_only_search_option_and_provider_price() -> None:
     assert added["model_output"]["status"] == "added"
     assert added["model_output"]["item_total"] == "₹309"
     assert added["ui_event"]["type"] == "basket.updated"
-    basket = await world.baskets.active(HOUSEHOLD_ID, PROVIDER)
+    basket = await world.baskets.active(TEST_HOUSEHOLD_ID, PROVIDER)
     line = basket.lines[0]
     assert (line.unit_price_paise, line.mrp_paise, line.quantity) == (15450, 18000, 2)
     assert basket.address_id == "addr_home"
@@ -66,7 +70,7 @@ async def test_voice_refuses_invented_or_unavailable_option() -> None:
     assert invented["model_output"]["status"] == "error"
     assert unavailable["model_output"]["status"] == "error"
     assert "unavailable" in unavailable["model_output"]["message"]
-    assert (await world.baskets.active(HOUSEHOLD_ID, PROVIDER)).lines == []
+    assert (await world.baskets.active(TEST_HOUSEHOLD_ID, PROVIDER)).lines == []
 
 
 async def test_voice_quantity_zero_removes_and_view_emits_basket_event() -> None:

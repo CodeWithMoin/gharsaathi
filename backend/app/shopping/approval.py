@@ -105,8 +105,12 @@ class ApprovalService:
         await self.baskets.save(current)
         return ApprovalRequest(approval=approval, quote=quote, basket=current)
 
-    async def approve(self, approval_id: str, fingerprint: str) -> Approval:
+    async def approve(
+        self, approval_id: str, fingerprint: str, household_id: str | None = None
+    ) -> Approval:
         approval = await self._approval(approval_id)
+        if household_id is not None:
+            await self._owned_basket(approval.basket_id, household_id)
         if approval.status != ApprovalStatus.PENDING:
             raise ApprovalRefused(f"This approval is {approval.status.value}; ask for a fresh one.")
         now = self.clock()
@@ -133,8 +137,10 @@ class ApprovalService:
         await self.baskets.save(basket)
         return approval
 
-    async def reject(self, approval_id: str) -> Approval:
+    async def reject(self, approval_id: str, household_id: str | None = None) -> Approval:
         approval = await self._approval(approval_id)
+        if household_id is not None:
+            await self._owned_basket(approval.basket_id, household_id)
         if approval.status not in OPEN_APPROVAL_STATUSES:
             raise ApprovalRefused(f"This approval is already {approval.status.value}.")
         await self._close(approval, ApprovalStatus.REJECTED)
@@ -168,3 +174,10 @@ class ApprovalService:
         if approval is None:
             raise NotFound("Approval not found.")
         return approval
+
+    async def _owned_basket(self, basket_id: str, household_id: str) -> Basket:
+        basket = await self._basket(basket_id)
+        if basket.household_id != household_id:
+            # Do not reveal that another household's approval exists.
+            raise NotFound("Approval not found.")
+        return basket

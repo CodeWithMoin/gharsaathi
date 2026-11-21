@@ -4,8 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Microphone, ShieldCheck, Stop, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mapRealtimeTranscriptEvent } from "./voice-transcript.mjs";
-
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
 
 type VoiceStatus = "connecting" | "live" | "closing" | "error";
 type VoiceProduct = { provider?: "swiggy_instamart" | "zepto"; provider_label?: string; product_id: string; sku_id: string; spin_id?: string; name: string; brand?: string; pack_size?: string; price: { mrp: number; offer_price: number }; available: boolean; image_url?: string; rating_value?: string };
@@ -38,6 +37,7 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
 }
 
 export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[]) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: () => void }) {
+  const authenticatedFetch = useAuthenticatedFetch();
   const [status, setStatus] = useState<VoiceStatus>("connecting");
   const [message, setMessage] = useState("Connecting to GharSaathi…");
   const [searching, setSearching] = useState(false);
@@ -95,7 +95,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
   }, [onTranscriptTurn]);
 
   const listenForToolEvents = useCallback((sessionId: string) => {
-    const source = new EventSource(`${API}/api/voice/sessions/${encodeURIComponent(sessionId)}/events`);
+    const source = new EventSource(`${API_BASE_URL}/api/voice/sessions/${encodeURIComponent(sessionId)}/events`);
     eventsRef.current = source;
     source.addEventListener("message", ({ data }) => {
       try {
@@ -192,7 +192,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       if (attempt !== attemptRef.current) return;
       const sdp = peer.localDescription?.sdp;
       if (!sdp) throw new Error("Could not prepare the microphone connection.");
-      const response = await fetch(`${API}/api/voice/session`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/voice/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -213,7 +213,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       setMessage(denied ? "Microphone permission is needed for voice shopping." : error instanceof Error ? error.message : "Could not start voice.");
       cleanup();
     }
-  }, [addressId, cleanup, handleTranscriptEvent, listenForToolEvents, onClose, zeptoAddressId]);
+  }, [addressId, authenticatedFetch, cleanup, handleTranscriptEvent, listenForToolEvents, onClose, zeptoAddressId]);
 
   useEffect(() => {
     void start();

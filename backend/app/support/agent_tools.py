@@ -97,11 +97,11 @@ def tool_definitions() -> list[dict[str, Any]]:
     ]
 
 
-def execute_tool(service: SupportService, call: AgentToolCall) -> AgentToolResult:
+def execute_tool(service: SupportService, user_id: str, call: AgentToolCall) -> AgentToolResult:
     try:
         if call.name == "report_order_issue":
-            created = service.create(ComplaintCreate.model_validate(call.arguments))
-            complaint = service.prepare(created.id)
+            created = service.create(user_id, ComplaintCreate.model_validate(call.arguments))
+            complaint = service.prepare(user_id, created.id)
             return AgentToolResult(
                 complaint=complaint,
                 requires_user_approval=True,
@@ -112,7 +112,7 @@ def execute_tool(service: SupportService, call: AgentToolCall) -> AgentToolResul
             )
         if call.name == "get_support_complaint":
             arguments = GetComplaintArguments.model_validate(call.arguments)
-            complaint = service.get(arguments.complaint_id)
+            complaint = service.get(user_id, arguments.complaint_id)
             return AgentToolResult(
                 complaint=complaint,
                 requires_user_approval=complaint.approval is None,
@@ -120,7 +120,7 @@ def execute_tool(service: SupportService, call: AgentToolCall) -> AgentToolResul
             )
         if call.name == "prepare_support_complaint":
             arguments = GetComplaintArguments.model_validate(call.arguments)
-            complaint = service.prepare(arguments.complaint_id)
+            complaint = service.prepare(user_id, arguments.complaint_id)
             return AgentToolResult(
                 complaint=complaint,
                 requires_user_approval=True,
@@ -131,7 +131,7 @@ def execute_tool(service: SupportService, call: AgentToolCall) -> AgentToolResul
 
         approval = ApproveComplaintArguments.model_validate(call.arguments)
         complaint = service.approve(
-            approval.complaint_id, approval.expected_revision
+            user_id, approval.complaint_id, approval.expected_revision
         )
         return AgentToolResult(
             complaint=complaint,

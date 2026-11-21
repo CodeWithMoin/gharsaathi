@@ -1,6 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from app.auth import UserIdDependency
 
 from app.tracking.errors import TrackingConflict, TrackingNotFound, TrackingProviderError
 from app.tracking.models import OrderWatch, StartTrackingRequest, TrackingRead
@@ -8,7 +10,6 @@ from app.tracking.service import OrderTrackingService
 
 
 router = APIRouter()
-LOCAL_HOUSEHOLD_ID = "local-household"
 
 
 def get_tracking_service(request: Request) -> OrderTrackingService:
@@ -23,17 +24,6 @@ def get_tracking_service(request: Request) -> OrderTrackingService:
     return service
 
 
-def local_household(
-    x_user_id: Annotated[str | None, Header()] = None,
-) -> str:
-    """Temporary local actor identity; multi-user auth must replace this boundary."""
-
-    actor = (x_user_id or LOCAL_HOUSEHOLD_ID).strip()
-    if not actor or len(actor) > 128:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid household.")
-    return actor
-
-
 def _raise_http(exc: Exception) -> None:
     if isinstance(exc, TrackingNotFound):
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
@@ -45,7 +35,7 @@ def _raise_http(exc: Exception) -> None:
 
 
 TrackingServiceDependency = Annotated[OrderTrackingService, Depends(get_tracking_service)]
-HouseholdDependency = Annotated[str, Depends(local_household)]
+HouseholdDependency = UserIdDependency
 
 
 @router.post("/monitors", response_model=TrackingRead, status_code=status.HTTP_201_CREATED)

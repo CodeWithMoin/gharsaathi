@@ -204,9 +204,10 @@ cd backend
 alembic upgrade head
 ```
 
-Memory endpoints currently require `X-User-Id`. This header is only a local-development
-identity boundary; replace it with the authenticated application's user ID before any
-multi-user deployment.
+User-scoped endpoints require a Clerk session token in the cross-origin
+`Authorization: Bearer …` header. The backend verifies the token and uses its `sub`
+claim as the external identity; browser-supplied user IDs are not trusted. Baskets and
+approvals are stored in the database under that identity and survive backend restarts.
 
 - `POST /api/memory/proposals`
 - `POST /api/memory/extract` — extracts evidence-backed proposals from one user message

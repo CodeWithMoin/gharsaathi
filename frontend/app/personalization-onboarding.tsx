@@ -2,9 +2,7 @@
 
 import { Check, ClockCounterClockwise, ShieldCheck } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
-
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
+import { useApiRequest } from "./authenticated-api";
 
 type Permission = {
   data_category: string;
@@ -29,18 +27,8 @@ type Props = {
   zeptoConnected: boolean;
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set("X-User-Id", DEV_USER_ID);
-  const response = await fetch(`${API}${path}`, { cache: "no-store", ...init, headers });
-  const payload = response.status === 204 ? null : await response.json();
-  if (!response.ok) {
-    throw new Error(payload && typeof payload.detail === "string" ? payload.detail : "Could not save personalization settings.");
-  }
-  return payload as T;
-}
-
 export function PersonalizationOnboarding({ commerceMode, swiggyConnected, zeptoConnected }: Props) {
+  const request = useApiRequest();
   const [permission, setPermission] = useState<Permission | null | undefined>(undefined);
   const [retentionDays, setRetentionDays] = useState(90);
   const [busy, setBusy] = useState<"enable" | "skip" | "refresh" | "disable" | null>(null);
@@ -62,7 +50,7 @@ export function PersonalizationOnboarding({ commerceMode, swiggyConnected, zepto
         setError(cause instanceof Error ? cause.message : "Could not load personalization settings.");
       });
     return () => { active = false; };
-  }, []);
+  }, [request]);
 
   async function savePermission(allowed: boolean, days: number | null) {
     return request<Permission>("/api/memory/permissions/purchase_history/proactive_reorder", {

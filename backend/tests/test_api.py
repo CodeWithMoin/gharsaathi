@@ -99,7 +99,7 @@ async def test_browser_can_read_retry_after_header(client: AsyncClient) -> None:
 async def test_addresses_are_typed(client: AsyncClient) -> None:
     response = await client.get(
         "/api/swiggy/addresses?page=1&pageSize=10&refresh=true",
-        headers={"X-User-Id": "test-user"},
+        headers={"X-Test-User-Id": "test-user"},
     )
     assert response.status_code == 200
     assert response.json()["addresses"][0] == {
@@ -114,7 +114,7 @@ async def test_addresses_are_typed(client: AsyncClient) -> None:
 async def test_address_reload_uses_database_snapshot_without_provider_call(
     client: AsyncClient,
 ) -> None:
-    headers = {"X-User-Id": "reload-user"}
+    headers = {"X-Test-User-Id": "reload-user"}
 
     empty = await client.get("/api/swiggy/addresses", headers=headers)
     assert empty.status_code == 200
@@ -146,7 +146,7 @@ async def test_address_reload_uses_database_snapshot_without_provider_call(
 async def test_demo_addresses_do_not_leak_into_live_provider_state(
     client: AsyncClient,
 ) -> None:
-    headers = {"X-User-Id": "demo-boundary-user"}
+    headers = {"X-Test-User-Id": "demo-boundary-user"}
     app.dependency_overrides[get_swiggy_service] = DemoSwiggyService
 
     demo = await client.get("/api/swiggy/addresses", headers=headers)
@@ -185,7 +185,7 @@ async def test_authentication_required_is_401(client: AsyncClient) -> None:
     try:
         response = await client.get(
             "/api/swiggy/addresses?refresh=true",
-            headers={"X-User-Id": "test-user"},
+            headers={"X-Test-User-Id": "test-user"},
         )
         assert response.status_code == 401
         assert response.json()["detail"] == "Connect your Swiggy account first."

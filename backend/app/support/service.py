@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from fastapi import UploadFile
 
-from app.support.errors import ComplaintStateError, SupportChannelUnavailable
+from app.support.errors import ComplaintNotFound, ComplaintStateError, SupportChannelUnavailable
 from app.support.models import (
     Complaint,
     ComplaintApproval,
@@ -19,10 +19,11 @@ class SupportService:
     def __init__(self, store: ComplaintStore):
         self.store = store
 
-    def create(self, request: ComplaintCreate) -> Complaint:
+    def create(self, user_id: str, request: ComplaintCreate) -> Complaint:
         now = datetime.now(UTC)
         complaint = Complaint(
             id=str(uuid4()),
+            user_id=user_id,
             **request.model_dump(),
             status=ComplaintStatus.ISSUE_REPORTED,
             revision=1,
@@ -31,13 +32,13 @@ class SupportService:
         )
         return self.store.save(complaint)
 
-    def get(self, complaint_id: str) -> Complaint:
-        return self.store.load(complaint_id)
+    def get(self, user_id: str, complaint_id: str) -> Complaint:
+        return self._owned(user_id, complaint_id)
 
     async def add_evidence(
-        self, complaint_id: str, upload: UploadFile
+        self, user_id: str, complaint_id: str, upload: UploadFile
     ) -> Complaint:
-        complaint = self.store.load(complaint_id)
+        complaint = self._owned(user_id, complaint_id)
         data = await upload.read(MAX_EVIDENCE_BYTES + 1)
         evidence = self.store.save_evidence(
             complaint.id,
@@ -53,8 +54,8 @@ class SupportService:
         complaint.updated_at = datetime.now(UTC)
         return self.store.save(complaint)
 
-    def prepare(self, complaint_id: str) -> Complaint:
-        complaint = self.store.load(complaint_id)
+    def prepare(self, user_id: str, complaint_id: str) -> Complaint:
+        complaint = self._owned(user_id, complaint_id)
         complaint.prepared_summary = self._summary(complaint)
         complaint.approval = None
         complaint.status = ComplaintStatus.AWAITING_APPROVAL
@@ -62,8 +63,8 @@ class SupportService:
         complaint.updated_at = datetime.now(UTC)
         return self.store.save(complaint)
 
-    def approve(self, complaint_id: str, expected_revision: int) -> Complaint:
-        complaint = self.store.load(complaint_id)
+    def approve(self, user_id: str, complaint_id: str, expected_revision: int) -> Complaint:
+        complaint = self._owned(user_id, complaint_id)
         if complaint.status != ComplaintStatus.AWAITING_APPROVAL:
             raise ComplaintStateError("Prepare the complaint before approving it.")
         if complaint.revision != expected_revision:
@@ -79,11 +80,17 @@ class SupportService:
         complaint.updated_at = datetime.now(UTC)
         return self.store.save(complaint)
 
-    def submit(self, complaint_id: str) -> None:
-        complaint = self.store.load(complaint_id)
+    def submit(self, user_id: str, complaint_id: str) -> None:
+        complaint = self._owned(user_id, complaint_id)
         if complaint.approval is None:
             raise ComplaintStateError("Approve the exact complaint before submission.")
         raise SupportChannelUnavailable(complaint.submission.reason)
+
+    def _owned(self, user_id: str, complaint_id: str) -> Complaint:
+        complaint = self.store.load(complaint_id)
+        if complaint.user_id != user_id:
+            raise ComplaintNotFound("Complaint was not found.")
+        return complaint
 
     @staticmethod
     def _invalidate_approval(complaint: Complaint) -> None:

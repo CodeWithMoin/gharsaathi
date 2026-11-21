@@ -14,9 +14,8 @@ import {
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useApiRequest } from "../authenticated-api";
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
 const MAX_QUANTITY = 50;
 
 export const BASKET_CHANGED_EVENT = "gharsaathi:basket-changed";
@@ -95,30 +94,21 @@ function providerQuery(provider: ProviderName) {
   return `?provider=${encodeURIComponent(provider)}`;
 }
 
-async function basketRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set("X-User-Id", DEV_USER_ID);
-  if (init?.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-
-  const response = await fetch(`${API}/api/basket${path}`, { cache: "no-store", ...init, headers });
-  const payload = response.status === 204 ? null : await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(payload && typeof payload.detail === "string" ? payload.detail : "Could not update the basket.");
-  }
-  return payload as T;
-}
-
 /**
  * Lets a product card add an item without knowing about this component's UI.
  * The panel listens for BASKET_CHANGED_EVENT and refreshes itself afterwards.
  */
-export async function addBasketLine(provider: ProviderName, line: AddBasketLine): Promise<ShoppingBasket> {
-  const basket = await basketRequest<ShoppingBasket>(`/lines${providerQuery(provider)}`, {
-    method: "POST",
-    body: JSON.stringify(line),
-  });
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
-  return basket;
+export function useAddBasketLine() {
+  const request = useApiRequest();
+  return useCallback(async (provider: ProviderName, line: AddBasketLine): Promise<ShoppingBasket> => {
+    const basket = await request<ShoppingBasket>(`/api/basket/lines${providerQuery(provider)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(line),
+    });
+    window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
+    return basket;
+  }, [request]);
 }
 
 function expiryText(value: string): string {
@@ -136,6 +126,12 @@ export function BasketPanel({
   onApprovalChange,
   className = "",
 }: BasketPanelProps) {
+  const apiRequest = useApiRequest();
+  const basketRequest = useCallback(<T,>(path: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    if (init?.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    return apiRequest<T>(`/api/basket${path}`, { ...init, headers });
+  }, [apiRequest]);
   const [basket, setBasket] = useState<ShoppingBasket | null>(null);
   const [request, setRequest] = useState<ApprovalRequest | null>(null);
   const [approval, setApproval] = useState<Approval | null>(null);
@@ -165,7 +161,7 @@ export function BasketPanel({
     } finally {
       if (!silent) setAction(null);
     }
-  }, [applyBasket, query]);
+  }, [applyBasket, basketRequest, query]);
 
   useEffect(() => {
     void load();
@@ -202,7 +198,7 @@ export function BasketPanel({
       if (active) setAction(null);
     });
     return () => { active = false; };
-  }, [addressId, applyBasket, basket, clearQuote, query]);
+  }, [addressId, applyBasket, basket, basketRequest, clearQuote, query]);
 
   const changeQuantity = useCallback(async (line: BasketLine, quantity: number) => {
     setAction(`line-${line.ref.variant_id}`);
@@ -219,7 +215,7 @@ export function BasketPanel({
     } finally {
       setAction(null);
     }
-  }, [applyBasket, clearQuote, query]);
+  }, [applyBasket, basketRequest, clearQuote, query]);
 
   const requestQuote = useCallback(async () => {
     setAction("quote");
@@ -235,7 +231,7 @@ export function BasketPanel({
     } finally {
       setAction(null);
     }
-  }, [applyBasket, onApprovalChange, query]);
+  }, [applyBasket, basketRequest, onApprovalChange, query]);
 
   const approve = useCallback(async () => {
     if (!approval) return;
@@ -253,7 +249,7 @@ export function BasketPanel({
     } finally {
       setAction(null);
     }
-  }, [approval, onApprovalChange]);
+  }, [approval, basketRequest, onApprovalChange]);
 
   const reject = useCallback(async () => {
     if (!approval) return;
@@ -269,7 +265,7 @@ export function BasketPanel({
     } finally {
       setAction(null);
     }
-  }, [approval, applyBasket, clearQuote, query]);
+  }, [approval, applyBasket, basketRequest, clearQuote, query]);
 
   const lines = basket?.lines ?? [];
   const lineCount = lines.reduce((total, line) => total + line.quantity, 0);

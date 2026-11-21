@@ -81,6 +81,7 @@ class ComplaintCreate(BaseModel):
 
 class Complaint(BaseModel):
     id: str
+    user_id: str = Field(min_length=1, max_length=128, exclude=True)
     provider: CommerceProvider
     order_id: str
     affected_product: str

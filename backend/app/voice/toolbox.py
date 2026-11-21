@@ -32,6 +32,7 @@ class VoiceToolbox:
         address_id: str | None,
         zepto_searcher: ProductSearcher | None = None,
         zepto_address_id: str | None = None,
+        household_id: str = "",
     ) -> None:
         options = {}
         targets = [
@@ -53,7 +54,9 @@ class VoiceToolbox:
                 )
             )
         self.search = MultiProviderShoppingToolExecutor(targets, options)
-        self.basket = BasketToolExecutor(baskets, approvals, options, address_id)
+        if not household_id:
+            raise ValueError("A verified household identity is required for voice baskets.")
+        self.basket = BasketToolExecutor(baskets, approvals, options, address_id, household_id)
 
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
         if name in BASKET_TOOL_NAMES:

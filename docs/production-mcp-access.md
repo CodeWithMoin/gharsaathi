@@ -48,8 +48,8 @@ enabling the other.
 
 Provider approval alone is not enough. Before enabling live commerce on AWS:
 
-- replace the development `X-User-Id` header with real authenticated user and
-  household identity;
+- keep Clerk JWT verification enabled and configure the production authorized
+  party/domain and public verification key;
 - replace the single-user encrypted token files with per-user encrypted
   provider connections in PostgreSQL or another durable store backed by KMS;
 - persist support/tracking state outside container `/tmp` and define retention

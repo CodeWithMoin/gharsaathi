@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
 
 from app.dependencies import ApprovalServiceDependency, BasketServiceDependency
+from app.auth import UserIdDependency
 from app.shopping.approval import ApprovalRequest
 from app.shopping.basket import (
     MAX_QUANTITY,
@@ -34,7 +35,6 @@ from app.shopping.models import (
 
 
 router = APIRouter()
-LOCAL_HOUSEHOLD_ID = "local-household"
 ProviderQuery = Annotated[ProviderName, Query()]
 
 
@@ -221,18 +221,18 @@ def approval_request_out(result: ApprovalRequest) -> ApprovalRequestOut:
 
 
 @router.get("", response_model=BasketOut)
-async def get_basket(service: BasketServiceDependency, provider: ProviderQuery) -> BasketOut:
-    return basket_out(await service.active(LOCAL_HOUSEHOLD_ID, provider))
+async def get_basket(service: BasketServiceDependency, provider: ProviderQuery, user_id: UserIdDependency) -> BasketOut:
+    return basket_out(await service.active(user_id, provider))
 
 
 @router.post("/lines", response_model=BasketOut)
 async def add_line(
-    body: AddLineRequest, service: BasketServiceDependency, provider: ProviderQuery
+    body: AddLineRequest, service: BasketServiceDependency, provider: ProviderQuery, user_id: UserIdDependency
 ) -> BasketOut:
     try:
         return basket_out(
             await service.add_line(
-                LOCAL_HOUSEHOLD_ID,
+                user_id,
                 provider,
                 BasketLine.model_validate(body.model_dump()),
             )
@@ -247,10 +247,11 @@ async def set_quantity(
     body: QuantityRequest,
     service: BasketServiceDependency,
     provider: ProviderQuery,
+    user_id: UserIdDependency,
 ) -> BasketOut:
     try:
         return basket_out(
-            await service.set_quantity(LOCAL_HOUSEHOLD_ID, provider, variant_id, body.quantity)
+            await service.set_quantity(user_id, provider, variant_id, body.quantity)
         )
     except ShoppingError as exc:
         _raise_http(exc)
@@ -258,20 +259,20 @@ async def set_quantity(
 
 @router.delete("/lines/{variant_id}", response_model=BasketOut)
 async def remove_line(
-    variant_id: str, service: BasketServiceDependency, provider: ProviderQuery
+    variant_id: str, service: BasketServiceDependency, provider: ProviderQuery, user_id: UserIdDependency
 ) -> BasketOut:
     try:
-        return basket_out(await service.remove_line(LOCAL_HOUSEHOLD_ID, provider, variant_id))
+        return basket_out(await service.remove_line(user_id, provider, variant_id))
     except ShoppingError as exc:
         _raise_http(exc)
 
 
 @router.post("/address", response_model=BasketOut)
 async def set_address(
-    body: AddressRequest, service: BasketServiceDependency, provider: ProviderQuery
+    body: AddressRequest, service: BasketServiceDependency, provider: ProviderQuery, user_id: UserIdDependency
 ) -> BasketOut:
     try:
-        return basket_out(await service.set_address(LOCAL_HOUSEHOLD_ID, provider, body.address_id))
+        return basket_out(await service.set_address(user_id, provider, body.address_id))
     except ShoppingError as exc:
         _raise_http(exc)
 
@@ -281,9 +282,10 @@ async def request_approval(
     baskets: BasketServiceDependency,
     approvals: ApprovalServiceDependency,
     provider: ProviderQuery,
+    user_id: UserIdDependency,
 ) -> ApprovalRequestOut:
     try:
-        basket = await baskets.active(LOCAL_HOUSEHOLD_ID, provider)
+        basket = await baskets.active(user_id, provider)
         return approval_request_out(await approvals.request(basket.id))
     except ShoppingError as exc:
         _raise_http(exc)
@@ -291,17 +293,17 @@ async def request_approval(
 
 @router.post("/approval/{approval_id}/approve", response_model=ApprovalOut)
 async def approve(
-    approval_id: str, body: ApproveRequest, approvals: ApprovalServiceDependency
+    approval_id: str, body: ApproveRequest, approvals: ApprovalServiceDependency, user_id: UserIdDependency
 ) -> ApprovalOut:
     try:
-        return approval_out(await approvals.approve(approval_id, body.fingerprint))
+        return approval_out(await approvals.approve(approval_id, body.fingerprint, user_id))
     except ShoppingError as exc:
         _raise_http(exc)
 
 
 @router.post("/approval/{approval_id}/reject", response_model=ApprovalOut)
-async def reject(approval_id: str, approvals: ApprovalServiceDependency) -> ApprovalOut:
+async def reject(approval_id: str, approvals: ApprovalServiceDependency, user_id: UserIdDependency) -> ApprovalOut:
     try:
-        return approval_out(await approvals.reject(approval_id))
+        return approval_out(await approvals.reject(approval_id, user_id))
     except ShoppingError as exc:
         _raise_http(exc)

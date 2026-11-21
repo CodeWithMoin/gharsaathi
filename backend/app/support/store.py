@@ -43,10 +43,10 @@ class ComplaintStore:
         self.complaints_path.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = self._path_for(complaint.id)
         temporary = path.with_suffix(f".{uuid4().hex}.tmp")
-        temporary.write_text(
-            json.dumps(complaint.model_dump(mode="json"), indent=2),
-            encoding="utf-8",
-        )
+        payload = complaint.model_dump(mode="json")
+        # Ownership is persisted but deliberately excluded from API serialization.
+        payload["user_id"] = complaint.user_id
+        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         os.chmod(temporary, 0o600)
         os.replace(temporary, path)
         return complaint

@@ -26,7 +26,11 @@ class ConversationRepository:
     async def upsert(self, subject_id: UUID, state: dict[str, object]) -> Conversation:
         conversation = await self.current(subject_id)
         if conversation is None:
-            conversation = Conversation(subject_id=subject_id, state=state)
+            conversation = Conversation(
+                subject_id=subject_id,
+                state=state,
+                updated_at=datetime.now(UTC),
+            )
             self.session.add(conversation)
         else:
             conversation.state = state
@@ -46,3 +50,39 @@ class ConversationRepository:
             .values(archived_at=now, updated_at=now)
         )
         await self.session.commit()
+
+    async def list_recent(self, subject_id: UUID, limit: int = 50) -> list[Conversation]:
+        result = await self.session.execute(
+            select(Conversation)
+            .where(Conversation.subject_id == subject_id)
+            .order_by(Conversation.updated_at.desc(), Conversation.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars())
+
+    async def open(self, subject_id: UUID, conversation_id: UUID) -> Conversation | None:
+        result = await self.session.execute(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.subject_id == subject_id,
+            )
+        )
+        conversation = result.scalar_one_or_none()
+        if conversation is None:
+            return None
+
+        now = datetime.now(UTC)
+        await self.session.execute(
+            update(Conversation)
+            .where(
+                Conversation.subject_id == subject_id,
+                Conversation.archived_at.is_(None),
+                Conversation.id != conversation_id,
+            )
+            .values(archived_at=now, updated_at=now)
+        )
+        conversation.archived_at = None
+        conversation.updated_at = now
+        await self.session.commit()
+        await self.session.refresh(conversation)
+        return conversation

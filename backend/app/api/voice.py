@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.dependencies import SidebandHubDependency, VoiceServiceDependency
 from app.voice.sideband import FINISHED
 from app.voice.service import LiveSession, VoiceConfigurationError, VoiceProviderError
+from app.auth import UserIdDependency
 
 
 router = APIRouter()
@@ -38,7 +39,7 @@ def _check_origin(request: Request) -> None:
 
 @router.post("/session", response_model=LiveSession, status_code=status.HTTP_201_CREATED)
 async def create_session(
-    body: SessionRequest, request: Request, service: VoiceServiceDependency
+    body: SessionRequest, request: Request, service: VoiceServiceDependency, user_id: UserIdDependency
 ) -> LiveSession:
     _check_origin(request)
     try:
@@ -46,6 +47,7 @@ async def create_session(
             body.sdp,
             body.swiggy_address_id,
             body.zepto_address_id,
+            user_id,
         )
     except VoiceConfigurationError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc

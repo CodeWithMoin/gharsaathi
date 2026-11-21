@@ -33,7 +33,7 @@ async def conversation_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
 
 
 def headers(user_id: str) -> dict[str, str]:
-    return {"X-User-Id": user_id}
+    return {"X-Test-User-Id": user_id}
 
 
 def state(query: str, *, messages: list[dict[str, str]] | None = None) -> dict[str, object]:
@@ -193,3 +193,67 @@ async def test_new_chat_archives_previous_conversation(
         json=state("tea"),
     )
     assert replacement.json()["submitted_query"] == "tea"
+
+
+@pytest.mark.asyncio
+async def test_recent_chats_can_be_listed_searched_and_reopened(
+    conversation_client: AsyncClient,
+) -> None:
+    first = await conversation_client.put(
+        "/api/conversations/current",
+        headers=headers("history-user"),
+        json=state("monthly household list"),
+    )
+    await conversation_client.post(
+        "/api/conversations/new", headers=headers("history-user")
+    )
+    second = await conversation_client.put(
+        "/api/conversations/current",
+        headers=headers("history-user"),
+        json=state("pet supplies"),
+    )
+
+    recent = await conversation_client.get(
+        "/api/conversations", headers=headers("history-user")
+    )
+    assert recent.status_code == 200
+    assert [item["title"] for item in recent.json()] == [
+        "pet supplies",
+        "monthly household list",
+    ]
+    assert recent.json()[0]["is_active"] is True
+    assert recent.json()[1]["is_active"] is False
+
+    searched = await conversation_client.get(
+        "/api/conversations?query=monthly", headers=headers("history-user")
+    )
+    assert [item["id"] for item in searched.json()] == [first.json()["id"]]
+
+    reopened = await conversation_client.post(
+        f"/api/conversations/{first.json()['id']}/open",
+        headers=headers("history-user"),
+    )
+    assert reopened.status_code == 200
+    assert reopened.json()["submitted_query"] == "monthly household list"
+
+    current = await conversation_client.get(
+        "/api/conversations/current", headers=headers("history-user")
+    )
+    assert current.json()["id"] == first.json()["id"]
+    assert current.json()["id"] != second.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_user_cannot_open_another_users_chat(
+    conversation_client: AsyncClient,
+) -> None:
+    saved = await conversation_client.put(
+        "/api/conversations/current",
+        headers=headers("owner"),
+        json=state("private basket"),
+    )
+    response = await conversation_client.post(
+        f"/api/conversations/{saved.json()['id']}/open",
+        headers=headers("intruder"),
+    )
+    assert response.status_code == 404

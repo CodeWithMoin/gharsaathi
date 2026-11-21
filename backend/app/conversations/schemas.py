@@ -60,3 +60,11 @@ class ConversationStateUpsert(BaseModel):
 class ConversationStateResponse(ConversationStateUpsert):
     id: UUID
     updated_at: datetime
+
+
+class ConversationSummary(BaseModel):
+    id: UUID
+    title: str
+    preview: str
+    updated_at: datetime
+    is_active: bool

@@ -2,9 +2,7 @@
 
 import { ArrowSquareOut, CheckCircle, Copy, EnvelopeSimple, Paperclip, ShieldCheck, Truck, X } from "@phosphor-icons/react";
 import { FormEvent, useState } from "react";
-
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
+import { useApiRequest } from "./authenticated-api";
 
 type Provider = "swiggy" | "zepto";
 type Complaint = {
@@ -39,16 +37,8 @@ const providerHandoff = {
   },
 } as const;
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set("X-User-Id", DEV_USER_ID);
-  const response = await fetch(`${API}${path}`, { cache: "no-store", ...init, headers });
-  const payload = response.status === 204 ? null : await response.json();
-  if (!response.ok) throw new Error(payload?.detail || "Could not prepare support handoff.");
-  return payload as T;
-}
-
 export function SupportPanel({ onClose, onTrackOrder }: SupportPanelProps) {
+  const request = useApiRequest();
   const [provider, setProvider] = useState<Provider>("swiggy");
   const [orderId, setOrderId] = useState("");
   const [product, setProduct] = useState("");

@@ -82,7 +82,7 @@ class LiveSessionService:
         return self.baskets is not None and self.approvals is not None
 
     def _tool_executor(
-        self, address_id: str | None, zepto_address_id: str | None
+        self, address_id: str | None, zepto_address_id: str | None, household_id: str
     ) -> ToolExecutor:
         if self.basket_enabled:
             # narrowed by basket_enabled
@@ -95,6 +95,7 @@ class LiveSessionService:
                 address_id,
                 self.zepto_searcher,
                 zepto_address_id,
+                household_id,
             )
         if self.zepto_searcher is not None:
             return MultiProviderShoppingToolExecutor(
@@ -116,6 +117,7 @@ class LiveSessionService:
         offer_sdp: str,
         swiggy_address_id: str | None = None,
         zepto_address_id: str | None = None,
+        household_id: str = "",
     ) -> LiveSession:
         api_key = self.settings.openai_api_key.get_secret_value().strip()
         if not api_key:
@@ -149,7 +151,7 @@ class LiveSessionService:
             raise VoiceProviderError("OpenAI returned an unexpected session response.")
         self.hub.start(
             session_id,
-            self._tool_executor(swiggy_address_id, zepto_address_id),
+            self._tool_executor(swiggy_address_id, zepto_address_id, household_id),
         )
         return LiveSession(session_id=session_id, sdp=answer_sdp)
 
