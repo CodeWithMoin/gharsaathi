@@ -38,6 +38,7 @@ type ProductComparisonProps = {
 };
 
 type ProductGroup = { key: string; product: Product; offers: Product[] };
+const MAX_COMPARISON_GROUPS = 6;
 
 function comparisonKey(product: Product) {
   const normalizedName = product.name.normalize("NFKD").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -53,7 +54,7 @@ export function groupProductsForComparison(products: Product[]): ProductGroup[] 
     if (existing) existing.offers.push(product);
     else groups.set(key, { key, product, offers: [product] });
   }
-  return Array.from(groups.values());
+  return Array.from(groups.values()).slice(0, MAX_COMPARISON_GROUPS);
 }
 
 function providerName(product: Product, commerceMode: "demo" | "live") {

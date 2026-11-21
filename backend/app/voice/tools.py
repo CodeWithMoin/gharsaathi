@@ -311,7 +311,7 @@ class MultiProviderShoppingToolExecutor:
                     "provider": target.provider,
                     "provider_label": target.store,
                 }
-                for product in products
+                for product in products[:per_store_limit]
             )
 
         return ToolOutcome(

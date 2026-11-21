@@ -49,6 +49,7 @@ class ConversationStateUpsert(BaseModel):
     products: list[ProductSnapshot] = Field(default_factory=list, max_length=100)
     searched: bool = False
     messages: list[ChatMessageSnapshot] = Field(default_factory=list, max_length=200)
+    results_after_message_id: str | None = Field(default=None, max_length=128)
 
     @field_validator("submitted_query")
     @classmethod

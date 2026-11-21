@@ -41,6 +41,7 @@ def state(query: str, *, messages: list[dict[str, str]] | None = None) -> dict[s
         "submitted_query": query,
         "searched": True,
         "messages": messages or [],
+        "results_after_message_id": messages[-1]["id"] if messages else None,
         "products": [
             {
                 "provider": "swiggy_instamart",
@@ -113,6 +114,7 @@ async def test_voice_turns_are_persisted_and_restored_in_order(
     )
     assert restored.status_code == 200
     assert restored.json()["messages"] == voice_messages
+    assert restored.json()["results_after_message_id"] == "voice-assistant-1"
 
 
 @pytest.mark.asyncio

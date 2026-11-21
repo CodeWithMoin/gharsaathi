@@ -3,6 +3,7 @@ import re
 import time
 
 from app.commerce.query_guard import non_search_reason
+from app.commerce.relevance import refine_search_result
 from app.commerce.zepto.client import ZeptoMcpClient
 from app.commerce.zepto.adapter import parse_addresses, parse_products
 from app.commerce.zepto.cart import ZeptoCart, parse_view_cart
@@ -126,7 +127,7 @@ class ZeptoService:
                     "search_products",
                     {"query": queries[0], "pageNumber": page_number},
                 )
-            result = parse_products(raw)
+            result = refine_search_result(normalized, parse_products(raw))
             self._search_cache[cache_key] = (time.monotonic(), result.model_copy(deep=True))
             return result
 

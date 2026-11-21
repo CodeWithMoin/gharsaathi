@@ -18,7 +18,7 @@ const LEGACY_CHAT_STORAGE_KEY = "gharsaathi:conversation:v1";
 type Address = { id: string; address_line: string; category?: string; tag?: string };
 type CommerceMode = "demo" | "live";
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string };
-type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; updated_at: string };
+type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; updated_at: string };
 type LegacyConversation = { submittedQuery?: string; products?: Product[]; searched?: boolean };
 let swiggyConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
 let zeptoConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
@@ -63,6 +63,7 @@ export default function Home() {
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [resultsAfterMessageId, setResultsAfterMessageId] = useState<string | null>(null);
   const [loading, setLoading] = useState<"connection" | "addresses" | "search" | "disconnect" | null>("connection");
   const [searched, setSearched] = useState(false);
   const [chatHydrated, setChatHydrated] = useState(false);
@@ -73,6 +74,7 @@ export default function Home() {
   const lastSearchRef = useRef<{ key: string; at: number } | null>(null);
   const conversationSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const conversationSaveTimerRef = useRef<number | null>(null);
+  const chatMessagesRef = useRef<ChatMessage[]>([]);
   const selectedAddress = useMemo(() => addresses.find((address) => address.id === addressId), [addresses, addressId]);
   const closeVoice = useCallback(() => setVoiceOpen(false), []);
   const handleBasketTouched = useCallback(() => setBasketOpen(true), []);
@@ -80,16 +82,20 @@ export default function Home() {
     setSubmittedQuery(searchQuery);
     setProducts(foundProducts);
     setSearched(true);
+    setResultsAfterMessageId(chatMessagesRef.current.at(-1)?.id ?? null);
     setMessage(`${foundProducts.length} ${commerceMode === "demo" ? "demo" : "live"} options found.`);
   }, [commerceMode]);
   const handleVoiceTranscript = useCallback((turn: VoiceTranscriptTurn) => {
     setChatMessages((current) => {
       const index = current.findIndex((item) => item.id === turn.id);
       if (index === -1) {
-        return [...current, { ...turn, modality: "voice", created_at: new Date().toISOString() }];
+        const next = [...current, { ...turn, modality: "voice" as const, created_at: new Date().toISOString() }];
+        chatMessagesRef.current = next;
+        return next;
       }
       const next = [...current];
       next[index] = { ...next[index], role: turn.role, content: turn.content };
+      chatMessagesRef.current = next;
       return next;
     });
   }, []);
@@ -226,10 +232,13 @@ export default function Home() {
           const repairedMessages = localReply && restoredMessages.at(-1)?.content !== localReply
             ? [...restoredMessages, { id: `local-reply-${Date.now().toString(36)}`, role: "assistant" as const, content: localReply, modality: "text" as const, created_at: new Date().toISOString() }]
             : restoredMessages;
+          const fallbackResultAnchor = [...repairedMessages].reverse().find((item) => item.role === "user")?.id ?? null;
           setSubmittedQuery(localReply ? "" : conversation.submitted_query);
           setProducts(localReply ? [] : conversation.products);
           setSearched(localReply ? false : conversation.searched);
           setChatMessages(repairedMessages);
+          chatMessagesRef.current = repairedMessages;
+          setResultsAfterMessageId(localReply ? null : conversation.results_after_message_id ?? fallbackResultAnchor);
           window.localStorage.removeItem(LEGACY_CHAT_STORAGE_KEY);
           return;
         }
@@ -273,7 +282,7 @@ export default function Home() {
     if (!chatHydrated || (!submittedQuery && !chatMessages.length)) return;
     const timer = window.setTimeout(() => {
       conversationSaveTimerRef.current = null;
-      const snapshot = { submitted_query: submittedQuery, products, searched, messages: chatMessages };
+      const snapshot = { submitted_query: submittedQuery, products, searched, messages: chatMessages, results_after_message_id: resultsAfterMessageId };
       conversationSaveQueueRef.current = conversationSaveQueueRef.current
         .catch(() => undefined)
         .then(async () => {
@@ -292,7 +301,7 @@ export default function Home() {
       window.clearTimeout(timer);
       if (conversationSaveTimerRef.current === timer) conversationSaveTimerRef.current = null;
     };
-  }, [chatHydrated, chatMessages, products, searched, submittedQuery]);
+  }, [chatHydrated, chatMessages, products, resultsAfterMessageId, searched, submittedQuery]);
 
   useEffect(() => {
     if (!chatHydrated || (!submittedQuery && !chatMessages.length && !basketOpen && !voiceOpen && !supportOpen && !trackingOpen)) return;
@@ -330,6 +339,8 @@ export default function Home() {
     setProducts([]);
     setSearched(false);
     setChatMessages([]);
+    chatMessagesRef.current = [];
+    setResultsAfterMessageId(null);
     setQuery("");
     try {
       await conversationSaveQueueRef.current;
@@ -376,11 +387,15 @@ export default function Home() {
     const localReply = conversationReply(clean, { swiggyConnected: connected === true, zeptoConnected: zeptoConnected === true });
     if (localReply) {
       const now = new Date().toISOString();
-      setChatMessages((current) => [
-        ...current,
+      setChatMessages((current) => {
+        const next = [
+          ...current,
         { id: `text-${Date.now().toString(36)}-user`, role: "user", content: clean, modality: "text", created_at: now },
         { id: `text-${Date.now().toString(36)}-assistant`, role: "assistant", content: localReply, modality: "text", created_at: now },
-      ]);
+        ] as ChatMessage[];
+        chatMessagesRef.current = next;
+        return next;
+      });
       setQuery("");
       setVoiceOpen(false);
       setMessage("Ready when you are.");
@@ -395,13 +410,19 @@ export default function Home() {
     lastSearchRef.current = { key: searchKey, at: now };
 
     setSubmittedQuery(clean);
-    setChatMessages((current) => [...current, {
-      id: `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      role: "user",
-      content: clean,
-      modality: "text",
-      created_at: new Date().toISOString(),
-    }]);
+    const userMessageId = `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    setChatMessages((current) => {
+      const next = [...current, {
+        id: userMessageId,
+        role: "user" as const,
+        content: clean,
+        modality: "text" as const,
+        created_at: new Date().toISOString(),
+      }];
+      chatMessagesRef.current = next;
+      return next;
+    });
+    setResultsAfterMessageId(userMessageId);
     setQuery("");
     setVoiceOpen(false);
     setProducts([]);
@@ -523,6 +544,15 @@ export default function Home() {
   const connectionLabel = commerceMode === "demo" ? "Safe demo · no live calls" : connected && zeptoConnected ? "Swiggy + Zepto linked" : connected && selectedAddress ? selectedAddress.tag || selectedAddress.category || "Swiggy ready" : zeptoConnected ? "Zepto linked" : connected ? "Choose address" : "Connect stores";
   const basketCount = basket?.lines.reduce((total, line) => total + line.quantity, 0) ?? 0;
   const hasChat = Boolean(submittedQuery || chatMessages.length);
+  const resultAnchorExists = resultsAfterMessageId !== null && chatMessages.some((item) => item.id === resultsAfterMessageId);
+  const searchOutcome = loading === "search" ? (
+    <motion.div key="searching-response" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4"><div className="flex items-center gap-1.5" aria-label="GharSaathi is searching">{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">{commerceMode === "demo" ? "Static demo catalogue mein dekh rahi hoon" : zeptoSearchReady ? "Swiggy aur Zepto par dekh rahi hoon" : "Swiggy Instamart par dekh rahi hoon"}</span></div></div></motion.div>
+  ) : searched && !products.length ? (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 max-w-md rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4"><div className="flex gap-3"><Basket size={20} className="mt-0.5 shrink-0 text-[#c6531d]" /><p className="text-sm leading-6">Is address par kuch nahi mila. Product ya brand ko thoda broadly bolkar try karein.</p></div></div></motion.div>
+  ) : products.length ? (() => {
+    const productCount = groupProductsForComparison(products).length;
+    return <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><div className="mb-2 w-fit max-w-full rounded-[18px] border border-[#ebddd2] bg-[#fffdf9] px-4 py-3"><p className="text-[13px] leading-5"><strong>{productCount === 1 ? "1 relevant option mila." : `${productCount} relevant options mile.`}</strong> {productCount > 1 ? (commerceMode === "demo" ? "Add karte hi agla item khulega." : `${zeptoSearchReady ? "Swiggy aur Zepto" : "Swiggy Instamart"} ke options compare karein.`) : "Best matching option neeche hai."}</p></div><ProductComparison products={products} commerceMode={commerceMode} addingSku={addingSku} onAdd={addProduct} /><p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p></motion.div>;
+  })() : null;
 
   return <main className="grain min-h-[100dvh] bg-[#f8f2ea] text-[#35241c]">
     <header className="fixed inset-x-0 top-0 z-30 border-b border-[#e9dbcf]/80 bg-[#fffdf9]/90 backdrop-blur-xl">
@@ -548,24 +578,22 @@ export default function Home() {
         </motion.div>
 
         <AnimatePresence initial={false}>
-          {chatMessages.map((chatMessage) => chatMessage.role === "user" ? (
-            <motion.div key={chatMessage.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 flex justify-end pl-8 sm:pl-12">
-              <div className="max-w-full whitespace-pre-wrap rounded-[22px_8px_22px_22px] bg-[#3b2a22] px-5 py-3.5 text-[15px] leading-6 text-[#fffaf5] shadow-[0_18px_36px_-24px_rgba(53,36,28,.8)]">{chatMessage.content}</div>
-            </motion.div>
-          ) : (
-            <motion.div key={chatMessage.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
-              <div className="max-w-[620px] whitespace-pre-wrap rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4 text-[15px] leading-7 shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] sm:text-base">{chatMessage.content}</div>
-            </motion.div>
+          {chatMessages.map((chatMessage) => (
+            <div key={chatMessage.id} className="contents">
+              {chatMessage.role === "user" ? (
+                <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 flex justify-end pl-8 sm:pl-12">
+                  <div className="max-w-full whitespace-pre-wrap rounded-[22px_8px_22px_22px] bg-[#3b2a22] px-5 py-3.5 text-[15px] leading-6 text-[#fffaf5] shadow-[0_18px_36px_-24px_rgba(53,36,28,.8)]">{chatMessage.content}</div>
+                </motion.div>
+              ) : (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
+                  <div className="max-w-[620px] whitespace-pre-wrap rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4 text-[15px] leading-7 shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] sm:text-base">{chatMessage.content}</div>
+                </motion.div>
+              )}
+              {chatMessage.id === resultsAfterMessageId && searchOutcome}
+            </div>
           ))}
-          {loading === "search" && <motion.div key="searching-response" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4"><div className="flex items-center gap-1.5" aria-label="GharSaathi is searching">{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">{commerceMode === "demo" ? "Static demo catalogue mein dekh rahi hoon" : zeptoSearchReady ? "Swiggy aur Zepto par dekh rahi hoon" : "Swiggy Instamart par dekh rahi hoon"}</span></div></div></motion.div>}
+          {!resultAnchorExists && searchOutcome}
         </AnimatePresence>
-
-        {searched && !products.length && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 max-w-md rounded-[8px_22px_22px_22px] border border-[#ebddd2] bg-[#fffdf9] px-5 py-4"><div className="flex gap-3"><Basket size={20} className="mt-0.5 shrink-0 text-[#c6531d]" /><p className="text-sm leading-6">Is address par kuch nahi mila. Product ya brand ko thoda broadly bolkar try karein.</p></div></div></motion.div>}
-
-        {!!products.length && (() => {
-          const productCount = groupProductsForComparison(products).length;
-          return <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><div className="mb-2 w-fit max-w-full rounded-[18px] border border-[#ebddd2] bg-[#fffdf9] px-4 py-3"><p className="text-[13px] leading-5"><strong>{productCount === 1 ? "1 option mila." : `${productCount} items mile.`}</strong> {productCount > 1 ? (commerceMode === "demo" ? "Add karte hi agla item khulega." : `${zeptoSearchReady ? "Swiggy aur Zepto" : "Swiggy Instamart"} ke live options compare karein.`) : "Dono stores ka price neeche compare karein."}</p></div><ProductComparison products={products} commerceMode={commerceMode} addingSku={addingSku} onAdd={addProduct} /><p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p></motion.div>;
-        })()}
 
         <AnimatePresence>{basketOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><BasketPanel provider={basketProvider} addressId={basketProvider === "zepto" ? zeptoAddressId : addressId} commerceMode={commerceMode} onBasketChange={setBasket} /><button type="button" onClick={() => setBasketOpen(false)} className="mx-auto mt-3 block text-xs font-semibold text-[#806f65] transition hover:text-[#3b2a22]">Hide basket</button></motion.div>}</AnimatePresence>
         <AnimatePresence>{supportOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><SupportPanel onClose={() => setSupportOpen(false)} onTrackOrder={() => { setSupportOpen(false); setTrackingOpen(true); }} /></motion.div>}</AnimatePresence>

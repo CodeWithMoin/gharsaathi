@@ -2,6 +2,7 @@ import asyncio
 import time
 
 from app.commerce.query_guard import non_search_reason
+from app.commerce.relevance import refine_search_result
 from app.commerce.swiggy.adapter import SwiggyInstamartAdapter
 from app.commerce.swiggy.client import SwiggyMcpClient
 from app.commerce.swiggy.models import (
@@ -65,7 +66,10 @@ class SwiggyService:
             cached = self._search_cache.get(cache_key)
             if cached is not None and time.monotonic() - cached[0] < 60:
                 return cached[1].model_copy(deep=True)
-            result = await self.adapter.search_products(normalized, address_id, offset)
+            result = refine_search_result(
+                normalized,
+                await self.adapter.search_products(normalized, address_id, offset),
+            )
             self._search_cache[cache_key] = (
                 time.monotonic(),
                 result.model_copy(deep=True),
