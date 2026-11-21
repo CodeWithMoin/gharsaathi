@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Basket, ChatCircleDots, Check, MapPin, Microphone, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, X } from "@phosphor-icons/react";
+import { ArrowRight, Basket, ChatCircleDots, Check, Microphone, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
 import { addBasketLine, BasketPanel, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
@@ -555,6 +555,7 @@ export default function Home() {
   }
 
   const connectionLabel = commerceMode === "demo" ? "Safe demo · no live calls" : connected && zeptoConnected ? "Swiggy + Zepto linked" : connected && selectedAddress ? selectedAddress.tag || selectedAddress.category || "Swiggy ready" : zeptoConnected ? "Zepto linked" : connected ? "Choose address" : "Connect stores";
+  const readyStoreCount = Number(connected === true && Boolean(selectedAddress)) + Number(zeptoSearchReady);
   const basketCount = basket?.lines.reduce((total, line) => total + line.quantity, 0) ?? 0;
   const hasChat = Boolean(submittedQuery || chatMessages.length);
   const resultAnchorExists = resultsAfterMessageId !== null && chatMessages.some((item) => item.id === resultsAfterMessageId);
@@ -568,19 +569,23 @@ export default function Home() {
   })() : null;
 
   return <main className="grain min-h-[100dvh] bg-[#f8f2ea] text-[#35241c]">
-    <header className="fixed inset-x-0 top-0 z-30 border-b border-[#e9dbcf]/80 bg-[#fffdf9]/90 backdrop-blur-xl">
-      <div className="mx-auto flex h-[72px] max-w-4xl items-center px-4 sm:px-6">
-        <Brand />
-        <div className="ml-3 hidden items-center gap-2 sm:flex"><span className={`size-1.5 rounded-full ${connected && selectedAddress ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} /><span className="text-[11px] text-[#806f65]">Your shopping chat</span></div>
-        {hasChat && <button onClick={() => void startNewChat()} disabled={loading === "search"} aria-label="Start a new chat" className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#806f65] transition hover:bg-[#f4e7dc] hover:text-[#35241c] active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-40"><Plus size={18} /></button>}
-        {hasChat && basketCount === 0 && <span className="ml-1 size-9 shrink-0" aria-hidden="true" />}
-        {basketCount > 0 && <button onClick={() => setBasketOpen((open) => !open)} aria-label={`Open basket with ${basketCount} items`} className={`${hasChat ? "ml-1" : "ml-auto"} relative grid size-9 shrink-0 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]`}><ShoppingCartSimple size={20} /><span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
-        <button type="button" onClick={() => setSupportOpen((open) => !open)} aria-label="Get help with an order" className={`${hasChat || basketCount > 0 ? "ml-1" : "ml-auto"} grid size-9 shrink-0 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]`}><ChatCircleDots size={20} /></button>
-        <button onClick={() => setSetupOpen(true)} className="ml-1 flex max-w-[46vw] items-center gap-2 rounded-full border border-[#e4d3c7] bg-white px-3 py-2 text-xs font-semibold text-[#5c463b] shadow-[0_8px_24px_-18px_rgba(73,42,28,.55)] transition hover:border-[#d8bbaa] active:scale-[.98]"><MapPin size={15} className="shrink-0 text-[#c6531d]" /><span className="truncate">{connectionLabel}</span></button>
+    <header className="fixed inset-x-0 top-0 z-30 border-b border-[#e9dbcf]/70 bg-[#fffdf9]/92 shadow-[0_10px_35px_-30px_rgba(73,42,28,.7)] backdrop-blur-xl">
+      <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
+        <div className="flex min-w-0 items-center">
+          <Brand />
+          <span className={`ml-2 size-2 shrink-0 rounded-full ring-4 ring-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} role="status" aria-label={readyStoreCount > 0 ? `${readyStoreCount} store${readyStoreCount === 1 ? "" : "s"} ready` : "No store ready"} title={connectionLabel} />
+          <span className="ml-2 hidden truncate text-[11px] text-[#806f65] sm:block">Your shopping chat</span>
+        </div>
+        <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
+          {hasChat && <button onClick={() => void startNewChat()} disabled={loading === "search"} aria-label="Start a new chat" className="grid size-10 place-items-center rounded-full text-[#806f65] transition hover:bg-[#f4e7dc] hover:text-[#35241c] active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-40"><Plus size={19} /></button>}
+          {basketCount > 0 && <button onClick={() => setBasketOpen((open) => !open)} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
+          <button type="button" onClick={() => setSupportOpen((open) => !open)} aria-label="Get help with an order" className={`grid size-10 place-items-center rounded-full transition active:scale-[.96] ${supportOpen ? "bg-[#f1dfd2] text-[#9f451d]" : "text-[#70584b] hover:bg-[#f4e7dc]"}`}><ChatCircleDots size={21} weight={supportOpen ? "fill" : "regular"} /></button>
+          <button onClick={() => setSetupOpen(true)} aria-label={`Manage stores. ${connectionLabel}`} className={`relative ml-0.5 flex h-10 items-center justify-center gap-2 rounded-full border px-2.5 text-xs font-semibold transition active:scale-[.98] md:max-w-[190px] md:px-3 ${setupOpen ? "border-[#c98d6c] bg-[#f4e2d6] text-[#8f421b]" : "border-[#e4d3c7] bg-white text-[#5c463b] hover:border-[#d8bbaa]"}`}><Storefront size={18} className="shrink-0 text-[#c6531d]" /><span className="hidden truncate md:block">{connectionLabel}</span><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} aria-hidden="true" /></button>
+        </nav>
       </div>
     </header>
 
-    <section className={`mx-auto flex min-h-[100dvh] max-w-4xl flex-col overflow-x-clip px-4 pt-[104px] sm:px-6 ${voiceOpen ? "pb-64 sm:pb-60" : "pb-40 sm:pb-44"}`}>
+    <section className={`mx-auto flex min-h-[100dvh] max-w-4xl flex-col overflow-x-clip px-4 pt-[96px] sm:px-6 ${voiceOpen ? "pb-64 sm:pb-60" : "pb-40 sm:pb-44"}`}>
       <div className="flex-1">
         <div className="mb-8 flex items-center gap-3"><span className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#9b8172]">Today</span><span className="h-px flex-1 bg-[#e8dcd2]" /></div>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mr-8 sm:mr-12">
