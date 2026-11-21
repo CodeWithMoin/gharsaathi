@@ -670,7 +670,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
               </button>)}
             </div>
           </div>
-          <div className="bg-[#f8f2ea] px-3 pb-[max(3rem,env(safe-area-inset-bottom))] pt-4">
+          <div className="bg-[#f8f2ea] px-3 pb-[max(3.5625rem,env(safe-area-inset-bottom))] pt-4">
             <AnimatePresence initial={false}>
               {accountMenuOpen && <motion.div id="account-menu" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: .16 }} className="mb-2 rounded-xl border border-[#e3d5cb] bg-white p-2 shadow-[0_14px_34px_-28px_rgba(61,38,27,.55)]">
                 <div className="px-2 pb-2 pt-1"><p className="truncate text-[12px] font-semibold text-[#3d2b23]">{userName}</p><p className="mt-0.5 text-[10px] text-[#8b7569]">GharSaathi account</p></div>
