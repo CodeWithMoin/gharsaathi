@@ -34,7 +34,7 @@ const featureSlides = [
   {
     eyebrow: "YOUR HOUSEHOLD",
     title: "Aapki pasand, yaad.",
-    description: "Brand, pack size aur quantity sirf aapki permission se. Agli baar dobara batana nahi.",
+    description: "Aapki permission se brand, pack size aur quantity yaad rahenge.",
     icon: <Brain size={38} weight="duotone" />,
   },
   {
