@@ -23,6 +23,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
     unclassified: set[str] = set()
     for item in items:
+        if any(item.iter_markers(name="live")) or any(item.iter_markers(name="live_cart")):
+            continue
         layer = _layer_for(Path(item.fspath))
         if layer is None:
             unclassified.add(Path(item.fspath).name)
@@ -35,6 +37,15 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             f"{sorted(unclassified)}. Put new tests in tests/unit, tests/module or "
             "tests/integration, or add the file to LEGACY_LAYERS in tests/layers.py."
         )
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--run-live",
+        action="store_true",
+        default=False,
+        help="Allow opt-in live provider smoke tests (also needs GHARSAATHI_LIVE_SMOKE=1).",
+    )
 
 
 @pytest.fixture(autouse=True)
