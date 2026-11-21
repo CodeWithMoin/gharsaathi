@@ -4,6 +4,7 @@
 !frontend/.env.local.example
 frontend/.env.local
 backend/.data/
+.run/
 backend/.pytest_cache/
 backend/.venv/
 frontend/.next/

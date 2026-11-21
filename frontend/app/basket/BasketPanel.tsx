@@ -1,0 +1,379 @@
+"use client";
+
+import {
+  Basket,
+  CheckCircle,
+  CircleNotch,
+  Minus,
+  Plus,
+  Receipt,
+  ShieldCheck,
+  Trash,
+  WarningCircle,
+  X,
+} from "@phosphor-icons/react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
+const MAX_QUANTITY = 50;
+
+export const BASKET_CHANGED_EVENT = "gharsaathi:basket-changed";
+
+export type ProviderName = "swiggy_instamart" | "zepto";
+export type Money = { paise: number; display: string };
+
+export type BasketLine = {
+  ref: { provider: ProviderName; product_id: string; variant_id: string; sku_id?: string | null };
+  name: string;
+  brand?: string | null;
+  pack_size?: string | null;
+  quantity: number;
+  available: boolean;
+  unit_price: Money;
+  mrp?: Money | null;
+  line_total: Money;
+  savings: Money;
+};
+
+export type ShoppingBasket = {
+  id: string;
+  provider: ProviderName;
+  address_id?: string | null;
+  status: "draft" | "awaiting_approval" | "approved" | "ordered" | "abandoned";
+  revision: number;
+  lines: BasketLine[];
+  item_total: Money;
+  savings_vs_mrp: Money;
+};
+
+export type Approval = {
+  id: string;
+  status: "pending" | "approved" | "rejected" | "expired" | "superseded" | "consumed";
+  fingerprint: string;
+  payable: Money;
+  payment_method?: string | null;
+  expires_at: string;
+};
+
+export type ApprovalRequest = {
+  approval: Approval;
+  quote: {
+    item_total: Money;
+    charges: { label: string; amount: Money }[];
+    payable: Money;
+    eta_text?: string | null;
+  };
+  basket: ShoppingBasket;
+  item_total_matches: boolean;
+};
+
+export type AddBasketLine = {
+  ref: BasketLine["ref"];
+  name: string;
+  brand?: string | null;
+  pack_size?: string | null;
+  unit_price_paise: number;
+  mrp_paise?: number | null;
+  quantity?: number;
+  available?: boolean;
+};
+
+type BasketPanelProps = {
+  provider?: ProviderName;
+  addressId?: string;
+  commerceMode?: "demo" | "live";
+  /** A quote produced by voice can be passed in here. It still needs a deliberate tap. */
+  incomingRequest?: ApprovalRequest | null;
+  onBasketChange?: (basket: ShoppingBasket) => void;
+  onApprovalChange?: (approval: Approval | null) => void;
+  className?: string;
+};
+
+function providerQuery(provider: ProviderName) {
+  return `?provider=${encodeURIComponent(provider)}`;
+}
+
+async function basketRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  headers.set("X-User-Id", DEV_USER_ID);
+  if (init?.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+
+  const response = await fetch(`${API}/api/basket${path}`, { cache: "no-store", ...init, headers });
+  const payload = response.status === 204 ? null : await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload && typeof payload.detail === "string" ? payload.detail : "Could not update the basket.");
+  }
+  return payload as T;
+}
+
+/**
+ * Lets a product card add an item without knowing about this component's UI.
+ * The panel listens for BASKET_CHANGED_EVENT and refreshes itself afterwards.
+ */
+export async function addBasketLine(provider: ProviderName, line: AddBasketLine): Promise<ShoppingBasket> {
+  const basket = await basketRequest<ShoppingBasket>(`/lines${providerQuery(provider)}`, {
+    method: "POST",
+    body: JSON.stringify(line),
+  });
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
+  return basket;
+}
+
+function expiryText(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "for a limited time";
+  return `until ${date.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}`;
+}
+
+export function BasketPanel({
+  provider = "swiggy_instamart",
+  addressId = "",
+  commerceMode = "live",
+  incomingRequest = null,
+  onBasketChange,
+  onApprovalChange,
+  className = "",
+}: BasketPanelProps) {
+  const [basket, setBasket] = useState<ShoppingBasket | null>(null);
+  const [request, setRequest] = useState<ApprovalRequest | null>(null);
+  const [approval, setApproval] = useState<Approval | null>(null);
+  const [action, setAction] = useState<string | null>("load");
+  const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
+  const query = useMemo(() => providerQuery(provider), [provider]);
+
+  const applyBasket = useCallback((next: ShoppingBasket) => {
+    setBasket(next);
+    onBasketChange?.(next);
+  }, [onBasketChange]);
+
+  const clearQuote = useCallback(() => {
+    setRequest(null);
+    setApproval(null);
+    onApprovalChange?.(null);
+  }, [onApprovalChange]);
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setAction("load");
+    try {
+      const next = await basketRequest<ShoppingBasket>(query);
+      applyBasket(next);
+      if (!silent) setNotice(null);
+    } catch (cause) {
+      setNotice({ text: cause instanceof Error ? cause.message : "Could not load the basket.", error: true });
+    } finally {
+      if (!silent) setAction(null);
+    }
+  }, [applyBasket, query]);
+
+  useEffect(() => {
+    void load();
+    const refresh = () => void load(true);
+    window.addEventListener(BASKET_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(BASKET_CHANGED_EVENT, refresh);
+  }, [load]);
+
+  useEffect(() => {
+    if (!incomingRequest) return;
+    applyBasket(incomingRequest.basket);
+    setRequest(incomingRequest);
+    setApproval(incomingRequest.approval);
+    onApprovalChange?.(incomingRequest.approval);
+    setNotice(null);
+  }, [applyBasket, incomingRequest, onApprovalChange]);
+
+  useEffect(() => {
+    if (!basket || !addressId || basket.address_id === addressId) return;
+    let active = true;
+    setAction("address");
+    void basketRequest<ShoppingBasket>(`/address${query}`, {
+      method: "POST",
+      body: JSON.stringify({ address_id: addressId }),
+    }).then((next) => {
+      if (!active) return;
+      applyBasket(next);
+      clearQuote();
+      setNotice(null);
+    }).catch((cause: unknown) => {
+      if (!active) return;
+      setNotice({ text: cause instanceof Error ? cause.message : "Could not set the delivery address.", error: true });
+    }).finally(() => {
+      if (active) setAction(null);
+    });
+    return () => { active = false; };
+  }, [addressId, applyBasket, basket, clearQuote, query]);
+
+  const changeQuantity = useCallback(async (line: BasketLine, quantity: number) => {
+    setAction(`line-${line.ref.variant_id}`);
+    try {
+      const path = `/lines/${encodeURIComponent(line.ref.variant_id)}${query}`;
+      const next = quantity <= 0
+        ? await basketRequest<ShoppingBasket>(path, { method: "DELETE" })
+        : await basketRequest<ShoppingBasket>(path, { method: "PATCH", body: JSON.stringify({ quantity }) });
+      applyBasket(next);
+      clearQuote();
+      setNotice(quantity <= 0 ? { text: `${line.name} removed from your basket.`, error: false } : null);
+    } catch (cause) {
+      setNotice({ text: cause instanceof Error ? cause.message : "Could not update the quantity.", error: true });
+    } finally {
+      setAction(null);
+    }
+  }, [applyBasket, clearQuote, query]);
+
+  const requestQuote = useCallback(async () => {
+    setAction("quote");
+    setNotice(null);
+    try {
+      const next = await basketRequest<ApprovalRequest>(`/approval${query}`, { method: "POST" });
+      applyBasket(next.basket);
+      setRequest(next);
+      setApproval(next.approval);
+      onApprovalChange?.(next.approval);
+    } catch (cause) {
+      setNotice({ text: cause instanceof Error ? cause.message : "Could not get the final bill.", error: true });
+    } finally {
+      setAction(null);
+    }
+  }, [applyBasket, onApprovalChange, query]);
+
+  const approve = useCallback(async () => {
+    if (!approval) return;
+    setAction("approve");
+    try {
+      const next = await basketRequest<Approval>(`/approval/${encodeURIComponent(approval.id)}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ fingerprint: approval.fingerprint }),
+      });
+      setApproval(next);
+      onApprovalChange?.(next);
+      setNotice({ text: "Approved. Your basket and final bill are locked for the next step.", error: false });
+    } catch (cause) {
+      setNotice({ text: cause instanceof Error ? cause.message : "Could not approve this bill.", error: true });
+    } finally {
+      setAction(null);
+    }
+  }, [approval, onApprovalChange]);
+
+  const reject = useCallback(async () => {
+    if (!approval) return;
+    setAction("reject");
+    try {
+      await basketRequest<Approval>(`/approval/${encodeURIComponent(approval.id)}/reject`, { method: "POST" });
+      clearQuote();
+      const next = await basketRequest<ShoppingBasket>(query);
+      applyBasket(next);
+      setNotice({ text: "Okay—nothing was ordered.", error: false });
+    } catch (cause) {
+      setNotice({ text: cause instanceof Error ? cause.message : "Could not reject this bill.", error: true });
+    } finally {
+      setAction(null);
+    }
+  }, [approval, applyBasket, clearQuote, query]);
+
+  const lines = basket?.lines ?? [];
+  const lineCount = lines.reduce((total, line) => total + line.quantity, 0);
+  const locked = action !== null;
+  const isApproved = approval?.status === "approved";
+  const providerLabel = provider === "swiggy_instamart" ? "Swiggy Instamart" : "Zepto";
+
+  return (
+    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`overflow-hidden rounded-[26px] border border-[#e6d7cb] bg-[#fffdf9] shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] ${className}`} aria-label="Your basket" aria-busy={locked}>
+      <header className="flex items-center gap-3 border-b border-[#efe4dc] px-5 py-4 sm:px-6">
+        <span className="grid size-10 place-items-center rounded-[14px] bg-[#f6e9df] text-[#c6531d]"><Basket size={20} weight="fill" /></span>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#b07659]">Your basket</p>
+          <h2 className="font-display text-lg font-semibold tracking-[-.025em] text-[#35241c]">{lineCount ? `${lineCount} ${lineCount === 1 ? "item" : "items"} ready to review` : "Add the things you need"}</h2>
+        </div>
+        {action === "load" && <CircleNotch size={18} className="ml-auto animate-spin text-[#b17d60]" aria-label="Loading basket" />}
+      </header>
+
+      {action === "load" && !basket ? (
+        <div className="space-y-3 px-5 py-5 sm:px-6">
+          <div className="h-16 animate-pulse rounded-2xl bg-[#f4ebe5]" />
+          <div className="h-16 animate-pulse rounded-2xl bg-[#f4ebe5]" />
+        </div>
+      ) : lines.length === 0 ? (
+        <div className="px-5 py-8 text-center sm:px-6">
+          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-[#f8eee7] text-[#bd7851]"><Receipt size={24} /></span>
+          <p className="mt-3 text-sm font-semibold text-[#453128]">Basket is empty</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-[#806f65]">Add a product from the options above. You&apos;ll see the exact bill before you approve anything.</p>
+        </div>
+      ) : (
+        <div className="px-5 py-2 sm:px-6">
+          <ul className="divide-y divide-[#f0e5dd]">
+            {lines.map((line) => {
+              const updating = action === `line-${line.ref.variant_id}`;
+              return (
+                <li key={line.ref.variant_id} className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 py-4 ${line.available ? "" : "opacity-60"}`}>
+                  <div className="min-w-0">
+                    {line.brand && <p className="truncate text-[9px] font-semibold uppercase tracking-[.12em] text-[#bd7047]">{line.brand}</p>}
+                    <h3 className="mt-0.5 truncate text-sm font-semibold text-[#3b2a22]">{line.name}</h3>
+                    <p className="mt-0.5 truncate text-xs text-[#89766a]">{[line.pack_size, `${line.unit_price.display} each`].filter(Boolean).join(" · ")}</p>
+                    {!line.available && <p className="mt-1 text-[11px] font-medium text-[#a44739]">No longer available</p>}
+                    <div className="mt-3 flex items-center gap-2">
+                      <div className="flex h-8 items-center rounded-full border border-[#e6d7cb] bg-white" role="group" aria-label={`Quantity of ${line.name}`}>
+                        <button type="button" onClick={() => void changeQuantity(line, line.quantity - 1)} disabled={locked} className="grid size-8 place-items-center rounded-full text-[#725a4b] transition hover:bg-[#f6e9df] disabled:opacity-40" aria-label={`Decrease quantity of ${line.name}`}><Minus size={13} weight="bold" /></button>
+                        <span className="min-w-6 text-center text-xs font-semibold tabular-nums" aria-live="polite">{updating ? <CircleNotch size={13} className="mx-auto animate-spin" /> : line.quantity}</span>
+                        <button type="button" onClick={() => void changeQuantity(line, line.quantity + 1)} disabled={locked || line.quantity >= MAX_QUANTITY || !line.available} className="grid size-8 place-items-center rounded-full text-[#725a4b] transition hover:bg-[#f6e9df] disabled:opacity-40" aria-label={`Increase quantity of ${line.name}`}><Plus size={13} weight="bold" /></button>
+                      </div>
+                      <button type="button" onClick={() => void changeQuantity(line, 0)} disabled={locked} className="grid size-8 place-items-center rounded-full text-[#9d7764] transition hover:bg-[#f9e9e3] hover:text-[#a44739] disabled:opacity-40" aria-label={`Remove ${line.name}`}><Trash size={15} /></button>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end text-right">
+                    <strong className="text-sm tabular-nums text-[#3b2a22]">{line.line_total.display}</strong>
+                    {line.savings.paise > 0 && <span className="mt-1 rounded-full bg-[#e8f2e8] px-2 py-0.5 text-[9px] font-semibold text-[#397144]">Save {line.savings.display}</span>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {!request && (
+            <div className="border-t border-[#efe4dc] py-4">
+              <div className="flex items-baseline justify-between gap-3 text-sm"><span className="text-[#806f65]">Items total</span><strong className="tabular-nums text-[#3b2a22]">{basket?.item_total.display}</strong></div>
+              {basket && basket.savings_vs_mrp.paise > 0 && <div className="mt-1 flex items-baseline justify-between gap-3 text-xs"><span className="text-[#806f65]">Savings vs MRP</span><strong className="tabular-nums text-[#397144]">{basket.savings_vs_mrp.display}</strong></div>}
+              {!addressId && <p className="mt-3 rounded-xl bg-[#f8eee7] px-3 py-2.5 text-xs leading-5 text-[#806f65]">Choose a delivery address to request the final bill.</p>}
+              {addressId && <div className="mt-3 flex gap-2 rounded-xl border border-[#f0d8c5] bg-[#fff4e9] px-3 py-2.5 text-[11px] leading-5 text-[#80533c]" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0 text-[#c6531d]" /><p>{commerceMode === "demo" ? <><strong className="font-semibold text-[#6a3d29]">Safe demo:</strong> this calculates a deterministic sample bill locally. It does not contact {providerLabel}, change a provider cart, check out, or place an order.</> : <><strong className="font-semibold text-[#6a3d29]">Before you continue:</strong> this syncs this basket to your current {providerLabel} cart to retrieve live availability, fees, and the exact bill. It may replace items already in that provider cart. It does <strong className="font-semibold">not</strong> check out or place an order.</>}</p></div>}
+              <button type="button" onClick={() => void requestQuote()} disabled={locked || !addressId} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#3b2a22] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_-18px_rgba(53,36,28,.8)] transition hover:bg-[#4a352b] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">
+                {action === "quote" ? <><CircleNotch size={17} className="animate-spin" /> Getting final bill…</> : <><Receipt size={17} /> Get final bill</>}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <AnimatePresence initial={false}>
+        {request && approval && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-[#ead8ca] bg-[#fff8f2]">
+            <div className="p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-[14px] bg-[#f5e2d5] text-[#c6531d]"><ShieldCheck size={21} weight="fill" /></span>
+                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#b07659]">Final bill · approval needed</p><h3 className="mt-0.5 text-base font-semibold text-[#35241c]">Review this exact bill</h3><p className="mt-1 text-xs leading-5 text-[#806f65]">Approval is bound to this exact basket, price, and expiry. Any material change needs a fresh approval.</p></div>
+              </div>
+
+              <ul className="mt-4 space-y-2 border-y border-[#eaded5] py-3 text-xs leading-5">
+                {request.basket.lines.map((line) => <li key={line.ref.variant_id} className="flex justify-between gap-4"><span className="min-w-0 text-[#69564b]"><b className="font-semibold text-[#47332a]">{line.quantity}×</b> {line.name}</span><span className="shrink-0 tabular-nums text-[#47332a]">{line.line_total.display}</span></li>)}
+                <li className="flex justify-between gap-4 pt-2 text-[#806f65]"><span>Store item total</span><span className="tabular-nums">{request.quote.item_total.display}</span></li>
+                {request.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`} className="flex justify-between gap-4 text-[#806f65]"><span>{charge.label}</span><span className="tabular-nums">{charge.amount.display}</span></li>)}
+                <li className="flex justify-between gap-4 pt-2 text-sm font-semibold text-[#35241c]"><span>Final payable</span><strong className="tabular-nums">{request.quote.payable.display}</strong></li>
+              </ul>
+
+              {!request.item_total_matches && <p className="mt-3 flex gap-2 rounded-xl bg-[#fff0df] px-3 py-2.5 text-xs leading-5 text-[#8c5127]"><WarningCircle size={16} className="mt-0.5 shrink-0" />Store item prices changed. The final bill above is the amount you would approve.</p>}
+              <p className="mt-3 text-[11px] leading-5 text-[#806f65]">{request.quote.eta_text ? `Delivery ${request.quote.eta_text} · ` : ""}Valid {expiryText(approval.expires_at)}.</p>
+
+              {isApproved ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-2xl border border-[#cce2d0] bg-[#eff8f0] px-3.5 py-3 text-sm text-[#2d6638]"><CheckCircle size={20} weight="fill" /><span><strong>Bill approved.</strong> No order has been placed.</span></div><div className="flex gap-2 rounded-xl bg-[#fff0df] px-3 py-2.5 text-[11px] leading-5 text-[#8c5127]" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0" /><p>A separate, explicit order confirmation would still be required before anything can be submitted to {providerLabel}. That final action is not enabled here.</p></div></div> : <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => void reject()} disabled={locked} className="rounded-full border border-[#d8c4b7] bg-white px-4 py-3 text-sm font-semibold text-[#684f42] transition hover:bg-[#fbf1eb] active:scale-[.98] disabled:opacity-45">{action === "reject" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : "Reject"}</button><button type="button" onClick={() => void approve()} disabled={locked} className="rounded-full bg-[#c6531d] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.98] disabled:opacity-45">{action === "approve" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : `Approve bill · ${request.quote.payable.display}`}</button></div>}
+              {!isApproved && <p className="mt-3 text-center text-[10px] leading-4 text-[#89766a]">This confirms the shown bill only—not checkout. A separate final order confirmation would still be required.</p>}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence initial={false}>
+        {notice && <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className={`mx-5 mb-5 flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs leading-5 sm:mx-6 sm:mb-6 ${notice.error ? "bg-[#fcedea] text-[#974237]" : "bg-[#edf6ee] text-[#397144]"}`} role="status" aria-live="polite"><span className="mt-0.5">{notice.error ? <WarningCircle size={15} weight="fill" /> : <CheckCircle size={15} weight="fill" />}</span><span>{notice.text}</span><button type="button" onClick={() => setNotice(null)} className="ml-auto -mr-1 shrink-0 rounded-full p-0.5 opacity-70 transition hover:opacity-100" aria-label="Dismiss message"><X size={14} /></button></motion.div>}
+      </AnimatePresence>
+    </motion.section>
+  );
+}
+
+export default BasketPanel;

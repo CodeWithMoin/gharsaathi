@@ -1,0 +1,169 @@
+"use client";
+
+import { ArrowSquareOut, CheckCircle, Copy, EnvelopeSimple, Paperclip, ShieldCheck, Truck, X } from "@phosphor-icons/react";
+import { FormEvent, useState } from "react";
+
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
+
+type Provider = "swiggy" | "zepto";
+type Complaint = {
+  id: string;
+  provider: Provider;
+  status: string;
+  revision: number;
+  prepared_summary: string | null;
+  evidence: Array<{ id: string; file_name: string }>;
+};
+
+type SupportPanelProps = { onClose: () => void; onTrackOrder?: () => void };
+
+const categories = [
+  ["missing_product", "Missing item"],
+  ["damaged_product", "Damaged item"],
+  ["spoiled_product", "Spoiled item"],
+  ["incorrect_product", "Wrong item"],
+  ["incorrect_quantity", "Wrong quantity"],
+  ["delayed_delivery", "Delayed delivery"],
+  ["other", "Other issue"],
+] as const;
+
+const providerHandoff = {
+  swiggy: {
+    href: "https://www.swiggy.com/support",
+    fallback: "Open the Swiggy app, select this order, then tap Help.",
+  },
+  zepto: {
+    href: "https://www.zepto.com/",
+    fallback: "Open the Zepto app, select this order, then tap Get Help.",
+  },
+} as const;
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  headers.set("X-User-Id", DEV_USER_ID);
+  const response = await fetch(`${API}${path}`, { cache: "no-store", ...init, headers });
+  const payload = response.status === 204 ? null : await response.json();
+  if (!response.ok) throw new Error(payload?.detail || "Could not prepare support handoff.");
+  return payload as T;
+}
+
+export function SupportPanel({ onClose, onTrackOrder }: SupportPanelProps) {
+  const [provider, setProvider] = useState<Provider>("swiggy");
+  const [orderId, setOrderId] = useState("");
+  const [product, setProduct] = useState("");
+  const [category, setCategory] = useState("missing_product");
+  const [description, setDescription] = useState("");
+  const [resolution, setResolution] = useState("refund");
+  const [evidence, setEvidence] = useState<File | null>(null);
+  const [complaint, setComplaint] = useState<Complaint | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
+
+  const prepare = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      let next = await request<Complaint>("/api/support/complaints", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          order_id: orderId,
+          affected_product: product,
+          category,
+          description,
+          desired_resolution: resolution,
+        }),
+      });
+      if (evidence) {
+        const body = new FormData();
+        body.set("evidence", evidence);
+        next = await request<Complaint>(`/api/support/complaints/${next.id}/evidence`, {
+          method: "POST",
+          body,
+        });
+      }
+      next = await request<Complaint>(`/api/support/complaints/${next.id}/prepare`, { method: "POST" });
+      setComplaint(next);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not prepare support handoff.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approve = async () => {
+    if (!complaint) return;
+    setBusy(true);
+    setError("");
+    try {
+      setComplaint(await request<Complaint>(`/api/support/complaints/${complaint.id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expected_revision: complaint.revision }),
+      }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Approval could not be recorded.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copySummary = async () => {
+    if (!complaint?.prepared_summary) return;
+    try {
+      await navigator.clipboard.writeText(complaint.prepared_summary);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setError("Could not copy the message. You can still select and copy it from the prepared text.");
+    }
+  };
+
+  const approved = complaint?.status === "approved_pending_submission";
+  const officialHandoff = providerHandoff[provider];
+  const emailHandoff = complaint?.prepared_summary && provider === "swiggy"
+    ? `mailto:support@swiggy.in?subject=${encodeURIComponent(`Order support request · ${orderId}`)}&body=${encodeURIComponent(complaint.prepared_summary)}`
+    : null;
+
+  return (
+    <section className="rounded-[8px_22px_22px_22px] border border-[#e6d7cd] bg-[#fffdf9] shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)]">
+      <header className="flex items-start gap-3 border-b border-[#eee2da] px-4 py-3.5">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[15px] font-semibold text-[#35241c]">Order help</h2>
+          <p className="mt-0.5 text-[11px] leading-4 text-[#806f65]">I’ll prepare everything. You approve before opening provider support.</p>
+        </div>
+        {onTrackOrder && <button type="button" onClick={onTrackOrder} className="flex shrink-0 items-center gap-1 rounded-full border border-[#dfd0c5] bg-white px-2.5 py-1.5 text-[10px] font-semibold text-[#70584b]"><Truck size={13} />Track</button>}
+        <button type="button" onClick={onClose} aria-label="Close order help" className="grid size-8 shrink-0 place-items-center rounded-full text-[#806f65] hover:bg-[#f5ebe4]"><X size={16} /></button>
+      </header>
+
+      {!complaint ? (
+        <form onSubmit={prepare} className="space-y-3 p-4">
+          <div className="grid grid-cols-2 gap-2">
+            {(["swiggy", "zepto"] as const).map((name) => <button key={name} type="button" onClick={() => setProvider(name)} className={`rounded-xl border px-3 py-2 text-xs font-semibold capitalize transition ${provider === name ? "border-[#c6531d] bg-[#fff1e7] text-[#9e421a]" : "border-[#e5d6cb] text-[#70584b]"}`}>{name}</button>)}
+          </div>
+          <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-[#5e493e]">Order ID</span><input value={orderId} onChange={(event) => setOrderId(event.target.value)} required minLength={2} placeholder="From your recent order" className="w-full rounded-xl border border-[#dfd0c5] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#c9825f]" /></label>
+          <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-[#5e493e]">Affected item</span><input value={product} onChange={(event) => setProduct(event.target.value)} required minLength={2} placeholder="e.g. Amul milk 1 L" className="w-full rounded-xl border border-[#dfd0c5] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#c9825f]" /></label>
+          <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-[#5e493e]">What happened?</span><select value={category} onChange={(event) => setCategory(event.target.value)} className="w-full rounded-xl border border-[#dfd0c5] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#c9825f]">{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-[#5e493e]">Describe it</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} required minLength={5} rows={3} placeholder="Tell me what was wrong…" className="w-full resize-none rounded-xl border border-[#dfd0c5] bg-white px-3 py-2.5 text-sm leading-5 outline-none focus:border-[#c9825f]" /></label>
+          <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setResolution("refund")} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${resolution === "refund" ? "border-[#c6531d] bg-[#fff1e7] text-[#9e421a]" : "border-[#e5d6cb] text-[#70584b]"}`}>Refund</button><button type="button" onClick={() => setResolution("replacement")} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${resolution === "replacement" ? "border-[#c6531d] bg-[#fff1e7] text-[#9e421a]" : "border-[#e5d6cb] text-[#70584b]"}`}>Replacement</button></div>
+          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-[#d9c3b5] px-3 py-2.5 text-xs text-[#70584b]"><Paperclip size={16} /><span className="min-w-0 flex-1 truncate">{evidence ? evidence.name : "Add photo evidence (optional)"}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setEvidence(event.target.files?.[0] ?? null)} className="sr-only" /></label>
+          {error && <p role="alert" className="rounded-xl bg-[#fff0ed] px-3 py-2 text-xs leading-5 text-[#9f3f32]">{error}</p>}
+          <button disabled={busy} className="w-full rounded-full bg-[#c6531d] px-4 py-3 text-sm font-semibold text-white transition active:scale-[.98] disabled:opacity-50">{busy ? "Preparing…" : "Prepare support message"}</button>
+        </form>
+      ) : (
+        <div className="p-4">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[#397144]"><CheckCircle size={17} weight="fill" />Message prepared</div>
+          <pre className="mt-3 whitespace-pre-wrap rounded-2xl bg-[#f7efe8] p-3 font-sans text-[11px] leading-5 text-[#59463c]">{complaint.prepared_summary}</pre>
+          {complaint.evidence.length > 0 && <p className="mt-2 text-[10px] text-[#806f65]">Evidence attached: {complaint.evidence.map((item) => item.file_name).join(", ")}</p>}
+          {error && <p role="alert" className="mt-3 rounded-xl bg-[#fff0ed] px-3 py-2 text-xs leading-5 text-[#9f3f32]">{error}</p>}
+          {!approved ? <button type="button" onClick={() => void approve()} disabled={busy} className="mt-4 w-full rounded-full bg-[#c6531d] px-4 py-3 text-sm font-semibold text-white transition active:scale-[.98] disabled:opacity-50">{busy ? "Recording approval…" : "Approve this exact message"}</button> : <div className="mt-4 rounded-2xl border border-[#cfe3d2] bg-[#eef7ef] p-3"><div className="flex gap-2 text-xs font-semibold text-[#32663b]"><ShieldCheck size={17} />Approved—not sent</div><p className="mt-1 text-[10px] leading-4 text-[#52775a]">Order details and the approved message will be copied—paste them into Swiggy’s chat.</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => void copySummary()} className="flex items-center justify-center gap-1.5 rounded-full border border-[#bfd4c2] bg-white px-3 py-2 text-xs font-semibold text-[#32663b]"><Copy size={14} />{copied ? "Details copied" : "Copy details"}</button><a href={officialHandoff.href} target="_blank" rel="noreferrer" onPointerDown={() => void copySummary()} onClick={() => void copySummary()} className="flex items-center justify-center gap-1.5 rounded-full bg-[#397144] px-3 py-2 text-xs font-semibold text-white"><ArrowSquareOut size={14} />Open Swiggy Help</a></div>{emailHandoff && <a href={emailHandoff} onClick={() => void copySummary()} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-[#bfd4c2] bg-white px-3 py-2 text-xs font-semibold text-[#32663b]"><EnvelopeSimple size={14} />Email support@swiggy.in</a>}<p className="mt-2 text-[10px] leading-4 text-[#52775a]">If it stays in the browser: {officialHandoff.fallback}</p></div>}
+          <button type="button" onClick={() => setComplaint(null)} className="mt-3 w-full text-center text-[11px] font-semibold text-[#8d5b40]">Start over</button>
+        </div>
+      )}
+    </section>
+  );
+}

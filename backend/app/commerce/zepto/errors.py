@@ -14,5 +14,9 @@ class ZeptoProviderError(ZeptoError):
     pass
 
 
+class ZeptoRateLimited(ZeptoProviderError):
+    pass
+
+
 class ZeptoSchemaError(ZeptoError):
     pass

@@ -5,7 +5,14 @@ from fastapi import Depends
 
 from app.commerce.swiggy.adapter import SwiggyInstamartAdapter
 from app.commerce.swiggy.client import SwiggyMcpClient
+from app.commerce.demo import (
+    DemoQuoteProvider,
+    DemoSwiggyService,
+    DemoZeptoQuoteProvider,
+    DemoZeptoService,
+)
 from app.commerce.swiggy.oauth import SwiggyOAuthClient
+from app.commerce.swiggy.quote_provider import SwiggyQuoteProvider
 from app.commerce.swiggy.service import SwiggyService
 from app.commerce.swiggy.store import EncryptedConnectionStore
 from app.commerce.zepto.client import ZeptoMcpClient
@@ -13,13 +20,40 @@ from app.commerce.zepto.oauth import ZeptoOAuthClient
 from app.commerce.zepto.service import ZeptoService
 from app.commerce.zepto.store import EncryptedZeptoConnectionStore
 from app.core.config import get_settings
+from app.core.local_secrets import get_or_create_local_encryption_key
+from app.shopping.approval import ApprovalService
+from app.shopping.basket import BasketService
+from app.shopping.memory import InMemoryApprovalRepository, InMemoryBasketRepository
+from app.shopping.models import ProviderName
+from app.shopping.ports import QuoteProvider
+from app.shopping.providers import ProviderRegistry, get_provider_registry
+from app.support.service import SupportService
+from app.support.store import ComplaintStore
+from app.tracking.adapters import (
+    DemoOrderStatusAdapter,
+    SwiggyDeliveryStatusAdapter,
+    ZeptoOrderStatusAdapter,
+)
+from app.tracking.models import TrackingProvider
+from app.tracking.service import OrderTrackingService
+from app.tracking.store import OrderTrackingStore
+from app.voice.service import LiveSessionService
+from app.voice.sideband import SidebandHub
 
 
 @lru_cache
-def get_swiggy_service() -> SwiggyService:
+def get_provider_encryption_key() -> str:
+    settings = get_settings()
+    if settings.app_encryption_key.strip():
+        return settings.app_encryption_key
+    return get_or_create_local_encryption_key(settings.local_encryption_key_path)
+
+
+@lru_cache
+def get_live_swiggy_service() -> SwiggyService:
     settings = get_settings()
     store = EncryptedConnectionStore(
-        settings.swiggy_token_store_path, settings.app_encryption_key
+        settings.swiggy_token_store_path, get_provider_encryption_key()
     )
     oauth = SwiggyOAuthClient(settings, store)
     client = SwiggyMcpClient(settings, oauth)
@@ -27,18 +61,150 @@ def get_swiggy_service() -> SwiggyService:
     return SwiggyService(oauth, client, adapter)
 
 
-SwiggyServiceDependency = Annotated[SwiggyService, Depends(get_swiggy_service)]
+@lru_cache
+def get_demo_swiggy_service() -> DemoSwiggyService:
+    return DemoSwiggyService()
 
 
 @lru_cache
-def get_zepto_service() -> ZeptoService:
+def get_swiggy_service() -> SwiggyService | DemoSwiggyService:
+    if get_settings().commerce_mode == "demo":
+        return get_demo_swiggy_service()
+    return get_live_swiggy_service()
+
+
+async def close_cached_services() -> None:
+    """Release provider transports without creating an unused cached service."""
+
+    if get_live_swiggy_service.cache_info().currsize:
+        await get_live_swiggy_service().client.aclose()
+    if get_live_zepto_service.cache_info().currsize:
+        await get_live_zepto_service().client.aclose()
+
+
+SwiggyServiceDependency = Annotated[
+    SwiggyService | DemoSwiggyService, Depends(get_swiggy_service)
+]
+
+
+@lru_cache
+def get_swiggy_quote_provider() -> SwiggyQuoteProvider | DemoQuoteProvider:
+    if get_settings().commerce_mode == "demo":
+        return DemoQuoteProvider()
+    return SwiggyQuoteProvider(get_live_swiggy_service().client)
+
+
+@lru_cache
+def get_quote_provider_registry() -> ProviderRegistry:
+    registry = get_provider_registry()
+    registry.register(get_swiggy_quote_provider())
+    if get_settings().commerce_mode == "demo":
+        registry.register(DemoZeptoQuoteProvider())
+    return registry
+
+
+def get_live_quote_provider(name: ProviderName) -> QuoteProvider:
+    """Return only verified, non-checkout pricing capabilities."""
+    return get_quote_provider_registry().get(name)
+
+
+@lru_cache
+def get_live_zepto_service() -> ZeptoService:
     settings = get_settings()
     store = EncryptedZeptoConnectionStore(
-        settings.zepto_token_store_path, settings.app_encryption_key
+        settings.zepto_token_store_path, get_provider_encryption_key()
     )
     oauth = ZeptoOAuthClient(settings, store)
     client = ZeptoMcpClient(settings, oauth)
     return ZeptoService(oauth, client)
 
 
-ZeptoServiceDependency = Annotated[ZeptoService, Depends(get_zepto_service)]
+@lru_cache
+def get_demo_zepto_service() -> DemoZeptoService:
+    return DemoZeptoService()
+
+
+@lru_cache
+def get_zepto_service() -> ZeptoService | DemoZeptoService:
+    if get_settings().commerce_mode == "demo":
+        return get_demo_zepto_service()
+    return get_live_zepto_service()
+
+
+ZeptoServiceDependency = Annotated[
+    ZeptoService | DemoZeptoService, Depends(get_zepto_service)
+]
+
+
+@lru_cache
+def get_sideband_hub() -> SidebandHub:
+    return SidebandHub(get_settings())
+
+
+@lru_cache
+def get_voice_service() -> LiveSessionService:
+    return LiveSessionService(
+        get_settings(),
+        get_swiggy_service(),
+        get_sideband_hub(),
+        baskets=get_basket_service(),
+        approvals=get_approval_service(),
+    )
+
+
+VoiceServiceDependency = Annotated[LiveSessionService, Depends(get_voice_service)]
+SidebandHubDependency = Annotated[SidebandHub, Depends(get_sideband_hub)]
+
+
+@lru_cache
+def get_basket_repository() -> InMemoryBasketRepository:
+    return InMemoryBasketRepository()
+
+
+@lru_cache
+def get_approval_repository() -> InMemoryApprovalRepository:
+    return InMemoryApprovalRepository()
+
+
+@lru_cache
+def get_basket_service() -> BasketService:
+    return BasketService(get_basket_repository(), get_approval_repository())
+
+
+@lru_cache
+def get_approval_service() -> ApprovalService:
+    return ApprovalService(
+        get_basket_repository(), get_approval_repository(), get_live_quote_provider
+    )
+
+
+BasketServiceDependency = Annotated[BasketService, Depends(get_basket_service)]
+ApprovalServiceDependency = Annotated[ApprovalService, Depends(get_approval_service)]
+
+
+@lru_cache
+def get_support_service() -> SupportService:
+    return SupportService(ComplaintStore(get_settings().support_data_path))
+
+
+SupportServiceDependency = Annotated[SupportService, Depends(get_support_service)]
+
+
+@lru_cache
+def get_order_tracking_service() -> OrderTrackingService:
+    settings = get_settings()
+    if settings.commerce_mode == "demo":
+        providers = {
+            TrackingProvider.SWIGGY: DemoOrderStatusAdapter(TrackingProvider.SWIGGY),
+            TrackingProvider.ZEPTO: DemoOrderStatusAdapter(TrackingProvider.ZEPTO),
+        }
+    else:
+        providers = {
+            TrackingProvider.SWIGGY: SwiggyDeliveryStatusAdapter(
+                get_live_swiggy_service().client
+            ),
+            TrackingProvider.ZEPTO: ZeptoOrderStatusAdapter(
+                get_live_zepto_service().client
+            ),
+        }
+    return OrderTrackingService(OrderTrackingStore(settings.tracking_data_path), providers)

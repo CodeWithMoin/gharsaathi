@@ -1,0 +1,114 @@
+from typing import Annotated
+
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
+
+from app.dependencies import SupportServiceDependency
+from app.support.agent_tools import (
+    AgentToolCall,
+    AgentToolResult,
+    execute_tool,
+    tool_definitions,
+)
+from app.support.errors import (
+    ComplaintNotFound,
+    ComplaintStateError,
+    EvidenceValidationError,
+    SupportChannelUnavailable,
+)
+from app.support.models import ApproveComplaintRequest, Complaint, ComplaintCreate
+
+
+router = APIRouter()
+
+
+def _raise_http(exc: Exception) -> None:
+    if isinstance(exc, ComplaintNotFound):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    if isinstance(exc, EvidenceValidationError):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, str(exc)) from exc
+    if isinstance(exc, ComplaintStateError):
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    if isinstance(exc, SupportChannelUnavailable):
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    raise exc
+
+
+@router.get("/agent/tools", response_model=list[dict])
+async def agent_tools() -> list[dict]:
+    return tool_definitions()
+
+
+@router.post("/agent/execute", response_model=AgentToolResult)
+async def execute_agent_tool(
+    body: AgentToolCall, service: SupportServiceDependency
+) -> AgentToolResult:
+    try:
+        return execute_tool(service, body)
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.post("/complaints", response_model=Complaint, status_code=status.HTTP_201_CREATED)
+async def create_complaint(
+    body: ComplaintCreate, service: SupportServiceDependency
+) -> Complaint:
+    return service.create(body)
+
+
+@router.get("/complaints/{complaint_id}", response_model=Complaint)
+async def get_complaint(
+    complaint_id: str, service: SupportServiceDependency
+) -> Complaint:
+    try:
+        return service.get(complaint_id)
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.post("/complaints/{complaint_id}/evidence", response_model=Complaint)
+async def add_evidence(
+    complaint_id: str,
+    service: SupportServiceDependency,
+    evidence: Annotated[UploadFile, File(description="JPEG, PNG, or WebP; maximum 8 MB")],
+) -> Complaint:
+    try:
+        return await service.add_evidence(complaint_id, evidence)
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.post("/complaints/{complaint_id}/prepare", response_model=Complaint)
+async def prepare_complaint(
+    complaint_id: str, service: SupportServiceDependency
+) -> Complaint:
+    try:
+        return service.prepare(complaint_id)
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.post("/complaints/{complaint_id}/approve", response_model=Complaint)
+async def approve_complaint(
+    complaint_id: str,
+    body: ApproveComplaintRequest,
+    service: SupportServiceDependency,
+) -> Complaint:
+    try:
+        return service.approve(complaint_id, body.expected_revision)
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.post("/complaints/{complaint_id}/submit", status_code=status.HTTP_204_NO_CONTENT)
+async def submit_complaint(
+    complaint_id: str, service: SupportServiceDependency
+) -> None:
+    try:
+        service.submit(complaint_id)
+    except Exception as exc:
+        _raise_http(exc)

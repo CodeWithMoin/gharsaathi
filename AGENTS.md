@@ -104,6 +104,11 @@ Work in this order:
 ## Engineering workflow
 
 - Start by inspecting files and checking the current git status.
+- Treat worktrees as temporary implementation lanes. Once a lane is complete,
+  verify its tests/build, merge the reviewed work into `main`, and run the app
+  from `main`. Before debugging runtime behavior, confirm the running frontend
+  and backend were launched from the expected checkout; do not leave finished
+  product work stranded only in a detached or feature worktree.
 - Make small, reviewable changes.
 - Prefer clear types, explicit error handling, and tests for provider boundaries.
 - Avoid speculative abstractions and unnecessary features.

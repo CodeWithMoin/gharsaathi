@@ -203,3 +203,49 @@ class MemoryEvent(Base):
     )
 
     memory: Mapped[MemoryItem] = relationship(back_populates="events")
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = (
+        Index("ix_conversations_subject_active", "subject_id", "archived_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("memory_subjects.id", ondelete="CASCADE"), index=True
+    )
+    state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ProviderAddressState(Base):
+    __tablename__ = "provider_address_states"
+    __table_args__ = (
+        UniqueConstraint(
+            "subject_id", "provider", name="uq_provider_address_state_subject_provider"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("memory_subjects.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(40))
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    selected_address_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

@@ -17,6 +17,7 @@ class StoredConnection(BaseModel):
 class ConnectionStatus(BaseModel):
     connected: bool
     expires_at: datetime | None = None
+    mode: Literal["demo", "live"] = "live"
 
 
 class Address(BaseModel):
@@ -45,6 +46,9 @@ class AddressList(BaseModel):
     addresses: list[Address]
     pagination: Pagination
     resolution: AddressResolution
+    cached: bool = False
+    needs_refresh: bool = False
+    refreshed_at: datetime | None = None
 
 
 class Price(BaseModel):

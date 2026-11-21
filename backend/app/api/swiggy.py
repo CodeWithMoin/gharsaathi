@@ -8,16 +8,21 @@ from app.commerce.swiggy.errors import (
     SwiggyAuthenticationRequired,
     SwiggyConfigurationError,
     SwiggyProviderError,
+    SwiggyRateLimited,
     SwiggySchemaError,
 )
 from app.commerce.swiggy.models import (
     AddressList,
+    AddressResolution,
     AppliedMemory,
     ConnectionStatus,
+    Pagination,
     PersonalizedProductSearchResult,
     ProductSearchResult,
     ToolDescription,
 )
+from app.commerce.provider_state import ProviderAddressRepository, cached_address_list
+from app.commerce.demo import DemoSwiggyService
 from app.core.config import get_settings
 from app.dependencies import SwiggyServiceDependency
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
@@ -43,11 +48,29 @@ class SearchRequest(BaseModel):
         return stripped
 
 
+class SelectedAddressRequest(BaseModel):
+    address_id: str = Field(min_length=1, max_length=256)
+
+    @field_validator("address_id")
+    @classmethod
+    def strip_address_id(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be blank")
+        return stripped
+
+
 def _raise_http(exc: Exception) -> None:
     if isinstance(exc, SwiggyAuthenticationRequired):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
     if isinstance(exc, SwiggyConfigurationError):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    if isinstance(exc, SwiggyRateLimited):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            str(exc),
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
     if isinstance(exc, (SwiggySchemaError, SwiggyProviderError)):
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     raise exc
@@ -101,9 +124,14 @@ async def oauth_callback(
 
 
 @router.post("/disconnect", status_code=status.HTTP_204_NO_CONTENT)
-async def disconnect(service: SwiggyServiceDependency) -> None:
+async def disconnect(
+    service: SwiggyServiceDependency,
+    session: DbSessionDependency,
+    actor: MemoryActorDependency,
+) -> None:
     try:
         await service.disconnect()
+        await ProviderAddressRepository(session).clear(actor.id)
     except Exception as exc:
         _raise_http(exc)
 
@@ -120,14 +148,51 @@ async def tools(service: SwiggyServiceDependency) -> list[ToolDescription]:
 @router.get("/addresses", response_model=AddressList)
 async def addresses(
     service: SwiggyServiceDependency,
+    session: DbSessionDependency,
+    actor: MemoryActorDependency,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=10)] = 10,
+    refresh: Annotated[bool, Query()] = False,
 ) -> AddressList:
     try:
-        return await service.addresses(page, page_size)
+        repository = ProviderAddressRepository(session)
+        state = await repository.get(actor.id)
+        if state is not None and not refresh:
+            return cached_address_list(state)
+        # Demo fixtures are local data, so seed their snapshot automatically.
+        # The live service never enters this branch: a reload without a cached
+        # snapshot remains provider-call-free until the user explicitly refreshes.
+        if not refresh and isinstance(service, DemoSwiggyService):
+            demo = await service.addresses(page, page_size)
+            return cached_address_list(await repository.save(actor.id, demo))
+        if not refresh:
+            return AddressList(
+                addresses=[],
+                pagination=Pagination(page=page, page_size=page_size),
+                resolution=AddressResolution(needs_user_clarification=True),
+                cached=True,
+                needs_refresh=True,
+            )
+        live = await service.addresses(page, page_size)
+        return cached_address_list(await repository.save(actor.id, live))
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")
+
+
+@router.put("/addresses/selected", response_model=AddressList)
+async def select_address(
+    body: SelectedAddressRequest,
+    session: DbSessionDependency,
+    actor: MemoryActorDependency,
+) -> AddressList:
+    state = await ProviderAddressRepository(session).select(actor.id, body.address_id)
+    if state is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "That address is not in the saved snapshot. Refresh addresses and try again.",
+        )
+    return cached_address_list(state)
 
 
 @router.post("/search", response_model=ProductSearchResult)

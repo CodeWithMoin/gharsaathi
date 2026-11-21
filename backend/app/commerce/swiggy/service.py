@@ -28,11 +28,16 @@ class SwiggyService:
 
     async def complete_authorization(self, code: str, state: str) -> None:
         await self.oauth.exchange_code(code, state)
+        # A freshly linked account must not inherit an older account's MCP
+        # transport or tool catalogue.
+        await self.client.aclose()
 
     async def reject_authorization(self, state: str) -> None:
         await self.oauth.reject_authorization(state)
 
     async def disconnect(self) -> None:
+        # Close the authenticated transport before revoking/removing its token.
+        await self.client.aclose()
         await self.oauth.disconnect()
 
     async def list_tools(self) -> list[ToolDescription]:
@@ -45,4 +50,3 @@ class SwiggyService:
         self, query: str, address_id: str, offset: int
     ) -> ProductSearchResult:
         return await self.adapter.search_products(query, address_id, offset)
-

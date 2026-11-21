@@ -45,7 +45,7 @@ MemoryActorDependency = Annotated[MemorySubject, Depends(get_memory_actor)]
 def get_memory_extractor() -> MemoryExtractor:
     settings = get_settings()
     return create_memory_extractor(
-        settings.openai_api_key,
+        settings.openai_api_key.get_secret_value(),
         settings.memory_extraction_model,
     )
 

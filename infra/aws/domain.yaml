@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: GharSaathi public Route 53 DNS zone.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: gharsaathi.app
+Resources:
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig:
+        Comment: GharSaathi production public DNS managed by CloudFormation
+      HostedZoneTags:
+        - Key: Project
+          Value: GharSaathi
+        - Key: Environment
+          Value: production
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  HostedZoneId:
+    Description: Route 53 hosted zone ID.
+    Value: !Ref HostedZone
+  NameServers:
+    Description: Replace the current Name.com nameservers with these four values.
+    Value: !Join [",", !GetAtt HostedZone.NameServers]

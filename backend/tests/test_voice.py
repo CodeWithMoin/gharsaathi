@@ -1,0 +1,170 @@
+import json
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+from pydantic import SecretStr
+
+from app.core.config import Settings
+from app.dependencies import get_voice_service
+from app.main import app
+from app.voice.service import (
+    LiveSession,
+    LiveSessionService,
+    VoiceConfigurationError,
+    VoiceProviderError,
+)
+from app.voice.tools import ShoppingToolExecutor
+from tests.shopping_fakes import World
+
+
+class RecordingHub:
+    def __init__(self) -> None:
+        self.started: list[tuple[str, ShoppingToolExecutor]] = []
+
+    def start(self, session_id: str, executor: ShoppingToolExecutor) -> None:
+        self.started.append((session_id, executor))
+
+
+class NoSearch:
+    async def search(self, query: str, address_id: str, offset: int):
+        raise AssertionError("search must not run here")
+
+
+def service(app_settings: Settings, client: httpx.AsyncClient, hub: RecordingHub | None = None) -> LiveSessionService:
+    return LiveSessionService(app_settings, NoSearch(), hub or RecordingHub(), client)  # type: ignore[arg-type]
+
+
+OFFER = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
+
+
+def settings(api_key: str = "sk-test-key") -> Settings:
+    return Settings(_env_file=None, openai_api_key=SecretStr(api_key))
+
+
+@pytest.mark.asyncio
+async def test_create_posts_client_delegation_session_and_returns_answer() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            201,
+            json={
+                "session": {"id": "live_123"},
+                "transport": {"type": "webrtc", "sdp": "answer-sdp"},
+            },
+        )
+
+    hub = RecordingHub()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await service(settings(), client, hub).create(OFFER, "addr_home")
+
+    assert result == LiveSession(session_id="live_123", sdp="answer-sdp")
+    assert hub.started[0][0] == "live_123"
+    assert hub.started[0][1].address_id == "addr_home"
+    request = seen[0]
+    assert str(request.url) == "https://api.openai.com/v1/live/sessions"
+    assert request.headers["authorization"] == "Bearer sk-test-key"
+    body = json.loads(request.content)
+    assert body["transport"] == {"type": "webrtc", "sdp": OFFER}
+    session = body["session"]
+    assert session["model"] == "gpt-live-1.1"
+    delegation = session["delegation"]
+    assert delegation["type"] == "responses"
+    assert delegation["responses"]["model"] == "gpt-6-luna"
+    assert [tool["name"] for tool in delegation["responses"]["tools"]] == ["search_products"]
+    assert session["audio"] == {"output": {"voice": "nira"}}
+    assert "format" not in session["audio"]
+    assert session["input"][0]["role"] == "developer"
+
+
+@pytest.mark.asyncio
+async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            201,
+            json={"session": {"id": "live_basket"}, "transport": {"type": "webrtc", "sdp": "answer"}},
+        )
+
+    world = World()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await LiveSessionService(
+            settings(), NoSearch(), RecordingHub(), client,
+            baskets=world.baskets, approvals=world.approvals,
+        ).create(OFFER, "addr_home")
+
+    tools = json.loads(seen[0].content)["session"]["delegation"]["responses"]["tools"]
+    names = {tool["name"] for tool in tools}
+    assert names == {
+        "search_products", "add_to_basket", "set_basket_quantity", "view_basket", "request_approval"
+    }
+    assert all("order" not in name and "checkout" not in name for name in names)
+
+
+@pytest.mark.asyncio
+async def test_missing_api_key_never_calls_openai() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("OpenAI must not be called without a key")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(VoiceConfigurationError):
+            await service(settings(""), client).create(OFFER)
+
+
+@pytest.mark.asyncio
+async def test_openai_error_message_is_surfaced_without_secrets() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={"error": {"message": "Offer did not have an audio media section."}},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(VoiceProviderError) as caught:
+            await service(settings(), client).create(OFFER)
+
+    assert caught.value.status_code == 400
+    assert "audio media section" in str(caught.value)
+    assert "sk-test-key" not in str(caught.value)
+
+
+class FakeVoiceService:
+    async def create(self, offer_sdp: str, swiggy_address_id: str | None = None) -> LiveSession:
+        return LiveSession(session_id="live_fake", sdp="answer")
+
+
+def api_client() -> TestClient:
+    app.dependency_overrides[get_voice_service] = lambda: FakeVoiceService()
+    return TestClient(app)
+
+
+def test_session_endpoint_returns_answer_for_allowed_origin() -> None:
+    response = api_client().post(
+        "/api/voice/session",
+        json={"sdp": OFFER},
+        headers={"Origin": "http://localhost:3003"},
+    )
+    assert response.status_code == 201
+    assert response.json() == {"session_id": "live_fake", "sdp": "answer"}
+
+
+def test_session_endpoint_rejects_unknown_origin() -> None:
+    response = api_client().post(
+        "/api/voice/session",
+        json={"sdp": OFFER},
+        headers={"Origin": "https://evil.example"},
+    )
+    assert response.status_code == 403
+
+
+def test_session_endpoint_rejects_offer_without_audio() -> None:
+    response = api_client().post(
+        "/api/voice/session",
+        json={"sdp": "v=0\r\n"},
+        headers={"Origin": "http://localhost:3003"},
+    )
+    assert response.status_code == 422

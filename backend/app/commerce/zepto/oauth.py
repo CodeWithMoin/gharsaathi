@@ -21,6 +21,9 @@ from app.commerce.zepto.store import EncryptedZeptoConnectionStore
 from app.core.config import Settings
 
 
+# The current product boundary is inspection-only.  Keeping this in the OAuth
+# layer means a configuration typo cannot silently request broader account
+# capabilities while the rest of the app has no safe use for them.
 READ_ONLY_SCOPE = "tools:read"
 
 
@@ -51,6 +54,7 @@ class ZeptoOAuthClient:
             return await client.request(method, url, **kwargs)
 
     async def _register_client(self) -> str:
+        self._ensure_read_only_scope()
         existing = await self.store.load()
         if existing is not None and existing.client_id:
             return existing.client_id
@@ -64,7 +68,7 @@ class ZeptoOAuthClient:
                 "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"],
                 "token_endpoint_auth_method": "none",
-                "scope": READ_ONLY_SCOPE,
+                "scope": self.settings.zepto_oauth_scope,
             },
             headers={"Accept": "application/json"},
         )
@@ -79,6 +83,7 @@ class ZeptoOAuthClient:
         return client_id
 
     async def authorization_url(self) -> str:
+        self._ensure_read_only_scope()
         client_id = await self._register_client()
         state = secrets.token_urlsafe(32)
         verifier = secrets.token_urlsafe(64)
@@ -101,14 +106,15 @@ class ZeptoOAuthClient:
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
                 "state": state,
-                "scope": READ_ONLY_SCOPE,
+                "scope": self.settings.zepto_oauth_scope,
                 "resource": self.settings.zepto_resource_url,
             }
         )
         return f"{self.settings.zepto_authorization_server_url}/authorize?{query}"
 
     async def exchange_code(self, code: str, state: str, issuer: str | None) -> None:
-        if issuer is not None and issuer.rstrip("/") != self.settings.zepto_authorization_server_url:
+        expected_issuer = self.settings.zepto_authorization_server_url.rstrip("/")
+        if issuer is not None and issuer.rstrip("/") != expected_issuer:
             raise ZeptoProviderError("Zepto OAuth issuer did not match the expected server.")
         async with self._pending_lock:
             pending = self._pending.pop(state, None)
@@ -153,6 +159,7 @@ class ZeptoOAuthClient:
             token = OAuthTokenResponse.model_validate(response.json())
         except (ValueError, TypeError) as exc:
             raise ZeptoProviderError("Zepto returned an invalid token response.") from exc
+        self._ensure_read_only_scope(token.scope)
         expires_at = datetime.now(UTC) + timedelta(seconds=token.expires_in)
         await self.store.save(
             StoredConnection(
@@ -165,6 +172,26 @@ class ZeptoOAuthClient:
             )
         )
         return token.access_token
+
+    def _ensure_read_only_scope(self, granted_scope: str | None = None) -> None:
+        """Reject a broader OAuth grant until a reviewed capability is added.
+
+        A token response is allowed to omit ``scope`` per OAuth conventions; in
+        that case it represents the requested scope.  If Zepto sends an
+        explicit scope, it must be exactly the read-only request.
+        """
+
+        requested = self.settings.zepto_oauth_scope.strip()
+        if requested != READ_ONLY_SCOPE:
+            raise ZeptoProviderError(
+                "Zepto is configured for a scope broader than this read-only integration. "
+                "Set ZEPTO_OAUTH_SCOPE=tools:read."
+            )
+        if granted_scope is not None and granted_scope.strip() != READ_ONLY_SCOPE:
+            raise ZeptoProviderError(
+                "Zepto returned a scope broader than this read-only integration. "
+                "Reconnect after reviewing the provider grant."
+            )
 
     async def access_token(self) -> str:
         connection = await self.store.load()

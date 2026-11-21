@@ -1,5 +1,15 @@
+import asyncio
+import re
+import time
+
 from app.commerce.zepto.client import ZeptoMcpClient
-from app.commerce.zepto.models import ConnectionStatus, ToolDescription
+from app.commerce.zepto.adapter import parse_addresses, parse_products
+from app.commerce.swiggy.models import AddressList, ProductSearchResult
+from app.commerce.zepto.models import (
+    CapabilitySummary,
+    ConnectionStatus,
+    ToolDescription,
+)
 from app.commerce.zepto.oauth import ZeptoOAuthClient
 
 
@@ -7,6 +17,10 @@ class ZeptoService:
     def __init__(self, oauth: ZeptoOAuthClient, client: ZeptoMcpClient) -> None:
         self.oauth = oauth
         self.client = client
+        self._selected_address: tuple[int, str] | None = None
+        self._past_items_generation: int | None = None
+        self._search_cache: dict[tuple[str, str, int], tuple[float, ProductSearchResult]] = {}
+        self._search_lock = asyncio.Lock()
 
     async def connection_status(self) -> ConnectionStatus:
         return await self.oauth.status()
@@ -17,13 +31,74 @@ class ZeptoService:
     async def complete_authorization(
         self, code: str, state: str, issuer: str | None
     ) -> None:
+        await self.client.aclose()
         await self.oauth.exchange_code(code, state, issuer)
 
     async def reject_authorization(self, state: str) -> None:
         await self.oauth.reject_authorization(state)
 
     async def disconnect(self) -> None:
+        await self.client.aclose()
         await self.oauth.disconnect()
 
     async def list_tools(self) -> list[ToolDescription]:
         return await self.client.list_tools()
+
+    async def capabilities(self) -> CapabilitySummary:
+        """Return discovery information without exposing a provider action."""
+
+        status = await self.connection_status()
+        if not status.connected:
+            return CapabilitySummary(connected=False, catalogue_discovered=False)
+
+        tools = await self.list_tools()
+        return CapabilitySummary(
+            connected=True,
+            catalogue_discovered=True,
+            remote_tool_names=sorted({tool.name for tool in tools}),
+        )
+
+    async def addresses(self) -> AddressList:
+        return parse_addresses(await self.client.call_tool("list_saved_addresses", {}))
+
+    async def search(
+        self, query: str, address_id: str, page_number: int = 0
+    ) -> ProductSearchResult:
+        normalized = " ".join(query.split())
+        cache_key = (address_id, normalized.casefold(), page_number)
+        async with self._search_lock:
+            cached = self._search_cache.get(cache_key)
+            if cached is not None and time.monotonic() - cached[0] < 60:
+                return cached[1].model_copy(deep=True)
+
+            generation = await self.client.prepare_session()
+            if self._selected_address != (generation, address_id):
+                await self.client.call_tool(
+                    "select_saved_address", {"addressId": address_id}
+                )
+                self._selected_address = (self.client.session_generation, address_id)
+                generation = self.client.session_generation
+
+            if self._past_items_generation != generation:
+                await self.client.call_tool("get_past_order_items", {})
+                self._past_items_generation = self.client.session_generation
+
+            queries = _split_queries(normalized)
+            if len(queries) > 1:
+                raw = await self.client.call_tool(
+                    "search_multiple_products",
+                    {"queries": queries, "pageNumber": page_number},
+                )
+            else:
+                raw = await self.client.call_tool(
+                    "search_products",
+                    {"query": queries[0], "pageNumber": page_number},
+                )
+            result = parse_products(raw)
+            self._search_cache[cache_key] = (time.monotonic(), result.model_copy(deep=True))
+            return result
+
+
+def _split_queries(query: str) -> list[str]:
+    parts = [part.strip() for part in re.split(r"\s*(?:,|\band\b|\baur\b)\s*", query, flags=re.IGNORECASE)]
+    return [part for part in parts if part] or [query]

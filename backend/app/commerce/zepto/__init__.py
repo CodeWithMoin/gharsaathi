@@ -1,1 +1,1 @@
-"""Read-only Zepto UCP/MCP integration for the local proof of concept."""
+"""Zepto MCP boundary with live-schema validation and guarded mutations."""

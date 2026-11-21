@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "GharCart · Instamart search",
-  description: "Search Swiggy Instamart for household essentials.",
+  title: "GharSaathi · Your AI household shopping agent",
+  description: "Speak naturally to search for household essentials in English, Hindi, or Hinglish.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

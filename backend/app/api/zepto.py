@@ -2,19 +2,53 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field, field_validator
 
+from app.commerce.demo import DemoZeptoService
+from app.commerce.provider_state import ProviderAddressRepository, cached_address_list
+from app.commerce.swiggy.models import (
+    AddressList,
+    AddressResolution,
+    Pagination,
+    ProductSearchResult,
+)
 from app.commerce.zepto.errors import (
     ZeptoAuthenticationRequired,
     ZeptoConfigurationError,
     ZeptoProviderError,
+    ZeptoRateLimited,
     ZeptoSchemaError,
 )
-from app.commerce.zepto.models import ConnectionStatus, ToolDescription
+from app.commerce.zepto.models import (
+    CapabilitySummary,
+    ConnectionStatus,
+    ToolDescription,
+)
 from app.core.config import get_settings
 from app.dependencies import ZeptoServiceDependency
+from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 
 
 router = APIRouter()
+ZEPTO_PROVIDER = "zepto"
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=2, max_length=120)
+    address_id: str = Field(min_length=1, max_length=256)
+    page_number: int = Field(default=0, ge=0, le=20)
+
+    @field_validator("query", "address_id")
+    @classmethod
+    def strip_non_empty(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be blank")
+        return stripped
+
+
+class SelectedAddressRequest(BaseModel):
+    address_id: str = Field(min_length=1, max_length=256)
 
 
 def _raise_http(exc: Exception) -> None:
@@ -22,6 +56,8 @@ def _raise_http(exc: Exception) -> None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
     if isinstance(exc, ZeptoConfigurationError):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    if isinstance(exc, ZeptoRateLimited):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(exc)) from exc
     if isinstance(exc, (ZeptoSchemaError, ZeptoProviderError)):
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     raise exc
@@ -76,9 +112,14 @@ async def oauth_callback(
 
 
 @router.post("/disconnect", status_code=status.HTTP_204_NO_CONTENT)
-async def disconnect(service: ZeptoServiceDependency) -> None:
+async def disconnect(
+    service: ZeptoServiceDependency,
+    session: DbSessionDependency,
+    actor: MemoryActorDependency,
+) -> None:
     try:
         await service.disconnect()
+        await ProviderAddressRepository(session).clear(actor.id, ZEPTO_PROVIDER)
     except Exception as exc:
         _raise_http(exc)
 
@@ -87,6 +128,79 @@ async def disconnect(service: ZeptoServiceDependency) -> None:
 async def tools(service: ZeptoServiceDependency) -> list[ToolDescription]:
     try:
         return await service.list_tools()
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.get("/capabilities", response_model=CapabilitySummary)
+async def capabilities(service: ZeptoServiceDependency) -> CapabilitySummary:
+    """Authenticated tool discovery with an explicit no-checkout boundary."""
+
+    try:
+        return await service.capabilities()
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.get("/addresses", response_model=AddressList)
+async def addresses(
+    service: ZeptoServiceDependency,
+    session: DbSessionDependency,
+    actor: MemoryActorDependency,
+    refresh: Annotated[bool, Query()] = False,
+) -> AddressList:
+    try:
+        repository = ProviderAddressRepository(session)
+        state = await repository.get(actor.id, ZEPTO_PROVIDER)
+        if state is not None and not refresh:
+            return cached_address_list(state)
+        if not refresh and isinstance(service, DemoZeptoService):
+            demo = await service.addresses()
+            return cached_address_list(
+                await repository.save(actor.id, demo, ZEPTO_PROVIDER)
+            )
+        if not refresh:
+            return AddressList(
+                addresses=[],
+                pagination=Pagination(),
+                resolution=AddressResolution(needs_user_clarification=True),
+                cached=True,
+                needs_refresh=True,
+            )
+        live = await service.addresses()
+        return cached_address_list(
+            await repository.save(actor.id, live, ZEPTO_PROVIDER)
+        )
+    except Exception as exc:
+        _raise_http(exc)
+        raise AssertionError("unreachable")
+
+
+@router.put("/addresses/selected", response_model=AddressList)
+async def select_address(
+    body: SelectedAddressRequest,
+    session: DbSessionDependency,
+    actor: MemoryActorDependency,
+) -> AddressList:
+    state = await ProviderAddressRepository(session).select(
+        actor.id, body.address_id.strip(), ZEPTO_PROVIDER
+    )
+    if state is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "That Zepto address is not in the saved snapshot. Refresh and try again.",
+        )
+    return cached_address_list(state)
+
+
+@router.post("/search", response_model=ProductSearchResult)
+async def search(
+    body: SearchRequest, service: ZeptoServiceDependency
+) -> ProductSearchResult:
+    try:
+        return await service.search(body.query, body.address_id, body.page_number)
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")

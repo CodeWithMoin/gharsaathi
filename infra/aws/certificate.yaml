@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: GharSaathi CloudFront TLS certificate. Deploy only in us-east-1.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: gharsaathi.app
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+
+Resources:
+  CloudFrontCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Sub "www.${DomainName}"
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+        - DomainName: !Sub "www.${DomainName}"
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: Project
+          Value: GharSaathi
+        - Key: Environment
+          Value: production
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  CertificateArn:
+    Description: ACM certificate ARN for the CloudFront distribution.
+    Value: !Ref CloudFrontCertificate

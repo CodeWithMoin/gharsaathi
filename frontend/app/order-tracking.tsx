@@ -1,0 +1,362 @@
+"use client";
+
+import {
+  ArrowsClockwise,
+  BellSimple,
+  CaretDown,
+  CheckCircle,
+  Circle,
+  ClockCountdown,
+  MapPin,
+  Package,
+  Pause,
+  Play,
+  Timer,
+  Truck,
+  WarningCircle,
+  X,
+} from "@phosphor-icons/react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
+const POLL_INTERVAL_MS = 45_000;
+
+type Provider = "swiggy" | "zepto";
+type TrackingStatus =
+  | "created"
+  | "confirmed"
+  | "preparing"
+  | "packed"
+  | "out_for_delivery"
+  | "arriving"
+  | "delivered"
+  | "delayed"
+  | "cancelled"
+  | "issue"
+  | string;
+
+type TrackingEvent = {
+  id?: string;
+  status?: TrackingStatus;
+  label?: string;
+  description?: string | null;
+  occurred_at?: string | null;
+  timestamp?: string | null;
+  current?: boolean;
+  snapshot?: {
+    status?: TrackingStatus;
+    provider_status?: string | null;
+    message?: string | null;
+    eta_at?: string | null;
+  };
+};
+
+type TrackingOrder = {
+  id?: string;
+  order_id?: string;
+  provider?: Provider;
+  status?: TrackingStatus;
+  active?: boolean;
+  status_label?: string;
+  eta?: string | null;
+  eta_text?: string | null;
+  eta_at?: string | null;
+  updated_at?: string | null;
+  items?: Array<{ name?: string; quantity?: number }>;
+  item_summary?: string | null;
+  timeline?: TrackingEvent[];
+  events?: TrackingEvent[];
+  snapshot?: TrackingEvent["snapshot"] | null;
+  last_error?: string | null;
+  stop_reason?: string | null;
+};
+
+type TrackingResponse = {
+  monitor_id?: string;
+  order?: TrackingOrder;
+  changed?: boolean;
+  meaningful_change?: boolean | { message?: string | null; summary?: string | null };
+  change_summary?: string | null;
+  checked_at?: string | null;
+  next_check_at?: string | null;
+  live_tracking_supported?: boolean;
+  provider_message?: string | null;
+};
+
+export type OrderTrackingProps = {
+  initialProvider?: Provider;
+  initialOrderId?: string;
+  initialAddressId?: string;
+  onClose?: () => void;
+};
+
+const statusCopy: Record<string, string> = {
+  created: "Order received",
+  confirmed: "Order confirmed",
+  preparing: "Being prepared",
+  packed: "Packed and ready",
+  out_for_delivery: "Out for delivery",
+  arriving: "Arriving soon",
+  delivered: "Delivered",
+  delayed: "Delayed",
+  cancelled: "Cancelled",
+  issue: "Needs attention",
+};
+
+function statusLabel(status?: TrackingStatus, fallback?: string) {
+  return fallback || (status ? statusCopy[status] ?? status.replaceAll("_", " ") : "Waiting for an update");
+}
+
+function displayTime(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+function orderItems(order: TrackingOrder) {
+  if (order.item_summary) return order.item_summary;
+  const items = order.items?.filter((item) => item.name) ?? [];
+  if (!items.length) return null;
+  const [first, ...rest] = items;
+  const quantity = first.quantity && first.quantity > 1 ? ` ×${first.quantity}` : "";
+  return `${first.name}${quantity}${rest.length ? ` + ${rest.length} more` : ""}`;
+}
+
+function normaliseResponse(payload: TrackingResponse | TrackingOrder): Required<Pick<TrackingResponse, "checked_at" | "next_check_at">> & TrackingResponse & { order: TrackingOrder } {
+  const response = payload as TrackingResponse;
+  return {
+    ...response,
+    order: response.order ?? (payload as TrackingOrder),
+    checked_at: response.checked_at ?? null,
+    next_check_at: response.next_check_at ?? null,
+  };
+}
+
+function isProblem(status?: TrackingStatus) {
+  return status === "delayed" || status === "cancelled" || status === "issue";
+}
+
+function StatusIcon({ status, active }: { status?: TrackingStatus; active: boolean }) {
+  const className = active ? "text-[#c6531d]" : "text-[#b9a79a]";
+  if (status === "out_for_delivery" || status === "arriving") return <Truck size={17} weight={active ? "fill" : "regular"} className={className} />;
+  if (status === "delivered") return <CheckCircle size={17} weight="fill" className="text-[#397144]" />;
+  if (isProblem(status)) return <WarningCircle size={17} weight="fill" className="text-[#b65745]" />;
+  if (status === "packed") return <Package size={17} weight={active ? "fill" : "regular"} className={className} />;
+  return active ? <CheckCircle size={17} weight="fill" className={className} /> : <Circle size={13} className={className} />;
+}
+
+export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId = "", initialAddressId, onClose }: OrderTrackingProps) {
+  const [provider, setProvider] = useState<Provider>(initialProvider);
+  const [orderId, setOrderId] = useState(initialOrderId);
+  const [monitorId, setMonitorId] = useState<string | null>(null);
+  const [tracking, setTracking] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [data, setData] = useState<ReturnType<typeof normaliseResponse> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [lastChange, setLastChange] = useState("");
+  const requestInFlight = useRef(false);
+  const seenEventCount = useRef(0);
+
+  const fetchUpdate = useCallback(async (force = false, nextMonitorId = monitorId) => {
+    if (!nextMonitorId || requestInFlight.current) return;
+    requestInFlight.current = true;
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`${API}/api/tracking/monitors/${encodeURIComponent(nextMonitorId)}${force ? "/refresh" : ""}`, {
+        method: force ? "POST" : "GET",
+        cache: "no-store",
+        headers: { "X-User-Id": DEV_USER_ID },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.detail || "No saved tracking update is available yet.");
+      const next = normaliseResponse(payload as TrackingResponse | TrackingOrder);
+      setData(next);
+      setTracking(next.live_tracking_supported !== false && next.order.active !== false);
+      const meaningful = typeof next.meaningful_change === "object" ? next.meaningful_change.message ?? next.meaningful_change.summary : next.change_summary;
+      const eventCount = next.order.events?.length ?? 0;
+      const newSavedEvent = seenEventCount.current > 0 && eventCount > seenEventCount.current;
+      seenEventCount.current = eventCount;
+      setLastChange(next.changed || newSavedEvent || next.meaningful_change === true || Boolean(meaningful) ? meaningful || "Your order status changed." : "");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not load this order.");
+    } finally {
+      requestInFlight.current = false;
+      setLoading(false);
+    }
+  }, [monitorId]);
+
+  useEffect(() => {
+    if (initialOrderId) return;
+    let active = true;
+    void fetch(`${API}/api/tracking/monitors?active_only=true`, {
+      cache: "no-store",
+      headers: { "X-User-Id": DEV_USER_ID },
+    }).then(async (response) => {
+      if (!response.ok || !active) return;
+      const watches = await response.json() as TrackingOrder[];
+      const watch = watches[0];
+      if (!watch?.id || !active) return;
+      setMonitorId(watch.id);
+      setProvider(watch.provider ?? "swiggy");
+      setOrderId(watch.order_id ?? "");
+      setTracking(true);
+      seenEventCount.current = watch.events?.length ?? 0;
+      setData(normaliseResponse(watch));
+    }).catch(() => {
+      // Starting a new monitor remains available if no saved watch can be restored.
+    });
+    return () => { active = false; };
+  }, [initialOrderId]);
+
+  useEffect(() => {
+    if (!tracking || !monitorId) return;
+    void fetchUpdate(false);
+    const interval = window.setInterval(() => void fetchUpdate(false), POLL_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [fetchUpdate, monitorId, tracking]);
+
+  const startTracking = async (event: FormEvent) => {
+    event.preventDefault();
+    const cleanedOrderId = orderId.trim();
+    if (!cleanedOrderId) return;
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
+    setLoading(true);
+    setError("");
+    setData(null);
+    setLastChange("");
+    try {
+      const response = await fetch(`${API}/api/tracking/monitors`, {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json", "X-User-Id": DEV_USER_ID },
+        body: JSON.stringify({
+          provider,
+          order_id: cleanedOrderId,
+          address_id: provider === "swiggy" ? initialAddressId : undefined,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.detail || "Could not start tracking this order.");
+      const next = normaliseResponse(payload as TrackingResponse | TrackingOrder);
+      if (!next.monitor_id) throw new Error("Tracking could not be started safely. Please try again.");
+      setMonitorId(next.monitor_id);
+      setData(next);
+      setTracking(next.live_tracking_supported !== false);
+      seenEventCount.current = next.order.events?.length ?? 0;
+      const meaningful = typeof next.meaningful_change === "object" ? next.meaningful_change.message ?? next.meaningful_change.summary : next.change_summary;
+      setLastChange(next.changed || next.meaningful_change === true || Boolean(meaningful) ? meaningful || "Your order status changed." : "");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not start tracking this order.");
+    } finally {
+      requestInFlight.current = false;
+      setLoading(false);
+    }
+  };
+
+  const stopTracking = async () => {
+    if (!monitorId || requestInFlight.current) return;
+    requestInFlight.current = true;
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`${API}/api/tracking/monitors/${encodeURIComponent(monitorId)}`, {
+        method: "DELETE",
+        cache: "no-store",
+        headers: { "X-User-Id": DEV_USER_ID },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.detail || "Could not stop this order watch.");
+      setData(normaliseResponse(payload as TrackingResponse));
+      setTracking(false);
+      setLastChange("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not stop this order watch.");
+    } finally {
+      requestInFlight.current = false;
+      setLoading(false);
+    }
+  };
+
+  const order = data?.order;
+  const timeline = useMemo(() => {
+    const source = order?.timeline ?? order?.events ?? [];
+    if (source.length) return source.map((event) => event.snapshot ? {
+      ...event,
+      status: event.snapshot.status,
+      label: event.snapshot.provider_status ?? statusLabel(event.snapshot.status),
+      description: event.snapshot.message,
+    } : event);
+    return order?.status ? [{ status: order.status, label: statusLabel(order.status, order.status_label), current: true, occurred_at: order.updated_at }] : [];
+  }, [order]);
+  const etaAt = order?.snapshot?.eta_at ?? order?.eta_at;
+  const eta = order?.eta_text ?? order?.eta ?? (etaAt ? `By ${displayTime(etaAt)}` : null);
+  const currentStatus = order?.snapshot?.status ?? order?.status;
+  const checkedAt = displayTime(data?.checked_at ?? order?.updated_at);
+
+  return (
+    <section className="w-full overflow-hidden rounded-[8px_22px_22px_22px] border border-[#e6d7cd] bg-[#fffdf9] shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)]" aria-label="Live order tracking">
+      <header className="flex items-start gap-3 border-b border-[#eee2da] px-4 py-3.5">
+        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f7e8dc] text-[#c6531d]"><ClockCountdown size={19} weight="fill" /></div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="truncate text-[15px] font-semibold text-[#35241c]">Track an order</h2>
+            {tracking && <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#ebf5ec] px-2 py-1 text-[9px] font-bold uppercase tracking-[.08em] text-[#397144]"><span className="size-1.5 animate-pulse rounded-full bg-[#4d945d]" />Watching</span>}
+          </div>
+          <p className="mt-0.5 text-[11px] leading-4 text-[#806f65]">Read-only updates from GharSaathi’s saved order status.</p>
+        </div>
+        {onClose && <button type="button" onClick={onClose} aria-label="Close live order tracking" className="grid size-8 shrink-0 place-items-center rounded-full text-[#806f65] transition hover:bg-[#f5ebe4]"><X size={16} /></button>}
+      </header>
+
+      <div className="p-4">
+        <form onSubmit={startTracking} className="space-y-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            {(["swiggy", "zepto"] as const).map((name) => <button key={name} type="button" onClick={() => { setProvider(name); setData(null); setTracking(false); setMonitorId(null); }} className={`rounded-xl border px-3 py-2 text-xs font-semibold capitalize transition ${provider === name ? "border-[#c6531d] bg-[#fff1e7] text-[#9e421a]" : "border-[#e5d6cb] text-[#70584b]"}`}>{name}</button>)}
+          </div>
+          <div className="flex gap-2">
+            <label className="min-w-0 flex-1"><span className="sr-only">Order ID</span><input value={orderId} onChange={(event) => setOrderId(event.target.value)} required placeholder="Enter order ID" className="w-full rounded-xl border border-[#dfd0c5] bg-white px-3 py-2.5 text-sm outline-none placeholder:text-[#a89589] focus:border-[#c9825f]" /></label>
+            {!tracking ? <button type="submit" disabled={loading} className="flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#c6531d] px-4 py-2.5 text-xs font-semibold text-white shadow-[0_8px_22px_-12px_rgba(158,65,24,.8)] transition active:scale-[.97] disabled:opacity-50"><Play size={13} weight="fill" />Start</button> : <button type="button" onClick={() => void stopTracking()} disabled={loading} className="flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#ddcabe] px-4 py-2.5 text-xs font-semibold text-[#694d3e] transition active:scale-[.97] disabled:opacity-50"><Pause size={13} weight="fill" />Stop</button>}
+          </div>
+        </form>
+
+        {error && <div role="alert" className="mt-3 rounded-2xl border border-[#f0cbc3] bg-[#fff0ed] px-3 py-2.5 text-xs leading-5 text-[#9f3f32]"><div className="flex items-center gap-1.5 font-semibold"><WarningCircle size={15} weight="fill" />Couldn’t show this order</div><p className="mt-0.5">{error}</p></div>}
+
+        {loading && !order && <div className="mt-4 space-y-3" aria-live="polite"><div className="h-20 animate-pulse rounded-2xl bg-[#f7efe8]" /><div className="h-10 animate-pulse rounded-xl bg-[#fbf5f0]" /></div>}
+
+        {!loading && !error && !order && !tracking && <div className="mt-4 rounded-2xl bg-[#f7efe8] px-3.5 py-3 text-xs leading-5 text-[#725d51]"><div className="flex items-center gap-1.5 font-semibold text-[#59463c]"><Timer size={15} />Ready when you are</div><p className="mt-1">Add an order ID to save a watch for meaningful delivery changes. It continues through browser reloads.</p></div>}
+
+        {order && <div className="mt-4 space-y-3">
+          {lastChange && <div className="rounded-2xl border border-[#cfe3d2] bg-[#eef7ef] px-3 py-2.5 text-xs leading-5 text-[#32663b]"><div className="flex items-center gap-1.5 font-semibold"><BellSimple size={15} weight="fill" />Meaningful update</div><p className="mt-0.5">{lastChange}</p></div>}
+
+          <div className={`rounded-2xl border px-3.5 py-3 ${isProblem(currentStatus) ? "border-[#efd1c8] bg-[#fff5f2]" : "border-[#e9ddd5] bg-[#fdfaf7]"}`}>
+            <div className="flex items-start gap-3">
+              <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white shadow-[0_6px_16px_-12px_rgba(63,38,25,.65)]"><StatusIcon status={currentStatus} active /></div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-[#3b2a22]">{statusLabel(currentStatus, order.status_label)}</p>
+                {orderItems(order) && <p className="mt-0.5 truncate text-[11px] text-[#806f65]">{orderItems(order)}</p>}
+                {eta && <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[#704b38]"><MapPin size={14} weight="fill" />ETA {eta}</p>}
+              </div>
+            </div>
+          </div>
+
+          {timeline.length > 0 && <div className="rounded-2xl border border-[#e9ddd5] bg-white">
+            <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="flex w-full items-center gap-2 px-3.5 py-3 text-left"><Package size={16} className="text-[#8d5b40]" /><span className="min-w-0 flex-1 text-xs font-semibold text-[#59463c]">Order journey</span><CaretDown size={15} className={`text-[#806f65] transition ${detailsOpen ? "rotate-180" : ""}`} /></button>
+            {detailsOpen && <ol className="border-t border-[#f0e6df] px-3.5 py-1.5">{timeline.map((event, index) => {
+              const active = event.current ?? index === timeline.length - 1;
+              const time = displayTime(event.occurred_at ?? event.timestamp);
+              return <li key={event.id ?? `${event.status ?? "status"}-${index}`} className="relative flex gap-3 py-2.5 last:pb-2"><div className="relative z-10 grid size-5 shrink-0 place-items-center rounded-full bg-white"><StatusIcon status={event.status} active={active} /></div>{index < timeline.length - 1 && <span className="absolute left-[9px] top-7 h-[calc(100%-8px)] w-px bg-[#eaded5]" />}<div className="min-w-0 flex-1"><p className={`text-xs ${active ? "font-semibold text-[#4b3428]" : "text-[#756257]"}`}>{event.label ?? statusLabel(event.status)}</p>{event.description && <p className="mt-0.5 text-[11px] leading-4 text-[#806f65]">{event.description}</p>}{time && <time className="mt-0.5 block text-[10px] text-[#a38f82]">{time}</time>}</div></li>;
+            })}</ol>}
+          </div>}
+
+          {data?.live_tracking_supported === false && <div className="rounded-2xl border border-[#ead7cc] bg-[#fff8f3] px-3 py-2.5 text-xs leading-5 text-[#70584b]"><div className="flex items-center gap-1.5 font-semibold"><WarningCircle size={15} />Live tracking is not available for this provider</div><p className="mt-0.5">{data.provider_message || "Showing the latest saved order status only. We will not guess or repeatedly call the provider."}</p></div>}
+          <div className="flex items-center gap-2 px-0.5 text-[10px] leading-4 text-[#8d7a6f]"><Timer size={13} className="shrink-0" />{tracking ? `Shows GharSaathi’s saved updates every ${POLL_INTERVAL_MS / 1000} sec; provider cadence stays protected` : "Watching is stopped"}{checkedAt && ` · Last saved ${checkedAt}`}</div>
+          <button type="button" onClick={() => void fetchUpdate(true)} disabled={loading || !monitorId} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-[#ddcabe] px-4 py-2.5 text-xs font-semibold text-[#694d3e] transition hover:bg-[#fff8f3] active:scale-[.98] disabled:opacity-50"><ArrowsClockwise size={14} className={loading ? "animate-spin" : ""} />Refresh saved update</button>
+        </div>}
+      </div>
+    </section>
+  );
+}

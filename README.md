@@ -1,6 +1,26 @@
-# GharCart — Household Shopping Agent
+# GharSaathi — Household Shopping Agent
 
-This milestone connects one local test user to Swiggy and supports only two read-only Instamart actions: list saved delivery addresses and search products at the selected address. It cannot mutate a cart, check out, or place an order.
+The local app starts in a safe static-demo mode. It can exercise address selection,
+product search, baskets, deterministic fees, and exact-bill approval without calling
+Swiggy or Zepto. It cannot check out or place an order.
+
+## Safe demo versus live commerce
+
+```bash
+make dev       # default: static fixtures, zero commerce API/MCP calls
+make dev-live  # explicit opt-in: live provider connections and MCP tools
+```
+
+Demo mode is the right place to iterate on UI, voice, chat, basket, and confirmation
+flows. It returns a local sample address and catalogue and calculates sample fees in
+deterministic backend code. Both provider cards remain visible, but no provider OAuth,
+search, cart, or catalogue-discovery request is made.
+
+In live mode, ordinary reloads do not fetch either provider's addresses again. The
+backend returns each provider's database snapshot and saved selection. Only the
+explicit **Refresh from Swiggy** or **Refresh from Zepto** action invokes a provider
+address tool. Searches and final-bill requests are live actions and are clearly
+labelled in the UI.
 
 ## Verified Swiggy contract
 
@@ -16,11 +36,36 @@ The integration was checked against the official Swiggy Builders Club documentat
 
 References: [authentication](https://mcp.swiggy.com/builders/docs/start/authenticate/), [MCP protocol](https://mcp.swiggy.com/builders/docs/reference/protocol/), [get_addresses](https://mcp.swiggy.com/builders/docs/reference/instamart/get_addresses/), and [search_products](https://mcp.swiggy.com/builders/docs/reference/instamart/search_products/).
 
-The backend still calls `tools/list` for the authenticated user and validates each tool call against the returned live JSON Schema. Swiggy notes that a user's live catalogue may differ from the public reference.
+The backend discovers `tools/list` once per authenticated MCP session and validates
+each tool call against the returned live JSON Schema. The same persistent session and
+catalogue are reused for later reads instead of re-initializing MCP for every request.
+Swiggy notes that a user's live catalogue may differ from the public reference.
+
+## Swiggy rate limits
+
+Swiggy does not publish fixed request caps or remaining-quota headers. Its gateway
+can return HTTP `429` with `Retry-After`; at the MCP layer the corresponding error
+code is `-32000`. The backend captures the raw header before the Python MCP SDK can
+wrap the transport error, and also recognizes JSON-RPC and proxy-style 429 messages.
+
+The exact provider delay becomes a shared local cooldown for the linked account. If
+an MCP bridge hides the header, the configurable fallback is 30 seconds. During the
+cooldown the backend returns `429` immediately without probing Swiggy, includes a
+browser-visible `Retry-After` response header, and leaves Zepto unaffected. Every
+provider rejection logs a generated correlation ID, operation name, delay, and delay
+source without logging tokens, addresses, response bodies, or search text.
+
+If a 429 remains after a genuine quiet period, stop all other clients using the same
+Swiggy identity and make one controlled request. Escalate a continued failure to
+`builders@swiggy.in` with the correlation ID, timestamp/timezone, MCP endpoint, HTTP
+status, JSON-RPC code, and `Retry-After` value. Never include an access token or OTP.
+
+Reference: [Swiggy rate-limit guidance](https://mcp.swiggy.com/builders/docs/operate/rate-limits/).
 
 ## Local setup
 
-Requirements: Python 3.11+, Node.js 20+, a Swiggy account with a saved delivery address, and a browser for Swiggy's phone/OTP page.
+Requirements for demo mode: Python 3.11+, Node.js 20+, and PostgreSQL. Live mode also
+requires provider accounts and a browser for the providers' phone/OTP pages.
 
 1. Create the root environment file and encryption key:
 
@@ -58,13 +103,38 @@ Requirements: Python 3.11+, Node.js 20+, a Swiggy account with a saved delivery 
    npm run dev
    ```
 
-5. Open [http://localhost:3000](http://localhost:3000), choose **Connect securely**, and complete phone/OTP authentication only on Swiggy's page. After Swiggy redirects back, choose a saved address and search for `Fortune cooking oil 1 litre`.
+5. Open [http://localhost:3003](http://localhost:3003), choose **Connect securely**, and complete phone/OTP authentication only on Swiggy's page. After Swiggy redirects back, choose a saved address and search for `Fortune cooking oil 1 litre`.
 
 No manually issued client ID, client secret, Swiggy password, or pasted access token is required. Swiggy returns a public-client ID through DCR. OAuth state and the PKCE verifier remain in backend memory and expire after ten minutes.
 
+## Zepto connection and product search
+
+The app can also connect a local Zepto account through the official [Zepto MCP](https://github.com/zeptonow/mcp) OAuth flow. It uses Dynamic Client Registration, PKCE S256, and the official Streamable HTTP MCP endpoint. Zepto accepts the allowlisted `http://localhost/callback` registration, so start the callback bridge in a third terminal before connecting:
+
+```bash
+cd backend
+sudo uvicorn app.local_callback_bridge:app --host 127.0.0.1 --port 80 --no-access-log
+```
+
+Then use `GET /api/zepto/oauth/start` (the UI's **Connect Zepto** action) and
+complete the phone/OTP flow only on Zepto's site. The callback bridge forwards the
+result to the backend, which validates OAuth state and keeps the token encrypted
+locally. After connecting, use **Refresh from Zepto** once to fetch and save the
+account's delivery addresses. Later reloads use that database snapshot without an MCP
+call. Swiggy and Zepto can stay connected together; a shopping request searches every
+provider whose saved address is ready.
+
+The authenticated Zepto catalogue was inspected before enabling actions. This build
+exposes only saved-address retrieval and product search. It keeps one serialized MCP
+session, caches the live tool catalogue for that session, reuses the selected address
+and past-order context, and caches an identical search briefly. A provider 429 starts
+a local cooldown so repeated UI actions do not keep extending the block. Zepto cart,
+payment, checkout, and order tools remain unavailable through this app. The scope is
+fixed to `tools:read`.
+
 ## Local token storage
 
-The single-user connection is encrypted with Fernet and stored at `backend/.data/swiggy_connection.enc` by default. The file is created with mode `0600`, excluded from Git, and never returned to the browser or logged. The application redacts OAuth callback query parameters from Uvicorn logs; the documented development command also disables access logs as defense in depth. Keep the configured encryption key stable across backend restarts. Changing it makes the existing encrypted connection unreadable; delete the local encrypted file and reconnect if you intentionally rotate the key during development.
+The single-user connection is encrypted with Fernet and stored at `backend/.data/swiggy_connection.enc` by default. The file is created with mode `0600`, excluded from Git, and never returned to the browser or logged. If `APP_ENCRYPTION_KEY` is not set, local development creates a private key once at `backend/.data/app_encryption.key` and reuses it across backend restarts. The application redacts OAuth callback query parameters from Uvicorn logs; the documented development command also disables access logs as defense in depth. Keep the configured encryption key stable across backend restarts. Changing or deleting it makes the existing encrypted connection unreadable; delete the local encrypted connection file and reconnect if you intentionally rotate the key.
 
 For a multi-user deployment, replace this file store with per-user encrypted database or vault storage and complete Swiggy's delegated-auth/enterprise onboarding.
 
@@ -80,6 +150,15 @@ For a multi-user deployment, replace this file store with per-user encrypted dat
 - `POST /api/swiggy/search` with `{"query":"Fortune cooking oil 1 litre","address_id":"<saved-address-id>","offset":0}`
 - `POST /api/swiggy/search/personalized` — applies only confirmed, permitted,
   category-relevant memories and returns which memories were used
+- `GET /api/zepto/connection`
+- `GET /api/zepto/oauth/start`
+- `GET /api/zepto/oauth/callback`
+- `POST /api/zepto/disconnect`
+- `GET /api/zepto/addresses?refresh=false` — database snapshot by default; provider
+  access only when `refresh=true`
+- `PUT /api/zepto/addresses/selected`
+- `POST /api/zepto/search` with
+  `{"query":"milk and bread","address_id":"<saved-address-id>","page_number":0}`
 
 ## Person-scoped memory
 
@@ -88,7 +167,9 @@ corrections, and purpose-specific consent. Conversation state and durable memory
 kept separate. A memory must be confirmed before retrieval, and retrieval requires
 both an allowed purpose on the memory and a matching active permission.
 
-Configure the database and run migrations:
+`make dev` starts the local Homebrew PostgreSQL instance when needed, creates the
+`equal_ai` development database, and applies migrations before starting the API.
+To configure another database or apply migrations manually:
 
 ```bash
 cd backend
