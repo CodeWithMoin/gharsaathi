@@ -4,7 +4,11 @@ from typing import Any
 
 import pytest
 
-from app.commerce.swiggy.errors import SwiggyAuthenticationRequired, SwiggyProviderError
+from app.commerce.swiggy.errors import (
+    SwiggyAuthenticationRequired,
+    SwiggyProviderError,
+    SwiggyRateLimited,
+)
 from app.commerce.swiggy.models import Price, Product, ProductSearchResult
 from app.voice.sideband import FINISHED, SessionChannel, SidebandRunner
 from app.voice.tools import ShoppingToolExecutor
@@ -103,6 +107,18 @@ async def test_provider_failures_become_honest_results(error: Exception, status:
         "search_products", json.dumps({"query": "atta"})
     )
     assert outcome.model_output["status"] == status
+    assert "results" not in outcome.model_output
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_is_not_misreported_as_unclear_availability() -> None:
+    outcome = await ShoppingToolExecutor(
+        FakeSearcher(SwiggyRateLimited("limited", retry_after_seconds=45)), "addr_home"
+    ).execute("search_products", json.dumps({"query": "Amul milk 1 litre"}))
+
+    assert outcome.model_output["status"] == "rate_limited"
+    assert outcome.model_output["retry_after_seconds"] == 45
+    assert "No stock result" in outcome.model_output["message"]
     assert "results" not in outcome.model_output
 
 

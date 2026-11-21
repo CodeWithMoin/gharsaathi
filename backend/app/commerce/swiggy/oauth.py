@@ -56,7 +56,7 @@ class SwiggyOAuthClient:
             "POST",
             f"{self.settings.swiggy_base_url}/auth/register",
             json={
-                "client_name": "GharCart local development",
+                "client_name": "GharSaathi local development",
                 "redirect_uris": [self.settings.swiggy_oauth_redirect_uri],
                 "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"],

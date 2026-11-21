@@ -14,6 +14,7 @@ from app.voice.service import (
     VoiceConfigurationError,
     VoiceProviderError,
 )
+from app.voice.prompts import BACKEND_INSTRUCTIONS, GREETING_INSTRUCTION, LIVE_INSTRUCTIONS
 from app.voice.tools import ShoppingToolExecutor
 from tests.shopping_fakes import World
 
@@ -40,6 +41,14 @@ OFFER = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
 
 def settings(api_key: str = "sk-test-key") -> Settings:
     return Settings(_env_file=None, openai_api_key=SecretStr(api_key))
+
+
+def test_voice_prompt_uses_gharsaathi_and_feminine_hinglish() -> None:
+    combined = "\n".join((LIVE_INSTRUCTIONS, GREETING_INSTRUCTION, BACKEND_INSTRUCTIONS))
+    assert "GharSaathi" in combined
+    assert "GharCart" not in combined
+    assert "dekh rahi hoon" in combined
+    assert "Never use masculine" in combined
 
 
 @pytest.mark.asyncio

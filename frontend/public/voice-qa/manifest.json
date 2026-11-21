@@ -1,0 +1,317 @@
+{
+  "version": "1.0.0",
+  "voice": "Lekha (macOS hi-IN mock TTS)",
+  "disclaimer": "These files validate mock catalogue phrasing and app playback. They do not prove OpenAI Realtime pronunciation.",
+  "metrics": {
+    "case_count": 12,
+    "utterance_count": 36,
+    "unique_response_ratio": 1.0,
+    "unique_opener_ratio": 0.9722,
+    "distinct_1": 0.2379,
+    "distinct_2": 0.5478,
+    "mean_within_case_jaccard": 0.2849,
+    "max_within_case_jaccard": 0.4118
+  },
+  "cases": [
+    {
+      "id": "atta",
+      "provider": "Swiggy Instamart",
+      "title": "Aashirvaad Shudh Chakki Atta, 5 kg",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Aashirvaad Shudh Chakki आटा, पाँच किलो। Iska price aur delivery check kar rahi hoon.",
+          "audio": "/voice-qa/atta-1.mp3",
+          "duration_seconds": 5.472
+        },
+        {
+          "id": 2,
+          "text": "पाँच किलो वाला Aashirvaad Shudh Chakki आटा मिल गया। Ab best option compare karti hoon.",
+          "audio": "/voice-qa/atta-2.mp3",
+          "duration_seconds": 5.544
+        },
+        {
+          "id": 3,
+          "text": "Aashirvaad का पाँच किलो आटा—price aur availability dono dekh leti hoon.",
+          "audio": "/voice-qa/atta-3.mp3",
+          "duration_seconds": 4.608
+        }
+      ]
+    },
+    {
+      "id": "toor-dal",
+      "provider": "Zepto",
+      "title": "Tata Sampann Unpolished Toor Dal, 1 kg",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Tata Sampann unpolished तूर दाल, एक किलो। Live price dekh rahi hoon.",
+          "audio": "/voice-qa/toor-dal-1.mp3",
+          "duration_seconds": 4.728
+        },
+        {
+          "id": 2,
+          "text": "एक किलो Tata Sampann तूर दाल available hai। Delivery time bhi compare karti hoon.",
+          "audio": "/voice-qa/toor-dal-2.mp3",
+          "duration_seconds": 5.952
+        },
+        {
+          "id": 3,
+          "text": "Tata Sampann की तूर दाल मिल गयी। Ab pack aur final price check kar leti hoon.",
+          "audio": "/voice-qa/toor-dal-3.mp3",
+          "duration_seconds": 4.968
+        }
+      ]
+    },
+    {
+      "id": "mustard-oil",
+      "provider": "Swiggy Instamart",
+      "title": "Fortune Kachi Ghani Mustard Oil, 1 L",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Fortune कच्ची घानी mustard oil, एक लीटर। Offer check kar rahi hoon.",
+          "audio": "/voice-qa/mustard-oil-1.mp3",
+          "duration_seconds": 5.04
+        },
+        {
+          "id": 2,
+          "text": "एक लीटर Fortune कच्ची घानी oil ka option mil gaya। Final payable price dekhti hoon.",
+          "audio": "/voice-qa/mustard-oil-2.mp3",
+          "duration_seconds": 5.688
+        },
+        {
+          "id": 3,
+          "text": "Fortune mustard oil, कच्ची घानी variant। Stock aur delivery compare kar leti hoon.",
+          "audio": "/voice-qa/mustard-oil-3.mp3",
+          "duration_seconds": 6.024
+        }
+      ]
+    },
+    {
+      "id": "ghee",
+      "provider": "Zepto",
+      "title": "Amul Pure Ghee, 1 L",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Amul pure घी, एक लीटर। Current price check kar rahi hoon.",
+          "audio": "/voice-qa/ghee-1.mp3",
+          "duration_seconds": 4.056
+        },
+        {
+          "id": 2,
+          "text": "एक लीटर Amul घी available hai। Delivery estimate bhi dekhti hoon.",
+          "audio": "/voice-qa/ghee-2.mp3",
+          "duration_seconds": 4.968
+        },
+        {
+          "id": 3,
+          "text": "Amul का pure घी mil gaya। Ab value aur pack fit compare kar leti hoon.",
+          "audio": "/voice-qa/ghee-3.mp3",
+          "duration_seconds": 4.656
+        }
+      ]
+    },
+    {
+      "id": "jeera",
+      "provider": "Swiggy Instamart",
+      "title": "Catch Whole Jeera, 100 g",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Catch whole जीरा, सौ ग्राम। Availability dekh rahi hoon.",
+          "audio": "/voice-qa/jeera-1.mp3",
+          "duration_seconds": 3.96
+        },
+        {
+          "id": 2,
+          "text": "सौ ग्राम Catch जीरा ka pack mil gaya। Price compare karti hoon.",
+          "audio": "/voice-qa/jeera-2.mp3",
+          "duration_seconds": 4.248
+        },
+        {
+          "id": 3,
+          "text": "Catch का whole जीरा—stock aur delivery dono check kar leti hoon.",
+          "audio": "/voice-qa/jeera-3.mp3",
+          "duration_seconds": 4.152
+        }
+      ]
+    },
+    {
+      "id": "haldi",
+      "provider": "Zepto",
+      "title": "Everest Turmeric Haldi Powder, 200 g",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Everest turmeric हल्दी powder, दो सौ ग्राम। Live options dekh rahi hoon.",
+          "audio": "/voice-qa/haldi-1.mp3",
+          "duration_seconds": 5.112
+        },
+        {
+          "id": 2,
+          "text": "दो सौ ग्राम Everest हल्दी powder available hai। Offer bhi check karti hoon.",
+          "audio": "/voice-qa/haldi-2.mp3",
+          "duration_seconds": 5.376
+        },
+        {
+          "id": 3,
+          "text": "Everest की हल्दी, दो सौ ग्राम। Final price compare kar leti hoon.",
+          "audio": "/voice-qa/haldi-3.mp3",
+          "duration_seconds": 4.752
+        }
+      ]
+    },
+    {
+      "id": "dhania",
+      "provider": "Swiggy Instamart",
+      "title": "Tata Sampann Coriander Dhania Powder, 200 g",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Tata Sampann coriander धनिया powder, दो सौ ग्राम। Price check kar rahi hoon.",
+          "audio": "/voice-qa/dhania-1.mp3",
+          "duration_seconds": 5.304
+        },
+        {
+          "id": 2,
+          "text": "दो सौ ग्राम Tata Sampann धनिया powder mil gaya। Delivery dekhti hoon.",
+          "audio": "/voice-qa/dhania-2.mp3",
+          "duration_seconds": 4.608
+        },
+        {
+          "id": 3,
+          "text": "Tata Sampann का धनिया powder—stock aur offer compare kar leti hoon.",
+          "audio": "/voice-qa/dhania-3.mp3",
+          "duration_seconds": 4.416
+        }
+      ]
+    },
+    {
+      "id": "besan",
+      "provider": "Zepto",
+      "title": "Fortune Chana Besan, 500 g",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Fortune चना बेसन, पाँच सौ ग्राम। Current price dekh rahi hoon.",
+          "audio": "/voice-qa/besan-1.mp3",
+          "duration_seconds": 4.68
+        },
+        {
+          "id": 2,
+          "text": "पाँच सौ ग्राम Fortune चना बेसन available hai। Delivery compare karti hoon.",
+          "audio": "/voice-qa/besan-2.mp3",
+          "duration_seconds": 5.232
+        },
+        {
+          "id": 3,
+          "text": "Fortune का चना बेसन mil gaya। Pack value check kar leti hoon.",
+          "audio": "/voice-qa/besan-3.mp3",
+          "duration_seconds": 4.272
+        }
+      ]
+    },
+    {
+      "id": "poha",
+      "provider": "Swiggy Instamart",
+      "title": "Tata Sampann Thick Poha, 500 g",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Tata Sampann thick पोहा, पाँच सौ ग्राम। Availability dekh rahi hoon.",
+          "audio": "/voice-qa/poha-1.mp3",
+          "duration_seconds": 4.8
+        },
+        {
+          "id": 2,
+          "text": "पाँच सौ ग्राम Tata Sampann पोहा mil gaya। Price compare karti hoon.",
+          "audio": "/voice-qa/poha-2.mp3",
+          "duration_seconds": 4.536
+        },
+        {
+          "id": 3,
+          "text": "Tata Sampann का thick पोहा—delivery aur offer check kar leti hoon.",
+          "audio": "/voice-qa/poha-3.mp3",
+          "duration_seconds": 4.056
+        }
+      ]
+    },
+    {
+      "id": "basmati-rice",
+      "provider": "Zepto",
+      "title": "India Gate Classic Basmati Rice, 5 kg",
+      "variants": [
+        {
+          "id": 1,
+          "text": "India Gate Classic बासमती चावल, पाँच किलो। Price dekh rahi hoon.",
+          "audio": "/voice-qa/basmati-rice-1.mp3",
+          "duration_seconds": 4.656
+        },
+        {
+          "id": 2,
+          "text": "पाँच किलो India Gate Classic बासमती चावल available hai। Delivery compare karti hoon.",
+          "audio": "/voice-qa/basmati-rice-2.mp3",
+          "duration_seconds": 5.688
+        },
+        {
+          "id": 3,
+          "text": "India Gate का Classic बासमती चावल—final payable price check kar leti hoon.",
+          "audio": "/voice-qa/basmati-rice-3.mp3",
+          "duration_seconds": 4.728
+        }
+      ]
+    },
+    {
+      "id": "detergent",
+      "provider": "Swiggy Instamart",
+      "title": "Surf Excel Matic Front Load Detergent, 2 kg",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Surf Excel Matic front load detergent, two kilograms. Live price check kar rahi hoon.",
+          "audio": "/voice-qa/detergent-1.mp3",
+          "duration_seconds": 6.168
+        },
+        {
+          "id": 2,
+          "text": "Two kilogram wala Surf Excel Matic front load pack available hai. Delivery bhi dekhti hoon.",
+          "audio": "/voice-qa/detergent-2.mp3",
+          "duration_seconds": 6.576
+        },
+        {
+          "id": 3,
+          "text": "Surf Excel Matic, front load variant—offer aur pack value compare kar leti hoon.",
+          "audio": "/voice-qa/detergent-3.mp3",
+          "duration_seconds": 5.568
+        }
+      ]
+    },
+    {
+      "id": "toilet-cleaner",
+      "provider": "Zepto",
+      "title": "Harpic Power Plus Toilet Cleaner, 1 L",
+      "variants": [
+        {
+          "id": 1,
+          "text": "Harpic Power Plus toilet cleaner, one litre. Availability check kar rahi hoon.",
+          "audio": "/voice-qa/toilet-cleaner-1.mp3",
+          "duration_seconds": 5.304
+        },
+        {
+          "id": 2,
+          "text": "One litre Harpic Power Plus pack mil gaya. Current price bhi dekhti hoon.",
+          "audio": "/voice-qa/toilet-cleaner-2.mp3",
+          "duration_seconds": 5.112
+        },
+        {
+          "id": 3,
+          "text": "Harpic Power Plus, one litre—delivery aur offer compare kar leti hoon.",
+          "audio": "/voice-qa/toilet-cleaner-3.mp3",
+          "duration_seconds": 4.632
+        }
+      ]
+    }
+  ]
+}

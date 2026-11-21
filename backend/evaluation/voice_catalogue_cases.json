@@ -1,0 +1,137 @@
+{
+  "version": "1.0.0",
+  "cases": [
+    {
+      "id": "atta",
+      "provider": "Swiggy Instamart",
+      "title": "Aashirvaad Shudh Chakki Atta, 5 kg",
+      "pronunciation_targets": ["आटा", "atta", "aata"],
+      "variants": [
+        "Aashirvaad Shudh Chakki आटा, पाँच किलो। Iska price aur delivery check kar rahi hoon.",
+        "पाँच किलो वाला Aashirvaad Shudh Chakki आटा मिल गया। Ab best option compare karti hoon.",
+        "Aashirvaad का पाँच किलो आटा—price aur availability dono dekh leti hoon."
+      ]
+    },
+    {
+      "id": "toor-dal",
+      "provider": "Zepto",
+      "title": "Tata Sampann Unpolished Toor Dal, 1 kg",
+      "pronunciation_targets": ["तूर दाल", "toor dal", "toor daal"],
+      "variants": [
+        "Tata Sampann unpolished तूर दाल, एक किलो। Live price dekh rahi hoon.",
+        "एक किलो Tata Sampann तूर दाल available hai। Delivery time bhi compare karti hoon.",
+        "Tata Sampann की तूर दाल मिल गयी। Ab pack aur final price check kar leti hoon."
+      ]
+    },
+    {
+      "id": "mustard-oil",
+      "provider": "Swiggy Instamart",
+      "title": "Fortune Kachi Ghani Mustard Oil, 1 L",
+      "pronunciation_targets": ["कच्ची घानी", "kachi ghani", "kachhi ghani", "kacchi ghani"],
+      "variants": [
+        "Fortune कच्ची घानी mustard oil, एक लीटर। Offer check kar rahi hoon.",
+        "एक लीटर Fortune कच्ची घानी oil ka option mil gaya। Final payable price dekhti hoon.",
+        "Fortune mustard oil, कच्ची घानी variant। Stock aur delivery compare kar leti hoon."
+      ]
+    },
+    {
+      "id": "ghee",
+      "provider": "Zepto",
+      "title": "Amul Pure Ghee, 1 L",
+      "pronunciation_targets": ["घी", "ghee"],
+      "variants": [
+        "Amul pure घी, एक लीटर। Current price check kar rahi hoon.",
+        "एक लीटर Amul घी available hai। Delivery estimate bhi dekhti hoon.",
+        "Amul का pure घी mil gaya। Ab value aur pack fit compare kar leti hoon."
+      ]
+    },
+    {
+      "id": "jeera",
+      "provider": "Swiggy Instamart",
+      "title": "Catch Whole Jeera, 100 g",
+      "pronunciation_targets": ["जीरा", "jeera", "jira"],
+      "variants": [
+        "Catch whole जीरा, सौ ग्राम। Availability dekh rahi hoon.",
+        "सौ ग्राम Catch जीरा ka pack mil gaya। Price compare karti hoon.",
+        "Catch का whole जीरा—stock aur delivery dono check kar leti hoon."
+      ]
+    },
+    {
+      "id": "haldi",
+      "provider": "Zepto",
+      "title": "Everest Turmeric Haldi Powder, 200 g",
+      "pronunciation_targets": ["हल्दी", "haldi"],
+      "variants": [
+        "Everest turmeric हल्दी powder, दो सौ ग्राम। Live options dekh rahi hoon.",
+        "दो सौ ग्राम Everest हल्दी powder available hai। Offer bhi check karti hoon.",
+        "Everest की हल्दी, दो सौ ग्राम। Final price compare kar leti hoon."
+      ]
+    },
+    {
+      "id": "dhania",
+      "provider": "Swiggy Instamart",
+      "title": "Tata Sampann Coriander Dhania Powder, 200 g",
+      "pronunciation_targets": ["धनिया", "dhania", "dhaniya"],
+      "variants": [
+        "Tata Sampann coriander धनिया powder, दो सौ ग्राम। Price check kar rahi hoon.",
+        "दो सौ ग्राम Tata Sampann धनिया powder mil gaya। Delivery dekhti hoon.",
+        "Tata Sampann का धनिया powder—stock aur offer compare kar leti hoon."
+      ]
+    },
+    {
+      "id": "besan",
+      "provider": "Zepto",
+      "title": "Fortune Chana Besan, 500 g",
+      "pronunciation_targets": ["चना बेसन", "chana besan"],
+      "variants": [
+        "Fortune चना बेसन, पाँच सौ ग्राम। Current price dekh rahi hoon.",
+        "पाँच सौ ग्राम Fortune चना बेसन available hai। Delivery compare karti hoon.",
+        "Fortune का चना बेसन mil gaya। Pack value check kar leti hoon."
+      ]
+    },
+    {
+      "id": "poha",
+      "provider": "Swiggy Instamart",
+      "title": "Tata Sampann Thick Poha, 500 g",
+      "pronunciation_targets": ["पोहा", "poha"],
+      "variants": [
+        "Tata Sampann thick पोहा, पाँच सौ ग्राम। Availability dekh rahi hoon.",
+        "पाँच सौ ग्राम Tata Sampann पोहा mil gaya। Price compare karti hoon.",
+        "Tata Sampann का thick पोहा—delivery aur offer check kar leti hoon."
+      ]
+    },
+    {
+      "id": "basmati-rice",
+      "provider": "Zepto",
+      "title": "India Gate Classic Basmati Rice, 5 kg",
+      "pronunciation_targets": ["बासमती चावल", "basmati rice", "basmati chawal"],
+      "variants": [
+        "India Gate Classic बासमती चावल, पाँच किलो। Price dekh rahi hoon.",
+        "पाँच किलो India Gate Classic बासमती चावल available hai। Delivery compare karti hoon.",
+        "India Gate का Classic बासमती चावल—final payable price check kar leti hoon."
+      ]
+    },
+    {
+      "id": "detergent",
+      "provider": "Swiggy Instamart",
+      "title": "Surf Excel Matic Front Load Detergent, 2 kg",
+      "pronunciation_targets": ["Surf Excel Matic"],
+      "variants": [
+        "Surf Excel Matic front load detergent, two kilograms. Live price check kar rahi hoon.",
+        "Two kilogram wala Surf Excel Matic front load pack available hai. Delivery bhi dekhti hoon.",
+        "Surf Excel Matic, front load variant—offer aur pack value compare kar leti hoon."
+      ]
+    },
+    {
+      "id": "toilet-cleaner",
+      "provider": "Zepto",
+      "title": "Harpic Power Plus Toilet Cleaner, 1 L",
+      "pronunciation_targets": ["Harpic Power Plus"],
+      "variants": [
+        "Harpic Power Plus toilet cleaner, one litre. Availability check kar rahi hoon.",
+        "One litre Harpic Power Plus pack mil gaya. Current price bhi dekhti hoon.",
+        "Harpic Power Plus, one litre—delivery aur offer compare kar leti hoon."
+      ]
+    }
+  ]
+}

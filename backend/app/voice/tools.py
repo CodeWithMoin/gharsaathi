@@ -7,6 +7,7 @@ from app.commerce.swiggy.errors import (
     SwiggyAuthenticationRequired,
     SwiggyConfigurationError,
     SwiggyError,
+    SwiggyRateLimited,
 )
 from app.commerce.swiggy.models import Product, ProductSearchResult
 from app.shopping.models import rupees_to_paise
@@ -142,6 +143,23 @@ class ShoppingToolExecutor:
                     "message": "Swiggy is not connected or the session has expired. Ask the user to connect Swiggy on screen.",
                 },
                 ui_event={"type": "tool.not_connected", "query": query},
+            )
+        except SwiggyRateLimited as exc:
+            return ToolOutcome(
+                model_output={
+                    "status": "rate_limited",
+                    "provider": "Swiggy Instamart",
+                    "retry_after_seconds": exc.retry_after_seconds,
+                    "message": (
+                        "Swiggy is temporarily rate-limiting search. No stock result "
+                        "was returned, so do not describe this as unclear availability."
+                    ),
+                },
+                ui_event={
+                    "type": "tool.error",
+                    "query": query,
+                    "message": "Swiggy is temporarily rate-limiting search.",
+                },
             )
         except SwiggyError:
             return ToolOutcome(

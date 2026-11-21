@@ -102,7 +102,7 @@ export function VoicePanel({ addressId, onClose, onResults, onTranscriptTurn, on
         const event = JSON.parse(data) as ToolEvent;
         if (event.type === "tool.started" && event.name === "search_products") {
           setSearching(true);
-          setMessage("Instamart par dekh raha hoon…");
+          setMessage("Instamart par dekh rahi hoon…");
         } else if (event.type === "tool.started") {
           setBasketNotice("");
           setMessage("Basket update kar raha hoon…");

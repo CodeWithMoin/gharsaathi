@@ -1,0 +1,20 @@
+{
+  "prompt_version": "1.4.0",
+  "model": "gpt-realtime-2.1",
+  "voice": "marin",
+  "metrics": {
+    "case_count": 12,
+    "utterance_count": 36,
+    "unique_response_ratio": 0.9722,
+    "unique_opener_ratio": 0.6944,
+    "distinct_1": 0.2894,
+    "distinct_2": 0.4884,
+    "mean_within_case_jaccard": 0.3949,
+    "max_within_case_jaccard": 1.0
+  },
+  "audio": {
+    "file_count": 36,
+    "total_duration_seconds": 185.976
+  },
+  "errors": []
+}
