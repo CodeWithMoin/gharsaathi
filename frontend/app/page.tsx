@@ -46,10 +46,10 @@ function conversationTime(value: string) {
 }
 
 export default function Home() {
-  return <FirstRunOnboarding>{({ justCompleted, firstName }) => <ShoppingChat startWithSetupOpen={justCompleted} userName={firstName} />}</FirstRunOnboarding>;
+  return <FirstRunOnboarding>{({ firstName, openSetup }) => <ShoppingChat userName={firstName} onOpenSetup={openSetup} />}</FirstRunOnboarding>;
 }
 
-function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetupOpen?: boolean; userName: string }) {
+function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { startWithSetupOpen?: boolean; userName: string; onOpenSetup?: () => void }) {
   const { signOut } = useClerk();
   const { user } = useUser();
   const apiRequest = useApiRequest();
@@ -835,6 +835,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         if (provider === "zepto") void selectZeptoAddress(id);
         else void selectAddress(id);
       }}
+      onManagePreferences={onOpenSetup ? () => { setAccountSettingsOpen(false); onOpenSetup(); } : undefined}
       onSignOut={() => void signOut({ redirectUrl: "/" })}
     />
 

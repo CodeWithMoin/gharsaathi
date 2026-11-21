@@ -15,6 +15,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import Image from "next/image";
+import { ADDRESS_FORM_OPTIONS } from "./onboarding-flow.mjs";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useApiRequest } from "./authenticated-api";
 
@@ -204,11 +205,7 @@ type AddressForm = "masculine" | "feminine" | "neutral";
 type ReplyLanguage = "hinglish" | "hindi" | "english";
 type VoiceProfile = { first_name: string | null; address_form: AddressForm; language: ReplyLanguage };
 
-const ADDRESS_FORMS: { id: AddressForm; label: string; example: string }[] = [
-  { id: "masculine", label: "Masculine", example: "aap dhoondh rahe hain" },
-  { id: "feminine", label: "Feminine", example: "aap dhoondh rahi hain" },
-  { id: "neutral", label: "Neutral", example: "aapko kya chahiye" },
-];
+const ADDRESS_FORMS: { id: AddressForm; label: string; example: string }[] = ADDRESS_FORM_OPTIONS.map((option) => ({ id: option.value, label: option.label, example: option.example }));
 
 function PreferencesDetail({ languageLabel, onLanguageChange, onManagePreferences }: { languageLabel: string; onLanguageChange?: (language: "hinglish" | "hindi" | "english") => void; onManagePreferences?: () => void }) {
   const request = useApiRequest();
