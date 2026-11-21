@@ -1,5 +1,8 @@
+import asyncio
+
 import pytest
 
+from app.shopping.approval import ApprovalService
 from app.shopping.errors import ApprovalRefused, ProviderUnavailable
 from app.shopping.models import ApprovalStatus, BasketStatus, basket_fingerprint
 from tests.shopping_fakes import DELIVERY_FEE, HOUSEHOLD, PROVIDER, World, line
@@ -66,3 +69,28 @@ async def test_provider_errors_are_normalized() -> None:
     world.provider.quote = broken
     with pytest.raises(ProviderUnavailable):
         await world.approvals.request(basket.id)
+
+
+async def test_approval_transition_waits_for_shared_checkout_coordinator() -> None:
+    world = World()
+    basket = await world.ready_basket()
+    requested = await world.approvals.request(basket.id)
+    coordinator = asyncio.Lock()
+    coordinated = ApprovalService(
+        world.basket_repo,
+        world.approval_repo,
+        lambda _: world.provider,
+        world.clock,
+        workflow_lock=coordinator,
+    )
+
+    await coordinator.acquire()
+    task = asyncio.create_task(
+        coordinated.approve(requested.approval.id, requested.approval.fingerprint)
+    )
+    await asyncio.sleep(0)
+    assert not task.done()
+
+    coordinator.release()
+    approved = await task
+    assert approved.status == ApprovalStatus.APPROVED

@@ -1,11 +1,12 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.database.models import ShoppingApprovalRecord, ShoppingBasketRecord
-from app.shopping.models import Approval, Basket, ProviderName
+from app.shopping.errors import InvalidBasketChange
+from app.shopping.models import Approval, Basket, BasketStatus, ProviderName
 
 
-OPEN_BASKET_STATUSES = ("draft", "awaiting_approval", "approved")
+OPEN_BASKET_STATUSES = ("draft", "awaiting_approval", "approved", "checkout_pending")
 
 
 class DatabaseBasketRepository:
@@ -27,6 +28,28 @@ class DatabaseBasketRepository:
                 return
             for key, value in values.items():
                 setattr(record, key, value)
+
+    async def save_if_editable(self, basket: Basket, *, expected_revision: int) -> None:
+        """Optimistically save a user edit without thawing a checkout claim."""
+
+        values = basket.model_dump(mode="python")
+        values["lines"] = [line.model_dump(mode="json") for line in basket.lines]
+        async with self.sessions() as session, session.begin():
+            result = await session.execute(
+                update(ShoppingBasketRecord)
+                .where(
+                    ShoppingBasketRecord.id == basket.id,
+                    ShoppingBasketRecord.revision == expected_revision,
+                    ShoppingBasketRecord.status.notin_(
+                        (BasketStatus.CHECKOUT_PENDING.value, BasketStatus.ORDERED.value)
+                    ),
+                )
+                .values(**values)
+            )
+            if result.rowcount != 1:
+                raise InvalidBasketChange(
+                    "This basket changed or checkout already started. Refresh before editing."
+                )
 
     async def active_for(self, household_id: str, provider: ProviderName) -> Basket | None:
         async with self.sessions() as session:

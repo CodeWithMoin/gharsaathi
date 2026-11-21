@@ -100,6 +100,7 @@ class BasketService:
         self, household_id: str, provider: ProviderName, line: BasketLine
     ) -> Basket:
         basket = await self.active(household_id, provider)
+        self._require_editable(basket)
         if line.ref.provider != basket.provider:
             raise InvalidBasketChange("This item belongs to a different store.")
         _validate_quantity(line.quantity)
@@ -118,6 +119,7 @@ class BasketService:
         self, household_id: str, provider: ProviderName, variant_id: str, quantity: int
     ) -> Basket:
         basket = await self.active(household_id, provider)
+        self._require_editable(basket)
         index = self._index(basket, variant_id)
         if quantity == 0:
             del basket.lines[index]
@@ -132,6 +134,7 @@ class BasketService:
         self, household_id: str, provider: ProviderName, variant_id: str
     ) -> Basket:
         basket = await self.active(household_id, provider)
+        self._require_editable(basket)
         del basket.lines[self._index(basket, variant_id)]
         return await self._commit(basket)
 
@@ -139,6 +142,7 @@ class BasketService:
         self, household_id: str, provider: ProviderName, address_id: str
     ) -> Basket:
         basket = await self.active(household_id, provider)
+        self._require_editable(basket)
         if basket.address_id == address_id:
             return basket
         basket.address_id = address_id
@@ -153,13 +157,23 @@ class BasketService:
 
     async def _commit(self, basket: Basket) -> Basket:
         now = self.clock()
+        expected_revision = basket.revision
         basket.revision += 1
         basket.updated_at = now
         basket.status = BasketStatus.DRAFT
-        await self.baskets.save(basket)
+        await self.baskets.save_if_editable(
+            basket, expected_revision=expected_revision
+        )
         for approval in await self.approvals.for_basket(basket.id):
             if approval.status in OPEN_APPROVAL_STATUSES:
                 approval.status = ApprovalStatus.SUPERSEDED
                 approval.decided_at = now
                 await self.approvals.save(approval)
         return basket
+
+    @staticmethod
+    def _require_editable(basket: Basket) -> None:
+        if basket.status in {BasketStatus.CHECKOUT_PENDING, BasketStatus.ORDERED}:
+            raise InvalidBasketChange(
+                "Checkout already started for this basket. Do not create or submit it again."
+            )

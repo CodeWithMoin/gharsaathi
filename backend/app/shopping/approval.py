@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -58,13 +59,23 @@ class ApprovalService:
         approvals: ApprovalRepository,
         providers: ProviderLookup,
         clock: Clock = utc_now,
+        workflow_lock: asyncio.Lock | None = None,
     ) -> None:
         self.baskets = baskets
         self.approvals = approvals
         self.providers = providers
         self.clock = clock
+        self.workflow_lock = workflow_lock
 
     async def request(self, basket_id: str) -> ApprovalRequest:
+        if self.workflow_lock is not None:
+            async with self.workflow_lock:
+                return await self._request(basket_id, coordinated=True)
+        return await self._request(basket_id, coordinated=False)
+
+    async def _request(
+        self, basket_id: str, *, coordinated: bool
+    ) -> ApprovalRequest:
         basket = await self._basket(basket_id)
         if basket.status == BasketStatus.ABANDONED:
             raise ApprovalRefused("This basket can no longer be approved.")
@@ -74,7 +85,12 @@ class ApprovalService:
             raise ApprovalRefused("Choose a delivery address first.")
 
         try:
-            quote = await self.providers(basket.provider).quote(basket)
+            provider = self.providers(basket.provider)
+            quote_unlocked = getattr(provider, "quote_unlocked", None)
+            if coordinated and callable(quote_unlocked):
+                quote = await quote_unlocked(basket)
+            else:
+                quote = await provider.quote(basket)
         except ShoppingError:
             raise
         except Exception as exc:
@@ -108,6 +124,14 @@ class ApprovalService:
     async def approve(
         self, approval_id: str, fingerprint: str, household_id: str | None = None
     ) -> Approval:
+        if self.workflow_lock is not None:
+            async with self.workflow_lock:
+                return await self._approve(approval_id, fingerprint, household_id)
+        return await self._approve(approval_id, fingerprint, household_id)
+
+    async def _approve(
+        self, approval_id: str, fingerprint: str, household_id: str | None
+    ) -> Approval:
         approval = await self._approval(approval_id)
         if household_id is not None:
             await self._owned_basket(approval.basket_id, household_id)
@@ -138,6 +162,14 @@ class ApprovalService:
         return approval
 
     async def reject(self, approval_id: str, household_id: str | None = None) -> Approval:
+        if self.workflow_lock is not None:
+            async with self.workflow_lock:
+                return await self._reject(approval_id, household_id)
+        return await self._reject(approval_id, household_id)
+
+    async def _reject(
+        self, approval_id: str, household_id: str | None
+    ) -> Approval:
         approval = await self._approval(approval_id)
         if household_id is not None:
             await self._owned_basket(approval.basket_id, household_id)

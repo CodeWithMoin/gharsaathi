@@ -14,7 +14,8 @@ import {
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useApiRequest } from "../authenticated-api";
+import { ApiError, useApiRequest } from "../authenticated-api";
+import { canConfirmZeptoCodOrder, checkoutStatusCopy } from "./zepto-checkout-state.mjs";
 
 const MAX_QUANTITY = 50;
 
@@ -40,7 +41,7 @@ export type ShoppingBasket = {
   id: string;
   provider: ProviderName;
   address_id?: string | null;
-  status: "draft" | "awaiting_approval" | "approved" | "ordered" | "abandoned";
+  status: "draft" | "awaiting_approval" | "approved" | "checkout_pending" | "ordered" | "abandoned";
   revision: number;
   lines: BasketLine[];
   item_total: Money;
@@ -49,7 +50,7 @@ export type ShoppingBasket = {
 
 export type Approval = {
   id: string;
-  status: "pending" | "approved" | "rejected" | "expired" | "superseded" | "consumed";
+  status: "pending" | "approved" | "rejected" | "expired" | "superseded" | "consuming" | "consumed";
   fingerprint: string;
   payable: Money;
   payment_method?: string | null;
@@ -66,6 +67,21 @@ export type ApprovalRequest = {
   };
   basket: ShoppingBasket;
   item_total_matches: boolean;
+};
+
+type ZeptoCheckoutStatus = "dispatching" | "confirmed" | "outcome_unknown" | "rejected";
+
+type ZeptoCheckoutResult = {
+  status: ZeptoCheckoutStatus;
+  provider_order_id?: string | null;
+  message?: string | null;
+};
+
+type ZeptoCheckoutState = {
+  approvalId: string;
+  fingerprint: string;
+  idempotencyKey: string;
+  result: ZeptoCheckoutResult;
 };
 
 export type AddBasketLine = {
@@ -117,6 +133,33 @@ function expiryText(value: string): string {
   return `until ${date.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}`;
 }
 
+function ZeptoCheckoutOutcome({ checkout }: { checkout: ZeptoCheckoutResult }) {
+  const submitting = checkout.status === "dispatching";
+  const succeeded = checkout.status === "confirmed";
+  const unknown = checkout.status === "outcome_unknown";
+  const className = succeeded
+    ? "border-[#cce2d0] bg-[#eff8f0] text-[#2d6638]"
+    : unknown
+      ? "border-[#f0d8c5] bg-[#fff0df] text-[#8c5127]"
+      : checkout.status === "rejected"
+        ? "border-[#efcfc7] bg-[#fcedea] text-[#974237]"
+        : "border-[#e8cbb9] bg-[#fff5ee] text-[#80533c]";
+
+  return (
+    <div className={`rounded-2xl border px-3.5 py-3 text-sm leading-5 ${className}`} role="status" aria-live="polite">
+      <div className="flex items-start gap-2">
+        {submitting ? <CircleNotch size={20} className="mt-0.5 shrink-0 animate-spin" aria-label="Submitting order" /> : succeeded ? <CheckCircle size={20} weight="fill" className="mt-0.5 shrink-0" /> : <WarningCircle size={20} weight="fill" className="mt-0.5 shrink-0" />}
+        <div>
+          <p className="font-semibold">{submitting ? "Submitting Zepto COD order" : succeeded ? "Zepto COD order placed" : unknown ? "Order status is unknown" : "Zepto did not accept the order"}</p>
+          <p className="mt-0.5 text-xs leading-5">{checkoutStatusCopy(checkout)}</p>
+          {succeeded && checkout.provider_order_id && <p className="mt-2 text-xs font-semibold">Use this order ID in Zepto order history: {checkout.provider_order_id}</p>}
+          {unknown && <p className="mt-2 text-xs font-semibold">Do not retry this action. Check Zepto or your order history first.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BasketPanel({
   provider = "swiggy_instamart",
   addressId = "",
@@ -137,6 +180,7 @@ export function BasketPanel({
   const [approval, setApproval] = useState<Approval | null>(null);
   const [action, setAction] = useState<string | null>("load");
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
+  const [checkout, setCheckout] = useState<ZeptoCheckoutState | null>(null);
   const query = useMemo(() => providerQuery(provider), [provider]);
 
   const applyBasket = useCallback((next: ShoppingBasket) => {
@@ -178,6 +222,11 @@ export function BasketPanel({
     onApprovalChange?.(incomingRequest.approval);
     setNotice(null);
   }, [applyBasket, incomingRequest, onApprovalChange]);
+
+  // A final-order result is valid only for the exact approved bill that created it.
+  useEffect(() => {
+    setCheckout(null);
+  }, [approval?.fingerprint, approval?.id, commerceMode, provider]);
 
   useEffect(() => {
     if (!basket || !addressId || basket.address_id === addressId) return;
@@ -267,10 +316,53 @@ export function BasketPanel({
     }
   }, [approval, applyBasket, basketRequest, clearQuote, query]);
 
+  const confirmZeptoCodOrder = useCallback(async () => {
+    if (!approval || !canConfirmZeptoCodOrder({ provider, commerceMode, approvalStatus: approval.status }) || checkout) return;
+
+    // Keep this key with this exact approval, so a transport retry cannot become a second order.
+    const idempotencyKey = crypto.randomUUID();
+    const submitted: ZeptoCheckoutState = {
+      approvalId: approval.id,
+      fingerprint: approval.fingerprint,
+      idempotencyKey,
+      result: { status: "dispatching" },
+    };
+    setCheckout(submitted);
+    setAction("checkout");
+    setNotice(null);
+    try {
+      const result = await apiRequest<ZeptoCheckoutResult>("/api/zepto/checkout/cod", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
+        body: JSON.stringify({ approval_id: approval.id, fingerprint: approval.fingerprint }),
+      });
+      setCheckout({ ...submitted, result });
+    } catch (cause) {
+      // A failed connection is an uncertain provider outcome, not permission to submit again.
+      const detail = cause instanceof Error ? cause.message : "We could not confirm the Zepto order.";
+      setCheckout({
+        ...submitted,
+        result: {
+          status: cause instanceof ApiError && cause.status >= 400 && cause.status < 500
+            ? "rejected"
+            : "outcome_unknown",
+          message: detail,
+        },
+      });
+    } finally {
+      setAction(null);
+    }
+  }, [apiRequest, approval, checkout, commerceMode, provider]);
+
   const lines = basket?.lines ?? [];
   const lineCount = lines.reduce((total, line) => total + line.quantity, 0);
   const locked = action !== null;
+  const basketFrozen = basket?.status === "checkout_pending" || basket?.status === "ordered";
   const isApproved = approval?.status === "approved";
+  const canConfirmZeptoCod = Boolean(approval && canConfirmZeptoCodOrder({ provider, commerceMode, approvalStatus: approval.status }));
   const providerLabel = provider === "swiggy_instamart" ? "Swiggy Instamart" : "Zepto";
 
   return (
@@ -297,6 +389,7 @@ export function BasketPanel({
         </div>
       ) : (
         <div className="px-5 py-2 sm:px-6">
+          {basketFrozen && <div className="mt-4 flex gap-2 rounded-xl border border-[#f0d8c5] bg-[#fff0df] px-3 py-2.5 text-xs leading-5 text-[#8c5127]" role="status"><WarningCircle size={16} className="mt-0.5 shrink-0" weight="fill" /><p>{basket?.status === "ordered" ? "This basket was ordered and is locked." : "This checkout may already have reached Zepto. The basket is locked—do not recreate or submit it again. Check Zepto order history if the result is unclear."}</p></div>}
           <ul className="divide-y divide-[#f0e5dd]">
             {lines.map((line) => {
               const updating = action === `line-${line.ref.variant_id}`;
@@ -309,11 +402,11 @@ export function BasketPanel({
                     {!line.available && <p className="mt-1 text-[11px] font-medium text-[#a44739]">No longer available</p>}
                     <div className="mt-3 flex items-center gap-2">
                       <div className="flex h-8 items-center rounded-full border border-[#e6d7cb] bg-white" role="group" aria-label={`Quantity of ${line.name}`}>
-                        <button type="button" onClick={() => void changeQuantity(line, line.quantity - 1)} disabled={locked} className="grid size-8 place-items-center rounded-full text-[#725a4b] transition hover:bg-[#f6e9df] disabled:opacity-40" aria-label={`Decrease quantity of ${line.name}`}><Minus size={13} weight="bold" /></button>
+                        <button type="button" onClick={() => void changeQuantity(line, line.quantity - 1)} disabled={locked || basketFrozen} className="grid size-8 place-items-center rounded-full text-[#725a4b] transition hover:bg-[#f6e9df] disabled:opacity-40" aria-label={`Decrease quantity of ${line.name}`}><Minus size={13} weight="bold" /></button>
                         <span className="min-w-6 text-center text-xs font-semibold tabular-nums" aria-live="polite">{updating ? <CircleNotch size={13} className="mx-auto animate-spin" /> : line.quantity}</span>
-                        <button type="button" onClick={() => void changeQuantity(line, line.quantity + 1)} disabled={locked || line.quantity >= MAX_QUANTITY || !line.available} className="grid size-8 place-items-center rounded-full text-[#725a4b] transition hover:bg-[#f6e9df] disabled:opacity-40" aria-label={`Increase quantity of ${line.name}`}><Plus size={13} weight="bold" /></button>
+                        <button type="button" onClick={() => void changeQuantity(line, line.quantity + 1)} disabled={locked || basketFrozen || line.quantity >= MAX_QUANTITY || !line.available} className="grid size-8 place-items-center rounded-full text-[#725a4b] transition hover:bg-[#f6e9df] disabled:opacity-40" aria-label={`Increase quantity of ${line.name}`}><Plus size={13} weight="bold" /></button>
                       </div>
-                      <button type="button" onClick={() => void changeQuantity(line, 0)} disabled={locked} className="grid size-8 place-items-center rounded-full text-[#9d7764] transition hover:bg-[#f9e9e3] hover:text-[#a44739] disabled:opacity-40" aria-label={`Remove ${line.name}`}><Trash size={15} /></button>
+                      <button type="button" onClick={() => void changeQuantity(line, 0)} disabled={locked || basketFrozen} className="grid size-8 place-items-center rounded-full text-[#9d7764] transition hover:bg-[#f9e9e3] hover:text-[#a44739] disabled:opacity-40" aria-label={`Remove ${line.name}`}><Trash size={15} /></button>
                     </div>
                   </div>
                   <div className="flex flex-col items-end text-right">
@@ -331,7 +424,7 @@ export function BasketPanel({
               {basket && basket.savings_vs_mrp.paise > 0 && <div className="mt-1 flex items-baseline justify-between gap-3 text-xs"><span className="text-[#806f65]">Savings vs MRP</span><strong className="tabular-nums text-[#397144]">{basket.savings_vs_mrp.display}</strong></div>}
               {!addressId && <p className="mt-3 rounded-xl bg-[#f8eee7] px-3 py-2.5 text-xs leading-5 text-[#806f65]">Choose a delivery address to request the final bill.</p>}
               {addressId && <div className="mt-3 flex gap-2 rounded-xl border border-[#f0d8c5] bg-[#fff4e9] px-3 py-2.5 text-[11px] leading-5 text-[#80533c]" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0 text-[#c6531d]" /><p>{commerceMode === "demo" ? <><strong className="font-semibold text-[#6a3d29]">Safe demo:</strong> this calculates a deterministic sample bill locally. It does not contact {providerLabel}, change a provider cart, check out, or place an order.</> : <><strong className="font-semibold text-[#6a3d29]">Before you continue:</strong> this syncs this basket to your current {providerLabel} cart to retrieve live availability, fees, and the exact bill. It may replace items already in that provider cart. It does <strong className="font-semibold">not</strong> check out or place an order.</>}</p></div>}
-              <button type="button" onClick={() => void requestQuote()} disabled={locked || !addressId} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#3b2a22] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_-18px_rgba(53,36,28,.8)] transition hover:bg-[#4a352b] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">
+              <button type="button" onClick={() => void requestQuote()} disabled={locked || basketFrozen || !addressId} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#3b2a22] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_-18px_rgba(53,36,28,.8)] transition hover:bg-[#4a352b] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">
                 {action === "quote" ? <><CircleNotch size={17} className="animate-spin" /> Getting final bill…</> : <><Receipt size={17} /> Get final bill</>}
               </button>
             </div>
@@ -358,7 +451,9 @@ export function BasketPanel({
               {!request.item_total_matches && <p className="mt-3 flex gap-2 rounded-xl bg-[#fff0df] px-3 py-2.5 text-xs leading-5 text-[#8c5127]"><WarningCircle size={16} className="mt-0.5 shrink-0" />Store item prices changed. The final bill above is the amount you would approve.</p>}
               <p className="mt-3 text-[11px] leading-5 text-[#806f65]">{request.quote.eta_text ? `Delivery ${request.quote.eta_text} · ` : ""}Valid {expiryText(approval.expires_at)}.</p>
 
-              {isApproved ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-2xl border border-[#cce2d0] bg-[#eff8f0] px-3.5 py-3 text-sm text-[#2d6638]"><CheckCircle size={20} weight="fill" /><span><strong>Bill approved.</strong> No order has been placed.</span></div><div className="flex gap-2 rounded-xl bg-[#fff0df] px-3 py-2.5 text-[11px] leading-5 text-[#8c5127]" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0" /><p>A separate, explicit order confirmation would still be required before anything can be submitted to {providerLabel}. That final action is not enabled here.</p></div></div> : <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => void reject()} disabled={locked} className="rounded-full border border-[#d8c4b7] bg-white px-4 py-3 text-sm font-semibold text-[#684f42] transition hover:bg-[#fbf1eb] active:scale-[.98] disabled:opacity-45">{action === "reject" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : "Reject"}</button><button type="button" onClick={() => void approve()} disabled={locked} className="rounded-full bg-[#c6531d] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.98] disabled:opacity-45">{action === "approve" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : `Approve bill · ${request.quote.payable.display}`}</button></div>}
+              {isApproved ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-2xl border border-[#cce2d0] bg-[#eff8f0] px-3.5 py-3 text-sm text-[#2d6638]"><CheckCircle size={20} weight="fill" /><span><strong>Bill approved.</strong> {canConfirmZeptoCod ? "Review the final COD action below." : "No order has been placed."}</span></div>{canConfirmZeptoCod ? (
+                checkout ? <ZeptoCheckoutOutcome checkout={checkout.result} /> : <div className="space-y-2 rounded-2xl border border-[#e8cbb9] bg-[#fff5ee] p-3.5"><p className="text-sm font-semibold text-[#5f3421]">One final step: place a Zepto cash-on-delivery order</p><p className="text-xs leading-5 text-[#80533c]">This submits the exact approved bill to Zepto. It cannot be undone here.</p><button type="button" onClick={() => void confirmZeptoCodOrder()} disabled={locked} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#9b3d17] px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_rgba(119,41,15,.8)] transition hover:bg-[#833212] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">{action === "checkout" ? <><CircleNotch size={17} className="animate-spin" /> Submitting COD order…</> : `Place Zepto COD order · ${request.quote.payable.display}`}</button></div>
+              ) : <div className="flex gap-2 rounded-xl bg-[#fff0df] px-3 py-2.5 text-[11px] leading-5 text-[#8c5127]" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0" /><p>A separate, explicit order confirmation would still be required before anything can be submitted to {providerLabel}. That final action is not enabled here.</p></div>}</div> : <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => void reject()} disabled={locked} className="rounded-full border border-[#d8c4b7] bg-white px-4 py-3 text-sm font-semibold text-[#684f42] transition hover:bg-[#fbf1eb] active:scale-[.98] disabled:opacity-45">{action === "reject" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : "Reject"}</button><button type="button" onClick={() => void approve()} disabled={locked} className="rounded-full bg-[#c6531d] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.98] disabled:opacity-45">{action === "approve" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : `Approve bill · ${request.quote.payable.display}`}</button></div>}
               {!isApproved && <p className="mt-3 text-center text-[10px] leading-4 text-[#89766a]">This confirms the shown bill only—not checkout. A separate final order confirmation would still be required.</p>}
             </div>
           </motion.div>

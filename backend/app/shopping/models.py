@@ -47,6 +47,8 @@ class BasketStatus(StrEnum):
     DRAFT = "draft"
     AWAITING_APPROVAL = "awaiting_approval"
     APPROVED = "approved"
+    CHECKOUT_PENDING = "checkout_pending"
+    ORDERED = "ordered"
     ABANDONED = "abandoned"
 
 
@@ -89,6 +91,8 @@ class ApprovalStatus(StrEnum):
     REJECTED = "rejected"
     EXPIRED = "expired"
     SUPERSEDED = "superseded"
+    CONSUMING = "consuming"
+    CONSUMED = "consumed"
 
 
 class Approval(BaseModel):
@@ -103,6 +107,34 @@ class Approval(BaseModel):
     created_at: datetime
     expires_at: datetime
     decided_at: datetime | None = None
+
+
+class CheckoutStatus(StrEnum):
+    """Durable outcome of the single consequential call for an approval."""
+
+    DISPATCHING = "dispatching"
+    CONFIRMED = "confirmed"
+    OUTCOME_UNKNOWN = "outcome_unknown"
+
+
+class CheckoutAttempt(BaseModel):
+    """One immutable checkout claim, followed by one terminal provider outcome.
+
+    The raw idempotency key is never persisted.  A unique hash is sufficient to
+    correlate retries without retaining browser-provided material.
+    """
+
+    id: str
+    approval_id: str
+    basket_id: str
+    household_id: str
+    idempotency_key_hash: str = Field(min_length=64, max_length=64)
+    payable_paise: int = Field(ge=0)
+    status: CheckoutStatus
+    provider_order_id: str | None = None
+    provider_status: str | None = None
+    created_at: datetime
+    completed_at: datetime | None = None
 
 
 def basket_fingerprint(basket: Basket, payable_paise: int) -> str:

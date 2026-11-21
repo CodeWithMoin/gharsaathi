@@ -1,4 +1,5 @@
-from app.shopping.models import Approval, Basket, ProviderName
+from app.shopping.errors import InvalidBasketChange
+from app.shopping.models import Approval, Basket, BasketStatus, ProviderName
 
 
 class InMemoryBasketRepository:
@@ -14,13 +15,26 @@ class InMemoryBasketRepository:
     async def save(self, basket: Basket) -> None:
         self._items[basket.id] = basket.model_copy(deep=True)
 
+    async def save_if_editable(self, basket: Basket, *, expected_revision: int) -> None:
+        current = self._items.get(basket.id)
+        if (
+            current is None
+            or current.revision != expected_revision
+            or current.status in {BasketStatus.CHECKOUT_PENDING, BasketStatus.ORDERED}
+        ):
+            raise InvalidBasketChange(
+                "This basket changed or checkout already started. Refresh before editing."
+            )
+        self._items[basket.id] = basket.model_copy(deep=True)
+
     async def active_for(self, household_id: str, provider: ProviderName) -> Basket | None:
         candidates = [
             basket
             for basket in self._items.values()
             if basket.household_id == household_id
             and basket.provider == provider
-            and basket.status in {"draft", "awaiting_approval", "approved"}
+            and basket.status
+            in {"draft", "awaiting_approval", "approved", "checkout_pending"}
         ]
         if not candidates:
             return None

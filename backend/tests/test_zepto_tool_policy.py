@@ -87,7 +87,7 @@ def test_exact_approval_is_bound_to_the_order_tool_basket_price_and_payload() ->
         require_exact_order_approval(changed_payload, approval)
 
 
-def test_zepto_public_api_has_no_cart_or_order_mutation_until_live_schemas_are_verified() -> None:
+def test_zepto_public_api_has_only_the_guarded_cod_order_mutation() -> None:
     methods = {"post", "put", "patch", "delete"}
     mutations = [
         f"{method.upper()} {path}"
@@ -98,4 +98,9 @@ def test_zepto_public_api_has_no_cart_or_order_mutation_until_live_schemas_are_v
     ]
 
     forbidden = ("cart", "basket", "checkout", "order", "payment", "purchase")
-    assert all(not any(word in operation.lower() for word in forbidden) for operation in mutations)
+    consequential = [
+        operation
+        for operation in mutations
+        if any(word in operation.lower() for word in forbidden)
+    ]
+    assert consequential == ["POST /api/zepto/checkout/cod"]

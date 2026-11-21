@@ -170,7 +170,7 @@ async def tools(service: ZeptoServiceDependency) -> list[ToolDescription]:
 
 @router.get("/capabilities", response_model=CapabilitySummary)
 async def capabilities(service: ZeptoServiceDependency) -> CapabilitySummary:
-    """Authenticated tool discovery with an explicit no-checkout boundary."""
+    """Authenticated discovery plus the app's narrow guarded capabilities."""
 
     try:
         return await service.capabilities()

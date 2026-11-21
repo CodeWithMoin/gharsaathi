@@ -1,7 +1,7 @@
-"""Regression tests for the no-order approval boundary.
+"""Regression tests for the approval and order boundary.
 
 These tests deliberately exercise only local state and mocked provider behavior.
-They must never call a payment, checkout, or order tool.
+They must never call a live payment, checkout, or order tool.
 """
 
 import pytest
@@ -42,7 +42,7 @@ async def test_an_approved_bill_is_superseded_if_the_basket_changes() -> None:
     assert stored is not None and stored.status == ApprovalStatus.SUPERSEDED
 
 
-def test_public_api_exposes_no_checkout_or_order_mutation_operation() -> None:
+def test_public_api_exposes_only_the_guarded_zepto_cod_checkout_mutation() -> None:
     schema = app.openapi()
     exposed = [
         f"{method.upper()} {path}"
@@ -50,7 +50,10 @@ def test_public_api_exposes_no_checkout_or_order_mutation_operation() -> None:
         for method in operations
         if method.lower() in {"get", "post", "put", "patch", "delete"}
     ]
-    assert all("checkout" not in operation.lower() for operation in exposed)
+    checkout_operations = [
+        operation for operation in exposed if "checkout" in operation.lower()
+    ]
+    assert checkout_operations == ["POST /api/zepto/checkout/cod"]
     order_operations = [
         operation for operation in exposed if "order" in operation.lower()
     ]
