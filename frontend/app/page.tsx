@@ -684,9 +684,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
           <div className="bg-[#f8f2ea] px-3 pb-[max(3.5625rem,env(safe-area-inset-bottom))] pt-4">
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => void startNewChat()} className="flex h-14 min-w-0 flex-1 items-center justify-center gap-2 rounded-[22px] bg-[#d95617] px-4 text-sm font-semibold text-white transition hover:bg-[#c94d12] active:scale-[.97]"><NotePencil size={19} weight="bold" className="shrink-0" /> New chat</button>
-              <button type="button" onClick={() => { setChatDrawerOpen(false); setAccountSettingsOpen(true); }} aria-label={`Open account settings for ${userName}`} title="Account & settings" className="grid size-14 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-[15px] font-semibold uppercase text-[#9f451d] ring-1 ring-[#dfc9bb] transition hover:bg-[#ead2c2] active:scale-[.96]">
+              <span aria-label={`${userName} profile`} title={userName} className="grid size-14 shrink-0 place-items-center rounded-full bg-[#f1ded1] text-[15px] font-semibold uppercase text-[#9f451d] ring-1 ring-[#dfc9bb]">
                 {userName.trim().charAt(0) || "G"}
-              </button>
+              </span>
             </div>
           </div>
         </motion.aside>

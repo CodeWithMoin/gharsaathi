@@ -63,7 +63,7 @@ export type AccountSettingsSheetProps = {
 type SettingsSection = "stores" | "preferences" | "privacy" | "addresses" | null;
 
 /**
- * A controlled, mobile-first account sheet. It intentionally has only an overview
+ * A controlled, mobile-first account panel. It intentionally has only an overview
  * and one detail layer, so connected-store and address flows never become a settings maze.
  */
 export function AccountSettingsSheet({
@@ -124,26 +124,25 @@ export function AccountSettingsSheet({
           : "Account";
 
   return <AnimatePresence>
-    {open && <motion.div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    {open && <motion.div className="fixed inset-0 z-50 flex items-stretch justify-start" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <button type="button" aria-label="Close account settings" className="absolute inset-0 cursor-default bg-[#3a271e]/35 backdrop-blur-[2px]" onClick={close} />
       <motion.section
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative flex max-h-[min(46rem,92dvh)] w-full max-w-md flex-col overflow-hidden rounded-t-[30px] border border-[#ead7ca] bg-[#fffaf5] text-[#35241c] shadow-[0_-22px_70px_-28px_rgba(62,34,22,.7)] sm:rounded-[30px]"
-        initial={{ y: 36, opacity: 0.7 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 36, opacity: 0.7 }}
+        className="relative flex h-[100dvh] w-[min(75vw,360px)] flex-col overflow-hidden rounded-r-[36px] border-r border-[#ead7ca] bg-[#fffaf5] text-[#35241c] shadow-[18px_0_55px_-36px_rgba(62,34,22,.52)] [corner-shape:squircle]"
+        initial={{ x: "-100%", opacity: 0.85 }}
+        animate={{ x: 0, opacity: 1 }}
+        exit={{ x: "-100%", opacity: 0.85 }}
         transition={{ type: "spring", damping: 28, stiffness: 330 }}
       >
-        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-[#dcc9bd] sm:hidden" />
-        <header className="flex items-center justify-between px-5 pb-3 pt-4">
+        <header className="flex items-center justify-between px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
           {section ? <button type="button" onClick={() => setSection(null)} className="grid size-11 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f5eae2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d]" aria-label="Back to account settings"><ArrowLeft size={20} weight="bold" /></button> : <span className="size-11" />}
           <h2 id={titleId} className="font-display text-lg font-semibold tracking-[-.04em]">{heading}</h2>
           <button ref={closeButtonRef} type="button" onClick={close} className="grid size-11 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f5eae2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d]" aria-label="Close account settings"><X size={20} weight="bold" /></button>
         </header>
 
-        <div className="overflow-y-auto px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <AnimatePresence mode="wait" initial={false}>
             {section === null
               ? <motion.div key="overview" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: .16 }}>
