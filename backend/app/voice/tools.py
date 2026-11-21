@@ -19,7 +19,7 @@ from app.commerce.zepto.errors import (
     ZeptoError,
     ZeptoRateLimited,
 )
-from app.shopping.models import rupees_to_paise
+from app.shopping.models import ProviderName, rupees_to_paise
 
 
 MAX_RESULTS_FOR_MODEL = 6
@@ -72,11 +72,20 @@ class ProductSearcher(Protocol):
 
 @dataclass(frozen=True)
 class ProviderSearchTarget:
-    provider: str
+    provider: ProviderName
     store: str
     searcher: ProductSearcher
     address_id: str | None
     add_supported: bool = False
+
+
+@dataclass(frozen=True)
+class SearchOption:
+    """A search result the model may refer to only by its opaque option_id."""
+
+    provider: ProviderName
+    store: str
+    product: Product
 
 
 class ToolOutcome(BaseModel):
@@ -220,7 +229,7 @@ class MultiProviderShoppingToolExecutor:
     def __init__(
         self,
         targets: list[ProviderSearchTarget],
-        options: dict[str, Product] | None = None,
+        options: dict[str, SearchOption] | None = None,
     ) -> None:
         self.targets = targets
         self.options = options if options is not None else {}
@@ -297,12 +306,13 @@ class MultiProviderShoppingToolExecutor:
                 assert isinstance(product, Product)
                 entry = {
                     "provider": target.store,
+                    "store_id": target.provider,
                     "add_supported": target.add_supported,
                     **_product_for_model(product),
                 }
                 if target.add_supported:
                     option_id = f"opt{len(self.options) + 1}"
-                    self.options[option_id] = product
+                    self.options[option_id] = SearchOption(target.provider, target.store, product)
                     entry["option_id"] = option_id
                 model_results.append(entry)
             ui_products.extend(
@@ -327,7 +337,7 @@ class MultiProviderShoppingToolExecutor:
                 ],
                 "note": (
                     "Current item prices only; nothing was added. Only results with an "
-                    "option_id can be added to a local basket. Zepto is search-only."
+                    "option_id can be added, to that store's own local basket."
                 ),
             },
             ui_event={

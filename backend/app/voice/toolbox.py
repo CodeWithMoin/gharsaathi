@@ -4,12 +4,18 @@ from typing import Protocol
 
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
-from app.voice.basket_tools import BASKET_TOOL_DEFINITIONS, BASKET_TOOL_NAMES, BasketToolExecutor
+from app.voice.basket_tools import (
+    BASKET_TOOL_DEFINITIONS,
+    BASKET_TOOL_NAMES,
+    BasketStore,
+    BasketToolExecutor,
+)
 from app.voice.tools import TOOL_DEFINITIONS as SEARCH_TOOL_DEFINITIONS
 from app.voice.tools import (
     MultiProviderShoppingToolExecutor,
     ProductSearcher,
     ProviderSearchTarget,
+    SearchOption,
     ToolOutcome,
 )
 
@@ -34,7 +40,7 @@ class VoiceToolbox:
         zepto_address_id: str | None = None,
         household_id: str = "",
     ) -> None:
-        options = {}
+        options: dict[str, SearchOption] = {}
         targets = [
             ProviderSearchTarget(
                 provider="swiggy_instamart",
@@ -51,12 +57,14 @@ class VoiceToolbox:
                     store="Zepto",
                     searcher=zepto_searcher,
                     address_id=zepto_address_id,
+                    add_supported=True,
                 )
             )
         self.search = MultiProviderShoppingToolExecutor(targets, options)
         if not household_id:
             raise ValueError("A verified household identity is required for voice baskets.")
-        self.basket = BasketToolExecutor(baskets, approvals, options, address_id, household_id)
+        stores = [BasketStore(target.provider, target.store, target.address_id) for target in targets]
+        self.basket = BasketToolExecutor(baskets, approvals, options, stores, household_id)
 
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
         if name in BASKET_TOOL_NAMES:

@@ -7,7 +7,8 @@ import { mapRealtimeTranscriptEvent } from "./voice-transcript.mjs";
 import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
 
 type VoiceStatus = "connecting" | "live" | "closing" | "error";
-type VoiceProduct = { provider?: "swiggy_instamart" | "zepto"; provider_label?: string; product_id: string; sku_id: string; spin_id?: string; name: string; brand?: string; pack_size?: string; price: { mrp: number; offer_price: number }; available: boolean; image_url?: string; rating_value?: string };
+type VoiceStore = "swiggy_instamart" | "zepto";
+type VoiceProduct = { provider?: VoiceStore; provider_label?: string; product_id: string; sku_id: string; spin_id?: string; name: string; brand?: string; pack_size?: string; price: { mrp: number; offer_price: number }; available: boolean; image_url?: string; rating_value?: string };
 type LiveEvent = { type: string; error?: { message?: string }; [key: string]: unknown };
 export type VoiceTranscriptTurn = { id: string; role: "user" | "assistant"; content: string };
 type ToolEvent =
@@ -15,8 +16,8 @@ type ToolEvent =
   | { type: "tool.results"; query: string; store: string; products: VoiceProduct[] }
   | { type: "tool.not_connected"; query: string }
   | { type: "tool.error"; message: string }
-  | { type: "basket.updated"; basket: { item_count: number; item_total: string } }
-  | { type: "basket.approval_requested"; approval: { payable: string }; quote: { eta_text?: string | null } }
+  | { type: "basket.updated"; provider?: VoiceStore; basket: { item_count: number; item_total: string; store?: string } }
+  | { type: "basket.approval_requested"; provider?: VoiceStore; store?: string; approval: { payable: string }; quote: { eta_text?: string | null } }
   | { type: "session.finished" };
 
 async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
@@ -36,7 +37,7 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   });
 }
 
-export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[]) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: () => void }) {
+export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[]) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void }) {
   const authenticatedFetch = useAuthenticatedFetch();
   const [status, setStatus] = useState<VoiceStatus>("connecting");
   const [message, setMessage] = useState("Connecting to GharSaathi…");
@@ -119,13 +120,14 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
           setMessage(event.message);
         } else if (event.type === "basket.updated") {
           const items = event.basket.item_count;
-          setBasketNotice(`${items} ${items === 1 ? "item" : "items"} · ${event.basket.item_total}`);
+          const store = event.basket.store ? `${event.basket.store} · ` : "";
+          setBasketNotice(`${store}${items} ${items === 1 ? "item" : "items"} · ${event.basket.item_total}`);
           setMessage(items ? "Basket update ho gaya." : "Basket is now empty.");
-          onBasketTouched?.();
+          onBasketTouched?.(event.provider);
         } else if (event.type === "basket.approval_requested") {
-          setBasketNotice(`Final bill · ${event.approval.payable}`);
+          setBasketNotice(`${event.store ? `${event.store} · ` : ""}Final bill · ${event.approval.payable}`);
           setMessage("Final bill ready hai—screen par review kijiye.");
-          onBasketTouched?.();
+          onBasketTouched?.(event.provider);
         } else if (event.type === "session.finished") {
           source.close();
         }
