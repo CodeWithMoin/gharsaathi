@@ -3,17 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "prepare:ort": "node scripts/copy-ort-assets.mjs",
+    "fetch:smart-turn-model": "node scripts/fetch-smart-turn-model.mjs",
+    "predev": "npm run prepare:ort",
+    "prebuild": "npm run prepare:ort",
     "dev": "next dev -p 3003",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "eval:smart-turn": "node scripts/eval-smart-turn.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.10.7",
     "@phosphor-icons/react": "^2.1.10",
     "framer-motion": "^14.14.0",
     "next": "^15.3.0",
+    "onnxruntime-web": "^1.31.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "swiper": "^12.2.0",

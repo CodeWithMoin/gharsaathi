@@ -238,6 +238,16 @@ database or vault storage and complete each provider's supported delegated-auth 
 enterprise onboarding. Do not expose the Zepto checkout route before that account binding
 is implemented.
 
+## Voice turn-taking
+
+`VOICE_TURN_TAKING` selects how GPT-Live voice handles pauses and interruptions:
+`native` (default), `tuned` (interruption/patience policy in the Live instructions) or
+`smart_turn` (tuned plus a browser-side Hinglish end-of-turn model and barge-in). For
+`smart_turn`, fetch and verify the model once with `cd frontend && npm run
+fetch:smart-turn-model`; without it the browser falls back to `tuned`. Findings,
+measurements and the evaluation command are in
+[`docs/voice-turn-taking.md`](docs/voice-turn-taking.md).
+
 ## Capability matrix
 
 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) lists every user-facing capability

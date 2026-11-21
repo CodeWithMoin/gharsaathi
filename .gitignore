@@ -12,3 +12,7 @@ frontend/node_modules/
 frontend/tsconfig.tsbuildinfo
 __pycache__/
 *.py[cod]
+frontend/public/ort/
+frontend/public/models/*.onnx
+frontend/public/models/*.partial
+backend/evaluation/.turn_taking_clips/
