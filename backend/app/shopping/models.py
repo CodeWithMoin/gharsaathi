@@ -109,6 +109,9 @@ class Quote(BaseModel):
     basket_id: str
     basket_revision: int
     item_total_paise: int
+    # Part of the discount charges that is the gap between MRP and selling
+    # price, when the provider reports item_total_paise at MRP (Zepto subTotal).
+    item_discount_paise: int = Field(default=0, ge=0)
     charges: list[Charge] = Field(default_factory=list)
     offers: list[OfferOpportunity] = Field(default_factory=list)
     payable_paise: int

@@ -14,6 +14,7 @@ from app.shopping.basket import (
     item_total_paise,
     line_savings_paise,
     line_total_paise,
+    quote_item_total_matches,
     savings_vs_mrp_paise,
 )
 from app.shopping.errors import (
@@ -246,7 +247,7 @@ def approval_request_out(result: ApprovalRequest) -> ApprovalRequestOut:
             quoted_at=quote.quoted_at,
         ),
         basket=basket_out(result.basket),
-        item_total_matches=quote.item_total_paise == item_total_paise(result.basket),
+        item_total_matches=quote_item_total_matches(quote, result.basket),
     )
 
 

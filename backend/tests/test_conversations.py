@@ -323,3 +323,49 @@ async def test_voice_chat_reopens_from_drawer_with_its_turns_and_sorts_first(
     after_reload = await conversation_client.get("/api/conversations/current", headers=user)
     assert after_reload.json()["id"] == voice.json()["id"]
     assert len(after_reload.json()["messages"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_chat_timeline_round_trips_with_the_chat(
+    conversation_client: AsyncClient,
+) -> None:
+    messages = [
+        {
+            "id": "voice-user-1",
+            "role": "user",
+            "content": "Diet Coke add karo",
+            "modality": "voice",
+            "created_at": "2026-11-22T10:00:00Z",
+        }
+    ]
+    timeline = {
+        "seq": 3,
+        "results_seq": 1,
+        "live": [{"provider": "zepto", "after_message_id": "voice-user-1", "seq": 3}],
+        "summaries": [
+            {
+                "provider": "zepto",
+                "after_message_id": "voice-user-1",
+                "seq": 2,
+                "stage": "updated",
+                "item_count": 2,
+                "item_total_paise": 22200,
+            }
+        ],
+    }
+    body = {**state("diet coke", messages=messages), "timeline": timeline}
+    saved = await conversation_client.put("/api/conversations/current", headers=headers("timeline-user"), json=body)
+    assert saved.status_code == 200
+    restored = await conversation_client.get("/api/conversations/current", headers=headers("timeline-user"))
+    assert restored.json()["timeline"] == timeline
+
+    legacy = await conversation_client.put("/api/conversations/current", headers=headers("timeline-user"), json=state("diet coke", messages=messages))
+    assert legacy.json()["timeline"] == {"seq": 0, "results_seq": 0, "live": [], "summaries": []}
+
+    duplicate_live = {**timeline, "live": timeline["live"] * 2}
+    rejected = await conversation_client.put(
+        "/api/conversations/current",
+        headers=headers("timeline-user"),
+        json={**body, "timeline": duplicate_live},
+    )
+    assert rejected.status_code == 422

@@ -182,6 +182,7 @@ def quote_from_cod_preview(basket: Basket, payload: dict[str, Any], quoted_at: d
         basket_id=basket.id,
         basket_revision=basket.revision,
         item_total_paise=subtotal,
+        item_discount_paise=_item_discount(discount, data.get("offers")),
         charges=charges,
         offers=offers,
         payable_paise=payable,
@@ -392,6 +393,25 @@ def _free_delivery_offer(
         applied=unlocked and delivery_fee_discount > 0,
         provider_confirmed=True,
     )
+
+
+def _item_discount(discount: int, raw_offers: object) -> int:
+    """The part of Zepto's ``discount`` that brings ``subTotal`` (at MRP) down to
+    the items' selling prices: the total minus every applied offer card.
+
+    If an applied card's amount is unreadable the split is unknown, and the
+    whole discount is returned; the item-total check then reports a mismatch.
+    """
+
+    applied = 0
+    for raw in raw_offers if isinstance(raw_offers, list) else []:
+        if not isinstance(raw, dict) or raw.get("isApplied") is not True:
+            continue
+        amount = _exact_count(raw.get("discountAmount"))
+        if amount is None:
+            return discount
+        applied += amount
+    return max(0, discount - applied)
 
 
 def _offers(raw: object, subtotal: int) -> list[OfferOpportunity]:
