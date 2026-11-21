@@ -1,6 +1,7 @@
 import asyncio
 import time
 
+from app.commerce.query_guard import non_search_reason
 from app.commerce.swiggy.adapter import SwiggyInstamartAdapter
 from app.commerce.swiggy.client import SwiggyMcpClient
 from app.commerce.swiggy.models import (
@@ -57,6 +58,8 @@ class SwiggyService:
         self, query: str, address_id: str, offset: int
     ) -> ProductSearchResult:
         normalized = " ".join(query.split())
+        if non_search_reason(normalized) is not None:
+            raise ValueError("A conversational message cannot be sent to product search.")
         cache_key = (address_id, normalized.casefold(), offset)
         async with self._search_lock:
             cached = self._search_cache.get(cache_key)

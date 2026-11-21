@@ -2,6 +2,7 @@ import asyncio
 import re
 import time
 
+from app.commerce.query_guard import non_search_reason
 from app.commerce.zepto.client import ZeptoMcpClient
 from app.commerce.zepto.adapter import parse_addresses, parse_products
 from app.commerce.zepto.cart import ZeptoCart, parse_view_cart
@@ -98,6 +99,8 @@ class ZeptoService:
         self, query: str, address_id: str, page_number: int = 0
     ) -> ProductSearchResult:
         normalized = " ".join(query.split())
+        if non_search_reason(normalized) is not None:
+            raise ValueError("A conversational message cannot be sent to product search.")
         cache_key = (address_id, normalized.casefold(), page_number)
         async with self._search_lock:
             cached = self._search_cache.get(cache_key)

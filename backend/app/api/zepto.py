@@ -23,6 +23,7 @@ from app.commerce.zepto.errors import (
     ZeptoRateLimited,
     ZeptoSchemaError,
 )
+from app.commerce.query_guard import non_search_reason
 from app.commerce.zepto.cart import ZeptoCart
 from app.commerce.zepto.history import ZeptoOrderDetail, ZeptoOrderHistory
 from app.commerce.zepto.models import (
@@ -277,6 +278,11 @@ async def select_address(
 async def search(
     body: SearchRequest, service: ZeptoServiceDependency
 ) -> ProductSearchResult:
+    if non_search_reason(body.query) is not None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "That is a chat message, not a product query. Ask for a grocery or household item.",
+        )
     try:
         return await service.search(body.query, body.address_id, body.page_number)
     except Exception as exc:

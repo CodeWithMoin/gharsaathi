@@ -9,6 +9,7 @@ import { groupProductsForComparison, ProductComparison, type Product } from "./p
 import { LiveOrderTracking } from "./order-tracking";
 import { SupportPanel } from "./support-panel";
 import { VoicePanel, type VoiceTranscriptTurn } from "./voice-panel";
+import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "local-test-user";
@@ -217,10 +218,18 @@ export default function Home() {
       .then((conversation) => {
         if (!active) return;
         if (conversation) {
-          setSubmittedQuery(conversation.submitted_query);
-          setProducts(conversation.products);
-          setSearched(conversation.searched);
-          setChatMessages(conversation.messages?.length ? conversation.messages : conversation.submitted_query ? [{ id: `migrated-${conversation.id}`, role: "user", content: conversation.submitted_query, modality: "text", created_at: conversation.updated_at }] : []);
+          const restoredIntent = conversationIntent(conversation.submitted_query);
+          const localReply = restoredIntent === "connection_status"
+            ? "Manage stores mein current Swiggy aur Zepto connection status dikh raha hai."
+            : conversationReply(conversation.submitted_query, { swiggyConnected: false, zeptoConnected: false });
+          const restoredMessages = conversation.messages?.length ? conversation.messages : conversation.submitted_query ? [{ id: `migrated-${conversation.id}`, role: "user" as const, content: conversation.submitted_query, modality: "text" as const, created_at: conversation.updated_at }] : [];
+          const repairedMessages = localReply && restoredMessages.at(-1)?.content !== localReply
+            ? [...restoredMessages, { id: `local-reply-${Date.now().toString(36)}`, role: "assistant" as const, content: localReply, modality: "text" as const, created_at: new Date().toISOString() }]
+            : restoredMessages;
+          setSubmittedQuery(localReply ? "" : conversation.submitted_query);
+          setProducts(localReply ? [] : conversation.products);
+          setSearched(localReply ? false : conversation.searched);
+          setChatMessages(repairedMessages);
           window.localStorage.removeItem(LEGACY_CHAT_STORAGE_KEY);
           return;
         }
@@ -364,6 +373,19 @@ export default function Home() {
   async function runSearch(value: string) {
     const clean = value.trim();
     if (!clean) return;
+    const localReply = conversationReply(clean, { swiggyConnected: connected === true, zeptoConnected: zeptoConnected === true });
+    if (localReply) {
+      const now = new Date().toISOString();
+      setChatMessages((current) => [
+        ...current,
+        { id: `text-${Date.now().toString(36)}-user`, role: "user", content: clean, modality: "text", created_at: now },
+        { id: `text-${Date.now().toString(36)}-assistant`, role: "assistant", content: localReply, modality: "text", created_at: now },
+      ]);
+      setQuery("");
+      setVoiceOpen(false);
+      setMessage("Ready when you are.");
+      return;
+    }
     const searchKey = `${addressId}\u0000${zeptoAddressId}\u0000${clean.toLocaleLowerCase()}`;
     const inFlight = searchRequestsRef.current.get(searchKey);
     if (inFlight) return inFlight;

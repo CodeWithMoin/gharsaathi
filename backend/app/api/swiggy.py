@@ -11,6 +11,7 @@ from app.commerce.swiggy.errors import (
     SwiggyRateLimited,
     SwiggySchemaError,
 )
+from app.commerce.query_guard import non_search_reason
 from app.commerce.swiggy.models import (
     AddressList,
     AddressResolution,
@@ -241,6 +242,11 @@ async def personalized_search(
     session: DbSessionDependency,
     actor: MemoryActorDependency,
 ) -> PersonalizedProductSearchResult:
+    if non_search_reason(body.query) is not None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "That is a chat message, not a product query. Ask for a grocery or household item.",
+        )
     try:
         memories = await MemoryService(session).retrieve(
             actor,

@@ -12,6 +12,7 @@ from app.commerce.swiggy.errors import (
     SwiggyRateLimited,
 )
 from app.commerce.swiggy.models import Product, ProductSearchResult
+from app.commerce.query_guard import clarification_for_query, non_search_reason
 from app.commerce.zepto.errors import (
     ZeptoAuthenticationRequired,
     ZeptoConfigurationError,
@@ -235,6 +236,15 @@ class MultiProviderShoppingToolExecutor:
                 model_output={
                     "status": "error",
                     "message": "Invalid arguments. Send a product query of 2 to 120 characters.",
+                }
+            )
+        if non_search_reason(arguments.query) is not None:
+            clarification = clarification_for_query(arguments.query)
+            return ToolOutcome(
+                model_output={
+                    "status": "not_a_product_query",
+                    "message": clarification
+                    or "Answer this conversational question directly. Do not search a store.",
                 }
             )
 
