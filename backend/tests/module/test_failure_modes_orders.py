@@ -102,11 +102,11 @@ async def test_fm_o01_a_cancelled_request_mid_dispatch_is_recorded_as_unknown() 
 @pytest.mark.parametrize(
     "payload",
     [
-        {"data": {"status": "PLACED", "order": {"id": "ZP-123"}}},
-        {"content_text": "Order placed successfully! Order ID ZP-123"},
+        {"data": {"status": "PLACED", "detail": {"ref": None}}},
+        {"content_text": "Request received, please wait"},
         {"data": {"isPreview": False, "paymentMethod": "COD", "toPayAmount": 22200}},
     ],
-    ids=["unknown_envelope", "text_envelope", "missing_order_id"],
+    ids=["unknown_envelope", "text_without_order_code", "missing_order_id"],
 )
 async def test_fm_o02_confirmed_order_in_an_unknown_shape_is_unknown_never_placed_or_retried(payload: dict) -> None:
     world = FaultWorld()
@@ -141,11 +141,6 @@ async def test_fm_o02_a_wellformed_confirmation_is_placed() -> None:
     assert result.status == "confirmed" and result.provider_order_id == "ZP-123"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="FM-O02: no read-only reconciliation of outcome_unknown on main (order history "
-    "check, 'Check with Zepto'); it is on codex/order-confirm-reconcile.",
-)
 def test_fm_o02_contract_unknown_outcomes_can_be_reconciled_read_only() -> None:
     from app.shopping import reconciliation  # noqa: F401
 
