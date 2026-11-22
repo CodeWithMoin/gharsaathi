@@ -254,7 +254,7 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
           tabIndex={overflowing ? 0 : -1}
           onKeyDown={onKeyDown}
           aria-label={`${label} options`}
-          className="relative flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-1 outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="relative -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 outline-none [scrollbar-width:none] sm:mx-0 sm:scroll-px-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
         >
           {options.map(({ key, product, number, badge }) => (
             <li key={key} className="w-[min(78%,15.5rem)] shrink-0 snap-start sm:w-[calc((100%-1.5rem)/3)]">
