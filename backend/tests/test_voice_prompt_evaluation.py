@@ -10,6 +10,7 @@ from app.voice.address_tools import OpenAddressFormArguments
 from app.voice.basket_tools import AddArguments, QuantityArguments, StoreArguments
 from app.voice.memory_tools import RecallArguments
 from app.voice.photo_tools import PhotoArguments
+from app.voice.order_status_tools import RecentArguments, StatusArguments
 from app.voice.memory_write_tools import (
     DecisionArguments,
     ForgetArguments,
@@ -384,7 +385,7 @@ def test_few_shot_examples_are_labelled_and_roman_except_explicit_hindi(
                 assert ratio >= 0.3, line
             else:
                 assert ratio == 0.0, line
-    assert 6 <= assistant_lines <= 22
+    assert 6 <= assistant_lines <= 24
     assert hindi_replies == 1
 
 
@@ -429,6 +430,8 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "list_delivery_addresses": AddressListArguments,
         "select_delivery_address": AddressSelectArguments,
         "read_attached_photo": PhotoArguments,
+        "get_order_status": StatusArguments,
+        "list_recent_orders": RecentArguments,
     }
     assert set(validators) == set(definitions)
 

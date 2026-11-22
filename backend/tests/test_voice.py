@@ -124,10 +124,16 @@ async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
         "update_preference", "forget_preference", "list_preferences", "confirm_memory",
         "prepare_order", "list_delivery_addresses", "select_delivery_address",
         "read_attached_photo",
+        "get_order_status", "list_recent_orders",
     }
-    # prepare_order only shows the order card; no tool can approve, check out or order.
-    assert all("checkout" not in name and "approve" not in name for name in names)
-    assert [name for name in names if "order" in name] == ["prepare_order"]
+    # prepare_order only shows the order card; no tool can approve, check out, cancel or order.
+    assert all(
+        "checkout" not in name and "approve" not in name and "cancel" not in name for name in names
+    )
+    # The other order tools only read status and history.
+    assert {name for name in names if "order" in name} == {
+        "prepare_order", "get_order_status", "list_recent_orders"
+    }
     prepare = next(tool for tool in tools if tool["name"] == "prepare_order")
     assert "never approves or places an order" in prepare["description"]
 

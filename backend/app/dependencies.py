@@ -271,6 +271,8 @@ def get_voice_service() -> LiveSessionService:
             else SavedAddressBook(get_session_factory())
         ),
         photo_reader=get_photo_reader(),
+        order_tracking=get_order_tracking_service(),
+        order_history=get_zepto_service(),
     )
 
 

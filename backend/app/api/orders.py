@@ -5,9 +5,10 @@ are the only path from the assistant to an order, and they act only for the
 signed-in user who owns the confirmation.
 """
 
+import logging
 from typing import Literal, NoReturn
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth import UserIdDependency
@@ -21,9 +22,13 @@ from app.shopping.errors import (
     ProviderUnavailable,
     ShoppingError,
 )
+from app.shopping.order_confirmation import OrderResult
+from app.tracking.models import StartTrackingRequest, TrackingProvider, TrackingRead
+from app.tracking.service import OrderTrackingService
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class ConfirmationRequest(BaseModel):
@@ -42,6 +47,9 @@ class OrderConfirmOut(BaseModel):
     store: str
     provider_order_id: str | None
     payable: OrderMoney
+    # Read-only status monitor started for a provider-confirmed order; null when
+    # the order is unconfirmed or tracking could not start (the order stands).
+    tracking: TrackingRead | None = None
 
 
 class OrderCancelOut(BaseModel):
@@ -63,6 +71,7 @@ def _raise_http(exc: ShoppingError) -> NoReturn:
 @router.post("/confirm", response_model=OrderConfirmOut)
 async def confirm_order(
     body: ConfirmationRequest,
+    request: Request,
     response: Response,
     confirmations: OrderConfirmationsDependency,
     checkout: CheckoutServiceDependency,
@@ -79,7 +88,30 @@ async def confirm_order(
         store=result.store,
         provider_order_id=result.provider_order_id,
         payable=OrderMoney(paise=result.payable_paise, display=format_rupees(result.payable_paise)),
+        tracking=await _start_tracking(request, user_id, result),
     )
+
+
+async def _start_tracking(request: Request, user_id: str, result: OrderResult) -> TrackingRead | None:
+    """Watch a provider-confirmed Zepto order (idempotent per order).
+
+    Only reads order status. A tracking failure never changes the order outcome.
+    """
+
+    # Only Zepto orders can be confirmed here (ORDERABLE_PROVIDERS).
+    if result.status != "confirmed" or not result.provider_order_id:
+        return None
+    service = getattr(request.app.state, "order_tracking_service", None)
+    if not isinstance(service, OrderTrackingService):
+        return None
+    try:
+        return await service.ensure(
+            user_id,
+            StartTrackingRequest(provider=TrackingProvider.ZEPTO, order_id=result.provider_order_id),
+        )
+    except Exception as exc:  # noqa: BLE001 - the order is placed; tracking is best effort
+        logger.warning("event=order_auto_track_failed error=%s", type(exc).__name__)
+        return None
 
 
 @router.post("/cancel", response_model=OrderCancelOut)
