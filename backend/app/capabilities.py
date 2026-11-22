@@ -186,6 +186,29 @@ CAPABILITIES: tuple[Capability, ...] = (
         ui_files=("frontend/app/product-comparison.tsx",),
     ),
     Capability(
+        id="compare_options",
+        title="Compare options on screen: price difference, unit price, pack, store",
+        voice=S(
+            W,
+            "compare_options(option_ids | item + positions, aspect): code works out price "
+            "differences, unit prices per 100 g / 100 ml / piece and the best value in stock; "
+            "the model repeats its strings.",
+        ),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
+        ui=S(
+            W,
+            "One live comparison card (comparison.ready): 2-4 columns with price, MRP, unit "
+            "price, stock, ETA, 'Cheapest' / 'Best value per 100 ml' badges and Add.",
+        ),
+        backend=S(
+            W,
+            "app/shopping/compare.py: pack parsing (g/kg, ml/L, pcs, multipacks), unit prices in "
+            "paise (half-up), never across grams and millilitres; read-only.",
+        ),
+        voice_tools=("compare_options",),
+        ui_files=("frontend/app/comparison-card-ui.tsx", "frontend/app/comparison-card.mjs"),
+    ),
+    Capability(
         id="multi_item_request",
         title="Ask for several items in one message ('atta, dal aur doodh')",
         voice=S(W, "Backend prompt tells the model to search each item separately."),
@@ -1077,6 +1100,15 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "item_summary",
         "bill_breakdown",
         "fees_total",
+        # compare_options arguments, result fields and statuses.
+        "option_ids",
+        "price_difference",
+        "price_line",
+        "unit_price",
+        "unit_price_difference",
+        "unit_price_line",
+        "better_value",
+        "options_not_on_screen",
         # summarize_my_memory and search_products household-fact fields.
         "more_on_screen",
         "nothing_saved",
