@@ -228,6 +228,7 @@ class CheckoutReconciler:
         history: OrderHistoryReader | None,
         *,
         tracking: TrackingStarter | None = None,
+        push: Any = None,
         clock: Callable[[], datetime] = utc_now,
         min_interval: timedelta = MIN_CHECK_INTERVAL,
         sleep: Callable[[float], Any] = asyncio.sleep,
@@ -237,6 +238,8 @@ class CheckoutReconciler:
         self.baskets = baskets
         self.history = history
         self.tracking = tracking
+        # Browser notifications: a settled order, or one still unknown after the checks.
+        self.push = push
         self.clock = clock
         self.min_interval = min_interval
         self.sleep = sleep
@@ -307,6 +310,8 @@ class CheckoutReconciler:
             attempt.id, provider_order_id=match.order_id, at=self.clock()
         )
         newly = updated.provider_order_id == match.order_id and updated.status != CheckoutStatus.OUTCOME_UNKNOWN
+        if newly and self.push is not None:
+            self.push.checkout_outcome(updated, earlier=True)
         return ReconcileOutcome(
             "matched",
             updated,
@@ -382,6 +387,13 @@ class CheckoutReconciler:
                 outcome = await self.reconcile(attempt_id)
                 if outcome.check in {"matched", "not_unknown", "ambiguous"}:
                     break
+            if (
+                outcome is not None
+                and self.push is not None
+                and outcome.attempt is not None
+                and outcome.attempt.status == CheckoutStatus.OUTCOME_UNKNOWN
+            ):
+                self.push.order_still_unknown(outcome.attempt)
             if outcome is not None and on_final is not None:
                 result = on_final(outcome)
                 if asyncio.iscoroutine(result):

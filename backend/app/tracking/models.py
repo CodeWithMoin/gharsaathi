@@ -92,7 +92,8 @@ NotificationKind = Literal["out_for_delivery", "delivered", "delayed", "cancelle
 
 
 class TrackingNotification(BaseModel):
-    """One in-app update worth telling the household about (never push/SMS/calls)."""
+    """One update worth telling the household about (in-app; also a browser
+    notification when they turned those on). Never SMS or calls."""
 
     id: str
     kind: NotificationKind

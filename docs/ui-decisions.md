@@ -62,6 +62,22 @@ dimmed backdrop, focus trapped and restored on close, body scroll locked, bottom
 sheet under 640 px and centered above, reduced-motion respected. Pure logic
 (`input-dialog-logic.mjs`) is unit-tested.
 
+## Browser notifications
+
+- Opt-in only. Settings → **Notifications** has one switch ("Notifications on this
+  device"); the browser permission prompt appears only after that tap, never on load.
+  When on: a "Tell me when" checklist (one per kind, all on by default) and **Send a
+  test notification**.
+- After the first placed order, a one-time inline prompt above the composer: "Get
+  delivery updates as notifications?" with **Not now** and **Turn on**. Either answer
+  is remembered on the server, so it never shows again (on any device).
+- Blocked, unsupported, insecure (plain-http LAN address), iPhone/iPad not added to
+  the Home Screen, and "not set up on this server" each show one plain sentence and a
+  disabled switch. Logic: `push-notifications.mjs`; UI: `notification-settings.tsx`.
+- While the app is visible and focused, updates appear only in-app (toast/status
+  card); the service worker shows system notifications only when it is not.
+- Tapping a notification opens or focuses the app and scrolls to that order's status card.
+
 ## Voice pill
 
 While voice is on, the composer is replaced by a compact pill

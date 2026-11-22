@@ -1,7 +1,7 @@
 """Rider assist: per-user switch + delivery notes, and rider call summaries.
 
 Revision ID: 20261122_rider01
-Revises: 20261122_pay01
+Revises: 20261122_push01
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision: str = "20261122_rider01"
-down_revision: str | None = "20261122_pay01"
+down_revision: str | None = "20261122_push01"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

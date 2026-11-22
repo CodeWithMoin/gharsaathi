@@ -3,8 +3,9 @@
 Only four changes count: out for delivery, delivered, cancelled, and a delay
 (the provider's ETA moved later by at least ``DELAY_THRESHOLD``). Everything
 else (a first reading, packing, small ETA drift, a reworded message) stays
-silent. Updates are shown in the app only: a toast and the chat status card.
-Nothing here sends a push notification, SMS or call.
+silent. Updates are shown in the app (a toast and the chat status card) and,
+for people who turned them on, sent as browser notifications by
+``app/notifications`` (``OrderTrackingService.push``). Never SMS or calls.
 """
 
 from __future__ import annotations

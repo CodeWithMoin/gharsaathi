@@ -1,0 +1,16 @@
+{
+  "name": "GharSaathi",
+  "short_name": "GharSaathi",
+  "description": "Your AI household shopping agent.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4efe8",
+  "theme_color": "#f4efe8",
+  "icons": [
+    { "src": "/icons/gharsaathi-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/gharsaathi-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/gharsaathi-icon.png", "sizes": "1254x1254", "type": "image/png", "purpose": "any" }
+  ]
+}

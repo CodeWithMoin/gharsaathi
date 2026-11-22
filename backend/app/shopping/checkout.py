@@ -63,6 +63,10 @@ class ZeptoCodGateway(Protocol):
     async def confirm_cod(self, basket: Basket) -> object: ...
 
 
+class CheckoutEvents(Protocol):
+    def checkout_outcome(self, attempt: CheckoutAttempt) -> None: ...
+
+
 class CheckoutAttemptRepository(Protocol):
     async def for_approval(self, approval_id: str) -> CheckoutAttempt | None: ...
 
@@ -429,10 +433,13 @@ class CheckoutService:
         clock: Clock = utc_now,
         checkout_lock: asyncio.Lock | None = None,
         payments: PrepaidGateway | None = None,
+        push: CheckoutEvents | None = None,
     ) -> None:
         self.baskets = baskets
         self.approvals = approvals
         self.attempts = attempts
+        # Browser notifications for placed orders and payments needing action.
+        self.push = push
         self.quote_provider = quote_provider
         self.gateway = gateway
         self.clock = clock
@@ -479,7 +486,7 @@ class CheckoutService:
 
         if self.checkout_lock is not None:
             async with self.checkout_lock:
-                return await self._checkout_serialized(
+                attempt = await self._checkout_serialized(
                     approval_id,
                     household_id,
                     key_hash,
@@ -487,14 +494,22 @@ class CheckoutService:
                     payment_method,
                     coordinated=True,
                 )
-        return await self._checkout_serialized(
-            approval_id,
-            household_id,
-            key_hash,
-            expected_fingerprint,
-            payment_method,
-            coordinated=False,
-        )
+        else:
+            attempt = await self._checkout_serialized(
+                approval_id,
+                household_id,
+                key_hash,
+                expected_fingerprint,
+                payment_method,
+                coordinated=False,
+            )
+        return self._announce(attempt)
+
+    def _announce(self, attempt: CheckoutAttempt) -> CheckoutAttempt:
+        # After the outcome is committed; deduped per order/attempt and status.
+        if self.push is not None:
+            self.push.checkout_outcome(attempt)
+        return attempt
 
     def _require_prepaid(self, method: PaymentMethod) -> PrepaidGateway:
         if (
@@ -678,13 +693,14 @@ class CheckoutService:
         report = await payments.check_status(
             attempt.provider_order_id, poll=attempt.payment_poll_allowed
         )
-        return await self.attempts.record_payment_status(
+        updated = await self.attempts.record_payment_status(
             attempt.id,
             from_status=attempt.status,
             to_status=next_checkout_status(attempt.status, report),
             poll_allowed=report.poll_instructed,
             at=self.clock(),
         )
+        return self._announce(updated)
 
     async def _fresh_quote(
         self,

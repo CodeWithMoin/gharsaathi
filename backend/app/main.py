@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.basket import router as basket_router
 from app.api.chat import router as chat_router
 from app.api.conversations import router as conversations_router
+from app.api.notifications import router as notifications_router
 from app.api.orders import router as orders_router
 from app.api.swiggy import router as swiggy_router
 from app.api.support import router as support_router
@@ -93,6 +94,9 @@ app.include_router(orders_router, prefix="/api/orders", tags=["Orders"])
 app.include_router(support_router, prefix="/api/support", tags=["Customer Support"])
 app.include_router(tracking_router, prefix="/api/tracking", tags=["Order Tracking"])
 app.include_router(rider_router, prefix="/api/rider", tags=["Rider assist"])
+app.include_router(
+    notifications_router, prefix="/api/notifications", tags=["Browser notifications"]
+)
 app.include_router(
     conversations_router,
     prefix="/api/conversations",

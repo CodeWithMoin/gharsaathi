@@ -96,22 +96,30 @@ class Settings(BaseSettings):
     support_data_path: Path = Field(default=Path("backend/.data/support"))
     tracking_data_path: Path = Field(default=Path("backend/.data/tracking"))
     tracking_polling_enabled: bool = True
-    # Rider assist (beta, docs/RIDER_ASSIST.md): an Exotel Voicebot applet streams a
-    # forwarded delivery-partner call to /api/rider/stream, bridged to OpenAI Realtime.
+    # Browser (Web Push) notifications. All three must be set, else the feature
+    # is hidden. Generate a pair with `make vapid-keys`.
+    web_push_vapid_public_key: str = ""
+    web_push_vapid_private_key: SecretStr = SecretStr("")
+    web_push_subject: str = ""
+    # Rider assist (beta, docs/RIDER_ASSIST.md): a forwarded delivery-partner call reaches
+    # a Vobiz number whose answer URL returns <Stream> to /api/rider/stream/..., bridged to
+    # OpenAI Realtime. Production: run in AWS ap-south-1 (TRAI media anchoring).
     rider_assist_enabled: bool = False
+    rider_assist_provider: Literal["vobiz"] = "vobiz"
     rider_assist_owner_user_id: str = ""
-    # Optional: the ExoPhone the flow is attached to; calls to another number are refused.
-    rider_assist_exophone: str = ""
+    # Public HTTPS origin Vobiz calls, e.g. https://rider.example.in (no trailing path).
+    rider_assist_public_url: str = ""
+    # Signs per-call stream URLs; at least 32 characters.
+    rider_assist_stream_secret: SecretStr = SecretStr("")
+    # Optional: the Vobiz number (E.164); calls to any other number are refused.
+    rider_assist_number: str = ""
     rider_assist_realtime_model: str = "gpt-realtime-2.1"
     rider_assist_voice: str = "marin"
     rider_assist_transcription_model: str = "gpt-4o-mini-transcribe"
     rider_assist_max_call_seconds: int = Field(default=180, ge=30, le=600)
-    exotel_stream_user: str = ""
-    exotel_stream_password: SecretStr = SecretStr("")
-    exotel_account_sid: str = ""
-    exotel_api_key: str = ""
-    exotel_api_token: SecretStr = SecretStr("")
-    exotel_subdomain: str = "api.in.exotel.com"
+    # Vobiz console → Settings → API (X-Auth-ID / X-Auth-Token). The token also signs webhooks.
+    vobiz_auth_id: str = ""
+    vobiz_auth_token: SecretStr = SecretStr("")
 
     @field_validator(
         "swiggy_token_store_path",
