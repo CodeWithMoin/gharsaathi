@@ -62,6 +62,8 @@ class AddressList(BaseModel):
     cached: bool = False
     needs_refresh: bool = False
     refreshed_at: datetime | None = None
+    # The selected saved address disappeared at the store; the user must pick again.
+    selection_removed: bool = False
 
 
 class Price(DisplayedPrice):

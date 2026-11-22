@@ -1,4 +1,6 @@
 export type OrderItem = { name: string; packSize: string | null; quantity: number };
+export type PaymentMethod = "cod" | "upi_reserve" | "wallet" | "online";
+export type PaymentOption = { id: PaymentMethod; label: string };
 
 export type OrderConfirmation = {
   id: string;
@@ -11,6 +13,8 @@ export type OrderConfirmation = {
   items: OrderItem[];
   addressLabel: string | null;
   address: string | null;
+  paymentMethod: PaymentMethod;
+  paymentMethods: PaymentOption[];
 };
 
 export type OrderCardState =
@@ -21,7 +25,22 @@ export type OrderCardState =
   | { status: "failed"; reason: string }
   | { status: "cancelling" }
   | { status: "cancelled" }
-  | { status: "expired" };
+  | { status: "expired" }
+  | { status: "switching" }
+  | { status: "awaiting_payment"; checkoutId: string; url: string | null }
+  | { status: "checking"; checkoutId: string; url: string | null }
+  | { status: "payment_succeeded"; checkoutId: string }
+  | { status: "payment_unknown"; checkoutId: string | null }
+  | { status: "payment_failed" }
+  | { status: "paid_order_failed" };
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string>;
+export function safePaymentUrl(raw: unknown): string | null;
+export function withPaymentMethodCard(confirmation: OrderConfirmation, body: unknown): OrderConfirmation | null;
+export function placeButtonLabel(confirmation: OrderConfirmation): string;
+export function paymentMethodLabel(confirmation: OrderConfirmation): string;
+export function checkableCheckoutId(state: OrderCardState): string | null;
+export function autoCheckDelayMs(checksSoFar: number): number | null;
 
 export function orderConfirmationFromEvent(raw: unknown): OrderConfirmation | null;
 export function countdownLabel(expiresAt: string, nowMs: number): string | null;

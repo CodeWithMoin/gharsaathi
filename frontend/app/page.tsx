@@ -27,17 +27,20 @@ import { disconnectCopy } from "./input-flows.mjs";
 import { ConfirmDialog } from "./ui/confirm-dialog";
 import type { AddressFormAck } from "./address-form-merge.mjs";
 import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
-import { applyAssistantEvent } from "./assistant-events.mjs";
+import { ADDRESS_REMOVED_MESSAGE, applyAssistantEvent } from "./assistant-events.mjs";
+import { zeptoAddressSelection } from "./zepto-address-refresh.mjs";
 import { OrderConfirmationCard } from "./order-confirmation-card";
 import { orderCardIndex, type OrderCardState, type OrderConfirmation } from "./order-confirmation.mjs";
 import { OrderStatusCard } from "./order-status-card";
 import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
+import { PhotoAttachButton, PhotoBubbleImage, PhotoChip, usePhotoAttachment } from "./photo-attachment-ui";
+import { attachmentIdFor, canSend, photoBubbleText, photoMessageContent } from "./photo-attachment.mjs";
 
 const LEGACY_CHAT_STORAGE_KEY = "gharsaathi:conversation:v1";
 
 type Address = { id: string; address_line: string; category?: string; tag?: string };
 type CommerceMode = "demo" | "live";
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string };
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string; photo_thumbnail?: string | null; photo_preview?: string | null };
 type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; timeline?: unknown; result_groups?: unknown; updated_at: string };
 type LegacyConversation = { submittedQuery?: string; products?: Product[]; searched?: boolean };
 type ChatTurnResponse = { conversation_id: string | null; reply: string; ui_events: unknown[] };
@@ -83,6 +86,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [zeptoBusy, setZeptoBusy] = useState(false);
   const [zeptoAddresses, setZeptoAddresses] = useState<Address[]>([]);
   const [zeptoAddressId, setZeptoAddressId] = useState("");
+  const zeptoAddressIdRef = useRef("");
+  zeptoAddressIdRef.current = zeptoAddressId;
+  // Shown when the selected Zepto address was deleted in Zepto; tapping it opens the picker.
+  const [addressRemovedToast, setAddressRemovedToast] = useState(false);
   // One Add delivery address popup for voice, typed chat and the manual button.
   const [addressPopupOpen, setAddressPopupOpen] = useState(false);
   const [addressPrefillRequest, setAddressPrefillRequest] = useState<ZeptoAddressPrefillRequest | null>(null);
@@ -116,6 +123,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const startFreshConversationRef = useRef(false);
   const selectedAddress = useMemo(() => addresses.find((address) => address.id === addressId), [addresses, addressId]);
   const closeVoice = useCallback(() => setVoiceOpen(false), []);
+  // Shop from a photo: one pending attachment, sent with the next typed turn or read by voice.
+  const photo = usePhotoAttachment();
+  const consumePhoto = photo.consumed;
+  const handlePhotoRead = useCallback(({ attachmentId }: { attachmentId: string }) => consumePhoto(attachmentId), [consumePhoto]);
   const basketProviderRef = useRef<ProviderName>(basketProvider);
   useEffect(() => { basketProviderRef.current = basketProvider; }, [basketProvider]);
   const followScrollRef = useRef(true);
@@ -212,6 +223,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     if (provider === "zepto") {
       setZeptoAddressId(nextAddressId);
       setZeptoSearchReady(true);
+      setAddressRemovedToast(false);
     } else setAddressId(nextAddressId);
   }, []);
   // Typed chat cannot confirm the form within its own turn; the next turn carries the report.
@@ -318,16 +330,18 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     return request;
   }, [apiRequest, commerceMode]);
 
-  const loadZeptoAddresses = useCallback(async (refresh = false) => {
+  // `auto` asks the backend for its bounded Zepto refresh: "load" (stale after 30 min) or "picker" (5 min).
+  const loadZeptoAddresses = useCallback(async (refresh = false, auto?: "load" | "picker") => {
     if (zeptoAddressRequestRef.current) return zeptoAddressRequestRef.current;
     const request = (async () => {
       setZeptoBusy(true);
       try {
-        const data = await apiRequest<{ addresses: Address[]; resolution: { default_address_id?: string }; needs_refresh?: boolean }>(`/api/zepto/addresses${refresh ? "?refresh=true" : ""}`);
+        const query = refresh ? "?refresh=true" : auto ? `?auto=${auto}` : "";
+        const data = await apiRequest<{ addresses: Address[]; resolution: { default_address_id?: string }; needs_refresh?: boolean; selection_removed?: boolean }>(`/api/zepto/addresses${query}`);
         setZeptoAddresses(data.addresses);
-        const preferred = data.resolution.default_address_id;
-        if (preferred && data.addresses.some((item) => item.id === preferred)) setZeptoAddressId(preferred);
-        else if (data.addresses.length === 1) setZeptoAddressId(data.addresses[0].id);
+        const selection = zeptoAddressSelection(data, zeptoAddressIdRef.current);
+        setZeptoAddressId(selection.selectedId);
+        if (selection.selectionRemoved) setAddressRemovedToast(true);
         setZeptoSearchReady(data.addresses.length > 0);
         if (refresh && data.addresses.length) setMessage("Zepto addresses saved. Reload will use this snapshot.");
         else if (data.needs_refresh) setMessage("Tap Refresh from Zepto once to save your delivery addresses.");
@@ -344,6 +358,17 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     });
     return request;
   }, [apiRequest]);
+  // Opening the Zepto picker refreshes a snapshot older than 5 minutes (bounded on the server).
+  useEffect(() => {
+    if (addressPicker === "zepto" && zeptoConnected === true && commerceMode === "live") void loadZeptoAddresses(false, "picker");
+  }, [addressPicker, zeptoConnected, commerceMode, loadZeptoAddresses]);
+  // The selected Zepto address was deleted in Zepto: clear it and fetch the current list.
+  const handleAddressRemoved = useCallback((provider: ProviderName) => {
+    if (provider !== "zepto") return;
+    setZeptoAddressId("");
+    setAddressRemovedToast(true);
+    void loadZeptoAddresses(false);
+  }, [loadZeptoAddresses]);
 
   useEffect(() => {
     let active = true;
@@ -399,7 +424,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         .then((data) => {
           if (!active || currentGeneration !== generation) return;
           setZeptoConnected(data.connected);
-          if (data.connected) void loadZeptoAddresses();
+          if (data.connected) void loadZeptoAddresses(false, "load");
         })
         .catch(() => {
           if (active && currentGeneration === generation) setZeptoConnected(false);
@@ -707,6 +732,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         body: JSON.stringify({ address_id: nextAddressId }),
       });
       setZeptoSearchReady(true);
+      setAddressRemovedToast(false);
     } catch (cause) {
       setZeptoAddressId(previous);
       setMessage(cause instanceof Error ? cause.message : "Could not save this Zepto address.");
@@ -726,8 +752,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
   async function runSearch(value: string) {
     const clean = value.trim();
-    if (!clean) return;
-    const localReply = conversationReply(clean, { swiggyConnected: connected === true, zeptoConnected: zeptoConnected === true });
+    const attachmentId = attachmentIdFor(photo.state);
+    if (!clean && !attachmentId) return;
+    if (photo.state.status === "uploading") return;
+    const localReply = attachmentId ? null : conversationReply(clean, { swiggyConnected: connected === true, zeptoConnected: zeptoConnected === true });
     if (localReply) {
       followScrollRef.current = true;
       const now = new Date().toISOString();
@@ -749,7 +777,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     const swiggyReady = connected === true && Boolean(addressId);
     const zeptoReady = zeptoConnected === true && Boolean(zeptoAddressId);
     followScrollRef.current = true;
-    const userMessage: ChatMessage = { id: `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, role: "user", content: clean, modality: "text", created_at: new Date().toISOString() };
+    // The full photo is never saved with the chat: the turn keeps a "Photo" placeholder and
+    // the server-made small thumbnail; the sharper local preview lives only in this session.
+    const photoFields = attachmentId && photo.state.status === "ready" ? { photo_thumbnail: photo.state.thumbnail, photo_preview: photo.takePreview() } : {};
+    const userMessage: ChatMessage = { id: `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, role: "user", content: attachmentId ? photoMessageContent(clean) : clean, modality: "text", created_at: new Date().toISOString(), ...photoFields };
     const withUser = [...chatMessagesRef.current, userMessage];
     chatMessagesRef.current = withUser;
     setChatMessages(withUser);
@@ -762,15 +793,16 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       const turn = await apiRequest<ChatTurnResponse>("/api/chat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversation_id: conversationIdRef.current, message: clean, swiggy_address_id: swiggyReady ? addressId : null, zepto_address_id: zeptoReady ? zeptoAddressId : null, ui_acks: pendingTypedAcksRef.current.splice(0, 4) }),
+        body: JSON.stringify({ conversation_id: conversationIdRef.current, message: clean, attachment_id: attachmentId, swiggy_address_id: swiggyReady ? addressId : null, zepto_address_id: zeptoReady ? zeptoAddressId : null, ui_acks: pendingTypedAcksRef.current.splice(0, 4) }),
       });
       if (turn.conversation_id) conversationIdRef.current ??= turn.conversation_id;
+      if (attachmentId) photo.consumed(attachmentId);
       const reply: ChatMessage = { id: `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}-assistant`, role: "assistant", content: turn.reply, modality: "text", created_at: new Date().toISOString() };
       const withReply = [...chatMessagesRef.current, reply];
       chatMessagesRef.current = withReply;
       setChatMessages(withReply);
       for (const event of turn.ui_events) {
-        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onOrderConfirmation: handleOrderConfirmation, onSupportOpen: openSupport });
+        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onAddressRemoved: handleAddressRemoved, onOrderConfirmation: handleOrderConfirmation, onSupportOpen: openSupport, onPhotoRead: handlePhotoRead });
         if (outcome?.kind === "not_connected") setSetupOpen(true);
         if (outcome?.ack && outcome.ackId) void outcome.ack.then((ack) => { pendingTypedAcksRef.current.push(ack); });
         if (outcome) setMessage(outcome.message);
@@ -1045,7 +1077,12 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
             const chatMessage = item.message;
             return chatMessage.role === "user" ? (
               <motion.div key={chatMessage.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 flex justify-end pl-8 sm:pl-12">
-                <div className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[22px_8px_22px_22px] border border-accent-border bg-user-bubble px-5 py-3.5 text-[15px] leading-6 text-on-user-bubble">{chatMessage.content}</div>
+                {chatMessage.photo_thumbnail || chatMessage.photo_preview ? (
+                  <div className="flex max-w-full flex-col items-end gap-1.5">
+                    <PhotoBubbleImage thumbnail={chatMessage.photo_thumbnail} preview={chatMessage.photo_preview} />
+                    {photoBubbleText(chatMessage.content) && <div className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[22px_8px_22px_22px] border border-accent-border bg-user-bubble px-5 py-3.5 text-[15px] leading-6 text-on-user-bubble">{photoBubbleText(chatMessage.content)}</div>}
+                  </div>
+                ) : <div className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[22px_8px_22px_22px] border border-accent-border bg-user-bubble px-5 py-3.5 text-[15px] leading-6 text-on-user-bubble">{chatMessage.content}</div>}
               </motion.div>
             ) : (
               <motion.div key={chatMessage.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
@@ -1055,19 +1092,21 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
           })}
         </AnimatePresence>
         {loading === "assistant" && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="w-fit rounded-[8px_22px_22px_22px] border border-border bg-surface px-5 py-4"><div className="flex items-center gap-1.5" role="status" aria-label="GharSaathi is typing">{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-accent" />)}<span className="ml-2 text-sm text-muted">Thinking…</span></div></div></motion.div>}
-        {chatFailure && loading !== "assistant" && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div role="alert" className="max-w-md rounded-[8px_22px_22px_22px] border border-border bg-surface px-5 py-4"><p className="text-sm leading-6 text-danger-hover">{chatFailure.message}</p><button type="button" onClick={() => { const failedQuery = chatFailure.query; setChatFailure(null); void runDirectSearch(failedQuery); }} className="mt-3 flex items-center gap-1.5 rounded-full bg-inverse px-4 py-2 text-xs font-semibold text-on-inverse transition active:scale-[.97]"><MagnifyingGlass size={14} /> Search directly</button></div></motion.div>}
+        {chatFailure && loading !== "assistant" && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div role="alert" className="max-w-md rounded-[8px_22px_22px_22px] border border-border bg-surface px-5 py-4"><p className="text-sm leading-6 text-danger-hover">{chatFailure.message}</p>{chatFailure.query && <button type="button" onClick={() => { const failedQuery = chatFailure.query; setChatFailure(null); void runDirectSearch(failedQuery); }} className="mt-3 flex items-center gap-1.5 rounded-full bg-inverse px-4 py-2 text-xs font-semibold text-on-inverse transition active:scale-[.97]"><MagnifyingGlass size={14} /> Search directly</button>}</div></motion.div>}
         {chatSaveFailed && <p role="status" className="mt-6 text-center text-[11px] leading-4 text-danger-hover">This chat hasn&apos;t been saved yet. GharSaathi will try again with your next message.</p>}
 
         <AnimatePresence>{trackingOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><LiveOrderTracking initialAddressId={addressId || undefined} onClose={() => setTrackingOpen(false)} /></motion.div>}</AnimatePresence>
       </div>
     </section>
 
+    <AnimatePresence>{addressRemovedToast && !orderToast && addressPicker !== "zepto" && <motion.div key="address-removed-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} style={{ bottom: insets.bottom + 112 }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><button type="button" onClick={() => { setAddressRemovedToast(false); setAddressPicker("zepto"); }} className="pointer-events-auto max-w-sm rounded-full bg-inverse px-4 py-2.5 text-center text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">{ADDRESS_REMOVED_MESSAGE}</button></motion.div>}</AnimatePresence>
     <AnimatePresence>{orderToast && <motion.div key="order-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} style={{ bottom: insets.bottom + 112 }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><p role="status" aria-live="polite" className="pointer-events-auto max-w-sm rounded-full bg-inverse px-4 py-2.5 text-center text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">{orderToast}</p></motion.div>}</AnimatePresence>
 
     <div style={{ bottom: insets.bottom }} className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <AnimatePresence mode="wait">
-        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} beforeSessionStart={flushConversationSave} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
-          <div className="flex items-center gap-2 rounded-[26px] border border-border-strong bg-surface p-2 pl-5 shadow-[0_24px_60px_-28px_rgb(var(--shadow)/.55),inset_0_1px_0_rgba(255,255,255,.9)]"><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search" || loading === "assistant"} className="min-w-0 flex-1 bg-transparent py-2 text-[15px] outline-none placeholder:text-subtle disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() ? <button type="submit" aria-label="Send request" disabled={loading === "search" || loading === "assistant"} className="grid size-12 shrink-0 place-items-center rounded-full bg-inverse text-on-inverse transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} onPointerEnter={prewarmVoice} onPointerDown={prewarmVoice} onFocus={prewarmVoice} disabled={loading === "search" || loading === "assistant"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[0_12px_30px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-accent" /><Microphone size={23} /></button>}</div>
+        {voiceOpen ? <motion.div key="voice-composer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }} className="mx-auto max-w-3xl"><PhotoChip state={photo.state} onRemove={photo.remove} voice /><div className="flex items-end justify-center gap-2"><PhotoAttachButton compact onFile={(file) => void photo.attach(file)} disabled={photo.state.status === "uploading"} /><VoicePanel addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onAddressRemoved={handleAddressRemoved} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} onPhotoRead={handlePhotoRead} beforeSessionStart={flushConversationSave} /></div></motion.div> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
+          <PhotoChip state={photo.state} onRemove={photo.remove} />
+          <div className="flex items-center gap-1 rounded-[26px] border border-border-strong bg-surface p-2 pl-2 shadow-[0_24px_60px_-28px_rgb(var(--shadow)/.55),inset_0_1px_0_rgba(255,255,255,.9)]"><PhotoAttachButton onFile={(file) => void photo.attach(file)} disabled={loading === "search" || loading === "assistant" || photo.state.status === "uploading"} /><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search" || loading === "assistant"} className="min-w-0 flex-1 bg-transparent py-2 pl-1 text-[15px] outline-none placeholder:text-subtle disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() || photo.state.status !== "idle" ? <button type="submit" aria-label={attachmentIdFor(photo.state) ? "Send photo" : "Send request"} disabled={loading === "search" || loading === "assistant" || !canSend(photo.state, query)} className="grid size-12 shrink-0 place-items-center rounded-full bg-inverse text-on-inverse transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} onPointerEnter={prewarmVoice} onPointerDown={prewarmVoice} onFocus={prewarmVoice} disabled={loading === "search" || loading === "assistant"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[0_12px_30px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-accent" /><Microphone size={23} /></button>}</div>
           <p className="mt-2.5 text-center text-[10px] text-muted">Hindi · English · Hinglish &nbsp;·&nbsp; You approve every purchase</p>
         </motion.form>}
       </AnimatePresence>

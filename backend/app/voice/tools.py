@@ -20,7 +20,7 @@ from app.commerce.zepto.errors import (
     ZeptoAuthenticationRequired,
     ZeptoConfigurationError,
     ZeptoError,
-    ZeptoRateLimited,
+    ZeptoProviderError,
 )
 from app.memory.recall import HouseholdMemory, HouseholdMemoryReader
 from app.memory.household_rules import (
@@ -67,11 +67,6 @@ AVOIDED_NOTE = (
     "'Aapne <rule> kaha tha—phir bhi dikhaun/add karun?'"
 )
 
-SLOW_STORE_NOTE = (
-    " A store marked store_unavailable did not answer in time and is not in these "
-    "results; say so once, briefly."
-)
-
 SEARCH_PRODUCTS_TOOL: dict[str, Any] = {
     "type": "function",
     "name": "search_products",
@@ -81,7 +76,10 @@ SEARCH_PRODUCTS_TOOL: dict[str, Any] = {
         "toys, small electronics and accessories. Read-only: it never changes a provider cart "
         "or places an order. Use a short product query in English or Hinglish, "
         "including brand and pack size when the user gave them, for example "
-        "'Fortune sunflower oil 1 litre', 'Aashirvaad atta 5 kg', or 'USB-C cable'."
+        "'Fortune sunflower oil 1 litre', 'Aashirvaad atta 5 kg', or 'USB-C cable'. "
+        "status provider_error (or a store listed in unreachable_stores) means that "
+        "store could not be reached: it says nothing about whether the product exists, "
+        "so never report it as not found."
     ),
     "parameters": {
         "type": "object",
@@ -408,7 +406,20 @@ class MultiProviderShoppingToolExecutor:
             )
 
         ready = [target for target in self.targets if target.address_id]
-        if not ready:
+        # A store whose saved address vanished is reported, not silently skipped.
+        address_problems = [
+            {
+                "status": "provider_error",
+                "reason": problem,
+                "store": target.store,
+                "store_id": target.provider,
+                "target": target,
+                "products": [],
+            }
+            for target in self.targets
+            if not target.address_id and (problem := _address_problem(target)) is not None
+        ]
+        if not ready and not address_problems:
             return ToolOutcome(
                 model_output={
                     "status": "not_connected",
@@ -429,7 +440,7 @@ class MultiProviderShoppingToolExecutor:
                 allowed.append(target)
             else:
                 skipped.append({"store": target.store, "household_rule": store_rule_label(rule)})
-        if not allowed:
+        if not allowed and not address_problems:
             return ToolOutcome(
                 model_output={
                     "status": "skipped_by_household_rule",
@@ -448,7 +459,9 @@ class MultiProviderShoppingToolExecutor:
                 },
             )
         ready = allowed
-        outcomes = await self._search_targets(ready, without_store_names(arguments.query))
+        outcomes = (
+            await self._search_targets(ready, without_store_names(arguments.query)) + address_problems
+        )
         post_started = time.perf_counter()
         try:
             return self._results(arguments.query, outcomes, memory, rules, skipped)
@@ -465,25 +478,37 @@ class MultiProviderShoppingToolExecutor:
     ) -> ToolOutcome:
         arguments = SearchProductsArguments(query=query)
         successful = [outcome for outcome in outcomes if outcome["status"] == "ok"]
+        unreachable = [
+            {"store": outcome["store"], "store_id": outcome["store_id"], "reason": outcome["reason"]}
+            for outcome in outcomes
+            if outcome["status"] == "provider_error"
+        ]
         if not successful:
             statuses = {str(outcome["status"]) for outcome in outcomes}
-            status = "rate_limited" if "rate_limited" in statuses else "not_connected" if statuses == {"not_connected"} else "error"
+            status = "not_connected" if statuses == {"not_connected"} else "provider_error"
+            model_output: dict[str, Any] = {
+                "status": status,
+                "query": arguments.query,
+                **item_fields(arguments.query),
+                "providers": [_provider_status(outcome) for outcome in outcomes],
+            }
+            if status == "provider_error":
+                model_output["unreachable_stores"] = unreachable
+                model_output["message"] = provider_error_message(unreachable)
+            else:
+                model_output["message"] = (
+                    "No store is connected. Do not guess price or availability."
+                )
             return ToolOutcome(
-                model_output={
-                    "status": status,
-                    "query": arguments.query,
-                    **item_fields(arguments.query),
-                    "providers": [
-                        {key: value for key, value in outcome.items() if key not in {"target", "products"}}
-                        for outcome in outcomes
-                    ],
-                    "message": "No connected store returned product results. Do not guess price or availability.",
-                },
+                model_output=model_output,
                 ui_event={
                     "type": "tool.not_connected" if status == "not_connected" else "tool.error",
                     "query": arguments.query,
                     **item_fields(arguments.query),
-                    "message": "Connected stores could not be searched right now.",
+                    "message": unreachable_ui_message(unreachable)
+                    if unreachable
+                    else "Connected stores could not be searched right now.",
+                    **_address_removed(unreachable),
                 },
             )
 
@@ -585,29 +610,29 @@ class MultiProviderShoppingToolExecutor:
                     else ""
                 )
                 + (AVOIDED_NOTE if any(entry.get("avoided") for entry in model_results) else "")
-                + (SLOW_STORE_NOTE if any(outcome["status"] == "store_unavailable" for outcome in outcomes) else "")
             ),
         }
         if any(outcome["status"] != "ok" for outcome in outcomes):
             # stores_checked already names the stores that answered.
-            model_output["provider_statuses"] = [
-                {key: value for key, value in outcome.items() if key not in {"target", "products"}}
-                for outcome in outcomes
-            ]
+            model_output["provider_statuses"] = [_provider_status(outcome) for outcome in outcomes]
         if skipped:
             model_output["skipped_stores"] = skipped
         if filtered_count:
             model_output["hidden_by_household_rules"] = filtered_count
-        return ToolOutcome(
-            model_output=model_output,
-            ui_event={
-                "type": "tool.results",
-                "query": arguments.query,
-                **item_fields(arguments.query),
-                "store": " + ".join(stores),
-                "products": ui_products,
-            },
-        )
+        ui_event: dict[str, Any] = {
+            "type": "tool.results",
+            "query": arguments.query,
+            **item_fields(arguments.query),
+            "store": " + ".join(stores),
+            "products": ui_products,
+        }
+        if unreachable:
+            model_output["unreachable_stores"] = unreachable
+            model_output["note"] += " " + provider_error_message(unreachable)
+            ui_event["unreachable_stores"] = [entry["store"] for entry in unreachable]
+            ui_event["notice"] = unreachable_ui_message(unreachable)
+            ui_event.update(_address_removed(unreachable))
+        return ToolOutcome(model_output=model_output, ui_event=ui_event)
 
     async def _search_targets(
         self, targets: list[ProviderSearchTarget], query: str
@@ -615,8 +640,8 @@ class MultiProviderShoppingToolExecutor:
         """Search every store concurrently; a slow store does not hold back a fast one.
 
         A store still running after the soft timeout (once another store has
-        answered) is reported as store_unavailable. Its search keeps running in
-        the background, so its result lands in the provider's search cache.
+        answered) is reported unreachable with reason "timeout". Its search keeps
+        running in the background, so its result lands in the provider's cache.
         """
 
         tasks = [asyncio.create_task(self._search_target(target, query)) for target in targets]
@@ -640,7 +665,14 @@ class MultiProviderShoppingToolExecutor:
             task.add_done_callback(_discard_result)
             logger.warning("event=voice_search_store_slow provider=%s", target.provider)
             outcomes.append(
-                {"status": "store_unavailable", "reason": "timeout", "store": target.store, "target": target, "products": []}
+                {
+                    "store": target.store,
+                    "store_id": target.provider,
+                    "target": target,
+                    "products": [],
+                    "status": "provider_error",
+                    "reason": "timeout",
+                }
             )
         return outcomes
 
@@ -657,25 +689,81 @@ class MultiProviderShoppingToolExecutor:
         self, target: ProviderSearchTarget, query: str
     ) -> dict[str, Any]:
         assert target.address_id is not None
+        base = {"store": target.store, "store_id": target.provider, "target": target, "products": []}
         try:
             result = await target.searcher.search(query, target.address_id, 0)
         except (SwiggyAuthenticationRequired, SwiggyConfigurationError, ZeptoAuthenticationRequired, ZeptoConfigurationError):
-            return {"status": "not_connected", "store": target.store, "target": target, "products": []}
+            return {**base, "status": "not_connected"}
         except SwiggyRateLimited as exc:
             return {
-                "status": "rate_limited",
-                "store": target.store,
+                **base,
+                "status": "provider_error",
+                "reason": "rate_limited",
                 "retry_after_seconds": exc.retry_after_seconds,
-                "target": target,
-                "products": [],
             }
-        except ZeptoRateLimited:
-            return {"status": "rate_limited", "store": target.store, "target": target, "products": []}
+        except ZeptoProviderError as exc:
+            return {**base, "status": "provider_error", "reason": exc.reason}
         except (SwiggyError, ZeptoError):
-            return {"status": "error", "store": target.store, "target": target, "products": []}
-        return {"status": "ok", "store": target.store, "target": target, "products": result.products}
+            return {**base, "status": "provider_error", "reason": "unavailable"}
+        return {**base, "status": "ok", "products": result.products}
 
 
 def _discard_result(task: "asyncio.Task[dict[str, Any]]") -> None:
     if not task.cancelled() and task.exception() is not None:
         logger.warning("event=voice_search_store_failed error=%s", type(task.exception()).__name__)
+
+
+def _address_problem(target: ProviderSearchTarget) -> str | None:
+    problem = getattr(target.searcher, "address_problem", None)
+    if not callable(problem):
+        return None
+    value = problem()
+    return value if isinstance(value, str) else None
+
+
+def _address_removed(unreachable: list[dict[str, Any]]) -> dict[str, str]:
+    """Tells the browser to open that store's address picker."""
+
+    store_id = next(
+        (entry["store_id"] for entry in unreachable if entry["reason"] == "address_invalid"), None
+    )
+    return {"address_removed": store_id} if store_id else {}
+
+
+def _provider_status(outcome: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in outcome.items() if key not in {"target", "products"}}
+
+
+PROVIDER_ERROR_REASONS = {
+    "unavailable": "is not responding right now",
+    "rate_limited": "is briefly limiting requests",
+    "timeout": "did not answer in time, so its results are not included",
+    "session_expired": "needs to be reconnected on screen",
+    "address_invalid": (
+        "no longer has the selected saved address (it was changed or deleted in the "
+        "store app); ask the user to pick a delivery address again "
+        "(list_delivery_addresses, then select_delivery_address)"
+    ),
+}
+
+
+def provider_error_message(unreachable: list[dict[str, Any]]) -> str:
+    """Model-facing explanation of a store that could not be searched."""
+
+    parts = [
+        f"{entry['store']} {PROVIDER_ERROR_REASONS.get(entry['reason'], PROVIDER_ERROR_REASONS['unavailable'])}"
+        for entry in unreachable
+    ]
+    return (
+        "Could not search: " + "; ".join(parts) + ". This is a connection problem, not a "
+        "search result: never say the item was not found or is unavailable there. Say, "
+        "for example, 'Zepto se abhi connect nahi ho paya, thodi der mein dobara try karte hain.'"
+    )
+
+
+def unreachable_ui_message(unreachable: list[dict[str, Any]]) -> str:
+    if any(entry["reason"] == "address_invalid" for entry in unreachable):
+        store = next(entry["store"] for entry in unreachable if entry["reason"] == "address_invalid")
+        return f"Your {store} saved address changed—choose a delivery address again."
+    stores = " and ".join(dict.fromkeys(entry["store"] for entry in unreachable))
+    return f"{stores} isn't responding—try again."

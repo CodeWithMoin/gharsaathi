@@ -19,6 +19,7 @@ from app.commerce.swiggy.oauth import SwiggyOAuthClient
 from app.commerce.swiggy.quote_provider import SwiggyQuoteProvider
 from app.commerce.swiggy.service import SwiggyService
 from app.commerce.swiggy.store import EncryptedConnectionStore
+from app.commerce.zepto.address_refresh import ZeptoAddressRefresher
 from app.commerce.zepto.client import ZeptoMcpClient
 from app.commerce.zepto.oauth import ZeptoOAuthClient
 from app.commerce.zepto.service import ZeptoService
@@ -35,6 +36,7 @@ from app.shopping.checkout import (
 )
 from app.database.session import get_session_factory
 from app.shopping.order_confirmation import OrderConfirmations
+from app.shopping.payments import PrepaidGateway
 from app.shopping.errors import ProviderUnavailable
 from app.shopping.models import Basket, ProviderName, Quote
 from app.shopping.ports import QuoteProvider
@@ -57,6 +59,8 @@ from app.conversations.summarizer import (
     OpenAIConversationSummarizer,
 )
 from app.memory.recall import DatabasePreferenceRecaller
+from app.photos.extraction import OpenAIPhotoExtractor, PhotoReader
+from app.photos.store import PhotoAttachmentStore
 from app.user_profile import DatabaseProfileReader
 from app.chat.service import ChatTurnService
 from app.voice.service import LiveSessionService
@@ -162,6 +166,29 @@ def get_live_zepto_service() -> ZeptoService:
 
 
 @lru_cache
+def get_zepto_address_refresher() -> ZeptoAddressRefresher | None:
+    """Bounded automatic Zepto address refresh; None in demo mode (no provider calls)."""
+
+    settings = get_settings()
+    if settings.commerce_mode == "demo":
+        return None
+    service = get_live_zepto_service()
+    refresher = ZeptoAddressRefresher(
+        service,
+        get_session_factory(),
+        get_basket_service(),
+        max_age_seconds=settings.zepto_address_refresh_max_age_min * 60,
+    )
+    service.on_address_removed = refresher.address_missing
+    return refresher
+
+
+ZeptoAddressRefresherDependency = Annotated[
+    ZeptoAddressRefresher | None, Depends(get_zepto_address_refresher)
+]
+
+
+@lru_cache
 def get_demo_zepto_service() -> DemoZeptoService:
     return DemoZeptoService()
 
@@ -224,6 +251,26 @@ ConversationSummariesDependency = Annotated[
 
 
 @lru_cache
+def get_photo_store() -> PhotoAttachmentStore:
+    return PhotoAttachmentStore()
+
+
+@lru_cache
+def get_photo_reader() -> PhotoReader:
+    settings = get_settings()
+    api_key = settings.openai_api_key.get_secret_value().strip()
+    extractor = (
+        OpenAIPhotoExtractor(api_key, settings.openai_base_url, settings.photo_extraction_model)
+        if api_key
+        else None
+    )
+    return PhotoReader(get_photo_store(), extractor)
+
+
+PhotoStoreDependency = Annotated[PhotoAttachmentStore, Depends(get_photo_store)]
+
+
+@lru_cache
 def get_sideband_hub() -> SidebandHub:
     return SidebandHub(get_settings())
 
@@ -248,6 +295,7 @@ def get_voice_service() -> LiveSessionService:
             if get_settings().commerce_mode == "demo"
             else SavedAddressBook(get_session_factory())
         ),
+        photo_reader=get_photo_reader(),
         order_tracking=get_order_tracking_service(),
         order_history=get_zepto_service(),
     )
@@ -291,10 +339,40 @@ def get_approval_service() -> ApprovalService:
 
 
 @lru_cache
+def get_zepto_payment_gateway() -> PrepaidGateway | None:
+    """Prepaid Zepto orders, or None in demo mode (cash on delivery only)."""
+
+    settings = get_settings()
+    if settings.commerce_mode == "demo":
+        return None
+    from app.commerce.zepto.payments import (
+        VERIFIED_CONTRACT,
+        ZeptoPaymentGateway,
+        parse_allowed_methods,
+    )
+    from app.commerce.zepto.quote_provider import ZeptoQuoteProvider
+
+    client = get_live_zepto_service().client
+    checkout_lock = get_zepto_checkout_lock()
+    return ZeptoPaymentGateway(
+        client=client,
+        quotes=ZeptoQuoteProvider(client, checkout_lock=checkout_lock),
+        enabled=settings.zepto_online_payments_enabled,
+        allowed=parse_allowed_methods(settings.zepto_payment_methods_allowed),
+        contract=VERIFIED_CONTRACT,
+        checkout_lock=checkout_lock,
+    )
+
+
+@lru_cache
 def get_order_confirmations() -> OrderConfirmations:
     """One registry per process, shared by voice, typed chat and the tap endpoint."""
 
-    return OrderConfirmations(get_basket_repository(), get_approval_service())
+    return OrderConfirmations(
+        get_basket_repository(),
+        get_approval_service(),
+        payments=get_zepto_payment_gateway(),
+    )
 
 
 OrderConfirmationsDependency = Annotated[OrderConfirmations, Depends(get_order_confirmations)]
@@ -347,6 +425,7 @@ def get_zepto_checkout_service() -> CheckoutService:
         quote_provider,
         gateway,
         checkout_lock=checkout_lock,
+        payments=get_zepto_payment_gateway(),
     )
 
 

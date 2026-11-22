@@ -107,6 +107,20 @@ test("a selected saved address reaches its handler and refreshes the basket when
   assert.equal(applyAssistantEvent({ type: "address.selected", provider: "blinkit", address_id: "x" }, {}), null);
 });
 
+test("an unreachable store is shown as a connection problem, not an empty result", () => {
+  const { calls, handlers } = recorder();
+  const failed = applyAssistantEvent({ type: "tool.error", query: "lassi", message: "Zepto isn't responding—try again." }, handlers);
+  assert.equal(failed.kind, "error");
+  assert.equal(failed.message, "Zepto isn't responding—try again.");
+  const partial = applyAssistantEvent(
+    { type: "tool.results", query: "lassi", store: "Swiggy Instamart", products: [{}], notice: "Zepto isn't responding—try again." },
+    handlers,
+  );
+  assert.equal(partial.notice, "Zepto isn't responding—try again.");
+  assert.match(partial.message, /Zepto isn't responding/);
+  assert.equal(calls.length, 1);
+});
+
 test("errors and not-connected only return a status", () => {
   const { calls, handlers } = recorder();
   assert.equal(applyAssistantEvent({ type: "tool.error", message: "Swiggy search failed." }, handlers).message, "Swiggy search failed.");

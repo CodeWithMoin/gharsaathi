@@ -58,8 +58,10 @@ async def test_a_slow_store_does_not_hold_back_the_fast_one() -> None:
     assert time.perf_counter() - started < 0.3
     output = outcome.model_output
     assert output["status"] == "ok" and output["stores_checked"] == ["Swiggy Instamart"]
-    assert {"status": "store_unavailable", "reason": "timeout", "store": "Zepto"} in output["provider_statuses"]
-    assert "store_unavailable" in output["note"]
+    assert {"store": "Zepto", "store_id": "zepto", "status": "provider_error", "reason": "timeout"} in output["provider_statuses"]
+    assert output["unreachable_stores"] == [{"store": "Zepto", "store_id": "zepto", "reason": "timeout"}]
+    assert "Zepto did not answer in time" in output["note"]
+    assert outcome.ui_event is not None and outcome.ui_event["unreachable_stores"] == ["Zepto"]
     # The slow search keeps running in the background (so a provider cache fills).
     await asyncio.sleep(0.6)
     assert zepto.finished == 1

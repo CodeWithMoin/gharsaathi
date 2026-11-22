@@ -118,7 +118,9 @@ CAPABILITIES: tuple[Capability, ...] = (
             "with select_delivery_address: validated against the user's own snapshot, saved "
             "like PUT .../addresses/selected, moved onto the store's basket (an open bill is "
             "superseded), used by later tools in the same session, and shown on screen "
-            "(address.selected).",
+            "(address.selected). Zepto's snapshot also refreshes automatically when stale "
+            "(30 min at load/session start, 5 min at picker open, debounced); a selection "
+            "deleted in Zepto is cleared, never replaced, and the user is asked to pick again.",
         ),
         typed_chat=S(W, "Same list/select tools as voice; the switched address is kept for later turns. " + TYPED_VIA_ASSISTANT),
         ui=S(W, "Radio list per store in the setup sheet; a voice/typed switch updates it without restarting voice."),
@@ -191,6 +193,49 @@ CAPABILITIES: tuple[Capability, ...] = (
         ui=S(M, "One search box, one query."),
         backend=S(W, "Via the voice model's parallel search_products calls."),
         voice_tools=("search_products",),
+    ),
+    Capability(
+        id="shop_from_photo",
+        title="Shop from a photo (product pack, shopping list, list screenshot, shelf/fridge)",
+        voice=S(
+            P,
+            "The user attaches a photo with the button beside the voice pill and refers to it "
+            "('photo dekho'); the backend model calls read_attached_photo, confirms the list in "
+            "one line, then searches each item (at most 4 searches per request). GPT-Live is "
+            "not told when a photo arrives, so the user must mention it.",
+        ),
+        typed_chat=S(
+            W,
+            "A message with attachment_id reads the photo before the model runs; one confirm "
+            "line, then up to 5 searches per message while a photo list is open. "
+            + TYPED_VIA_ASSISTANT,
+        ),
+        ui=S(
+            W,
+            "Composer photo button: Take photo (native camera input on phones, webcam dialog on "
+            "desktops) or Choose from gallery; client-side downscale to 1600 px JPEG (drops "
+            "EXIF); thumbnail chip with remove; send with or without text; the user's bubble "
+            "shows the photo thumbnail (tap for a larger view) and the saved chat keeps only "
+            "the 'Photo' placeholder plus a <=320 px, <=40 KB server-made thumbnail.",
+        ),
+        backend=S(
+            W,
+            "Magic-byte type check, 8 MB cap, Pillow decode, all metadata stripped, re-encoded "
+            "JPEG kept in memory per user for at most 15 min and deleted right after reading; "
+            "the upload returns a metadata-free thumbnail data URL that saved chats re-validate. "
+            "Strict-JSON vision extraction (PHOTO_EXTRACTION_MODEL) reads printed pack names "
+            "verbatim (printed_name, search_query), image text treated as data, prices "
+            "stripped, at most 15 items.",
+        ),
+        voice_tools=("read_attached_photo",),
+        routes=("POST /api/chat/attachments", "DELETE /api/chat/attachments/{attachment_id}"),
+        ui_files=(
+            "frontend/app/page.tsx",
+            "frontend/app/photo-attachment-ui.tsx",
+            "frontend/app/photo-attachment.mjs",
+            "frontend/app/camera-dialog.tsx",
+            "frontend/app/camera-capture.mjs",
+        ),
     ),
     Capability(
         id="add_to_basket",
@@ -313,6 +358,39 @@ CAPABILITIES: tuple[Capability, ...] = (
             "frontend/app/basket/zepto-checkout-state.mjs",
             "frontend/app/order-confirmation-card.tsx",
         ),
+    ),
+    Capability(
+        id="order_zepto_prepaid",
+        title="Pay for a Zepto order online (UPI, Zepto Cash, pay online)",
+        voice=S(
+            IP,
+            "prepare_order takes an optional payment_method; the card offers only methods "
+            "that are enabled and listed by Zepto. Off by default "
+            "(ZEPTO_ONLINE_PAYMENTS_ENABLED) and until the response contract is verified.",
+            branch="codex/online-payment",
+        ),
+        typed_chat=S(IP, "Same prepare_order card as voice.", branch="codex/online-payment"),
+        ui=S(
+            IP,
+            "Order card payment-method chips, Pay ₹… button, Open payment and "
+            "\"I've paid, check status\" (order-confirmation-card.tsx).",
+            branch="codex/online-payment",
+        ),
+        backend=S(
+            IP,
+            "Same bound card, tap, approval and one-shot claim as COD; the card binds the "
+            "method. Payment states awaiting_payment / payment_succeeded / payment_failed / "
+            "paid_order_failed / payment_unknown; single check_payment_status reads "
+            "(app/shopping/payments.py, app/commerce/zepto/payments.py). Response shapes "
+            "unverified: VERIFIED_CONTRACT is None, so only COD is offered.",
+            branch="codex/online-payment",
+        ),
+        voice_tools=("prepare_order",),
+        routes=(
+            "POST /api/orders/payment-method",
+            "POST /api/orders/payment-status",
+        ),
+        ui_files=("frontend/app/order-confirmation-card.tsx",),
     ),
     Capability(
         id="order_swiggy",
@@ -670,6 +748,10 @@ UNMOUNTED_ROUTERS: dict[str, str] = {
 # be a defined voice tool.
 PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
     {
+        # read_attached_photo item fields and photo kinds.
+        "printed_name",
+        "search_query",
+        "product_photo",
         # Order status tool fields and statuses (codex/order-tracking-status).
         "order_ref",
         "order_status",
@@ -702,6 +784,10 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "not_saved_one_off",
         "skipped_stores",
         "user_words",
+        # Search statuses for a store that could not be reached (not "not found").
+        "provider_error",
+        "unreachable_stores",
+        "address_invalid",
         # Household-rule annotations and the delivery ETA field (search options, bill).
         "avoid_store",
         "avoided_because",
@@ -745,6 +831,15 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "cash_on_delivery",
         "item_count",
         "delivery_address",
+        "payment_method",
+        "payment_methods",
+        "payment_method_label",
+        "payment_method_unavailable",
+        "upi_reserve",
+        # read_attached_photo result statuses and fields (codex/photo-to-basket).
+        "no_items",
+        "no_photo",
+        "shopping_list",
     }
 )
 
@@ -796,13 +891,31 @@ API_CONTRACTS: dict[str, tuple[str, ...]] = {
         '"ui_acks": [{"ack_id": "<from address_form.open>", "form_visible": true, "reason": null, '
         '"filled_fields": ["building_name"], "kept_user_fields": []}]}',
         "conversation_id null means the current conversation; another user's id is 404. "
-        "message: 1-2000 characters; unknown keys are 422.",
+        "message: 1-2000 characters (may be empty when attachment_id is set); unknown keys are 422. "
+        'attachment_id: "ph_..." from POST /api/chat/attachments; the photo is read (and deleted) before the model runs.',
         'Response 200: {"conversation_id": "<uuid>" | null, "reply": "Roman-script Hinglish text", '
         '"ui_events": [{"type": "tool.results" | "basket.updated" | "basket.approval_requested" | '
-        '"order.confirmation_requested" | "address_form.open" | "address_form.unavailable" | "address.selected" | "tool.not_connected" | "tool.error" | '
+        '"order.confirmation_requested" | "photo.read" | "address_form.open" | "address_form.unavailable" | "address.selected" | "tool.not_connected" | "tool.error" | '
         '"memory.changed", ...}]}',
         "ui_events use the voice sideband shapes. Caps per turn: 6 tool rounds, 2 searches. "
         "Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS).",
+    ),
+    "POST /api/chat/attachments": (
+        "Auth: Clerk bearer token and accepted current terms. multipart/form-data with one `file` field.",
+        "Accepted by magic bytes: JPEG, PNG, WebP, HEIC/HEIF; at most 8 MB (413), other types 415, unreadable 422.",
+        "The image is decoded, EXIF orientation applied, every metadata block (EXIF/GPS/XMP/ICC) dropped, "
+        "downscaled to 1600 px and re-encoded as JPEG; kept in memory for this user only, at most 15 minutes, "
+        "and deleted as soon as its items are read. Never written to disk or the database.",
+        'Response 201: {"attachment_id": "ph_...", "expires_in_seconds": 900, "width": 1200, "height": 1600, '
+        '"thumbnail": "data:image/jpeg;base64,..." | null}',
+        "thumbnail: a new <=320 px, <=40 KB JPEG made from the stripped pixels (no metadata). The browser "
+        "saves it on the user's chat message as photo_thumbnail; PUT /api/conversations/current re-checks "
+        "it (JPEG, size, dimensions, no metadata), drops invalid ones and keeps the newest 20 per chat.",
+        "Send it with POST /api/chat/turn as attachment_id (message may then be empty).",
+    ),
+    "DELETE /api/chat/attachments/{attachment_id}": (
+        "Auth: Clerk bearer token and accepted current terms. Removes a pending photo of this user. "
+        "Response 204; idempotent, and another user's id is a no-op.",
     ),
     "GET /api/profile": (
         "Auth: Clerk bearer token; the record belongs to the verified user only.",

@@ -170,6 +170,31 @@ class BasketService:
 
         return await self._edit(household_id, provider, change)
 
+    async def clear_removed_address(
+        self, household_id: str, provider: ProviderName, address_id: str
+    ) -> bool:
+        """The saved address ``address_id`` no longer exists at the store.
+
+        Lines are kept; the basket's address is cleared, which supersedes any
+        open bill and therefore any order card bound to it. Returns whether
+        the basket changed. A basket already in checkout is left untouched.
+        """
+
+        basket = await self.baskets.active_for(household_id, provider)
+        if basket is None or basket.address_id != address_id:
+            return False
+        if basket.status in {BasketStatus.CHECKOUT_PENDING, BasketStatus.ORDERED}:
+            return False
+
+        def change(current: Basket) -> bool:
+            if current.address_id != address_id:
+                return False
+            current.address_id = None
+            return True
+
+        await self._edit(household_id, provider, change)
+        return True
+
     @staticmethod
     def _index(basket: Basket, variant_id: str) -> int:
         for index, line in enumerate(basket.lines):

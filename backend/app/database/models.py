@@ -328,6 +328,16 @@ class ZeptoCheckoutAttemptRecord(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    payment_method: Mapped[str] = mapped_column(
+        String(16), default="cod", server_default="cod"
+    )
+    payment_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    payment_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    payment_poll_allowed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
 
 
 class PurchaseOrderNode(Base):
