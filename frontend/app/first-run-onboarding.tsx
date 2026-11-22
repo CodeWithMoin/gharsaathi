@@ -53,7 +53,7 @@ function LoadingSplash() {
     <div className="flex flex-col items-center">
       <LogoMark />
       <p className="font-display mt-5 text-2xl font-semibold tracking-[-.04em]">GharSaathi</p>
-      <span className="mt-5 h-1 w-12 overflow-hidden rounded-full bg-border-strong" role="progressbar" aria-label="Loading GharSaathi"><span className="block h-full w-1/2 animate-pulse rounded-full bg-accent" /></span>
+      <span className="mt-5 h-1 w-14 overflow-hidden rounded-full bg-border-strong" role="progressbar" aria-label="Loading GharSaathi"><motion.span className="block h-full w-1/3 rounded-full bg-accent" initial={{ x: "-110%" }} animate={{ x: "320%" }} transition={{ duration: 1.1, ease: "easeInOut", repeat: Infinity }} /></span>
     </div>
   </main>;
 }
