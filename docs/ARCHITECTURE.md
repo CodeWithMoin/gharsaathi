@@ -101,7 +101,8 @@ flowchart TD
 | D6 | Remember a preference stated in passing (tier 1) | Backend model calls `remember_preference` / `update_preference` with `mode: "stated"` | **Yes:** code saves only with habit/rule words (`hamesha`, `kabhi nahi`, `sirf`, `mat … karna`) and refuses one-off words (`is baar`); a stated update must match a remembered item. Saved active at once; reply acknowledges with undo; `forget_preference` within 24 h restores what it replaced |
 | D7 | Remember on request ("yaad rakhna…") | Backend model: `remember_preference` `mode: "explicit"` → read-back → `confirm_memory` | **Yes:** stays a pending proposal until `confirm_memory(confirm)`; forget-all needs a token issued in the same session |
 | D8 | Suggest a preference from repeated choices (tier 2) | Code: basket adds are recorded; after a conversation save/archive `choice_signals.propose_from_choices` creates a pending proposal (same brand+pack in ≥3 conversations, or the same store every time both offered it) | **Yes:** never active without a yes; offered at most once per session (attached to a matching `add_to_basket` result); rejected/deleted suggestions never return |
-| D9 | Apply saved rules to search | Code (`memory/household_rules.py` in `search_products`) | **Yes:** `avoid_store` skips that store's search (and an earlier option from it cannot be added), `avoid_product`/`avoid_brand` hide options unless the query asks for them (then `avoided: true`), `prefer_*` adds `preferred: true` (separate from `remembered`) |
+| D9 | Apply saved rules to search | Code (`memory/household_rules.py` in `search_products`) | **Yes:** `avoid_store` skips that store's search (and an earlier option from it cannot be added), `avoid_product`/`avoid_brand` hide options unless the query asks for them (then `avoided: true`), `prefer_*` adds `preferred: true` (separate from `remembered`). Household facts: `diet` (vegetarian / eggetarian / jain) and `avoid_ingredient` hide conflicting names (ambiguous ones like a "chicken masala" are flagged), keep-outs add `ingredient_check`; avoid phrases that name a kind ("sugary cold drinks", "pork products") match that kind; `usual_quantity` is the add default (`add_to_basket` quantity null); `cheapest` / `prefer_best_unit_value` / `prefer_fastest_delivery` order options within a rank |
+| D10 | "What do you know about me?" | Backend model calls `summarize_my_memory` | **Yes:** top 5 by code (food, avoid, usual buys, home, style, orders), `more_on_screen`, opens Settings → What GharSaathi knows (`GET /api/memory/summary`) |
 | D10 | Prepare an order card | Backend model calls `prepare_order` on an explicit order request | **Yes, for the order itself:** the tool only shows the card; only the user's tap on **Place order** approves and orders, and code re-checks the bound confirmation first. Calling it at the wrong time can only show a card |
 | D11 | Answer "where is my order?" | Backend model calls `get_order_status` / `list_recent_orders` | **Yes:** read-only tools scoped to the verified household; status and ETA come only from the provider; cancelling is not possible (no tool) |
 | D12 | Pick a product for "X order kar do" / "X add karo" | Code (`express_tools.pick_option`) after the model calls `express_order` / `quick_add` | **Yes:** only the remembered product or the single named brand+size match in stock is picked; otherwise `needs_choice` (one question). The order still needs the tap |
@@ -832,3 +833,28 @@ sequenceDiagram
 - Opt-in real-provider smoke tests: [`LIVE_SMOKE.md`](LIVE_SMOKE.md)
 - Voice turn-taking modes: [`voice-turn-taking.md`](voice-turn-taking.md)
 - Rider assist (beta, Vobiz → OpenAI Realtime phone assistant for delivery partners): [`RIDER_ASSIST.md`](RIDER_ASSIST.md)
+
+## Household memory: seed, summary and demo history
+
+- **Seed (owner only).** `app/memory/demo_seed.py` (`make memory-seed`, `gs memory import`)
+  turns the owner's answers file into structured memories through
+  `HouseholdPreferenceService` (consent, sensitive-data policy), as things the owner told
+  us (`origin: explicit`). Items are tagged `source_conversation_id = demo-memory-seed`;
+  re-runs are idempotent (unchanged / replaced / pruned), `--remove-seeded` deletes exactly
+  the tagged ones and restores what they had replaced. No in-app setup interview exists.
+- **Kinds beyond brand/size/store/avoid/rule:** `diet`, `avoid_ingredient`, `usual_quantity`,
+  `usual_item`, `shopping_style`, `household` (people, kids, baby, pets), `delivery_note`,
+  `routine`, `goal`. Enum values (diet, style, home answers) are code-controlled, so the
+  policy word list does not apply to them; allergies are stored only as ingredients to keep
+  out. Usual buys with a told product (`product_name`) are the "remembered" pick for
+  `search_products`, `quick_add` and `express_order`.
+- **Summary.** `app/memory/summary.py` groups confirmed memories, profile choices and
+  consented order history (Home, Food, Usual buys, Avoid, Shopping style, From your
+  orders) with a source per item; `summarize_my_memory` speaks the top 5.
+- **Synthetic demo history.** `app/memory/demo_synth.py` (`make memory-synth`,
+  `gs memory synth`) writes ~12 months of delivered orders (`synth-` ids, no prices) into
+  the purchase graph, generated from the same answers and filtered through the household's
+  own rules. They feed patterns, usual suggestions and recall, show as "From demo history",
+  never get a provider lookup id, never stop an incremental provider import or count as
+  known, and are never `last_real_order`. Tracking, order status, reconciliation, order help
+  and ordering read the stores' own order lists, never the purchase graph (a test enforces it).

@@ -20,8 +20,17 @@ never inline in whatever sheet happens to be open. Current users:
 |---|---|---|
 | Add delivery address | `address-form-sheet.tsx` | Voice, typed chat, onboarding and the picker's "Add a new address" |
 | Choose delivery address | `address-picker-dialog.tsx` | One store at a time; tapping an address saves it right away; Refresh; Zepto (live) can add a new address on top. Opened from the setup sheet's address rows and Settings → Addresses. No voice/typed event opens it yet (none exists) |
-| Edit preference | `memory-settings.tsx` | Unsaved-changes guard; save errors show inside the popup |
-| Forget everything | `memory-settings.tsx` | `ConfirmDialog`, destructive |
+| Edit preference | `memory-settings.tsx` | Unsaved-changes guard; save errors show inside the popup; fixed-set answers (diet, value preference, home questions) are a choice |
+| Delete everything | `memory-settings.tsx` | `ConfirmDialog`, destructive; name, language and order history stay |
+| Remove order history | `memory-settings.tsx` (From your orders) | `ConfirmDialog`, destructive; store orders are not changed |
+
+Settings → **What GharSaathi knows** (`memory-settings.tsx`, view logic `summaryView` in
+`memory-groups.mjs`) lists everything saved in six groups: Home, Food, Usual buys, Avoid,
+Shopping style, From your orders. Each row shows its source (You told us · Said in passing ·
+From your repeated choices · From your orders · From demo history) and when it was updated,
+with Edit and Delete (profile rows: Edit opens Preferences, Reset goes back to the default;
+order rows are read-only). "What do you know about me?" by voice or chat opens it
+(`memory.summary` event).
 | Edit profile | `account-settings-sheet.tsx` | Name, how to address you and reply language in one popup with one Save; only changed fields are sent |
 | Disconnect Swiggy / Zepto | `page.tsx` setup sheet | `ConfirmDialog`, destructive; closes only after the disconnect succeeds |
 | Add a photo | `photo-attachment-ui.tsx` (📎 in the composer and beside the voice pill) | Two choices: **Take photo** and and **Choose from gallery**; the file inputs live outside the popup. On phones and tablets **Take photo** clicks the native `capture="environment"` input; elsewhere it opens **Take a photo**. The picked photo shows at once (local preview, before upload finishes) as a thumbnail chip with **Remove photo** above the composer or pill |
