@@ -381,3 +381,38 @@ async def test_confirmation_surfaces_ambiguous_provider_result_without_retrying(
     assert fake.calls == [
         ("create_order", {"confirmOrder": True, "userAddressId": "addr_home"}, False)
     ]
+
+
+def test_preview_accepts_total_items_as_distinct_products_for_quantity_two() -> None:
+    """Owner's live case: 2 x Amul Lassi; Zepto counts one distinct product."""
+    two = basket()
+    two.lines[0].quantity = 2
+    value = preview()
+    value["data"]["items"][0]["quantity"] = 2
+    value["data"]["subTotal"] = 3000
+    value["data"]["toPayAmount"] = 6500
+    value["data"]["totalItems"] = 1
+    value["data"]["freeDelivery"]["remainingAmountToUnlock"] = 6900
+
+    quote = quote_from_cod_preview(two, value, NOW)
+
+    assert quote.payable_paise == 6500
+
+
+def test_preview_still_refuses_real_quantity_mismatches() -> None:
+    two = basket()
+    two.lines[0].quantity = 2
+    wrong_line = preview()
+    wrong_line["data"]["items"][0]["quantity"] = 1
+    wrong_line["data"]["subTotal"] = 1500
+    wrong_line["data"]["totalItems"] = 1
+    wrong_total = preview()
+    wrong_total["data"]["items"][0]["quantity"] = 2
+    wrong_total["data"]["subTotal"] = 3000
+    wrong_total["data"]["toPayAmount"] = 6500
+    wrong_total["data"]["totalItems"] = 3
+    wrong_total["data"]["freeDelivery"]["remainingAmountToUnlock"] = 6900
+
+    for value in (wrong_line, wrong_total):
+        with pytest.raises((ApprovalRefused, ZeptoSchemaError)):
+            quote_from_cod_preview(two, value, NOW)

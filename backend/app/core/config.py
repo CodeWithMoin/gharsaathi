@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     live_backend_model: str = "gpt-6-luna"
     # Typed chat runs the same backend model and tools as voice, one bounded turn per request.
     chat_turn_timeout_seconds: float = Field(default=60.0, ge=5.0, le=180.0)
+    # Shop from a photo: vision model for reading attached photos (Responses API, image input).
+    photo_extraction_model: str = "gpt-6-luna"
     # native | tuned (option A) | smart_turn (option B); see docs/voice-turn-taking.md
     voice_turn_taking: Literal["native", "tuned", "smart_turn"] = "native"
     # Dev diagnostic: log content-free sideband event summaries (type, id field names, timing).

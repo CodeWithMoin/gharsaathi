@@ -27,6 +27,7 @@ const ADDRESS_UNAVAILABLE_MESSAGES = {
  *   onOrderConfirmation?: (confirmation: import("./order-confirmation.mjs").OrderConfirmation) => void,
  *   onAddressSelected?: (selection: { provider: "swiggy_instamart" | "zepto", addressId: string, label?: string, billCancelled: boolean }) => void,
  *   onSupportOpen?: () => void,
+ *   onPhotoRead?: (read: { attachmentId: string, itemCount: number }) => void,
  * }} handlers
  */
 export function applyAssistantEvent(raw, handlers) {
@@ -112,6 +113,12 @@ export function applyAssistantEvent(raw, handlers) {
     if (!handlers.onSupportOpen) return null;
     handlers.onSupportOpen();
     return { kind: "support", message: "Opened Order help—tell me what went wrong." };
+  }
+  if (event.type === "photo.read" && typeof event.attachment_id === "string" && event.attachment_id) {
+    // The server read the photo and deleted it; the chip can go.
+    const itemCount = Number.isInteger(event.item_count) && event.item_count >= 0 ? event.item_count : 0;
+    handlers.onPhotoRead?.({ attachmentId: event.attachment_id.slice(0, 64), itemCount });
+    return { kind: "photo", message: itemCount ? `Read ${itemCount} ${itemCount === 1 ? "item" : "items"} from the photo.` : "No shopping items found in the photo." };
   }
   if (event.type === "address_form.unavailable" && typeof event.reason === "string") {
     handlers.onAddressForm?.({ unavailable: event.reason });
