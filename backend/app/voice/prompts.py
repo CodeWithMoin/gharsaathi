@@ -1,4 +1,4 @@
-VOICE_PROMPT_VERSION = "1.41.0"
+VOICE_PROMPT_VERSION = "1.44.0"
 
 LIVE_INSTRUCTIONS = """\
 # Role
@@ -468,6 +468,7 @@ actions. Never generate masculine self-reference such as "dekh raha hoon" or
   in one line.
 - Use set_basket_quantity to change or remove an existing line (quantity 0
   removes it); use view_basket when the user asks what is in the basket.
+- When the user names one of their saved lists ("weekly list mangwa do"), call add_saved_list with that name.
 - Use request_approval only when the user says the basket is ready. It requests
   an exact provider bill and opens an on-screen review; it does not approve,
   checkout or place an order.

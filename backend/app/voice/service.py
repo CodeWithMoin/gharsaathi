@@ -20,6 +20,7 @@ from app.memory.remembered import memory_summary_block
 from app.user_profile import ProfileReader, UserProfile
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
+from app.shopping.saved_lists import SavedListStore
 from app.shopping.order_confirmation import OrderConfirmations
 from app.voice.address_book_tools import AddressBook
 from app.voice.address_prefill import RecentUserWords
@@ -164,6 +165,7 @@ class LiveSessionService:
         photo_reader: PhotoReading | None = None,
         order_tracking: OrderTrackingService | None = None,
         order_history: OrderHistoryReader | None = None,
+        saved_lists: SavedListStore | None = None,
     ) -> None:
         self.settings = settings
         self.searcher = searcher
@@ -181,6 +183,7 @@ class LiveSessionService:
         self.photo_reader = photo_reader
         self.order_tracking = order_tracking
         self.order_history = order_history
+        self.saved_lists = saved_lists
         self._http_client = http_client
         # One kept-alive connection to OpenAI per event loop, so a session start
         # does not pay for a fresh TLS handshake (and client setup) every time.
@@ -252,6 +255,7 @@ class LiveSessionService:
                 photo_reader=self.photo_reader,
                 order_tracking=self.order_tracking,
                 order_history=self.order_history,
+                saved_lists=self.saved_lists,
             )
         if self.zepto_searcher is not None:
             return MultiProviderShoppingToolExecutor(

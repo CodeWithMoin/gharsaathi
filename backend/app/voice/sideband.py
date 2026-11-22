@@ -13,6 +13,7 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
 
 from app.core.config import Settings
+from app.devtools.trace import TurnTrace, start_trace
 from app.voice.address_prefill import RecentUserWords
 from app.voice.timing import collect, log_timing, ms_since
 from app.voice.tools import ShoppingToolExecutor
@@ -126,6 +127,7 @@ class SidebandRunner:
         log_event_types: bool = False,
         acks: UiAckRegistry | None = None,
         user_words: RecentUserWords | None = None,
+        trace_factory: Callable[[], TurnTrace | None] | None = None,
     ) -> None:
         self.connection = connection
         self.executor = executor
@@ -143,6 +145,10 @@ class SidebandRunner:
         self._send_lock = asyncio.Lock()
         # Content-free per-delegation stage marks (perf_counter), VOICE_EVENT_LOG only.
         self._timeline: dict[str, dict[str, Any]] = {}
+        # Opt-in DEV_TRACE records per delegation: the trace, its current round and
+        # when that round's model response started (perf_counter).
+        self.trace_factory = trace_factory
+        self._traces: dict[str, tuple[TurnTrace, list[Any]]] = {}
         # Order results from the user's tap on the order card are spoken by
         # GPT-Live through session.commentary.append (application-authored text).
         attach = getattr(getattr(executor, "order", None), "attach_sender", None)
@@ -178,6 +184,8 @@ class SidebandRunner:
             self._detach_order(None)
         for task in [*self._continuations, *(t for ts in self._pending.values() for t in ts)]:
             task.cancel()
+        for delegation_id in list(self._traces):
+            self._finish_trace(delegation_id, "session_closed")
 
     async def handle(self, event: dict[str, Any]) -> bool:
         """Process one event. Returns True when the session has closed."""
@@ -215,6 +223,7 @@ class SidebandRunner:
         inner_type = inner.get("type")
         if self.log_event_types:
             self._mark(delegation_id, inner_type, inner)
+        traced = self._trace_for(delegation_id)
 
         if inner_type == "response.output_item.done":
             item = inner.get("item")
@@ -222,10 +231,17 @@ class SidebandRunner:
                 self._start_call(delegation_id, item)
         elif inner_type in {"response.completed", "response.incomplete", "response.failed"}:
             tasks = self._pending.pop(delegation_id, [])
+            if traced is not None:
+                trace, state = traced
+                response = inner.get("response") if isinstance(inner.get("response"), dict) else {}
+                trace.model_round(ms_since(state[1]), response.get("usage"), round_number=state[0])
             if not tasks and self.log_event_types:
                 self._log_turn(delegation_id, str(inner_type))
+            if not tasks:
+                self._finish_trace(delegation_id, str(inner_type).removeprefix("response."))
             if tasks and self._delegation_rounds.get(delegation_id, 0) >= MAX_CONTINUATION_ROUNDS:
                 logger.warning("event=voice_delegation_round_cap rounds=%s", MAX_CONTINUATION_ROUNDS)
+                self._finish_trace(delegation_id, "round_cap")
             elif tasks:
                 self._delegation_rounds[delegation_id] = (
                     self._delegation_rounds.get(delegation_id, 0) + 1
@@ -252,22 +268,40 @@ class SidebandRunner:
                 limited = SEARCH_LIMIT_OUTPUT
             else:
                 self._delegation_searches[delegation_id] = searches + 1
+        traced = self._traces.get(delegation_id)
         if limited is not None:
+            if traced is not None:
+                traced[0].tool(
+                    name, arguments if isinstance(arguments, str) else None, None, 0.0,
+                    round_number=traced[1][0], status="refused_" + str(limited.get("status")),
+                )
             task = asyncio.create_task(self._send_output(call_id, limited))
         else:
             task = asyncio.create_task(
-                self._run_call(call_id, name, arguments if isinstance(arguments, str) else "")
+                self._run_call(
+                    call_id,
+                    name,
+                    arguments if isinstance(arguments, str) else "",
+                    traced=(traced[0], traced[1][0]) if traced is not None else None,
+                )
             )
         self._pending.setdefault(delegation_id, []).append(task)
 
-    async def _run_call(self, call_id: str, name: str, arguments: str) -> None:
+    async def _run_call(
+        self, call_id: str, name: str, arguments: str, *, traced: tuple[TurnTrace, int] | None = None
+    ) -> None:
         self.publish({"type": "tool.started", "name": name})
+        started = time.perf_counter()
         try:
-            with collect(self.log_event_types) as stages:
-                started = time.perf_counter()
+            with collect(self.log_event_types or traced is not None) as stages:
                 outcome = await self.executor.execute(name, arguments)
             if self.log_event_types:
                 log_timing("voice_tool_timing", {"name": name[:64], "total_ms": ms_since(started), **stages})
+            if traced is not None:
+                traced[0].tool(
+                    name, arguments, outcome.model_output, ms_since(started),
+                    round_number=traced[1], stages=stages,
+                )
             model_output = outcome.model_output
             for event in outcome.extra_ui_events:
                 self.publish(event)
@@ -279,6 +313,8 @@ class SidebandRunner:
                     model_output = apply_ack(model_output, await self.acks.wait(ack_id))
         except Exception:
             logger.exception("Voice tool %s failed", name)
+            if traced is not None:
+                traced[0].tool(name, arguments, None, ms_since(started), round_number=traced[1], status="exception")
             model_output = {"status": "error", "message": "The tool failed unexpectedly."}
             self.publish({"type": "tool.error", "message": "Search mein kuch gadbad ho gayi. Ek baar phir boliye."})
         await self._send_output(call_id, model_output)
@@ -302,12 +338,30 @@ class SidebandRunner:
         waited = time.perf_counter()
         await asyncio.gather(*tasks, return_exceptions=True)
         self._round += 1
+        traced = self._traces.get(delegation_id)
+        if traced is not None:
+            traced[1][0] += 1
+            traced[1][1] = time.perf_counter()
         await self.send({"type": "response.create", "event_id": f"continue_{delegation_id}_{self._round}"})
         timeline = self._timeline.get(delegation_id)
         if timeline is not None:
             # Tool time the model actually waited for after its response completed.
             timeline["tool_wait_ms"] = timeline.get("tool_wait_ms", 0.0) + ms_since(waited)
             timeline["continued_at"] = time.perf_counter()
+
+    def _trace_for(self, delegation_id: str) -> tuple[TurnTrace, list[Any]] | None:
+        traced = self._traces.get(delegation_id)
+        if traced is None and self.trace_factory is not None:
+            trace = self.trace_factory()
+            if trace is not None:
+                # [current round number, that round's start]
+                traced = self._traces[delegation_id] = (trace, [1, time.perf_counter()])
+        return traced
+
+    def _finish_trace(self, delegation_id: str, outcome: str) -> None:
+        traced = self._traces.pop(delegation_id, None)
+        if traced is not None and not traced[0].finished:
+            traced[0].finish(outcome)
 
     def _mark(self, delegation_id: str, inner_type: Any, inner: dict[str, Any]) -> None:
         now = time.perf_counter()
@@ -427,6 +481,7 @@ class SidebandHub:
                     # The toolbox's own buffer, so the address form checks prefill
                     # against what this session's user actually said.
                     user_words=getattr(executor, "user_words", None),
+                    trace_factory=lambda: start_trace(self.settings, "voice", session_id=session_id[-12:]),
                 ).run()
         except (OSError, WebSocketException, asyncio.TimeoutError) as exc:
             logger.warning("Voice sideband for %s ended: %s", session_id, type(exc).__name__)

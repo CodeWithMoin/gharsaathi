@@ -52,6 +52,12 @@ from app.voice.order_status_tools import (
     OrderStatusToolExecutor,
 )
 from app.tracking.service import OrderTrackingService
+from app.shopping.saved_lists import SavedListStore, StoreTarget
+from app.voice.saved_list_tools import (
+    SAVED_LIST_TOOL_DEFINITIONS,
+    SAVED_LIST_TOOL_NAMES,
+    SavedListToolExecutor,
+)
 from app.voice.tools import TOOL_DEFINITIONS as SEARCH_TOOL_DEFINITIONS
 from app.voice.tools import (
     MultiProviderShoppingToolExecutor,
@@ -86,6 +92,7 @@ VOICE_TOOL_DEFINITIONS = [
     *ADDRESS_BOOK_TOOL_DEFINITIONS,
     *PHOTO_TOOL_DEFINITIONS,
     *ORDER_STATUS_TOOL_DEFINITIONS,
+    *SAVED_LIST_TOOL_DEFINITIONS,
 ]
 
 
@@ -124,6 +131,7 @@ class VoiceToolbox:
         photo_reader: PhotoReading | None = None,
         order_tracking: OrderTrackingService | None = None,
         order_history: OrderHistoryReader | None = None,
+        saved_lists: SavedListStore | None = None,
     ) -> None:
         options: dict[str, SearchOption] = {}
         targets = [
@@ -186,6 +194,17 @@ class VoiceToolbox:
             ),
         )
 
+        self.saved_lists = SavedListToolExecutor(
+            saved_lists, baskets, self._list_targets, household_id
+        )
+
+    def _list_targets(self) -> dict[ProviderName, StoreTarget]:
+        # The session's current stores and addresses (use_address updates them).
+        return {
+            target.provider: StoreTarget(target.provider, target.searcher, target.address_id)
+            for target in self.search.targets
+        }
+
     def has_store(self, provider: ProviderName) -> bool:
         return provider in self.basket.stores
 
@@ -227,6 +246,8 @@ class VoiceToolbox:
             return await self.order.execute(name, raw_arguments)
         if name in EXPRESS_TOOL_NAMES:
             return await self.express.execute(name, raw_arguments)
+        if name in SAVED_LIST_TOOL_NAMES:
+            return await self.saved_lists.execute(name, raw_arguments)
         if name in ORDER_STATUS_TOOL_NAMES:
             return await self.order_status.execute(name, raw_arguments)
         if name in MEMORY_WRITE_TOOL_NAMES:

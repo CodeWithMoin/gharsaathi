@@ -13,6 +13,7 @@ import { VOICE_START_TIMEOUT_MS, startDeadline, voiceFailureView, voiceSupport }
 import { zeptoAddressSelection } from "../../app/zepto-address-refresh.mjs";
 import { MESSAGES as PUSH_MESSAGES, detectSupport, notificationState, turnOn } from "../../app/push-notifications.mjs";
 import { riderCallCardText, riderStatus } from "../../app/rider-assist.mjs";
+import { CLEAR_CONFLICT_TEXT, addReportText, basketEditState } from "../../app/quick-actions.mjs";
 
 /**
  * A strict expected failure: passes while `fn` fails, and fails (asking for
@@ -252,4 +253,32 @@ test("FM-R03 rider assist off on the server is shown as such, and a failed call 
   const base = { feature_enabled: false, owner_configured: true, stream_auth_configured: true, enabled: true };
   assert.deepEqual(riderStatus(base), { label: "Turned off on this server", active: false, canToggle: true });
   assert.match(riderCallCardText({ started_at: "2026-11-22T02:54:00Z", outcome: "assistant_unavailable", answered_from: [] }), /couldn't answer/);
+});
+
+test("FM-B10: Clear basket is disabled with the reason while checkout is pending; a race reads as a review prompt", () => {
+  const pending = basketEditState({ status: "checkout_pending", lines: [{ quantity: 1 }] });
+  assert.equal(pending.canClear, false);
+  assert.equal(pending.canEdit, false);
+  assert.ok(pending.reason);
+  assert.match(CLEAR_CONFLICT_TEXT, /changed\. Review it/);
+});
+
+test("FM-L01: repeat/list with unavailable items says which and why, and still offers the bill", () => {
+  const summary = addReportText({ added_count: 1, items: [
+    { name: "Milk", store: "Zepto", provider: "zepto", quantity: 1, status: "added" },
+    { name: "Curd", store: "Zepto", provider: "zepto", quantity: 1, status: "unavailable" },
+  ], baskets: [{ provider: "zepto", lines: [] }] }, { source: "your last order" });
+  assert.match(summary.text, /Not added: Curd \(unavailable at Zepto right now\)/);
+  assert.equal(summary.offerBill, true);
+});
+
+test("FM-L03: a store that is down is named as unreachable, never as not found", () => {
+  const summary = addReportText({ added_count: 0, items: [
+    { name: "Milk", store: "Zepto", provider: "zepto", quantity: 1, status: "store_error" },
+    { name: "Atta", store: "Swiggy Instamart", provider: "swiggy_instamart", quantity: 1, status: "store_not_ready" },
+  ], baskets: [] }, { source: "“Weekly list”" });
+  assert.match(summary.text, /Zepto couldn't be reached/);
+  assert.match(summary.text, /Swiggy Instamart isn't connected/);
+  assert.doesNotMatch(summary.text, /not (found|listed)/i);
+  assert.equal(summary.offerBill, false);
 });

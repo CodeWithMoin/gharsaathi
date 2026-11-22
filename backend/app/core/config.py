@@ -85,6 +85,13 @@ class Settings(BaseSettings):
     voice_turn_taking: Literal["native", "tuned", "smart_turn"] = "native"
     # Dev diagnostic: log content-free sideband event summaries (type, id field names, timing).
     voice_event_log: bool = False
+    # Local operator toolkit (docs/DEV_TOOLS.md). DEV_TOOLS_ENABLED opens /api/dev/* to a
+    # signed-in user on localhost only (never in a private/hosted deployment). DEV_TRACE
+    # writes one content-light JSONL record per typed/voice turn to DEV_TRACE_DIR.
+    dev_tools_enabled: bool = False
+    dev_trace: bool = False
+    dev_trace_dir: Path = Field(default=Path(".run/traces"))
+    dev_trace_keep: int = Field(default=500, ge=10, le=10_000)
     memory_extraction_model: str = "gpt-4o-mini"
     # Background rolling chat summaries (app/conversations/summarizer.py).
     conversation_summary_model: str = "gpt-6-luna"
@@ -134,6 +141,7 @@ class Settings(BaseSettings):
         "local_encryption_key_path",
         "support_data_path",
         "tracking_data_path",
+        "dev_trace_dir",
         mode="after",
     )
     @classmethod

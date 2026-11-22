@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 
-.PHONY: start start-demo help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household memory-seed memory-synth reconcile-unknown vapid-keys vobiz-check check check-full test test-unit test-module test-integration test-failures clean-run live-smoke live-smoke-cart
+PHONY_DEV := doctor doctor-offline demo-check gs
+.PHONY: $(PHONY_DEV) start start-demo help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household memory-seed memory-synth reconcile-unknown vapid-keys vobiz-check check check-full test test-unit test-module test-integration test-failures clean-run live-smoke live-smoke-cart
 
 start:
 	@./scripts/start.sh live
@@ -32,6 +33,10 @@ help:
 	@echo "  make memory-synth ARGS=\"--file <path> --dry-run|--apply\"  Demo only: synthetic order history from the same answers (--remove --apply undoes it)"
 	@echo "  make reconcile-unknown ARGS=--dry-run  Check unknown Zepto orders against order history (--apply settles single matches)"
 	@echo "  make vapid-keys    Generate browser-notification (Web Push) keys; prints them here only"
+	@echo "  make doctor        One readiness table, green/amber/red (0 Swiggy/Zepto calls; exit 1 on red)"
+	@echo "  make doctor-offline  Same, without OpenAI/Jev calls"
+	@echo "  make demo-check    Pre-demo checklist: offline doctor + quick evals + memory + address + baskets"
+	@echo "  make gs ARGS='trace last'  Operator CLI (also: scripts/gs --help; docs/DEV_TOOLS.md)"
 	@echo "  make test          Run every test layer (backend + frontend)"
 	@echo "  make test-unit     Pure-logic tests (backend + frontend)"
 	@echo "  make test-module   Module tests with in-memory fakes (backend + frontend)"
@@ -110,6 +115,18 @@ reconcile-unknown:
 # Prints the private key to this terminal only; paste the lines into .env.
 vapid-keys:
 	@cd backend && PYTHONPATH=. uv run --with-requirements requirements.txt python -m app.notifications.vapid
+
+doctor:
+	@./scripts/gs doctor $(ARGS)
+
+doctor-offline:
+	@./scripts/gs doctor --offline
+
+demo-check:
+	@./scripts/gs demo-check $(ARGS)
+
+gs:
+	@./scripts/gs $(ARGS)
 
 check:
 	@./scripts/verify.sh

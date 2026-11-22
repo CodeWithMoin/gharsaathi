@@ -81,6 +81,14 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
+# Which checkout/branch/commit this launch runs (read by make doctor). No secrets.
+mkdir -p "${RUN_DIR}"
+printf '{"checkout":"%s","branch":"%s","commit":"%s","commerce_mode":"%s","started_at":"%s"}\n' \
+  "${REPO_ROOT}" \
+  "$(git -C "${REPO_ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)" \
+  "$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+  "${COMMERCE_MODE}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${RUN_DIR}/launch.json"
+
 echo "Starting backend on http://127.0.0.1:8000 (${COMMERCE_MODE} commerce mode)"
 (
   cd "${REPO_ROOT}/backend"

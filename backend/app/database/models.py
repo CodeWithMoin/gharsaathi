@@ -759,3 +759,22 @@ class RiderCallRecord(Base):
     summary: Mapped[str] = mapped_column(String(600))
     answered_from: Mapped[list[str]] = mapped_column(JSON)
     seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SavedShoppingListRecord(Base):
+    """A shopping list the user created and named ("Weekly list"); never predicted."""
+
+    __tablename__ = "saved_shopping_lists"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name_key", name="uq_saved_shopping_lists_user_name"),
+        Index("ix_saved_shopping_lists_user_updated", "user_id", "updated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(128))
+    name: Mapped[str] = mapped_column(String(60))
+    # casefolded, whitespace-collapsed name: one "weekly list" per user.
+    name_key: Mapped[str] = mapped_column(String(60))
+    items: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

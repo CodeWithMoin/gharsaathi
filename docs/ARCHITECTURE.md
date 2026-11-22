@@ -129,6 +129,27 @@ flowchart TD
 | Tap runs the existing approve + COD checkout: idempotency key `order-confirmation:<id>`, durable one-shot claim per approval, fresh re-quote must match, outcome-unknown never retried | `backend/app/shopping/checkout.py` | Double orders, price drift, blind retries |
 | The card binds the payment method; another method means a fresh card (`POST /api/orders/payment-method`). Prepaid methods are offered only with the flag on, allow-listed, covered by the verified response contract and listed by `get_payment_methods`; the tap re-quotes with that method's own unconfirmed preview, then makes one `create_*` call; only a provider-confirmed payment and order is placed | `backend/app/shopping/payments.py`, `backend/app/commerce/zepto/payments.py`, `checkout.py` | Paying an amount the user did not approve, guessed response fields, money claims without the provider |
 
+## Saved lists, repeat last order, recent items, clear
+
+`app/shopping/saved_lists.py`. Lists are only what the user saved and named
+(`saved_shopping_lists`, user-scoped, unique name per user, 20 lists × 40 items).
+"Repeat last order" and recent items read this household's own real orders only: an
+`ordered` basket with a `confirmed` checkout attempt that has a provider order id.
+Synthetic sample orders (`synth-` basket or order ids) and baskets without a confirmed
+attempt are never repeated.
+Adding (`add_items`, shared by `POST /api/lists/{id}/add-to-basket`,
+`POST /api/quick-actions/repeat-last`, `POST /api/quick-actions/recent-item` and the
+`add_saved_list` voice/typed tool) searches each item's name at its store and adds
+only the same variant while available, at today's price, in one revision-checked
+`BasketService.add_lines` edit per store. Unavailable, not listed, store not ready,
+store error and locked basket are reported per item; a store that fails is not
+searched again in that run. Nothing quotes, approves or orders.
+
+`BasketService.clear(household, provider, *, expected_revision=None)` empties a basket
+in one revision-checked edit, shared by the `clear_basket` voice/typed tool and the
+basket card's **Clear basket** (`POST /api/baskets/{provider}/clear`, which passes the
+revision the card shows: 409 when the basket changed since, refused in checkout).
+
 ## Placing an order (one tap)
 
 ```mermaid
@@ -568,6 +589,8 @@ while the demo-store tools took ~0 ms. Fewer rounds is the main lever.
   `saving_paise`, `total_variants`, and `provider_statuses` when every store
   answered (−22% tokens per search result).
 
+Per-turn traces (rounds, tools, ms, tokens; local JSONL): `DEV_TRACE=true` and
+`scripts/gs trace last` ([`DEV_TOOLS.md`](DEV_TOOLS.md)).
 Diagnostics: `VOICE_EVENT_LOG=true` logs content-free
 `event=voice_delegation_timing`, `voice_tool_timing`, `chat_tool_timing` and
 `chat_turn_timing` lines. Benchmark: `python -m evaluation.run_turn_latency`
@@ -805,6 +828,7 @@ sequenceDiagram
 
 - Feature × surface matrix: [`CAPABILITIES.md`](CAPABILITIES.md)
 - Test layers and how to run them: [`TESTING.md`](TESTING.md)
+- Local operator toolkit (`make doctor`, `scripts/gs`, `DEV_TRACE`, `/dev`): [`DEV_TOOLS.md`](DEV_TOOLS.md)
 - Opt-in real-provider smoke tests: [`LIVE_SMOKE.md`](LIVE_SMOKE.md)
 - Voice turn-taking modes: [`voice-turn-taking.md`](voice-turn-taking.md)
 - Rider assist (beta, Vobiz → OpenAI Realtime phone assistant for delivery partners): [`RIDER_ASSIST.md`](RIDER_ASSIST.md)
