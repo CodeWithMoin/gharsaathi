@@ -1,11 +1,11 @@
-"""One forwarded call: Exotel Voicebot stream ↔ OpenAI Realtime (WebSocket).
+"""One forwarded call: the carrier's bidirectional stream ↔ OpenAI Realtime (WebSocket).
 
-Exotel side (https://developer.exotel.com/docs/agentstream/websocket-protocol):
-PCM16 mono at the stream's rate in, Exotel-valid chunks out, ``clear`` on barge-in,
-closing the socket advances the call flow. Realtime side
-(https://developers.openai.com/api/docs/guides/realtime-conversations): 24 kHz PCM,
-server VAD, function tools handled here, ``conversation.item.truncate`` after a
-barge-in. Only a short summary of the call is kept, never audio.
+Carrier side: a ``TelephonyAdapter`` (``vobiz.py``) parses events and formats
+playback, checkpoints, clear (barge-in) and stop. Realtime side
+(https://developers.openai.com/api/docs/guides/realtime-conversations): μ-law
+passthrough (``audio/pcmu``) or 24 kHz PCM, server VAD, function tools handled
+here, ``conversation.item.truncate`` after a barge-in. Only a short summary of
+the call is kept, never audio.
 """
 
 from __future__ import annotations
@@ -21,19 +21,15 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from app.rider.audio import REALTIME_RATE, OutboundChunker, Resampler, duration_ms
+from app.rider.audio import REALTIME_PCM_RATE, OutboundChunker, Resampler
 from app.rider.prompts import RIDER_PROMPT_VERSION, WRAP_UP, greeting, rider_instructions
-from app.rider.protocol import (
-    ExotelEvent,
+from app.rider.telephony import (
+    MULAW_PLAN,
+    AudioPlan,
     ProtocolError,
-    StartInfo,
-    clear_message,
-    mark_message,
-    mask_number,
-    media_message,
-    parse_event,
-    resolve_sample_rate,
-    same_number,
+    StreamStart,
+    TelephonyAdapter,
+    TelephonyEvent,
 )
 from app.rider.safety import redact_secrets, request_flags
 from app.rider.store import RiderCallSummary
@@ -43,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 START_TIMEOUT_SECONDS = 10.0
 REALTIME_CONNECT_TIMEOUT_SECONDS = 10.0
-# No audio from Exotel for this long means the call is gone.
+# No audio from the carrier for this long means the call is gone.
 IDLE_SECONDS = 20.0
 WRAP_UP_BEFORE_END_SECONDS = 20.0
 END_PLAYBACK_TIMEOUT_SECONDS = 8.0
@@ -52,7 +48,7 @@ MAX_TRANSCRIPTS = 40
 RIDER_QUOTE_CHARS = 120
 
 
-class ExotelSocket(Protocol):
+class CallSocket(Protocol):
     async def receive_text(self) -> str: ...
 
     async def send_text(self, data: str) -> None: ...
@@ -89,16 +85,17 @@ class BridgeConfig:
     max_call_seconds: float
     owner_name: str | None
     language: str
-    query_sample_rate: int | None = None
-    # When set, only calls to this ExoPhone are answered.
-    expected_to: str = ""
+    # The call the stream URL was issued for (signed path); any other is refused.
+    expected_call_id: str = ""
+    # Masked caller number from the signed answer webhook.
+    caller: str = "unknown"
     idle_seconds: float = IDLE_SECONDS
     start_timeout_seconds: float = START_TIMEOUT_SECONDS
     connect_timeout_seconds: float = REALTIME_CONNECT_TIMEOUT_SECONDS
     end_playback_timeout_seconds: float = END_PLAYBACK_TIMEOUT_SECONDS
 
 
-def session_update(config: BridgeConfig) -> dict[str, Any]:
+def session_update(config: BridgeConfig, plan: AudioPlan = MULAW_PLAN) -> dict[str, Any]:
     return {
         "type": "session.update",
         "event_id": "rider_session",
@@ -109,7 +106,7 @@ def session_update(config: BridgeConfig) -> dict[str, Any]:
             "instructions": rider_instructions(config.owner_name, config.language),
             "audio": {
                 "input": {
-                    "format": {"type": "audio/pcm", "rate": REALTIME_RATE},
+                    "format": dict(plan.realtime_format),
                     "transcription": {"model": config.transcription_model},
                     "turn_detection": {
                         "type": "server_vad",
@@ -119,7 +116,7 @@ def session_update(config: BridgeConfig) -> dict[str, Any]:
                     },
                 },
                 "output": {
-                    "format": {"type": "audio/pcm", "rate": REALTIME_RATE},
+                    "format": dict(plan.realtime_format),
                     "voice": config.voice,
                 },
             },
@@ -154,7 +151,8 @@ class CallState:
 class RiderCallBridge:
     def __init__(
         self,
-        exotel: ExotelSocket,
+        socket: CallSocket,
+        adapter: TelephonyAdapter,
         connect_realtime: RealtimeConnector,
         toolbox: RiderToolbox,
         config: BridgeConfig,
@@ -163,34 +161,33 @@ class RiderCallBridge:
         clock: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        self.exotel = exotel
+        self.socket = socket
+        self.adapter = adapter
         self.connect_realtime = connect_realtime
         self.toolbox = toolbox
         self.config = config
         self.recorder = recorder
         self.clock = clock
         self.now = now
-        self.state = CallState(started_at=now())
+        self.state = CallState(started_at=now(), caller=config.caller)
         self.toolbox.on_notify = self._deliver_note
-        self.stream_sid = ""
-        self.rate = 8000
+        self.stream_id = ""
+        self.call_id = ""
+        self.plan: AudioPlan = MULAW_PLAN
         self.realtime: RealtimeConnection | None = None
         self._send_lock = asyncio.Lock()
         self._done = asyncio.Event()
         self._end_played = asyncio.Event()
         self._end_reason: str | None = None
-        self._exotel_closed = False
+        self._socket_closed = False
         self._chunker: OutboundChunker | None = None
         self._to_realtime: Resampler | None = None
-        self._to_exotel: Resampler | None = None
         # Playback bookkeeping for barge-in (clear + truncate).
         self._speaking_item: str | None = None
         self._speaking_response: str | None = None
         self._item_sent_bytes = 0
         self._item_started_at: float | None = None
-        self._last_audio_sent_at: float | None = None
         self._dropped_responses: set[str] = set()
-        self._wrap_up_sent = False
         self.sent_chunks: list[int] = []
 
     # ---- lifecycle -------------------------------------------------------
@@ -198,21 +195,24 @@ class RiderCallBridge:
     async def run(self) -> RiderCallSummary | None:
         start = await self._await_start()
         if start is None:
-            await self._close_exotel()
+            await self._close_socket()
             return None
-        if self.config.expected_to and not same_number(start.to_number, self.config.expected_to):
-            logger.warning("event=rider_call_refused reason=unexpected_number")
-            await self._close_exotel()
+        if self.config.expected_call_id and start.call_id != self.config.expected_call_id:
+            logger.warning("event=rider_call_refused reason=call_id_mismatch")
+            await self._close_socket(1008)
             return None
-        self.stream_sid = start.stream_sid
-        self.state.caller = mask_number(start.from_number)
-        self.rate = resolve_sample_rate(start, self.config.query_sample_rate)
-        self._chunker = OutboundChunker(self.rate)
-        self._to_realtime = Resampler(self.rate, REALTIME_RATE)
-        self._to_exotel = Resampler(REALTIME_RATE, self.rate)
+        self.stream_id = start.stream_id
+        self.call_id = start.call_id
+        self.plan = start.audio
+        frame = self.plan.outbound_bytes_per_ms * self.adapter.frame_ms
+        self._chunker = OutboundChunker(frame, self.plan.outbound_sample_bytes)
+        if self.plan.resample_inbound:
+            self._to_realtime = Resampler(self.plan.inbound_rate, REALTIME_PCM_RATE)
         logger.info(
-            "event=rider_call_start rate=%s prompt=%s caller=%s",
-            self.rate,
+            "event=rider_call_start provider=%s audio=%s/%s prompt=%s caller=%s",
+            self.adapter.name,
+            self.plan.inbound_encoding,
+            self.plan.inbound_rate,
             RIDER_PROMPT_VERSION,
             self.state.caller,
         )
@@ -220,17 +220,17 @@ class RiderCallBridge:
             self.realtime = await asyncio.wait_for(
                 self.connect_realtime(), self.config.connect_timeout_seconds
             )
-            await self._send_realtime(session_update(self.config))
+            await self._send_realtime(session_update(self.config, self.plan))
             await self._send_realtime(greeting_request(self.config))
         except Exception as exc:  # noqa: BLE001 - any failure here means no assistant
             logger.warning("event=rider_realtime_unavailable error=%s", type(exc).__name__)
             self.state.outcome = "assistant_unavailable"
             await self._close_realtime()
-            await self._close_exotel()
+            await self._stop_stream()
             return await self._finish()
 
         tasks = [
-            asyncio.create_task(self._exotel_loop()),
+            asyncio.create_task(self._socket_loop()),
             asyncio.create_task(self._realtime_loop()),
             asyncio.create_task(self._deadline()),
         ]
@@ -241,7 +241,7 @@ class RiderCallBridge:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             await self._close_realtime()
-            await self._close_exotel()
+            await self._stop_stream()
         return await self._finish()
 
     def _stop(self, reason: str) -> None:
@@ -249,18 +249,19 @@ class RiderCallBridge:
             self._end_reason = reason
         self._done.set()
 
-    async def _await_start(self) -> StartInfo | None:
+    async def _await_start(self) -> StreamStart | None:
         deadline = self.clock() + self.config.start_timeout_seconds
         while True:
             remaining = deadline - self.clock()
             if remaining <= 0:
                 return None
             try:
-                raw = await asyncio.wait_for(self.exotel.receive_text(), remaining)
+                raw = await asyncio.wait_for(self.socket.receive_text(), remaining)
             except (asyncio.TimeoutError, Exception):  # noqa: BLE001 - disconnect or timeout
+                self._socket_closed = True
                 return None
             try:
-                event = parse_event(raw)
+                event = self.adapter.parse(raw)
             except ProtocolError:
                 continue
             if event.kind == "start" and event.start is not None:
@@ -272,7 +273,6 @@ class RiderCallBridge:
         cap = self.config.max_call_seconds
         wrap_at = max(0.0, cap - WRAP_UP_BEFORE_END_SECONDS)
         await asyncio.sleep(wrap_at)
-        self._wrap_up_sent = True
         try:
             await self._send_realtime(
                 {"type": "response.create", "event_id": "rider_wrap_up", "response": {"instructions": WRAP_UP}}
@@ -283,38 +283,38 @@ class RiderCallBridge:
         logger.info("event=rider_call_cap seconds=%s", cap)
         self._stop("time_limit")
 
-    # ---- Exotel → Realtime ----------------------------------------------
+    # ---- call → Realtime -------------------------------------------------
 
-    async def _exotel_loop(self) -> None:
+    async def _socket_loop(self) -> None:
         while not self._done.is_set():
             try:
-                raw = await asyncio.wait_for(self.exotel.receive_text(), self.config.idle_seconds)
+                raw = await asyncio.wait_for(self.socket.receive_text(), self.config.idle_seconds)
             except asyncio.TimeoutError:
                 self._stop("idle")
                 return
-            except Exception:  # noqa: BLE001 - Exotel hung up / socket closed
-                self._exotel_closed = True
+            except Exception:  # noqa: BLE001 - the carrier closed the socket (hang-up)
+                self._socket_closed = True
                 self._stop("caller_left")
                 return
             try:
-                event = parse_event(raw)
+                event = self.adapter.parse(raw)
             except ProtocolError:
                 continue
-            await self._on_exotel(event)
+            await self._on_call_event(event)
 
-    async def _on_exotel(self, event: ExotelEvent) -> None:
-        if event.kind == "media" and event.audio and self._to_realtime is not None:
-            pcm = self._to_realtime.process(event.audio)
-            if pcm:
+    async def _on_call_event(self, event: TelephonyEvent) -> None:
+        if event.kind == "media" and event.audio:
+            audio = self._to_realtime.process(event.audio) if self._to_realtime else event.audio
+            if audio:
                 await self._send_realtime(
-                    {"type": "input_audio_buffer.append", "audio": base64.b64encode(pcm).decode("ascii")}
+                    {"type": "input_audio_buffer.append", "audio": base64.b64encode(audio).decode("ascii")}
                 )
-        elif event.kind == "mark" and event.mark == END_CALL_MARK:
+        elif event.kind == "played" and event.name == END_CALL_MARK:
             self._end_played.set()
         elif event.kind == "stop":
-            self._stop(event.stop_reason or "stopped")
+            self._stop("stopped")
 
-    # ---- Realtime → Exotel ----------------------------------------------
+    # ---- Realtime → call -------------------------------------------------
 
     async def _realtime_loop(self) -> None:
         assert self.realtime is not None
@@ -361,10 +361,10 @@ class RiderCallBridge:
         if isinstance(response_id, str) and response_id in self._dropped_responses:
             return
         delta = event.get("delta")
-        if not isinstance(delta, str) or self._to_exotel is None or self._chunker is None:
+        if not isinstance(delta, str) or self._chunker is None:
             return
         try:
-            pcm24 = base64.b64decode(delta, validate=True)
+            audio = base64.b64decode(delta, validate=True)
         except (binascii.Error, ValueError):
             return
         item_id = event.get("item_id")
@@ -374,45 +374,46 @@ class RiderCallBridge:
             self._item_started_at = None
         if isinstance(response_id, str):
             self._speaking_response = response_id
-        for chunk in self._chunker.push(self._to_exotel.process(pcm24)):
-            await self._send_media(chunk)
+        # Realtime output is already in the outbound format (μ-law 8 kHz or PCM 24 kHz).
+        for chunk in self._chunker.push(audio):
+            await self._send_audio(chunk)
 
     async def _flush_audio(self) -> None:
         if self._chunker is None:
             return
         for chunk in self._chunker.flush():
-            await self._send_media(chunk)
+            await self._send_audio(chunk)
 
-    async def _send_media(self, chunk: bytes) -> None:
+    async def _send_audio(self, chunk: bytes) -> None:
         now = self.clock()
         if self._item_started_at is None:
             self._item_started_at = now
         self._item_sent_bytes += len(chunk)
-        self._last_audio_sent_at = now
         self.sent_chunks.append(len(chunk))
-        await self._send_exotel(media_message(self.stream_sid, chunk))
+        await self._send_socket(self.adapter.play(self.stream_id, self.plan, chunk))
+
+    def _sent_ms(self) -> int:
+        return self._item_sent_bytes // max(1, self.plan.outbound_bytes_per_ms)
 
     def _playback_ms(self) -> int:
         """Audio of the current item the caller has heard so far (estimate)."""
 
-        sent = duration_ms(self._item_sent_bytes, self.rate)
         if self._item_started_at is None:
             return 0
         elapsed = int((self.clock() - self._item_started_at) * 1000)
-        return max(0, min(sent, elapsed))
+        return max(0, min(self._sent_ms(), elapsed))
 
     def _assistant_audible(self) -> bool:
-        if self._last_audio_sent_at is None or self._item_started_at is None:
+        if self._item_started_at is None:
             return False
-        sent_ms = duration_ms(self._item_sent_bytes, self.rate)
-        return (self.clock() - self._item_started_at) * 1000 < sent_ms + 250
+        return (self.clock() - self._item_started_at) * 1000 < self._sent_ms() + 250
 
     async def _barge_in(self) -> None:
         if self._chunker is not None:
             self._chunker.drop()
         if not self._assistant_audible():
             return
-        await self._send_exotel(clear_message(self.stream_sid))
+        await self._send_socket(self.adapter.clear(self.stream_id))
         if self._speaking_response:
             self._dropped_responses.add(self._speaking_response)
         if self._speaking_item:
@@ -463,8 +464,10 @@ class RiderCallBridge:
             await self._send_realtime({"type": "response.create"})
 
     async def _end_after_playback(self) -> None:
+        """Let the goodbye play (checkpoint → playedStream, with a timeout), then stop."""
+
         await self._flush_audio()
-        await self._send_exotel(mark_message(self.stream_sid, END_CALL_MARK))
+        await self._send_socket(self.adapter.checkpoint(self.stream_id, END_CALL_MARK))
         try:
             await asyncio.wait_for(self._end_played.wait(), self.config.end_playback_timeout_seconds)
         except asyncio.TimeoutError:
@@ -478,14 +481,14 @@ class RiderCallBridge:
             raise RealtimeUnavailable("Realtime is not connected.")
         await self.realtime.send(json.dumps(event, ensure_ascii=False))
 
-    async def _send_exotel(self, message: str) -> None:
-        if self._exotel_closed:
+    async def _send_socket(self, message: str) -> None:
+        if self._socket_closed:
             return
         async with self._send_lock:
             try:
-                await self.exotel.send_text(message)
+                await self.socket.send_text(message)
             except Exception:  # noqa: BLE001 - caller hung up
-                self._exotel_closed = True
+                self._socket_closed = True
                 self._stop("caller_left")
 
     async def _close_realtime(self) -> None:
@@ -495,12 +498,21 @@ class RiderCallBridge:
             except Exception:  # noqa: BLE001
                 pass
 
-    async def _close_exotel(self) -> None:
-        if self._exotel_closed:
+    async def _stop_stream(self) -> None:
+        """Tell the carrier the stream is over (its next XML runs), then close."""
+
+        if not self._socket_closed and self.stream_id:
+            message = self.adapter.stop(self.stream_id)
+            if message:
+                await self._send_socket(message)
+        await self._close_socket()
+
+    async def _close_socket(self, code: int = 1000) -> None:
+        if self._socket_closed:
             return
-        self._exotel_closed = True
+        self._socket_closed = True
         try:
-            await self.exotel.close(1000)
+            await self.socket.close(code)
         except Exception:  # noqa: BLE001
             pass
 

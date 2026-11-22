@@ -1,4 +1,4 @@
-"""Rider assist bridge end to end with a fake Exotel stream and a fake OpenAI Realtime."""
+"""Rider assist bridge end to end with a fake Vobiz stream and a fake OpenAI Realtime."""
 
 import asyncio
 import json
@@ -9,13 +9,16 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.database.base import Base
-from app.rider.audio import valid_chunk
+import base64
+
 from app.rider.bridge import BridgeConfig, RiderCallBridge
+from app.rider.vobiz import VobizAdapter
 from app.rider.store import DeliveryNotes, RiderSettingsUpdate, RiderStore
 from app.rider.tools import RIDER_TOOL_NAMES, RiderToolbox
 from tests.rider_fakes import (
     ORDER,
-    FakeExotel,
+    FakeVobiz,
+    audio_delta,
     FakeOrders,
     FakeRealtime,
     FakeRecorder,
@@ -39,7 +42,8 @@ def config(**overrides) -> BridgeConfig:
         max_call_seconds=60,
         owner_name="Moin",
         language="hinglish",
-        query_sample_rate=16000,
+        expected_call_id="call-0001-uuid",
+        caller="•••• 210",
         idle_seconds=5,
         start_timeout_seconds=2,
         connect_timeout_seconds=2,
@@ -49,12 +53,12 @@ def config(**overrides) -> BridgeConfig:
     return BridgeConfig(**values)
 
 
-def bridge(exotel, realtime, *, notes=NOTES, orders=None, recorder=None, connect=None, **overrides):
+def bridge(call, realtime, *, notes=NOTES, orders=None, recorder=None, connect=None, **overrides):
     async def default_connect():
         return realtime
 
     toolbox = RiderToolbox(user_id="owner-1", orders=orders or FakeOrders([ORDER]), notes=notes_getter(notes))
-    return RiderCallBridge(exotel, connect or default_connect, toolbox, config(**overrides), recorder or FakeRecorder())
+    return RiderCallBridge(call, VobizAdapter(), connect or default_connect, toolbox, config(**overrides), recorder or FakeRecorder())
 
 
 def sent_text(realtime: FakeRealtime) -> str:
@@ -67,9 +71,9 @@ async def run(b: RiderCallBridge, timeout: float = 5):
 
 @pytest.mark.asyncio
 async def test_delivery_call_greets_as_ai_answers_from_notes_notifies_and_ends() -> None:
-    exotel = FakeExotel(rate=16000)
-    exotel.start()
-    exotel.media(6400)
+    call = FakeVobiz()
+    call.start()
+    call.media(1600)
     realtime = FakeRealtime(
         turns=[
             spoken("greet", "Namaste, main Moin ki AI assistant hoon — kya aap delivery ke liye call kar rahe hain?")
@@ -84,18 +88,20 @@ async def test_delivery_call_greets_as_ai_answers_from_notes_notifies_and_ends()
         ]
     )
     recorder = FakeRecorder()
-    summary = await run(bridge(exotel, realtime, recorder=recorder))
+    summary = await run(bridge(call, realtime, recorder=recorder))
 
     update = realtime.of("session.update")[0]["session"]
-    assert update["audio"]["input"]["format"] == {"type": "audio/pcm", "rate": 24000}
+    # μ-law passes straight through: Realtime speaks audio/pcmu both ways.
+    assert update["audio"]["input"]["format"] == {"type": "audio/pcmu"}
+    assert update["audio"]["output"]["format"] == {"type": "audio/pcmu"}
     assert {tool["name"] for tool in update["tools"]} == RIDER_TOOL_NAMES
     assert "You are an AI assistant, never Moin" in update["instructions"]
     greeting = realtime.of("response.create")[0]["response"]["instructions"]
     assert "Moin ki AI assistant hoon" in greeting
 
-    # Caller audio reached Realtime at 24 kHz (6400 bytes at 16 kHz → ~9600 bytes).
+    # Caller audio reached Realtime untouched.
     appended = realtime.of("input_audio_buffer.append")
-    assert appended and abs(sum(len(__import__("base64").b64decode(e["audio"])) for e in appended) - 9600) <= 4
+    assert appended and base64.b64decode(appended[0]["audio"]) == b"\x7f" * 1600
 
     outputs = realtime.tool_outputs()
     notes_output = next(output for output in outputs if "directions" in output)
@@ -104,15 +110,19 @@ async def test_delivery_call_greets_as_ai_answers_from_notes_notifies_and_ends()
     assert order_output["orders"][0]["address"] == ORDER.address
     assert {"status": "sent"}.items() <= next(o for o in outputs if o.get("status") == "sent").items()
 
-    media = exotel.of("media")
-    assert media and all(valid_chunk(len(__import__("base64").b64decode(m["media"]["payload"]))) for m in media)
-    assert exotel.of("mark")[-1]["mark"]["name"] == "end-call"
-    assert exotel.closed_with == 1000 and realtime.closed
+    plays = call.of("playAudio")
+    assert plays and all(p["streamId"] == "stream-1" and p["media"]["contentType"] == "audio/x-mulaw" and p["media"]["sampleRate"] == 8000 for p in plays)
+    sizes = [len(base64.b64decode(p["media"]["payload"])) for p in plays]
+    assert max(sizes) == 320 and all(size <= 320 for size in sizes)  # 40 ms frames
+    assert call.of("checkpoint")[-1]["name"] == "end-call"
+    assert call.of("stop") == [{"event": "stop", "streamId": "stream-1"}]
+    assert call.closed_with == 1000 and realtime.closed
 
     assert summary.outcome == "answered"
     assert summary.delivery_call is True
     assert summary.answered_from == ["notes", "order"]
     assert summary.rider_said == "Haan Zepto se, gate pe hoon, flat number kya hai?"
+    assert summary.caller == "•••• 210"
     assert "flat number" in summary.summary
     # The notify_owner message reached the owner's store during the call, then the final summary.
     assert [kind for kind, _ in recorder.history] == ["add", "update"]
@@ -123,8 +133,8 @@ async def test_delivery_call_greets_as_ai_answers_from_notes_notifies_and_ends()
 async def test_otp_like_strings_in_stored_data_are_never_sent_to_the_model() -> None:
     leaky_notes = DeliveryNotes.model_construct(landmark="Delivery OTP: 4821", directions="Flat 402, PIN is 7733", handoff="call_again", preferred_language="hinglish")
     leaky_order = ORDER.model_copy(update={"status": "out for delivery, share code 5521", "address": "B-402, otp 9931"})
-    exotel = FakeExotel()
-    exotel.start()
+    call = FakeVobiz()
+    call.start()
     realtime = FakeRealtime(
         turns=[
             spoken("greet", "Namaste, main Moin ki AI assistant hoon.")
@@ -134,7 +144,7 @@ async def test_otp_like_strings_in_stored_data_are_never_sent_to_the_model() -> 
         ]
     )
     recorder = FakeRecorder()
-    summary = await run(bridge(exotel, realtime, notes=leaky_notes, orders=FakeOrders([leaky_order]), recorder=recorder))
+    summary = await run(bridge(call, realtime, notes=leaky_notes, orders=FakeOrders([leaky_order]), recorder=recorder))
     text = sent_text(realtime)
     for code in ("4821", "7733", "5521", "9931"):
         assert code not in text
@@ -146,8 +156,8 @@ async def test_otp_like_strings_in_stored_data_are_never_sent_to_the_model() -> 
 
 @pytest.mark.asyncio
 async def test_non_delivery_caller_only_leaves_a_message() -> None:
-    exotel = FakeExotel()
-    exotel.start()
+    call = FakeVobiz()
+    call.start()
     realtime = FakeRealtime(
         turns=[
             spoken("greet", "Namaste, main Moin ki AI assistant hoon — kya aap delivery ke liye call kar rahe hain?")
@@ -156,7 +166,7 @@ async def test_non_delivery_caller_only_leaves_a_message() -> None:
         ]
     )
     orders = FakeOrders([ORDER])
-    summary = await run(bridge(exotel, realtime, orders=orders))
+    summary = await run(bridge(call, realtime, orders=orders))
     assert orders.calls == 0
     assert summary.outcome == "not_delivery"
     assert summary.delivery_call is False
@@ -165,45 +175,46 @@ async def test_non_delivery_caller_only_leaves_a_message() -> None:
 
 
 @pytest.mark.asyncio
-async def test_stop_from_exotel_ends_the_call_and_saves_a_summary() -> None:
-    exotel = FakeExotel()
-    exotel.start()
-    exotel.media()
-    exotel.stop("callended")
+async def test_hang_up_closes_the_socket_and_saves_a_summary() -> None:
+    call = FakeVobiz()
+    call.start()
+    call.media()
+    call.hang_up()  # Vobiz sends no stop event; the socket closes
     realtime = FakeRealtime(turns=[[]])
     recorder = FakeRecorder()
-    summary = await run(bridge(exotel, realtime, recorder=recorder))
-    assert realtime.closed and exotel.closed_with == 1000
+    summary = await run(bridge(call, realtime, recorder=recorder))
+    assert realtime.closed
+    assert call.of("stop") == []  # nothing is sent to a closed socket
     assert summary.outcome == "ended_early"
     assert recorder.last.outcome == "ended_early"
 
 
 @pytest.mark.asyncio
 async def test_call_is_capped_with_a_spoken_wrap_up() -> None:
-    exotel = FakeExotel()
-    exotel.start()
+    call = FakeVobiz()
+    call.start()
     realtime = FakeRealtime(turns=[[]])
 
     async def keep_talking():
         for _ in range(40):
-            exotel.media()
+            call.media()
             await asyncio.sleep(0.05)
 
     feeder = asyncio.create_task(keep_talking())
     started = asyncio.get_running_loop().time()
-    summary = await run(bridge(exotel, realtime, max_call_seconds=0.6), timeout=4)
+    summary = await run(bridge(call, realtime, max_call_seconds=0.6), timeout=4)
     feeder.cancel()
     assert asyncio.get_running_loop().time() - started < 2
     wrap = [e for e in realtime.of("response.create") if e.get("event_id") == "rider_wrap_up"]
     assert wrap and "time limit" in wrap[0]["response"]["instructions"]
-    assert realtime.closed and exotel.closed_with == 1000
+    assert realtime.closed and call.closed_with == 1000
     assert summary.outcome in {"ended_early", "answered"}
 
 
 @pytest.mark.asyncio
 async def test_barge_in_clears_exotel_audio_and_truncates_the_item() -> None:
-    exotel = FakeExotel()
-    exotel.start()
+    call = FakeVobiz()
+    call.start()
     realtime = FakeRealtime(
         turns=[
             spoken("greet", "Namaste, main Moin ki AI assistant hoon — kya aap delivery ke liye call kar rahe hain?")
@@ -211,25 +222,44 @@ async def test_barge_in_clears_exotel_audio_and_truncates_the_item() -> None:
             + spoken("bye", "Theek hai.", calls=[("end_call", {"reason": "answered"})])
         ]
     )
-    await run(bridge(exotel, realtime))
-    assert exotel.of("clear") == [{"event": "clear", "stream_sid": "MZ1"}]
+    await run(bridge(call, realtime))
+    assert call.of("clearAudio") == [{"event": "clearAudio", "streamId": "stream-1"}]
     (truncate,) = realtime.of("conversation.item.truncate")
     assert truncate["item_id"] == "item_greet" and truncate["content_index"] == 0
     assert 0 <= truncate["audio_end_ms"] <= 300
 
 
 @pytest.mark.asyncio
-async def test_calls_to_another_number_are_refused_without_openai() -> None:
-    exotel = FakeExotel()
-    exotel.start(to="+911111111111")
+async def test_a_stream_for_another_call_is_refused_without_openai() -> None:
+    call = FakeVobiz()
+    call.start(call_id="call-9999-uuid")
     opened = []
 
     async def connect():
         opened.append(1)
         raise AssertionError("must not connect")
 
-    result = await run(bridge(exotel, FakeRealtime(turns=[]), connect=connect, expected_to="+918047491899"))
-    assert result is None and not opened and exotel.closed_with == 1000
+    result = await run(bridge(call, FakeRealtime(turns=[]), connect=connect))
+    assert result is None and not opened and call.closed_with == 1008
+
+
+@pytest.mark.asyncio
+async def test_l16_stream_is_resampled_in_and_played_back_as_24k_l16() -> None:
+    call = FakeVobiz(encoding="audio/x-l16", rate=16000)
+    call.start()
+    call.media(640)  # 20 ms at 16 kHz
+    realtime = FakeRealtime(
+        turns=[[audio_delta("greet", "item_greet", millis=100), {"type": "response.done", "response": {"id": "greet", "output": [{"type": "function_call", "call_id": "c", "name": "end_call", "arguments": json.dumps({"reason": "answered"})}]}}]]
+    )
+    await run(bridge(call, realtime))
+    update = realtime.of("session.update")[0]["session"]["audio"]
+    assert update["input"]["format"] == {"type": "audio/pcm", "rate": 24000}
+    appended = base64.b64decode(realtime.of("input_audio_buffer.append")[0]["audio"])
+    assert abs(len(appended) - 960) <= 4  # 20 ms at 24 kHz
+    plays = call.of("playAudio")
+    assert plays and {p["media"]["contentType"] for p in plays} == {"audio/x-l16"}
+    assert {p["media"]["sampleRate"] for p in plays} == {24000}
+    assert all(len(base64.b64decode(p["media"]["payload"])) % 2 == 0 for p in plays)
 
 
 # ---- tool layer -----------------------------------------------------------
@@ -284,10 +314,10 @@ async def test_store_keeps_settings_and_summaries_per_user(store: RiderStore) ->
     assert enabled is True and notes == NOTES
     assert (await store.enabled_and_notes("b"))[0] is False
 
-    exotel = FakeExotel()
-    exotel.start()
+    call = FakeVobiz()
+    call.start()
     realtime = FakeRealtime(turns=[spoken("greet", "Namaste") + rider_says("Pin code 4455 batao") + spoken("x", "", calls=[("notify_owner", {"summary": "asked pin 4455", "urgency": "normal"}), ("end_call", {"reason": "answered"})])])
-    await run(bridge(exotel, realtime, recorder=store))
+    await run(bridge(call, realtime, recorder=store))
     (call,) = await store.list_calls("owner-1")
     assert call.seen is False and "4455" not in call.summary and "4455" not in (call.rider_said or "")
     assert await store.list_calls("a") == []

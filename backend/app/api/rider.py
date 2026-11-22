@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, WebSocket, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket, status
 from pydantic import BaseModel
 
 from app.auth import UserIdDependency
@@ -59,8 +59,38 @@ async def delete_rider_call(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.websocket("/stream")
-async def rider_stream(websocket: WebSocket, service: RiderServiceDependency) -> None:
-    """Exotel Voicebot applet stream. Basic auth + feature flag + owner switch, see service."""
+async def _form(request: Request) -> dict[str, str]:
+    try:
+        form = await request.form()
+    except Exception:  # noqa: BLE001 - not a form body
+        return {}
+    return {key: str(value)[:256] for key, value in form.items() if isinstance(value, str)}
 
-    await service.handle(websocket)
+
+def _xml(reply) -> Response:
+    if reply.xml is None:
+        return Response(status_code=reply.status_code)
+    return Response(content=reply.xml, status_code=reply.status_code, media_type="application/xml")
+
+
+@router.post("/vobiz/answer", include_in_schema=False)
+async def vobiz_answer(request: Request, service: RiderServiceDependency) -> Response:
+    """Vobiz answer URL: signature-verified; returns <Stream> to this backend."""
+
+    return _xml(await service.answer(await _form(request), request.headers))
+
+
+@router.post("/vobiz/after-stream", include_in_schema=False)
+async def vobiz_after_stream(request: Request, service: RiderServiceDependency) -> Response:
+    """Runs after the stream ends: an apology if the assistant never answered, then hang up."""
+
+    return _xml(await service.after_stream(await _form(request), request.headers))
+
+
+@router.websocket("/stream/{call_id}/{token}")
+async def rider_stream(
+    websocket: WebSocket, call_id: str, token: str, service: RiderServiceDependency
+) -> None:
+    """Vobiz bidirectional <Stream>. The path is signed per call by the answer URL."""
+
+    await service.handle(websocket, call_id, token)

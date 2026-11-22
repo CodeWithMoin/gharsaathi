@@ -1,4 +1,4 @@
-"""In-memory fakes for the rider assist bridge: an Exotel stream and OpenAI Realtime."""
+"""In-memory fakes for the rider assist bridge: a Vobiz stream and OpenAI Realtime."""
 
 from __future__ import annotations
 
@@ -17,43 +17,47 @@ class Closed(Exception):
     pass
 
 
-class FakeExotel:
-    """Plays the Exotel side: queued events in, every sent message recorded."""
+class FakeVobiz:
+    """Plays the Vobiz side: queued events in, every sent message recorded.
 
-    def __init__(self, *, rate: int = 16000, echo_marks: bool = True) -> None:
+    Vobiz sends no inbound stop: the socket just closes (``hang_up``).
+    """
+
+    def __init__(self, *, encoding: str = "audio/x-mulaw", rate: int = 8000, echo_checkpoints: bool = True) -> None:
         self.incoming: asyncio.Queue[str | None] = asyncio.Queue()
         self.sent: list[dict[str, Any]] = []
         self.closed_with: int | None = None
-        self.echo_marks = echo_marks
+        self.echo_checkpoints = echo_checkpoints
+        self.encoding = encoding
         self.rate = rate
 
-    def start(self, *, to: str = "+918047491899", caller: str = "+919876543210") -> None:
-        self.incoming.put_nowait(json.dumps({"event": "connected"}))
+    def start(self, *, call_id: str = "call-0001-uuid", extra: str = "{}") -> None:
         self.incoming.put_nowait(
             json.dumps(
                 {
+                    "sequenceNumber": 0,
                     "event": "start",
-                    "sequence_number": "1",
-                    "stream_sid": "MZ1",
                     "start": {
-                        "stream_sid": "MZ1",
-                        "call_sid": "CA1",
-                        "account_sid": "AC1",
-                        "from": caller,
-                        "to": to,
-                        "custom_parameters": {},
-                        "media_format": {"encoding": "audio/x-raw", "sample_rate": str(self.rate), "bit_rate": "16"},
+                        "callId": call_id,
+                        "streamId": "stream-1",
+                        "accountId": "500025",
+                        "tracks": ["inbound"],
+                        "mediaFormat": {"encoding": self.encoding, "sampleRate": self.rate},
                     },
+                    "extra_headers": extra,
                 }
             )
         )
 
-    def media(self, byte_count: int = 3200) -> None:
-        payload = base64.b64encode(b"\x10\x00" * (byte_count // 2)).decode()
-        self.incoming.put_nowait(json.dumps({"event": "media", "stream_sid": "MZ1", "media": {"chunk": "1", "timestamp": "0", "payload": payload}}))
+    def media(self, byte_count: int = 160) -> None:
+        sample = b"\x7f" if self.encoding == "audio/x-mulaw" else b"\x10\x00"
+        payload = base64.b64encode(sample * (byte_count // len(sample))).decode()
+        self.incoming.put_nowait(
+            json.dumps({"sequenceNumber": 1, "streamId": "stream-1", "event": "media", "media": {"track": "inbound", "timestamp": "1", "chunk": 1, "payload": payload}, "extra_headers": "{}"})
+        )
 
-    def stop(self, reason: str = "callended") -> None:
-        self.incoming.put_nowait(json.dumps({"event": "stop", "stream_sid": "MZ1", "stop": {"reason": reason}}))
+    def hang_up(self) -> None:
+        self.incoming.put_nowait(None)
 
     async def receive_text(self) -> str:
         item = await self.incoming.get()
@@ -66,8 +70,8 @@ class FakeExotel:
             raise Closed()
         message = json.loads(data)
         self.sent.append(message)
-        if self.echo_marks and message.get("event") == "mark":
-            self.incoming.put_nowait(json.dumps({"event": "mark", "stream_sid": "MZ1", "mark": message["mark"]}))
+        if self.echo_checkpoints and message.get("event") == "checkpoint":
+            self.incoming.put_nowait(json.dumps({"event": "playedStream", "name": message["name"]}))
 
     async def close(self, code: int = 1000) -> None:
         self.closed_with = code
@@ -75,6 +79,15 @@ class FakeExotel:
 
     def of(self, kind: str) -> list[dict[str, Any]]:
         return [message for message in self.sent if message.get("event") == kind]
+
+
+def mulaw_delta(response_id: str, item_id: str, millis: int = 300) -> dict[str, Any]:
+    return {
+        "type": "response.output_audio.delta",
+        "response_id": response_id,
+        "item_id": item_id,
+        "delta": base64.b64encode(b"\x55" * (8 * millis)).decode(),
+    }
 
 
 def audio_delta(response_id: str, item_id: str, millis: int = 300) -> dict[str, Any]:
@@ -94,7 +107,7 @@ def spoken(response_id: str, text: str, *, calls: list[tuple[str, dict[str, Any]
     events: list[dict[str, Any]] = []
     if text:
         events += [
-            audio_delta(response_id, item),
+            mulaw_delta(response_id, item),
             {"type": "response.output_audio.done", "response_id": response_id, "item_id": item},
             {"type": "response.output_audio_transcript.done", "response_id": response_id, "transcript": text},
         ]

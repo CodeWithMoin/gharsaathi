@@ -1,9 +1,11 @@
-"""PCM16 mono audio helpers for the Exotel ↔ OpenAI Realtime bridge.
+"""Audio helpers for the call ↔ OpenAI Realtime bridge.
 
-Exotel streams raw 16-bit little-endian mono PCM at 8, 16 or 24 kHz; Realtime's
-PCM format is 24 kHz. Audio we send to Exotel must arrive in chunks of
-3,200–100,000 bytes that are a multiple of 320 bytes
-(https://developer.exotel.com/docs/agentstream/stream-voicebot-applet).
+Two plans (chosen from the carrier's ``start`` message, see ``telephony.py``):
+
+* G.711 μ-law 8 kHz both ways: Realtime accepts and produces ``audio/pcmu``, so the
+  bytes pass through untouched (no transcoding, no resampling).
+* Linear PCM16 (8 or 16 kHz in): resampled to Realtime's 24 kHz PCM; Realtime's
+  24 kHz output is played back as L16/24 kHz, which the carrier accepts.
 """
 
 from __future__ import annotations
@@ -11,14 +13,7 @@ from __future__ import annotations
 import array
 import sys
 
-SUPPORTED_RATES = (8000, 16000, 24000)
-REALTIME_RATE = 24000
-CHUNK_MULTIPLE = 320
-MIN_CHUNK_BYTES = 3200
-MAX_CHUNK_BYTES = 100_000
-# Send roughly 100 ms per media message at 8 kHz, more at higher rates: small enough
-# for a responsive `clear` (barge-in), never below Exotel's minimum.
-TARGET_CHUNK_MS = 100
+REALTIME_PCM_RATE = 24000
 
 
 def _samples(data: bytes) -> array.array:
@@ -49,7 +44,7 @@ class Resampler:
         self.source_rate = source_rate
         self.target_rate = target_rate
         self._step = source_rate / target_rate
-        self._position = 0.0  # next output position, in input samples, relative to _previous
+        self._position = 0.0
         self._previous: int | None = None
         self._odd = b""
 
@@ -78,65 +73,37 @@ class Resampler:
             out.append(int(round(a + (b - a) * fraction)))
             position += self._step
         if self._previous is None and last == 0:
-            # A single first sample: emit it and continue from there.
             out.append(window[0])
             position = self._step
         self._position = position - last
         self._previous = window[last]
         return _bytes(out)
 
-    def reset(self) -> None:
-        self._position = 0.0
-        self._previous = None
-        self._odd = b""
-
-
-def silence(byte_count: int) -> bytes:
-    return b"\x00" * byte_count
-
-
-def chunk_bytes_for(rate: int) -> int:
-    """Bytes in TARGET_CHUNK_MS at ``rate``, rounded to Exotel's rules."""
-
-    size = rate * 2 * TARGET_CHUNK_MS // 1000
-    size -= size % CHUNK_MULTIPLE
-    return max(MIN_CHUNK_BYTES, min(MAX_CHUNK_BYTES, size))
-
-
-def valid_chunk(size: int) -> bool:
-    return MIN_CHUNK_BYTES <= size <= MAX_CHUNK_BYTES and size % CHUNK_MULTIPLE == 0
-
 
 class OutboundChunker:
-    """Cuts outgoing PCM into Exotel-valid chunks.
+    """Cuts outgoing audio into fixed frames (``push``); ``flush`` sends the rest
+    whole-sample aligned; ``drop`` discards it (barge-in)."""
 
-    ``push`` returns only full chunks; ``flush`` pads the remainder with silence
-    up to a valid size (end of an assistant turn); ``drop`` discards it (barge-in).
-    """
-
-    def __init__(self, rate: int) -> None:
-        if rate not in SUPPORTED_RATES:
-            raise ValueError(f"Unsupported Exotel sample rate {rate}.")
-        self.rate = rate
-        self.chunk_size = chunk_bytes_for(rate)
+    def __init__(self, frame_bytes: int, sample_bytes: int = 1) -> None:
+        if frame_bytes <= 0 or frame_bytes % sample_bytes:
+            raise ValueError("Frame size must be a positive multiple of the sample size.")
+        self.frame_bytes = frame_bytes
+        self.sample_bytes = sample_bytes
         self._buffer = bytearray()
 
     def push(self, data: bytes) -> list[bytes]:
         self._buffer.extend(data)
         chunks: list[bytes] = []
-        while len(self._buffer) >= self.chunk_size:
-            chunks.append(bytes(self._buffer[: self.chunk_size]))
-            del self._buffer[: self.chunk_size]
+        while len(self._buffer) >= self.frame_bytes:
+            chunks.append(bytes(self._buffer[: self.frame_bytes]))
+            del self._buffer[: self.frame_bytes]
         return chunks
 
     def flush(self) -> list[bytes]:
-        if not self._buffer:
-            return []
-        size = len(self._buffer)
-        padded = max(MIN_CHUNK_BYTES, size + (-size % CHUNK_MULTIPLE))
-        chunk = bytes(self._buffer) + silence(padded - size)
+        usable = len(self._buffer) - len(self._buffer) % self.sample_bytes
+        chunk = bytes(self._buffer[:usable])
         self._buffer.clear()
-        return [chunk]
+        return [chunk] if chunk else []
 
     def drop(self) -> None:
         self._buffer.clear()
@@ -144,7 +111,3 @@ class OutboundChunker:
     @property
     def pending(self) -> int:
         return len(self._buffer)
-
-
-def duration_ms(byte_count: int, rate: int) -> int:
-    return byte_count * 1000 // (rate * 2)

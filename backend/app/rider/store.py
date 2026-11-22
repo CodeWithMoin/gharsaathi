@@ -263,3 +263,24 @@ class RiderStore:
             )
             await session.commit()
             return int(result.rowcount or 0)  # type: ignore[attr-defined]
+
+
+def outcome_text(call: RiderCallSummary) -> str:
+    """How the call went, in a few words (same wording as the app's rider-call card)."""
+
+    used = set(call.answered_from)
+    if call.outcome == "assistant_unavailable":
+        return "the assistant couldn't answer"
+    if call.outcome == "not_delivery":
+        return "not a delivery call, message taken"
+    if call.outcome == "in_progress":
+        return "the rider is on the line"
+    if used == {"notes", "order"}:
+        return "answered from your notes and order"
+    if "notes" in used:
+        return "answered from your notes"
+    if "order" in used:
+        return "answered from your order"
+    if call.outcome == "message_taken":
+        return "message taken"
+    return "call ended"

@@ -84,7 +84,7 @@ export function riderOutcomeText(call) {
   const from = new Set(call.answered_from ?? []);
   if (call.outcome === "assistant_unavailable") return "the assistant couldn't answer";
   if (call.outcome === "not_delivery") return "not a delivery call, message taken";
-  if (call.outcome === "in_progress") return "call in progress";
+  if (call.outcome === "in_progress") return "the rider is on the line";
   if (from.has("notes") && from.has("order")) return "answered from your notes and order";
   if (from.has("notes")) return "answered from your notes";
   if (from.has("order")) return "answered from your order";
