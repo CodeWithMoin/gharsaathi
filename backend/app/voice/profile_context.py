@@ -24,6 +24,20 @@ LANGUAGE_RULES = {
 }
 
 
+REPLY_STYLE_RULES = {
+    "quick": (
+        "Quick: one line. Do not repeat what is already on screen (options, basket, bill, "
+        "order card); refer to it. At most one question per turn. Fold confirmations into the "
+        "card: after a card or an add, one line and stop."
+    ),
+    "detailed": (
+        "Detailed: up to three short sentences. You may name the main options with size and "
+        "price, and say why you picked one. Still at most one question per turn, and never "
+        "invent amounts."
+    ),
+}
+
+
 def session_profile_block(profile: UserProfile | None) -> str:
     """Instructions appended for one session; empty when the user saved nothing."""
     if profile is None:
@@ -34,6 +48,7 @@ def session_profile_block(profile: UserProfile | None) -> str:
         f"- Address form for the user: {profile.address_form}",
         f"- Preferred reply language: {LANGUAGE_LABELS[profile.language]}",
         f"- Reply language rule: {LANGUAGE_RULES[profile.language]}",
+        f"- Reply style: {REPLY_STYLE_RULES[profile.reply_style]}",
     ]
     if profile.first_name:
         lines.append(f"- Preferred first name: {profile.first_name}")

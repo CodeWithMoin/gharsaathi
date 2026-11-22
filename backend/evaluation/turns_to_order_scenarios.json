@@ -1,0 +1,90 @@
+{
+  "version": "1.0.0",
+  "description": "Turns-to-order and single-mutation latency scenarios for the delegated backend model. Run by run_turns_to_order.py on demo stores plus harness fixtures; no store call, no order (the order card is never tapped).",
+  "catalogues": {
+    "lassi_fixture": {
+      "description": "One Amul lassi pack on Zepto, plus a same-brand non-lassi and another brand's lassi, so only one option matches 'Amul lassi'.",
+      "swiggy_instamart": [
+        {"product_id": "fx-amul-lassi-200", "name": "Amul Sweet Lassi", "brand": "Amul", "pack_size": "200 ml", "mrp": 25, "offer_price": 22}
+      ],
+      "zepto": [
+        {"product_id": "fx-amul-lassi-200", "name": "Amul Sweet Lassi", "brand": "Amul", "pack_size": "200 ml", "mrp": 25, "offer_price": 20},
+        {"product_id": "fx-amul-masti-200", "name": "Amul Masti Spiced Buttermilk", "brand": "Amul", "pack_size": "200 ml", "mrp": 15, "offer_price": 14},
+        {"product_id": "fx-md-lassi-180", "name": "Mother Dairy Meetha Lassi", "brand": "Mother Dairy", "pack_size": "180 ml", "mrp": 25, "offer_price": 23}
+      ]
+    },
+    "surf_two_fixture": {
+      "description": "Two Surf Excel packs on Zepto, so 'Surf Excel' alone is ambiguous.",
+      "swiggy_instamart": [
+        {"product_id": "fx-surf-matic-2kg", "name": "Surf Excel Matic Front Load Detergent Powder", "brand": "Surf Excel", "pack_size": "2 kg", "mrp": 620, "offer_price": 549}
+      ],
+      "zepto": [
+        {"product_id": "fx-surf-matic-2kg", "name": "Surf Excel Matic Front Load Detergent Powder", "brand": "Surf Excel", "pack_size": "2 kg", "mrp": 620, "offer_price": 565},
+        {"product_id": "fx-surf-easy-1kg", "name": "Surf Excel Easy Wash Detergent Powder", "brand": "Surf Excel", "pack_size": "1 kg", "mrp": 160, "offer_price": 145}
+      ]
+    },
+    "milk_fixture": {
+      "description": "Two 1 L toned milks on Zepto; memory remembers Amul Taaza.",
+      "swiggy_instamart": [
+        {"product_id": "fx-amul-taaza-1l", "name": "Amul Taaza Toned Milk", "brand": "Amul", "pack_size": "1 L", "mrp": 56, "offer_price": 56}
+      ],
+      "zepto": [
+        {"product_id": "fx-amul-taaza-1l", "name": "Amul Taaza Toned Milk", "brand": "Amul", "pack_size": "1 L", "mrp": 56, "offer_price": 54},
+        {"product_id": "fx-md-toned-1l", "name": "Mother Dairy Toned Milk", "brand": "Mother Dairy", "pack_size": "1 L", "mrp": 56, "offer_price": 55}
+      ]
+    }
+  },
+  "scenarios": [
+    {
+      "id": "o1-express-single",
+      "title": "Express: '2 Amul lassi order kar do' → order card",
+      "catalogue": "lassi_fixture",
+      "goal": "order_card",
+      "turns": ["2 Amul lassi order kar do"],
+      "follow_ups": ["haan, wahi", "haan, order kar do", "order kar do"],
+      "expect_card_quantity": {"Amul Sweet Lassi": 2}
+    },
+    {
+      "id": "o2-express-two-items",
+      "title": "Express: two specific items in one request",
+      "catalogue": "demo",
+      "goal": "order_card",
+      "turns": ["Amul Taaza doodh 1 litre aur Tata Tea Gold 500 g order kar do"],
+      "follow_ups": ["haan, dono", "haan, order kar do", "order kar do"]
+    },
+    {
+      "id": "o3-usual-milk",
+      "title": "Express: 'usual milk mangwa do' with a remembered Amul Taaza",
+      "catalogue": "milk_fixture",
+      "goal": "order_card",
+      "memory": [
+        {"source": "purchase_history", "name": "Amul Taaza Toned Milk 1 L", "store_id": "zepto", "last_bought": "2026-11-18", "times": 6}
+      ],
+      "turns": ["usual milk mangwa do"],
+      "follow_ups": ["haan, wahi", "haan, order kar do", "order kar do"],
+      "expect_card_contains": "Amul Taaza"
+    },
+    {
+      "id": "o4-ambiguous-one-question",
+      "title": "Express: ambiguous 'Surf Excel' → one question → card",
+      "catalogue": "surf_two_fixture",
+      "goal": "order_card",
+      "turns": ["Surf Excel order kar do"],
+      "follow_ups": ["Matic 2 kg wala", "haan, order kar do", "order kar do"],
+      "expect_card_contains": "Matic"
+    },
+    {
+      "id": "c1-clear-cart",
+      "title": "Typed 'clear cart' with two Zepto items",
+      "catalogue": "demo",
+      "goal": "basket_empty",
+      "seed_basket": [
+        {"store": "zepto", "query": "Amul Taaza milk", "quantity": 1},
+        {"store": "zepto", "query": "Tata Tea Gold", "quantity": 2}
+      ],
+      "turns": ["clear cart"],
+      "follow_ups": ["haan, sab hata do"],
+      "target_rounds": 2
+    }
+  ]
+}

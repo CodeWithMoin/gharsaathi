@@ -269,6 +269,8 @@ class SidebandRunner:
             if self.log_event_types:
                 log_timing("voice_tool_timing", {"name": name[:64], "total_ms": ms_since(started), **stages})
             model_output = outcome.model_output
+            for event in outcome.extra_ui_events:
+                self.publish(event)
             if outcome.ui_event is not None:
                 self.publish(outcome.ui_event)
                 ack_id = outcome.ui_event.get("ack_id")

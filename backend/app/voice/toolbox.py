@@ -43,6 +43,7 @@ from app.voice.memory_tools import (
 from app.shopping.models import ProviderName
 from app.shopping.order_confirmation import OrderConfirmations
 from app.voice.order_tools import ORDER_TOOL_DEFINITIONS, ORDER_TOOL_NAMES, OrderToolExecutor
+from app.voice.express_tools import EXPRESS_TOOL_DEFINITIONS, EXPRESS_TOOL_NAMES, ExpressToolExecutor
 from app.voice.photo_tools import PHOTO_TOOL_DEFINITIONS, PHOTO_TOOL_NAMES, PhotoReading, PhotoToolExecutor
 from app.voice.order_status_tools import (
     ORDER_STATUS_TOOL_DEFINITIONS,
@@ -81,6 +82,7 @@ VOICE_TOOL_DEFINITIONS = [
     *MEMORY_TOOL_DEFINITIONS,
     *MEMORY_WRITE_TOOL_DEFINITIONS,
     *ORDER_TOOL_DEFINITIONS,
+    *EXPRESS_TOOL_DEFINITIONS,
     *ADDRESS_BOOK_TOOL_DEFINITIONS,
     *PHOTO_TOOL_DEFINITIONS,
     *ORDER_STATUS_TOOL_DEFINITIONS,
@@ -171,6 +173,7 @@ class VoiceToolbox:
         )
         self.order = OrderToolExecutor(self.basket, order_confirmations)
         self.photo = PhotoToolExecutor(photo_reader, household_id)
+        self.express = ExpressToolExecutor(self)
         self.order_status = OrderStatusToolExecutor(
             order_tracking,
             order_history,
@@ -222,6 +225,8 @@ class VoiceToolbox:
             return await self._recall_then_search(name, raw_arguments)
         if name in ORDER_TOOL_NAMES:
             return await self.order.execute(name, raw_arguments)
+        if name in EXPRESS_TOOL_NAMES:
+            return await self.express.execute(name, raw_arguments)
         if name in ORDER_STATUS_TOOL_NAMES:
             return await self.order_status.execute(name, raw_arguments)
         if name in MEMORY_WRITE_TOOL_NAMES:
