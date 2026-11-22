@@ -153,16 +153,10 @@ async def test_fm_p02_partial_results_carry_an_unreachable_notice() -> None:
 # ---------------------------------------------------------------- FM-P03
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="FM-P03: no per-store search timeout on main; a hung store blocks the whole search "
-    "(voice: until the user gives up; typed: until the 60 s turn timeout). Per-store soft/hard "
-    "timeouts are on codex/turn-latency.",
-)
 async def test_fm_p03_a_hung_store_does_not_block_the_other_stores_results() -> None:
     swiggy = FaultySearcher([product("Amul Taaza Milk", "500 ml", 28, prefix="s")])
     zepto = FaultySearcher(None, Slow(30))
-    executor = MultiProviderShoppingToolExecutor(  # type: ignore[call-arg]
+    executor = MultiProviderShoppingToolExecutor(
         [
             ProviderSearchTarget("swiggy_instamart", "Swiggy Instamart", swiggy, "s-home", True),
             ProviderSearchTarget("zepto", "Zepto", zepto, ZEPTO_ADDRESS, True),
@@ -177,6 +171,9 @@ async def test_fm_p03_a_hung_store_does_not_block_the_other_stores_results() -> 
 
     assert outcome.model_output["status"] == "ok"
     assert {r["store_id"] for r in outcome.model_output["results"]} == {"swiggy_instamart"}
+    assert outcome.model_output["unreachable_stores"] == [
+        {"store": "Zepto", "store_id": "zepto", "reason": "timeout"}
+    ]
 
 
 # ---------------------------------------------------------------- FM-P04 / P05
