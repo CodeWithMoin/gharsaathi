@@ -1,6 +1,20 @@
 import { BAR_INTERVAL_MS, PILL_BAR_COUNT, createBarHistory, createSpeakerTracker, levelFromRms, rmsFromSamples, smoothLevel, type VoiceSpeaker } from "./voice-levels.mjs";
 
-const COLORS = { user: "#3b2a22", assistant: "#c6531d", idle: "#d9c6b8" } as const;
+// Fallbacks only; the live values come from the --color-meter-* tokens in globals.css.
+const FALLBACK_COLORS = { user: "rgb(42 38 35)", assistant: "rgb(182 74 24)", idle: "rgb(221 214 206)" } as const;
+const COLOR_TOKENS = { user: "--color-meter-user", assistant: "--color-meter-assistant", idle: "--color-meter-idle" } as const;
+
+type MeterColors = Record<keyof typeof FALLBACK_COLORS, string>;
+
+function readMeterColors(element: Element): MeterColors {
+  const style = getComputedStyle(element);
+  const colors = { ...FALLBACK_COLORS } as MeterColors;
+  for (const key of Object.keys(COLOR_TOKENS) as (keyof MeterColors)[]) {
+    const channels = style.getPropertyValue(COLOR_TOKENS[key]).trim();
+    if (channels) colors[key] = `rgb(${channels})`;
+  }
+  return colors;
+}
 const MIN_FRAME_MS = 1000 / 60;
 const REDUCED_FRAME_MS = 1000 / 8;
 const BAR_WIDTH = 2.5;
@@ -24,6 +38,7 @@ export class VoiceLevelMeter {
   private readonly tracker = createSpeakerTracker();
   private speaker: VoiceSpeaker = null;
   private canvas: HTMLCanvasElement | null = null;
+  private colors: MeterColors = { ...FALLBACK_COLORS };
   private frame = 0;
   private lastFrame = 0;
   private lastBar = 0;
@@ -54,6 +69,7 @@ export class VoiceLevelMeter {
 
   setCanvas(canvas: HTMLCanvasElement | null, reducedMotion: boolean): void {
     this.canvas = canvas;
+    if (canvas) this.colors = readMeterColors(canvas);
     this.reducedMotion = reducedMotion;
     this.run();
   }
@@ -124,6 +140,7 @@ export class VoiceLevelMeter {
     const canvas = this.canvas;
     const context = canvas?.getContext("2d");
     if (!canvas || !context) return;
+    const { colors } = this;
     const ratio = window.devicePixelRatio || 1;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
@@ -138,9 +155,9 @@ export class VoiceLevelMeter {
       const loudest: Kind = this.levels.assistant >= this.levels.user ? "assistant" : "user";
       const barHeight = 4;
       const top = (height - barHeight) / 2;
-      context.fillStyle = COLORS.idle;
+      context.fillStyle = colors.idle;
       roundedBar(context, 0, top, width, barHeight);
-      context.fillStyle = COLORS[this.speaker ?? loudest];
+      context.fillStyle = colors[this.speaker ?? loudest];
       roundedBar(context, 0, top, Math.max(barHeight, width * this.levels[loudest]), barHeight);
       return;
     }
@@ -150,7 +167,7 @@ export class VoiceLevelMeter {
     let x = (width - total) / 2;
     for (const bar of bars) {
       const barHeight = Math.max(BAR_WIDTH, bar.level * height);
-      context.fillStyle = bar.speaker ? COLORS[bar.speaker] : COLORS.idle;
+      context.fillStyle = bar.speaker ? colors[bar.speaker] : colors.idle;
       roundedBar(context, x, (height - barHeight) / 2, BAR_WIDTH, barHeight);
       x += BAR_WIDTH + BAR_GAP;
     }

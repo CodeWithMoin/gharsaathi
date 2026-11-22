@@ -71,3 +71,58 @@ While voice is on, the composer is replaced by a compact pill
   blocked autoplay open them automatically with **Try again** / **Turn on sound**.
   Escape closes them. Basket, bill, order and results notices show as a short toast
   above the pill (3.6 s) and are also announced through the polite status region.
+
+## Colour tokens and the warm-light palette
+
+All app colour comes from semantic tokens. Values live once, as RGB channels,
+in `frontend/app/globals.css` (`--color-*`), and `frontend/tailwind.config.ts`
+exposes them as Tailwind colours, so opacity modifiers still work
+(`bg-scrim/45`). Never hard-code a hex value in `frontend/app/**`; add or reuse
+a token. `tests/unit/theme-contrast.test.mjs` fails on new hex values, checks
+WCAG AA for every text/background token pair (4.5:1 body text, 3:1 large text,
+icons and focus rings), and checks that Clerk's literal colours
+(`app/ui/clerk-colors.mjs`, Clerk's hosted UI needs real colours) match the tokens.
+
+Palette direction: warm but light. Warm off-white page, white surfaces, soft warm
+borders, warm-charcoal text (not brown), warm-grey secondary text, and one
+terracotta accent for primary actions, links, selection and focus. User chat
+bubbles are a light peach tint with dark text. Dark fills (`inverse`) are
+charcoal, used sparingly for secondary solid buttons, the compact toast and the
+dark onboarding card. Zepto keeps its own purple only where Zepto is the actor.
+
+| Tailwind colour | CSS variable | Value | Use |
+|---|---|---|---|
+| `canvas` | `--color-bg` | `#faf8f5` | Page background, quiet hover on white |
+| `surface` | `--color-surface` | `#ffffff` | Cards, sheets, inputs |
+| `surface-muted` | `--color-surface-muted` | `#f6f3ef` | Grouped rows, secondary panels, skeletons |
+| `surface-strong` | `--color-surface-strong` | `#eee9e3` | Pressed/hover fill on muted surfaces |
+| `border` | `--color-border` | `#e8e2db` | Hairlines, dividers |
+| `border-strong` | `--color-border-strong` | `#d9d1c8` | Input and button outlines, disabled fills |
+| `ink` | `--color-text` | `#1f1c1a` | Primary text |
+| `ink-secondary` | `--color-text-secondary` | `#45403b` | Body copy, secondary labels |
+| `muted` | `--color-text-muted` | `#6b645d` | Helper text, metadata |
+| `subtle` | `--color-text-subtle` | `#736b64` | Smallest captions, placeholders (still AA) |
+| `accent` | `--color-accent` | `#b64a18` | Primary buttons, links, selected state |
+| `accent-hover` | `--color-accent-hover` | `#9d3e15` | Hover/pressed primary |
+| `accent-strong` | `--color-accent-strong` | `#8f3812` | Accent text on tints, Place order |
+| `accent-soft` | `--color-accent-soft` | `#fbeee6` | Selected rows, accent chips and icon wells |
+| `accent-border` | `--color-accent-border` | `#f0d3c2` | Borders on accent-tinted or warm controls |
+| `on-accent` | `--color-on-accent` | `#ffffff` | Text on any saturated fill (accent, danger, success, Zepto) |
+| `user-bubble` / `on-user-bubble` | `--color-user-bubble` … | `#fbe9de` / `#1f1c1a` | User chat bubble |
+| `inverse` / `inverse-hover` / `on-inverse` | `--color-inverse` … | `#2a2623` / `#3a3531` / `#ffffff` | Charcoal secondary buttons, toast |
+| `success` / `success-strong` / `success-soft` / `success-border` | | `#3a7347` / `#2f6040` / `#edf6ef` / `#cfe5d5` | Connected, confirmed, savings |
+| `warning` / `warning-soft` / `warning-border` | | `#8a5a1c` / `#fdf3e3` / `#f1dcb8` | Demo mode, price changes, cautions |
+| `danger` / `danger-hover` / `danger-soft` / `danger-border` | | `#b3261e` / `#8f1f19` / `#fdecea` / `#f3c9c5` | Errors and destructive actions |
+| `focus` | `--color-focus` | `#b64a18` | Focus rings |
+| `zepto*` | `--color-zepto*` | unchanged purples | Zepto-branded controls only |
+| `scrim` | `--color-scrim` | `#1f1c1a` | Modal backdrops (always with opacity) |
+| `meter-user` / `meter-assistant` / `meter-idle` | `--color-meter-*` | `#2a2623` / `#b64a18` / `#ddd6ce` | Voice pill meter (read by `voice-meter.ts`) and its legend dots |
+
+Shadows use `rgb(var(--shadow)/a)` (warm neutral) or `rgb(var(--accent-shadow)/a)`
+inside arbitrary `shadow-[…]` values so they follow the palette.
+
+Key contrast ratios (all checked in the test): `ink` on `canvas` 15.99,
+`muted` on `canvas` 5.49, `subtle` on `surface-muted` 4.73, `accent` on white 5.27,
+`accent` on `accent-soft` 4.64, white on `accent` 5.27, user bubble text 14.37,
+`danger` on `danger-soft` 5.72. The two meter colours are 2.84:1 apart and differ
+in hue; the pill also names the speaker in text.

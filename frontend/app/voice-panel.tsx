@@ -412,7 +412,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
   const label = voicePillLabel({ status, busy, speaker });
   const showDetails = expanded || status === "error" || playBlocked;
   const icon = status === "error" ? "error" : status === "connecting" || status === "closing" || (label === "Thinking") ? "wait" : speaker === "assistant" ? "speaker" : "mic";
-  const iconTone = icon === "error" ? "bg-[#f6dcd5] text-[#a44739]" : icon === "speaker" ? "bg-[#c6531d] text-white" : icon === "mic" && speaker === "user" ? "bg-[#3b2a22] text-white" : "bg-[#f7e8dc] text-[#c6531d]";
+  const iconTone = icon === "error" ? "bg-danger-soft text-danger" : icon === "speaker" ? "bg-accent text-on-accent" : icon === "mic" && speaker === "user" ? "bg-inverse text-on-inverse" : "bg-accent-soft text-accent";
   // MotionConfig below drops the transforms for reduced motion and keeps the fades.
   const swap = { initial: { opacity: 0, scale: .8, filter: "blur(2px)" }, animate: { opacity: 1, scale: 1, filter: "blur(0px)" }, exit: { opacity: 0, scale: .8, filter: "blur(2px)" } };
   const quick = { duration: .16, ease: [.23, 1, .32, 1] as const };
@@ -429,33 +429,33 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     <p className="sr-only" role="status" aria-live="polite">{message}</p>
 
     <AnimatePresence initial={false}>
-      {basketNotice && !showDetails && <motion.p key="notice" {...lift} transition={{ duration: .2, ease: [.23, 1, .32, 1] }} role="status" className="max-w-[min(88vw,340px)] truncate rounded-full bg-[#3b2a22] px-3.5 py-2 text-xs font-medium text-[#fffaf5] shadow-[0_14px_30px_-18px_rgba(53,36,28,.9)]">{basketNotice}</motion.p>}
+      {basketNotice && !showDetails && <motion.p key="notice" {...lift} transition={{ duration: .2, ease: [.23, 1, .32, 1] }} role="status" className="max-w-[min(88vw,340px)] truncate rounded-full bg-inverse px-3.5 py-2 text-xs font-medium text-on-inverse shadow-[0_14px_30px_-18px_rgb(var(--shadow)/.9)]">{basketNotice}</motion.p>}
     </AnimatePresence>
 
     <AnimatePresence initial={false}>
-      {showDetails && <motion.div key="details" id="voice-details" {...lift} transition={{ duration: .2, ease: [.23, 1, .32, 1] }} style={{ transformOrigin: "bottom center" }} className="w-[min(88vw,340px)] rounded-[20px] border border-[#e7d8cc] bg-[#fffdf9] p-3.5 shadow-[0_20px_44px_-26px_rgba(70,40,24,.6)]">
-        <p className={`text-[13px] leading-5 ${status === "error" ? "text-[#a44739]" : "text-[#4d3a30]"}`}>{message}</p>
-        {basketNotice && <p className="mt-1.5 text-xs font-medium text-[#75422d]">{basketNotice}</p>}
-        <div className="mt-2.5 flex items-center gap-3 text-[10px] leading-4 text-[#75645a]">
-          <span className="flex items-center gap-1.5"><i className="size-1.5 rounded-full bg-[#3b2a22]" aria-hidden="true" />You</span>
-          <span className="flex items-center gap-1.5"><i className="size-1.5 rounded-full bg-[#c6531d]" aria-hidden="true" />GharSaathi</span>
+      {showDetails && <motion.div key="details" id="voice-details" {...lift} transition={{ duration: .2, ease: [.23, 1, .32, 1] }} style={{ transformOrigin: "bottom center" }} className="w-[min(88vw,340px)] rounded-[20px] border border-border bg-surface p-3.5 shadow-[0_20px_44px_-26px_rgb(var(--shadow)/.6)]">
+        <p className={`text-[13px] leading-5 ${status === "error" ? "text-danger" : "text-ink-secondary"}`}>{message}</p>
+        {basketNotice && <p className="mt-1.5 text-xs font-medium text-warning">{basketNotice}</p>}
+        <div className="mt-2.5 flex items-center gap-3 text-[10px] leading-4 text-muted">
+          <span className="flex items-center gap-1.5"><i className="size-1.5 rounded-full bg-meter-user" aria-hidden="true" />You</span>
+          <span className="flex items-center gap-1.5"><i className="size-1.5 rounded-full bg-meter-assistant" aria-hidden="true" />GharSaathi</span>
           <span className="ml-auto flex min-w-0 items-center gap-1"><ShieldCheck size={12} className="shrink-0" /><span className="truncate">Mic is on until you stop · chat is saved</span></span>
         </div>
         {(status === "error" || playBlocked) && <div className="mt-3 flex gap-2">
-          {status === "error" && <button type="button" onClick={() => void start()} className="flex items-center gap-1.5 rounded-full bg-[#3b2a22] px-4 py-2 text-xs font-semibold text-white transition-transform duration-150 ease-out active:scale-[.97]"><ArrowClockwise size={14} /> Try again</button>}
-          {playBlocked && status !== "error" && <button type="button" onClick={playVoice} className="flex items-center gap-1.5 rounded-full bg-[#c6531d] px-4 py-2 text-xs font-semibold text-white transition-transform duration-150 ease-out active:scale-[.97]"><SpeakerHigh size={14} weight="fill" /> Turn on sound</button>}
+          {status === "error" && <button type="button" onClick={() => void start()} className="flex items-center gap-1.5 rounded-full bg-inverse px-4 py-2 text-xs font-semibold text-on-inverse transition-transform duration-150 ease-out active:scale-[.97]"><ArrowClockwise size={14} /> Try again</button>}
+          {playBlocked && status !== "error" && <button type="button" onClick={playVoice} className="flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-on-accent transition-transform duration-150 ease-out active:scale-[.97]"><SpeakerHigh size={14} weight="fill" /> Turn on sound</button>}
         </div>}
       </motion.div>}
     </AnimatePresence>
 
-    <div className="flex items-center gap-1 rounded-full border border-[#deccbf] bg-[#fffdf9]/90 p-1.5 shadow-[0_18px_40px_-22px_rgba(70,40,24,.6),inset_0_1px_0_rgba(255,255,255,.9)] backdrop-blur-xl [@media(prefers-reduced-transparency:reduce)]:bg-[#fffdf9] [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none">
+    <div className="flex items-center gap-1 rounded-full border border-border-strong bg-surface/90 p-1.5 shadow-[0_18px_40px_-22px_rgb(var(--shadow)/.6),inset_0_1px_0_rgba(255,255,255,.9)] backdrop-blur-xl [@media(prefers-reduced-transparency:reduce)]:bg-surface [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none">
       <button
         type="button"
         onClick={() => { if (playBlocked) playVoice(); setExpanded((open) => !open); }}
         aria-expanded={showDetails}
         aria-controls="voice-details"
         aria-label={`Voice: ${label}. ${showDetails ? "Hide" : "Show"} details`}
-        className="flex items-center gap-2.5 rounded-full py-0.5 pl-0.5 pr-2 outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-[#c6531d]/50 active:scale-[.97]"
+        className="flex items-center gap-2.5 rounded-full py-0.5 pl-0.5 pr-2 outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-focus/50 active:scale-[.97]"
       >
         <span className={`relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-full transition-colors duration-200 ${iconTone}`}>
           <AnimatePresence initial={false} mode="popLayout">
@@ -465,13 +465,13 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
           </AnimatePresence>
         </span>
         <canvas ref={canvasRef} aria-hidden="true" className="h-[22px] w-[62px]" />
-        <span className="relative grid w-[5.25rem] text-left text-sm font-semibold text-[#3b2a22]" aria-hidden="true">
+        <span className="relative grid w-[5.25rem] text-left text-sm font-semibold text-ink" aria-hidden="true">
           <AnimatePresence initial={false} mode="popLayout">
             <motion.span key={label} {...swap} transition={quick} className="col-start-1 row-start-1 origin-left">{label}</motion.span>
           </AnimatePresence>
         </span>
       </button>
-      <button type="button" onClick={closeConversation} aria-label="End voice conversation" className="grid size-10 shrink-0 place-items-center rounded-full bg-[#c6531d] text-white shadow-[0_8px_20px_-12px_rgba(158,65,24,.85)] outline-none transition-[transform,background-color] duration-150 ease-out hover:bg-[#b94a18] focus-visible:ring-2 focus-visible:ring-[#c6531d]/50 focus-visible:ring-offset-2 active:scale-[.94]"><Stop size={15} weight="fill" /></button>
+      <button type="button" onClick={closeConversation} aria-label="End voice conversation" className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[0_8px_20px_-12px_rgb(var(--accent-shadow)/.85)] outline-none transition-[transform,background-color] duration-150 ease-out hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-focus/50 focus-visible:ring-offset-2 active:scale-[.94]"><Stop size={15} weight="fill" /></button>
     </div>
     <audio ref={audioRef} autoPlay hidden />
   </motion.section></MotionConfig>;

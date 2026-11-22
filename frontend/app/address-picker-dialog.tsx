@@ -8,8 +8,8 @@ import { InputDialog } from "./ui/input-dialog";
 export type AddressPickerStore = "swiggy" | "zepto";
 
 const STORE = {
-  swiggy: { name: "Swiggy Instamart", short: "Swiggy", accent: "accent-[#c6531d]", text: "text-[#c6531d]", button: "bg-[#c6531d] hover:bg-[#b34a19]", ring: "has-[:checked]:border-[#e7b89e] has-[:checked]:bg-[#fff6f0]" },
-  zepto: { name: "Zepto", short: "Zepto", accent: "accent-[#7b3fc4]", text: "text-[#7b3fc4]", button: "bg-[#5f2e91] hover:bg-[#51277c]", ring: "has-[:checked]:border-[#cdb4ea] has-[:checked]:bg-[#faf6fe]" },
+  swiggy: { name: "Swiggy Instamart", short: "Swiggy", accent: "accent-accent", text: "text-accent", button: "bg-accent hover:bg-accent-hover", ring: "has-[:checked]:border-accent-border has-[:checked]:bg-accent-soft" },
+  zepto: { name: "Zepto", short: "Zepto", accent: "accent-zepto", text: "text-zepto", button: "bg-zepto-strong hover:bg-zepto-hover", ring: "has-[:checked]:border-zepto-border has-[:checked]:bg-zepto-soft" },
 } as const;
 
 /**
@@ -43,27 +43,27 @@ export function AddressPickerDialog({ open, store, commerceMode, addresses, sele
     widthClassName="sm:max-w-md"
     onClose={onClose}
     footer={({ requestClose }) => <div className="flex items-center gap-3">
-      <button type="button" onClick={onRefresh} disabled={refreshing} className={`flex items-center gap-1.5 rounded-full px-3 py-3 text-sm font-semibold ${style.text} transition hover:bg-[#f6eee8] disabled:cursor-not-allowed disabled:opacity-45`}><ArrowClockwise size={16} className={refreshing ? "animate-spin" : ""} />{refreshLabel}</button>
-      <button type="button" onClick={() => requestClose("done")} disabled={!chosen} className={`ml-auto rounded-full px-5 py-3 text-sm font-semibold text-white transition disabled:opacity-40 ${style.button}`}>Use this address</button>
+      <button type="button" onClick={onRefresh} disabled={refreshing} className={`flex items-center gap-1.5 rounded-full px-3 py-3 text-sm font-semibold ${style.text} transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-45`}><ArrowClockwise size={16} className={refreshing ? "animate-spin" : ""} />{refreshLabel}</button>
+      <button type="button" onClick={() => requestClose("done")} disabled={!chosen} className={`ml-auto rounded-full px-5 py-3 text-sm font-semibold text-on-accent transition disabled:opacity-40 ${style.button}`}>Use this address</button>
     </div>}
   >
     {refreshing && !addresses.length
-      ? <div className="space-y-2" role="status" aria-label="Loading addresses"><div className="h-16 animate-pulse rounded-2xl bg-[#eee2d8]" /><div className="h-16 animate-pulse rounded-2xl bg-[#eee2d8]" /></div>
+      ? <div className="space-y-2" role="status" aria-label="Loading addresses"><div className="h-16 animate-pulse rounded-2xl bg-surface-strong" /><div className="h-16 animate-pulse rounded-2xl bg-surface-strong" /></div>
       : addresses.length
         ? <fieldset>
           <legend className="sr-only">Saved {style.name} addresses</legend>
           <div className="space-y-2">
             {addresses.map((address) => {
               const isSelected = address.id === selectedId;
-              return <label key={address.id} className={`flex cursor-pointer items-start gap-3 rounded-2xl border border-[#eadbd0] bg-white px-3.5 py-3 transition hover:bg-[#fffaf6] ${style.ring}`}>
+              return <label key={address.id} className={`flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-white px-3.5 py-3 transition hover:bg-surface ${style.ring}`}>
                 <input type="radio" name={groupName} checked={isSelected} onChange={() => onSelect(address.id)} className={`mt-1 ${style.accent}`} />
-                <span className="min-w-0 flex-1"><strong className="block text-sm">{addressLabel(address)}</strong>{address.address_line && <small className="mt-1 block break-words leading-relaxed text-[#806f65]">{address.address_line}</small>}</span>
+                <span className="min-w-0 flex-1"><strong className="block text-sm">{addressLabel(address)}</strong>{address.address_line && <small className="mt-1 block break-words leading-relaxed text-muted">{address.address_line}</small>}</span>
                 {isSelected && <Check size={17} className={`mt-0.5 shrink-0 ${style.text}`} aria-hidden="true" />}
               </label>;
             })}
           </div>
         </fieldset>
-        : <p className="rounded-2xl bg-[#f7ede5] px-4 py-3 text-xs leading-5 text-[#806f65]">{emptyText}</p>}
+        : <p className="rounded-2xl bg-surface-muted px-4 py-3 text-xs leading-5 text-muted">{emptyText}</p>}
     {onAddNew && <button type="button" onClick={onAddNew} className={`mt-4 flex min-h-11 items-center gap-1.5 text-sm font-semibold ${style.text}`}><Plus size={15} /> Add a new address</button>}
   </InputDialog>;
 }
@@ -80,14 +80,14 @@ export function StoreAddressRow({ store, commerceMode, addresses, selectedId, lo
   const style = STORE[store];
   const summary = addressSummary(addresses, selectedId);
   const heading = commerceMode === "demo" ? `${style.short} demo address` : `${style.short} delivery address`;
-  return <div className="flex items-center gap-3 rounded-2xl border border-[#e7d8cd] bg-[#fffaf5] px-4 py-3">
+  return <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3">
     <MapPin size={20} weight="duotone" className={`shrink-0 ${style.text}`} />
     <div className="min-w-0 flex-1">
-      <h3 className="text-[11px] font-semibold uppercase tracking-[.12em] text-[#9b8172]">{heading}</h3>
+      <h3 className="text-[11px] font-semibold uppercase tracking-[.12em] text-subtle">{heading}</h3>
       {loading && !addresses.length
-        ? <span className="mt-1 block h-4 w-32 animate-pulse rounded bg-[#eee2d8]" aria-label="Loading addresses" />
-        : <><p className={`mt-0.5 truncate text-sm font-semibold ${summary.chosen ? "" : "text-[#806f65]"}`}>{summary.title}</p>{summary.detail && <p className="truncate text-xs text-[#806f65]">{summary.detail}</p>}</>}
+        ? <span className="mt-1 block h-4 w-32 animate-pulse rounded bg-surface-strong" aria-label="Loading addresses" />
+        : <><p className={`mt-0.5 truncate text-sm font-semibold ${summary.chosen ? "" : "text-muted"}`}>{summary.title}</p>{summary.detail && <p className="truncate text-xs text-muted">{summary.detail}</p>}</>}
     </div>
-    <button type="button" onClick={onChoose} className={`shrink-0 rounded-full border border-[#e4cabc] bg-white px-3.5 py-2 text-xs font-semibold ${style.text} transition hover:bg-[#fff5ed]`}>{summary.chosen ? "Change" : "Choose"}</button>
+    <button type="button" onClick={onChoose} className={`shrink-0 rounded-full border border-accent-border bg-white px-3.5 py-2 text-xs font-semibold ${style.text} transition hover:bg-canvas`}>{summary.chosen ? "Change" : "Choose"}</button>
   </div>;
 }

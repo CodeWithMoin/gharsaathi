@@ -35,8 +35,8 @@ export function AddressFormSheet({
       onClose={() => { setDirty(false); setBusy(false); onClose(); }}
       footer={({ requestClose }) => (
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => requestClose("cancel")} disabled={busy} className="rounded-full px-4 py-3 text-sm font-semibold text-[#6f5b50] transition hover:bg-[#f3e7dd] disabled:opacity-40">Cancel</button>
-          <button type="submit" form={formId} disabled={busy} className="ml-auto flex flex-1 items-center justify-center gap-2 rounded-full bg-[#6f359f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#5d2c86] disabled:opacity-45 sm:flex-none">{busy ? <><SpinnerGap size={17} className="animate-spin" /> Saving to Zepto…</> : "Save address"}</button>
+          <button type="button" onClick={() => requestClose("cancel")} disabled={busy} className="rounded-full px-4 py-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-strong disabled:opacity-40">Cancel</button>
+          <button type="submit" form={formId} disabled={busy} className="ml-auto flex flex-1 items-center justify-center gap-2 rounded-full bg-zepto-strong px-5 py-3 text-sm font-semibold text-on-accent transition hover:bg-zepto-hover disabled:opacity-45 sm:flex-none">{busy ? <><SpinnerGap size={17} className="animate-spin" /> Saving to Zepto…</> : "Save address"}</button>
         </div>
       )}
     >

@@ -10,11 +10,11 @@ import { ConfirmDialog } from "./ui/confirm-dialog";
 import { InputDialog } from "./ui/input-dialog";
 import { hasUnsavedChanges } from "./ui/input-dialog-logic.mjs";
 
-const ring = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d]";
+const ring = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 const BADGE_STYLES: Record<string, string> = {
-  "Just learned": "bg-[#e3f0e7] text-[#2f6a48]",
-  "You told us": "bg-[#f7e8de] text-[#93471f]",
-  Suggested: "bg-[#eee6f6] text-[#5d4386]",
+  "Just learned": "bg-success-soft text-success",
+  "You told us": "bg-accent-soft text-accent-strong",
+  Suggested: "bg-zepto-soft text-zepto-strong",
 };
 
 function errorText(cause: unknown, fallback: string) {
@@ -178,38 +178,38 @@ export function MemorySettings() {
   return <div className="space-y-4">
     <div>
       <h3 ref={headingRef} tabIndex={-1} className="sr-only focus:outline-none">Saved preferences</h3>
-      <p className="text-xs leading-5 text-[#806f65]">Only what you told GharSaathi or approved. Change or remove anything at any time.</p>
+      <p className="text-xs leading-5 text-muted">Only what you told GharSaathi or approved. Change or remove anything at any time.</p>
     </div>
 
     <PermissionCard state={permissionState} busy={permissionBusy} error={permissionError} onToggle={() => void togglePermission()} />
 
-    <p aria-live="polite" role="status" className={`text-xs leading-5 ${notice ? "" : "sr-only"} ${notice?.tone === "error" ? "text-[#a33d2c]" : "text-[#3f7a55]"}`}>{notice?.text ?? ""}</p>
+    <p aria-live="polite" role="status" className={`text-xs leading-5 ${notice ? "" : "sr-only"} ${notice?.tone === "error" ? "text-danger" : "text-success"}`}>{notice?.text ?? ""}</p>
 
     {memories === undefined
-      ? <div className="space-y-2" aria-label="Loading memories" role="status"><div className="h-16 animate-pulse rounded-2xl bg-[#f3e6dc]" /><div className="h-16 animate-pulse rounded-2xl bg-[#f3e6dc]" /></div>
+      ? <div className="space-y-2" aria-label="Loading memories" role="status"><div className="h-16 animate-pulse rounded-2xl bg-surface-strong" /><div className="h-16 animate-pulse rounded-2xl bg-surface-strong" /></div>
       : <>
-        {loadError && <div role="alert" className="flex items-start gap-2 rounded-2xl border border-[#efc9bd] bg-[#fff4ef] p-3 text-xs leading-5 text-[#8f3a2a]"><Warning size={16} className="mt-0.5 shrink-0" /><span className="min-w-0 flex-1">{loadError}</span><button type="button" onClick={() => void loadMemories()} className={`min-h-9 shrink-0 rounded-lg border border-[#e4b9aa] px-2.5 font-semibold ${ring}`}>Retry</button></div>}
+        {loadError && <div role="alert" className="flex items-start gap-2 rounded-2xl border border-danger-border bg-danger-soft p-3 text-xs leading-5 text-danger-hover"><Warning size={16} className="mt-0.5 shrink-0" /><span className="min-w-0 flex-1">{loadError}</span><button type="button" onClick={() => void loadMemories()} className={`min-h-9 shrink-0 rounded-lg border border-accent-border px-2.5 font-semibold ${ring}`}>Retry</button></div>}
 
-        {view.suggestions.length > 0 && <section aria-labelledby="memory-suggestions" className="rounded-2xl border border-[#e2d6ee] bg-[#fbf8fe] p-3">
-          <h4 id="memory-suggestions" className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.13em] text-[#6b5193]"><Sparkle size={14} weight="fill" />Suggestions</h4>
-          <p className="mt-1 text-[11px] leading-4 text-[#7b6c8c]">Saved only if you choose Remember.</p>
+        {view.suggestions.length > 0 && <section aria-labelledby="memory-suggestions" className="rounded-2xl border border-zepto-border bg-zepto-soft p-3">
+          <h4 id="memory-suggestions" className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.13em] text-zepto-muted"><Sparkle size={14} weight="fill" />Suggestions</h4>
+          <p className="mt-1 text-[11px] leading-4 text-zepto-muted">Saved only if you choose Remember.</p>
           <ul className="mt-2 space-y-2">
             {view.suggestions.map((row) => <li key={row.id} className="rounded-xl bg-white p-3">
               <p className="break-words text-sm font-semibold">{row.sentence}</p>
-              {row.date && <p className="mt-0.5 text-[11px] text-[#8d766a]">{row.date}</p>}
+              {row.date && <p className="mt-0.5 text-[11px] text-muted">{row.date}</p>}
               <div className="mt-2 flex flex-wrap gap-2">
-                <button type="button" disabled={busyId !== null} onClick={() => void act(row.id, () => api.confirm(row.id), `Remembered: “${row.sentence}”`, "Could not save.")} aria-label={`Remember: ${row.sentence}`} className={`flex min-h-10 items-center gap-1 rounded-xl bg-[#c6531d] px-3 text-xs font-semibold text-white disabled:opacity-50 ${ring}`}>{busyId === row.id ? <CircleNotch size={14} className="animate-spin" /> : <Check size={14} weight="bold" />}Remember</button>
-                <button type="button" disabled={busyId !== null} onClick={() => void act(row.id, () => api.reject(row.id), "Okay, this won't be saved.", "That didn't work.")} aria-label={`Dismiss: ${row.sentence}`} className={`min-h-10 rounded-xl border border-[#e4cabc] px-3 text-xs font-semibold text-[#68493c] disabled:opacity-50 ${ring}`}>Dismiss</button>
+                <button type="button" disabled={busyId !== null} onClick={() => void act(row.id, () => api.confirm(row.id), `Remembered: “${row.sentence}”`, "Could not save.")} aria-label={`Remember: ${row.sentence}`} className={`flex min-h-10 items-center gap-1 rounded-xl bg-accent px-3 text-xs font-semibold text-on-accent disabled:opacity-50 ${ring}`}>{busyId === row.id ? <CircleNotch size={14} className="animate-spin" /> : <Check size={14} weight="bold" />}Remember</button>
+                <button type="button" disabled={busyId !== null} onClick={() => void act(row.id, () => api.reject(row.id), "Okay, this won't be saved.", "That didn't work.")} aria-label={`Dismiss: ${row.sentence}`} className={`min-h-10 rounded-xl border border-accent-border px-3 text-xs font-semibold text-ink-secondary disabled:opacity-50 ${ring}`}>Dismiss</button>
               </div>
             </li>)}
           </ul>
         </section>}
 
-        {view.total === 0 && !loadError && <div className="rounded-2xl border border-dashed border-[#e2cdbf] bg-[#fffdf9] px-4 py-5 text-sm leading-6 text-[#806f65]">Nothing saved yet. Just tell GharSaathi, for example ‘always get Amul milk’.</div>}
+        {view.total === 0 && !loadError && <div className="rounded-2xl border border-dashed border-accent-border bg-surface px-4 py-5 text-sm leading-6 text-muted">Nothing saved yet. Just tell GharSaathi, for example ‘always get Amul milk’.</div>}
 
         {view.groups.map((group) => <section key={group.id} aria-labelledby={`memory-group-${group.id}`}>
-          <h4 id={`memory-group-${group.id}`} className="px-1 text-[11px] font-bold uppercase tracking-[.13em] text-[#9a7562]">{group.title} <span className="font-semibold text-[#b49a8c]">· {group.rows.length}</span></h4>
-          <ul className="mt-2 overflow-hidden rounded-2xl border border-[#ead9cd] bg-[#fffdf9]">
+          <h4 id={`memory-group-${group.id}`} className="px-1 text-[11px] font-bold uppercase tracking-[.13em] text-muted">{group.title} <span className="font-semibold text-subtle">· {group.rows.length}</span></h4>
+          <ul className="mt-2 overflow-hidden rounded-2xl border border-border bg-surface">
             {group.rows.map((row, index) => <MemoryItemRow
               key={row.id}
               row={row}
@@ -224,7 +224,7 @@ export function MemorySettings() {
           </ul>
         </section>)}
 
-        {forgetAllAvailable && view.total + view.suggestions.length > 0 && <button ref={forgetAllButtonRef} type="button" onClick={() => void startForgetAll()} disabled={forgetAllBusy || busyId !== null} className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#e6cfc2] bg-[#fffdf9] px-4 text-sm font-semibold text-[#9f3f2c] hover:bg-[#fff5ef] disabled:opacity-55 ${ring}`}>{forgetAllBusy && !forgetAll ? <CircleNotch size={16} className="animate-spin" /> : <Trash size={16} weight="bold" />}Forget everything</button>}
+        {forgetAllAvailable && view.total + view.suggestions.length > 0 && <button ref={forgetAllButtonRef} type="button" onClick={() => void startForgetAll()} disabled={forgetAllBusy || busyId !== null} className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-accent-border bg-surface px-4 text-sm font-semibold text-danger hover:bg-danger-soft disabled:opacity-55 ${ring}`}>{forgetAllBusy && !forgetAll ? <CircleNotch size={16} className="animate-spin" /> : <Trash size={16} weight="bold" />}Forget everything</button>}
       </>}
 
     <EditPreferenceDialog
@@ -261,14 +261,14 @@ function PermissionCard({ state, busy, error, onToggle }: { state: "on" | "off" 
       : state === "partial"
         ? "Only some preferences are in use. Turn this on to use all of them."
         : "Off. Saved preferences stay visible but are not used while shopping.";
-  return <div className="rounded-2xl border border-[#ead9cd] bg-[#fffdf9] p-3.5">
+  return <div className="rounded-2xl border border-border bg-surface p-3.5">
     <div className="flex items-center gap-3">
-      <div className="min-w-0 flex-1"><p id={labelId} className="text-sm font-semibold">Use saved preferences</p><p id={descriptionId} className="mt-0.5 text-xs leading-5 text-[#806f65]">{description}</p></div>
-      <button type="button" role="switch" aria-checked={on} aria-labelledby={labelId} aria-describedby={descriptionId} disabled={state === undefined || busy} onClick={onToggle} className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-55 ${on ? "bg-[#c6531d]" : "bg-[#dccbbf]"} ${ring} focus-visible:ring-offset-2`}>
-        <span className={`absolute top-0.5 grid size-6 place-items-center rounded-full bg-white shadow transition-[left] ${on ? "left-[22px]" : "left-0.5"}`}>{busy && <CircleNotch size={12} className="animate-spin text-[#c6531d]" />}</span>
+      <div className="min-w-0 flex-1"><p id={labelId} className="text-sm font-semibold">Use saved preferences</p><p id={descriptionId} className="mt-0.5 text-xs leading-5 text-muted">{description}</p></div>
+      <button type="button" role="switch" aria-checked={on} aria-labelledby={labelId} aria-describedby={descriptionId} disabled={state === undefined || busy} onClick={onToggle} className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-55 ${on ? "bg-accent" : "bg-border-strong"} ${ring} focus-visible:ring-offset-2`}>
+        <span className={`absolute top-0.5 grid size-6 place-items-center rounded-full bg-white shadow transition-[left] ${on ? "left-[22px]" : "left-0.5"}`}>{busy && <CircleNotch size={12} className="animate-spin text-accent" />}</span>
       </button>
     </div>
-    {error && <p role="alert" className="mt-2 text-[11px] text-[#a33d2c]">{error}</p>}
+    {error && <p role="alert" className="mt-2 text-[11px] text-danger">{error}</p>}
   </div>;
 }
 
@@ -283,16 +283,16 @@ function MemoryItemRow({ row, first, busy, disabled, showUndo, onEdit, onDelete,
   onUndo: () => void;
 }) {
   const small = `flex min-h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold disabled:opacity-50 ${ring}`;
-  return <li className={`px-3.5 py-3 ${first ? "" : "border-t border-[#f0e2d8]"}`}>
+  return <li className={`px-3.5 py-3 ${first ? "" : "border-t border-border"}`}>
     <p className="break-words text-sm font-semibold leading-5">{row.sentence}</p>
-    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-[#8d766a]">
+    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted">
       <span className={`rounded-full px-2 py-0.5 font-semibold ${BADGE_STYLES[row.badge] ?? BADGE_STYLES["You told us"]}`}>{row.badge}</span>
       {row.date && <span>{row.date}</span>}
     </p>
     <div className="mt-2 flex flex-wrap gap-1.5">
-      {showUndo && <button type="button" disabled={disabled} onClick={onUndo} aria-label={`Undo: ${row.sentence}`} className={`${small} bg-[#e3f0e7] text-[#2f6a48]`}>{busy ? <CircleNotch size={13} className="animate-spin" /> : <ArrowCounterClockwise size={13} weight="bold" />}Undo</button>}
-      <button type="button" disabled={disabled} onClick={onEdit} aria-label={`Edit: ${row.sentence}`} className={`${small} border border-[#e4cabc] text-[#68493c]`}><PencilSimple size={13} weight="bold" />Edit</button>
-      <button type="button" disabled={disabled} onClick={onDelete} aria-label={`Delete: ${row.sentence}`} className={`${small} border border-[#efcfc4] text-[#9f3f2c]`}>{busy && !showUndo ? <CircleNotch size={13} className="animate-spin" /> : <Trash size={13} weight="bold" />}Delete</button>
+      {showUndo && <button type="button" disabled={disabled} onClick={onUndo} aria-label={`Undo: ${row.sentence}`} className={`${small} bg-success-soft text-success`}>{busy ? <CircleNotch size={13} className="animate-spin" /> : <ArrowCounterClockwise size={13} weight="bold" />}Undo</button>}
+      <button type="button" disabled={disabled} onClick={onEdit} aria-label={`Edit: ${row.sentence}`} className={`${small} border border-accent-border text-ink-secondary`}><PencilSimple size={13} weight="bold" />Edit</button>
+      <button type="button" disabled={disabled} onClick={onDelete} aria-label={`Delete: ${row.sentence}`} className={`${small} border border-danger-border text-danger`}>{busy && !showUndo ? <CircleNotch size={13} className="animate-spin" /> : <Trash size={13} weight="bold" />}Delete</button>
     </div>
   </li>;
 }
@@ -321,16 +321,16 @@ function EditPreferenceDialog({ row, busy, error, onClose, onSave }: { row: Memo
     widthClassName="sm:max-w-md"
     onClose={onClose}
     footer={({ requestClose }) => <div className="flex items-center gap-3">
-      <button type="button" disabled={busy} onClick={() => requestClose("cancel")} className={`rounded-full px-4 py-3 text-sm font-semibold text-[#6f5b50] transition hover:bg-[#f3e7dd] disabled:opacity-40 ${ring}`}>Cancel</button>
-      <button type="submit" form={formId} disabled={busy} className={`ml-auto flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[#3b2a22] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none ${ring}`}>{busy && <CircleNotch size={15} className="animate-spin" />}{busy ? "Saving…" : "Save"}</button>
+      <button type="button" disabled={busy} onClick={() => requestClose("cancel")} className={`rounded-full px-4 py-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-strong disabled:opacity-40 ${ring}`}>Cancel</button>
+      <button type="submit" form={formId} disabled={busy} className={`ml-auto flex flex-1 items-center justify-center gap-1.5 rounded-full bg-inverse px-5 py-3 text-sm font-semibold text-on-inverse disabled:opacity-50 sm:flex-none ${ring}`}>{busy && <CircleNotch size={15} className="animate-spin" />}{busy ? "Saving…" : "Save"}</button>
     </div>}
   >
     {shown && draft && <form id={formId} onSubmit={(event) => { event.preventDefault(); if (!busy) void onSave(shown, draft.values); }} aria-label={`Edit: ${shown.sentence}`} className="space-y-3">
       {fields.map((field) => <div key={field.key}>
-        <label htmlFor={`${baseId}-${field.key}`} className="block text-xs font-semibold text-[#5f4a3f]">{field.label}</label>
-        <input id={`${baseId}-${field.key}`} value={draft.values[field.key] ?? ""} maxLength={field.key === "text" ? 300 : 160} disabled={busy} onChange={(event) => { const value = event.target.value; setDraft((current) => current && { ...current, values: { ...current.values, [field.key]: value } }); }} className="mt-1 min-h-11 w-full rounded-xl border border-[#deccbf] bg-white px-3 text-sm outline-none focus:border-[#c6531d] focus-visible:ring-2 focus-visible:ring-[#c6531d]/30 disabled:opacity-60" />
+        <label htmlFor={`${baseId}-${field.key}`} className="block text-xs font-semibold text-ink-secondary">{field.label}</label>
+        <input id={`${baseId}-${field.key}`} value={draft.values[field.key] ?? ""} maxLength={field.key === "text" ? 300 : 160} disabled={busy} onChange={(event) => { const value = event.target.value; setDraft((current) => current && { ...current, values: { ...current.values, [field.key]: value } }); }} className="mt-1 min-h-11 w-full rounded-xl border border-border-strong bg-white px-3 text-sm outline-none focus:border-accent focus-visible:ring-2 focus-visible:ring-focus/30 disabled:opacity-60" />
       </div>)}
-      {error && <p role="alert" className="rounded-xl bg-[#fff4ef] px-3 py-2 text-xs leading-5 text-[#8f3a2a]">{error}</p>}
+      {error && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-xs leading-5 text-danger-hover">{error}</p>}
     </form>}
   </InputDialog>;
 }

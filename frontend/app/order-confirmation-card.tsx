@@ -77,33 +77,33 @@ export function OrderConfirmationCard({ confirmation, onResult }: { confirmation
   const busy = state.status === "placing" || state.status === "cancelling";
 
   return <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
-    <section aria-label={`Confirm ${confirmation.store} order`} className="max-w-[620px] rounded-[8px_22px_22px_22px] border border-[#e8cbb9] bg-[#fffdf9] p-4 shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] sm:p-5">
+    <section aria-label={`Confirm ${confirmation.store} order`} className="max-w-[620px] rounded-[8px_22px_22px_22px] border border-accent-border bg-surface p-4 shadow-[0_18px_45px_-34px_rgb(var(--shadow)/.7)] sm:p-5">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-semibold text-[#3b2a22]">{confirmation.store} order · {confirmation.itemCount} {confirmation.itemCount === 1 ? "item" : "items"}</h3>
-        {open && countdown && <span className="shrink-0 text-[11px] font-medium tabular-nums text-[#89766a]" aria-live="off">{countdown}</span>}
+        <h3 className="text-sm font-semibold text-ink">{confirmation.store} order · {confirmation.itemCount} {confirmation.itemCount === 1 ? "item" : "items"}</h3>
+        {open && countdown && <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted" aria-live="off">{countdown}</span>}
       </div>
-      <ul className="mt-3 space-y-1 text-sm text-[#5f4a3e]">
-        {confirmation.items.map((item, index) => <li key={`${item.name}-${index}`} className="flex gap-2"><span className="shrink-0 tabular-nums text-[#89766a]">{item.quantity} ×</span><span className="min-w-0">{item.name}{item.packSize ? ` · ${item.packSize}` : ""}</span></li>)}
+      <ul className="mt-3 space-y-1 text-sm text-ink-secondary">
+        {confirmation.items.map((item, index) => <li key={`${item.name}-${index}`} className="flex gap-2"><span className="shrink-0 tabular-nums text-muted">{item.quantity} ×</span><span className="min-w-0">{item.name}{item.packSize ? ` · ${item.packSize}` : ""}</span></li>)}
       </ul>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#75645a]">
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
         <span className="flex items-center gap-1.5"><Money size={14} /> Cash on delivery</span>
         {deliverTo && <span className="flex items-center gap-1.5"><MapPin size={14} /> {deliverTo}</span>}
       </div>
-      <p className="mt-3 text-base font-semibold text-[#3b2a22]">Total {confirmation.payable}</p>
+      <p className="mt-3 text-base font-semibold text-ink">Total {confirmation.payable}</p>
       {result ? (
-        <p role="status" className={`mt-4 flex items-start gap-2 rounded-2xl px-3.5 py-3 text-sm ${state.status === "placed" ? "bg-[#eff8f0] text-[#2d6638]" : "bg-[#fbf1ec] text-[#8a3f2a]"}`}>
+        <p role="status" className={`mt-4 flex items-start gap-2 rounded-2xl px-3.5 py-3 text-sm ${state.status === "placed" ? "bg-success-soft text-success-strong" : "bg-surface-muted text-danger-hover"}`}>
           {state.status === "placed" ? <CheckCircle size={18} weight="fill" className="mt-0.5 shrink-0" /> : <WarningCircle size={18} className="mt-0.5 shrink-0" />}
           <span>{result}</span>
         </p>
       ) : (
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <button type="button" onClick={() => void place()} disabled={busy} className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#9b3d17] px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_rgba(119,41,15,.8)] transition hover:bg-[#833212] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">
+          <button type="button" onClick={() => void place()} disabled={busy} className="flex flex-1 items-center justify-center gap-2 rounded-full bg-accent-strong px-5 py-3 text-sm font-semibold text-on-accent shadow-[0_10px_24px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">
             {state.status === "placing" ? <><CircleNotch size={17} className="animate-spin" /> Placing order…</> : `Place order · ${confirmation.payable}`}
           </button>
-          <button type="button" onClick={() => void cancel()} disabled={busy} className="rounded-full border border-[#deccbf] px-5 py-3 text-sm font-semibold text-[#5f4a3e] transition hover:bg-[#f6ece4] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">Cancel</button>
+          <button type="button" onClick={() => void cancel()} disabled={busy} className="rounded-full border border-border-strong px-5 py-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-muted active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">Cancel</button>
         </div>
       )}
-      {open && <p className="mt-2 text-center text-[10px] leading-4 text-[#89766a]">Tapping Place order approves this exact bill and places the order. It can&apos;t be undone here.</p>}
+      {open && <p className="mt-2 text-center text-[10px] leading-4 text-muted">Tapping Place order approves this exact bill and places the order. It can&apos;t be undone here.</p>}
     </section>
   </motion.div>;
 }

@@ -139,7 +139,7 @@ export function InputDialog({ open, title, description, children, footer, onClos
     <AnimatePresence>
       {open && (
         <motion.div key="input-dialog" className={`fixed inset-0 z-[90] flex ${sheet ? "items-end" : "items-center justify-center p-4"}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0.01 : 0.15 }}>
-          <div className="absolute inset-0 bg-[#2a1b14]/45 backdrop-blur-[2px]" aria-hidden="true" onMouseDown={() => requestClose("backdrop")} />
+          <div className="absolute inset-0 bg-scrim/45 backdrop-blur-[2px]" aria-hidden="true" onMouseDown={() => requestClose("backdrop")} />
           <motion.div
             ref={panelRef}
             role={role}
@@ -149,18 +149,18 @@ export function InputDialog({ open, title, description, children, footer, onClos
             tabIndex={-1}
             onKeyDown={onKeyDown}
             {...motionProps}
-            className={`relative flex w-full flex-col overflow-hidden bg-[#fffdf9] text-[#3b2a22] shadow-[0_30px_80px_-30px_rgba(42,27,20,.7)] outline-none ${sheet ? "max-h-[92dvh] rounded-t-[26px]" : `max-h-[88dvh] rounded-[24px] ${widthClassName}`}`}
+            className={`relative flex w-full flex-col overflow-hidden bg-surface text-ink shadow-[0_30px_80px_-30px_rgb(var(--shadow)/.7)] outline-none ${sheet ? "max-h-[92dvh] rounded-t-[26px]" : `max-h-[88dvh] rounded-[24px] ${widthClassName}`}`}
           >
-            {sheet && <span className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-[#e2d3c7]" aria-hidden="true" />}
-            <header className="flex shrink-0 items-start gap-3 border-b border-[#efe4db] px-5 pb-4 pt-4">
+            {sheet && <span className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-border-strong" aria-hidden="true" />}
+            <header className="flex shrink-0 items-start gap-3 border-b border-border px-5 pb-4 pt-4">
               <div className="min-w-0 flex-1">
                 <h2 id={titleId} className="font-display text-lg font-semibold leading-6">{title}</h2>
-                {description && <div id={descriptionId} className="mt-1 text-xs leading-5 text-[#806f65]">{description}</div>}
+                {description && <div id={descriptionId} className="mt-1 text-xs leading-5 text-muted">{description}</div>}
               </div>
-              <button type="button" onClick={() => requestClose("close_button")} disabled={busy} className="grid size-9 shrink-0 place-items-center rounded-full text-[#8c776b] transition hover:bg-[#f3e7dd] hover:text-[#3b2a22] disabled:opacity-40" aria-label={closeLabel}><X size={18} /></button>
+              <button type="button" onClick={() => requestClose("close_button")} disabled={busy} className="grid size-9 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface-strong hover:text-ink disabled:opacity-40" aria-label={closeLabel}><X size={18} /></button>
             </header>
             <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
-            {footer && <footer className="shrink-0 border-t border-[#efe4db] bg-[#fffdf9] px-5 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))]">{typeof footer === "function" ? footer(api) : footer}</footer>}
+            {footer && <footer className="shrink-0 border-t border-border bg-surface px-5 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))]">{typeof footer === "function" ? footer(api) : footer}</footer>}
           </motion.div>
         </motion.div>
       )}
