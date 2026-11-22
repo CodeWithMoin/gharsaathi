@@ -31,10 +31,10 @@ test("titles prefer the items discussed, then fall back to the preview", () => {
   assert.equal(conversationTitle(chat({})), "Shopping chat");
 });
 
-test("dates read as Today, Yesterday, or a short date", () => {
+test("dates read as a time today, Yesterday, or a short date", () => {
   const now = new Date(2026, 10, 22, 20, 0);
-  assert.equal(relativeChatDate(new Date(2026, 10, 22, 17, 28).toISOString(), now), "Today, 5:28");
-  assert.equal(relativeChatDate(new Date(2026, 10, 22, 0, 5).toISOString(), now), "Today, 12:05");
+  assert.equal(relativeChatDate(new Date(2026, 10, 22, 17, 28).toISOString(), now), "5:28 pm");
+  assert.equal(relativeChatDate(new Date(2026, 10, 22, 0, 5).toISOString(), now), "12:05 am");
   assert.equal(relativeChatDate(new Date(2026, 10, 21, 23, 59).toISOString(), now), "Yesterday");
   assert.equal(relativeChatDate(new Date(2026, 10, 20, 9, 0).toISOString(), now), "20 Nov");
   assert.equal(relativeChatDate(new Date(2025, 11, 31, 9, 0).toISOString(), now), "31 Dec 2025");

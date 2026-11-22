@@ -1232,9 +1232,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
                 <p className="mt-4 text-sm font-semibold leading-5 text-ink">{chatSearch.trim() ? "No matching chats" : "No shopping chats yet"}</p>
                 <p className="mt-2 max-w-[24ch] text-[13px] leading-5 text-muted">{chatSearch.trim() ? "Try a different search." : "Say what you need to start. Your chats are saved here."}</p>
               </div>}
-              {!recentChatsLoading && filteredRecentChats.map((chat) => <button type="button" key={chat.id} onClick={() => void openSavedChat(chat.id)} className={`group relative flex w-full items-start gap-3 rounded-xl px-2 py-3 text-left transition hover:bg-surface-strong ${chat.is_active ? "bg-surface-strong" : ""}`}>
-                {chat.is_active && <span className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-accent" aria-hidden="true" />}
-                <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl bg-white text-muted ring-1 ring-border"><ChatCircleDots size={17} weight={chat.is_active ? "fill" : "regular"} /></span>
+              {!recentChatsLoading && filteredRecentChats.map((chat) => <button type="button" key={chat.id} onClick={() => void openSavedChat(chat.id)} className={`group relative flex w-full items-start gap-3 rounded-2xl px-3.5 py-3.5 text-left transition hover:bg-surface-strong ${chat.is_active ? "bg-surface ring-1 ring-border" : ""}`}>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2">
                     <span className="block min-w-0 flex-1 truncate text-sm font-semibold text-ink">{conversationTitle(chat)}</span>

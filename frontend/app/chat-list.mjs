@@ -78,7 +78,7 @@ export function relativeChatDate(value, now = new Date()) {
   const days = Math.round((dayStart(now) - dayStart(date)) / 86_400_000);
   if (days <= 0) {
     const hours = date.getHours() % 12 || 12;
-    return `Today, ${hours}:${String(date.getMinutes()).padStart(2, "0")}`;
+    return `${hours}:${String(date.getMinutes()).padStart(2, "0")} ${date.getHours() < 12 ? "am" : "pm"}`;
   }
   if (days === 1) return "Yesterday";
   const dayMonth = `${date.getDate()} ${MONTHS[date.getMonth()]}`;
