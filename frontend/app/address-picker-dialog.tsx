@@ -8,7 +8,7 @@ import { InputDialog } from "./ui/input-dialog";
 export type AddressPickerStore = "swiggy" | "zepto";
 
 const STORE = {
-  swiggy: { name: "Swiggy Instamart", short: "Swiggy", accent: "accent-accent", text: "text-accent", button: "bg-accent hover:bg-accent-hover", ring: "has-[:checked]:border-accent-border has-[:checked]:bg-accent-soft" },
+  swiggy: { name: "Swiggy Instamart", short: "Swiggy", accent: "accent-accent", text: "text-accent-ink", button: "bg-accent hover:bg-accent-hover", ring: "has-[:checked]:border-accent-border has-[:checked]:bg-accent-soft" },
   zepto: { name: "Zepto", short: "Zepto", accent: "accent-zepto", text: "text-zepto", button: "bg-zepto-strong hover:bg-zepto-hover", ring: "has-[:checked]:border-zepto-border has-[:checked]:bg-zepto-soft" },
 } as const;
 

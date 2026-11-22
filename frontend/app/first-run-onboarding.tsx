@@ -80,7 +80,7 @@ export function PublicOnboarding() {
 
       <motion.ul {...rise(3)} className="mt-7 divide-y divide-border border-y border-border">
         {PROMISES.map((item) => <li key={item.title} className="flex items-start gap-3 py-3.5">
-          <span className="mt-0.5 shrink-0 text-accent">{item.icon}</span>
+          <span className="mt-0.5 shrink-0 text-accent-ink">{item.icon}</span>
           <span><span className="block text-[14px] font-semibold text-ink">{item.title}</span><span className="mt-0.5 block text-[13px] leading-5 text-muted">{item.text}</span></span>
         </li>)}
       </motion.ul>

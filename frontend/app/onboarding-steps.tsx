@@ -142,7 +142,7 @@ function Spinner({ size = 17 }: { size?: number }) {
 }
 
 function Note({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-  return <div className="flex items-start gap-2.5 rounded-2xl bg-surface-strong px-3.5 py-3 text-[13px] leading-5 text-ink-secondary"><span className="mt-0.5 shrink-0 text-accent">{icon}</span><span>{children}</span></div>;
+  return <div className="flex items-start gap-2.5 rounded-2xl bg-surface-strong px-3.5 py-3 text-[13px] leading-5 text-ink-secondary"><span className="mt-0.5 shrink-0 text-accent-ink">{icon}</span><span>{children}</span></div>;
 }
 
 /* ---------------------------------------------------------------- profile */
@@ -257,7 +257,7 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
             <input type="radio" name="reply-language" value={option.value} checked={selected} onChange={() => setLanguage(option.value)} className="sr-only" />
             <span className={`text-[14px] font-semibold ${selected ? "text-accent-strong" : "text-ink-secondary"}`}>{option.label}</span>
             <span className="mt-0.5 text-[11px] text-muted" lang={option.value === "hindi" ? "hi" : undefined}>{option.note}</span>
-            {selected && <Check size={14} weight="bold" className="absolute right-2.5 top-2.5 text-accent" aria-hidden="true" />}
+            {selected && <Check size={14} weight="bold" className="absolute right-2.5 top-2.5 text-accent-ink" aria-hidden="true" />}
           </label>;
         })}
       </div>
@@ -309,7 +309,7 @@ export function ConsentStep({ updatedTerms, focusHeading, onAccept }: {
         { icon: <ShieldCheck size={20} weight="duotone" />, text: "No order is placed without your approval." },
         { icon: <LockKey size={20} weight="duotone" />, text: "GharSaathi never asks for your password or OTP." },
         { icon: <Trash size={20} weight="duotone" />, text: "Anything GharSaathi remembers can be deleted at any time." },
-      ].map((item) => <li key={item.text} className="flex items-start gap-3 py-3.5 text-[14px] leading-5 text-ink-secondary"><span className="mt-0.5 shrink-0 text-accent">{item.icon}</span>{item.text}</li>)}
+      ].map((item) => <li key={item.text} className="flex items-start gap-3 py-3.5 text-[14px] leading-5 text-ink-secondary"><span className="mt-0.5 shrink-0 text-accent-ink">{item.icon}</span>{item.text}</li>)}
     </ul>}
 
     <label className={`${updatedTerms ? "" : "mt-6"} flex cursor-pointer items-start gap-3 rounded-[20px] border border-border-strong bg-surface p-4 text-[14px] leading-6 text-ink-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus`}>
@@ -452,7 +452,7 @@ function StoreAddresses({ provider, state, demo, onLoad, onSelect, onAdded }: {
           <input type="radio" name={`${provider}-address`} value={address.id} checked={selected} disabled={state.selecting} onChange={() => onSelect(address.id)} className="sr-only" />
           <span aria-hidden="true" className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border-2 transition-colors duration-150 ${selected ? "border-accent bg-accent" : "border-accent-border bg-white"}`}>{selected && <span className="size-1.5 rounded-full bg-white" />}</span>
           <span className="min-w-0 flex-1"><span className="block text-[14px] font-semibold text-ink">{address.tag || address.category || "Saved address"}</span><span className="mt-0.5 block text-[13px] leading-5 text-muted">{address.address_line}</span></span>
-          {selected && state.selecting && <span className="mt-0.5 text-accent"><Spinner size={15} /></span>}
+          {selected && state.selecting && <span className="mt-0.5 text-accent-ink"><Spinner size={15} /></span>}
         </label>;
       })}
     </div>}
@@ -516,7 +516,7 @@ export function PersonalizeStep({ swiggyConnected, zeptoConnected, commerceMode,
             { icon: <Eye size={20} weight="duotone" />, title: "Read-only", text: "Recent orders from connected stores, read-only. Nothing is added or ordered." },
             { icon: <Sparkle size={20} weight="duotone" />, title: "“The usual?” suggestions", text: "Repeat items are spotted and suggested. GharSaathi never guesses what has run out at home." },
             { icon: <Trash size={20} weight="duotone" />, title: "Delete any time", text: "Turning this off in settings removes the imported data." },
-          ].map((item) => <li key={item.title} className="flex items-start gap-3 py-3.5"><span className="mt-0.5 shrink-0 text-accent">{item.icon}</span><span><span className="block text-[14px] font-semibold text-ink">{item.title}</span><span className="mt-0.5 block text-[13px] leading-5 text-muted">{item.text}</span></span></li>)}
+          ].map((item) => <li key={item.title} className="flex items-start gap-3 py-3.5"><span className="mt-0.5 shrink-0 text-accent-ink">{item.icon}</span><span><span className="block text-[14px] font-semibold text-ink">{item.title}</span><span className="mt-0.5 block text-[13px] leading-5 text-muted">{item.text}</span></span></li>)}
         </ul>
 
         {demo && <div className="mt-5"><Note icon={<ShieldCheck size={17} weight="duotone" />}>Import is off in demo mode. No real order history is read.</Note></div>}

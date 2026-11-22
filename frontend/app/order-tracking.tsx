@@ -138,7 +138,7 @@ function isProblem(status?: TrackingStatus) {
 }
 
 function StatusIcon({ status, active }: { status?: TrackingStatus; active: boolean }) {
-  const className = active ? "text-accent" : "text-subtle";
+  const className = active ? "text-accent-ink" : "text-subtle";
   if (status === "out_for_delivery" || status === "arriving") return <Truck size={17} weight={active ? "fill" : "regular"} className={className} />;
   if (status === "delivered") return <CheckCircle size={17} weight="fill" className="text-success" />;
   if (isProblem(status)) return <WarningCircle size={17} weight="fill" className="text-danger" />;
@@ -298,7 +298,7 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
   return (
     <section className="w-full overflow-hidden rounded-[8px_22px_22px_22px] border border-border-strong bg-surface shadow-[0_18px_45px_-34px_rgb(var(--shadow)/.7)]" aria-label="Live order tracking">
       <header className="flex items-start gap-3 border-b border-border px-4 py-3.5">
-        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"><ClockCountdown size={19} weight="fill" /></div>
+        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-ink"><ClockCountdown size={19} weight="fill" /></div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 className="truncate text-[15px] font-semibold text-ink">Track an order</h2>

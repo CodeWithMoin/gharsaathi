@@ -15,6 +15,7 @@ const colors = {
   "subtle": token("text-subtle"),
   "accent": token("accent"),
   "accent-hover": token("accent-hover"),
+  "accent-ink": token("accent-ink"),
   "accent-strong": token("accent-strong"),
   "accent-soft": token("accent-soft"),
   "accent-border": token("accent-border"),

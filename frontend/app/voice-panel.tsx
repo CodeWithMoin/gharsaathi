@@ -412,7 +412,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
   const label = voicePillLabel({ status, busy, speaker });
   const showDetails = expanded || status === "error" || playBlocked;
   const icon = status === "error" ? "error" : status === "connecting" || status === "closing" || (label === "Thinking") ? "wait" : speaker === "assistant" ? "speaker" : "mic";
-  const iconTone = icon === "error" ? "bg-danger-soft text-danger" : icon === "speaker" ? "bg-accent text-on-accent" : icon === "mic" && speaker === "user" ? "bg-inverse text-on-inverse" : "bg-accent-soft text-accent";
+  const iconTone = icon === "error" ? "bg-danger-soft text-danger" : icon === "speaker" ? "bg-accent text-on-accent" : icon === "mic" && speaker === "user" ? "bg-inverse text-on-inverse" : "bg-accent-soft text-accent-ink";
   // MotionConfig below drops the transforms for reduced motion and keeps the fades.
   const swap = { initial: { opacity: 0, scale: .8, filter: "blur(2px)" }, animate: { opacity: 1, scale: 1, filter: "blur(0px)" }, exit: { opacity: 0, scale: .8, filter: "blur(2px)" } };
   const quick = { duration: .16, ease: [.23, 1, .32, 1] as const };

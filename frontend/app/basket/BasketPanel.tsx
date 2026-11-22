@@ -533,12 +533,12 @@ export function BasketPanel({
   return (
     <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`overflow-hidden rounded-[26px] border border-border-strong bg-surface shadow-[0_18px_45px_-34px_rgb(var(--shadow)/.7)] ${className}`} aria-label="Your basket" aria-busy={locked}>
       <header className="flex items-center gap-3 border-b border-border px-5 py-4 sm:px-6">
-        <span className="grid size-10 place-items-center rounded-[14px] bg-accent-soft text-accent"><Basket size={20} weight="fill" /></span>
+        <span className="grid size-10 place-items-center rounded-[14px] bg-accent-soft text-accent-ink"><Basket size={20} weight="fill" /></span>
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-accent">Your basket</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-accent-ink">Your basket</p>
           <h2 className="font-display text-lg font-semibold tracking-[-.025em] text-ink">{lineCount ? `${lineCount} ${lineCount === 1 ? "item" : "items"} ready to review` : "Add the things you need"}</h2>
         </div>
-        {action === "load" && <CircleNotch size={18} className="ml-auto animate-spin text-accent" aria-label="Loading basket" />}
+        {action === "load" && <CircleNotch size={18} className="ml-auto animate-spin text-accent-ink" aria-label="Loading basket" />}
       </header>
 
       {action === "load" && !basket ? (
@@ -548,7 +548,7 @@ export function BasketPanel({
         </div>
       ) : lines.length === 0 ? (
         <div className="px-5 py-8 text-center sm:px-6">
-          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-surface-muted text-accent"><Receipt size={24} /></span>
+          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-surface-muted text-accent-ink"><Receipt size={24} /></span>
           <p className="mt-3 text-sm font-semibold text-ink">Basket is empty</p>
           <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted">Add a product from the options above. You&apos;ll see the exact bill before you approve anything.</p>
         </div>
@@ -561,7 +561,7 @@ export function BasketPanel({
               return (
                 <li key={line.ref.variant_id} className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 py-4 ${line.available ? "" : "opacity-60"}`}>
                   <div className="min-w-0">
-                    {line.brand && <p className="truncate text-[9px] font-semibold uppercase tracking-[.12em] text-accent">{line.brand}</p>}
+                    {line.brand && <p className="truncate text-[9px] font-semibold uppercase tracking-[.12em] text-accent-ink">{line.brand}</p>}
                     <h3 className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5 text-ink">{line.name}</h3>
                     <p className="mt-0.5 truncate text-xs text-muted">{[line.pack_size, `${line.unit_price.display} each`].filter(Boolean).join(" · ")}</p>
                     {!line.available && <p className="mt-1 text-[11px] font-medium text-danger">No longer available</p>}
@@ -588,7 +588,7 @@ export function BasketPanel({
               <div className="flex items-baseline justify-between gap-3 text-sm"><span className="text-muted">Items total</span><strong className="tabular-nums text-ink">{basket?.item_total.display}</strong></div>
               {basket && basket.savings_vs_mrp.paise > 0 && <div className="mt-1 flex items-baseline justify-between gap-3 text-xs"><span className="text-muted">Savings vs MRP</span><strong className="tabular-nums text-success">{basket.savings_vs_mrp.display}</strong></div>}
               {!addressId && <p className="mt-3 rounded-xl bg-surface-muted px-3 py-2.5 text-xs leading-5 text-muted">Choose a delivery address to request the final bill.</p>}
-              {addressId && <div className="mt-3 flex gap-2 rounded-xl border border-warning-border bg-warning-soft px-3 py-2.5 text-[11px] leading-5 text-warning" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0 text-accent" /><p>{commerceMode === "demo" ? <><strong className="font-semibold text-warning">Safe demo:</strong> this calculates a deterministic sample bill locally. It does not contact {providerLabel}, change a provider cart, check out, or place an order.</> : <><strong className="font-semibold text-warning">Before you continue:</strong> this syncs this basket to your current {providerLabel} cart to retrieve live availability, fees, and the exact bill. It may replace items already in that provider cart. It does <strong className="font-semibold">not</strong> check out or place an order.</>}</p></div>}
+              {addressId && <div className="mt-3 flex gap-2 rounded-xl border border-warning-border bg-warning-soft px-3 py-2.5 text-[11px] leading-5 text-warning" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0 text-accent-ink" /><p>{commerceMode === "demo" ? <><strong className="font-semibold text-warning">Safe demo:</strong> this calculates a deterministic sample bill locally. It does not contact {providerLabel}, change a provider cart, check out, or place an order.</> : <><strong className="font-semibold text-warning">Before you continue:</strong> this syncs this basket to your current {providerLabel} cart to retrieve live availability, fees, and the exact bill. It may replace items already in that provider cart. It does <strong className="font-semibold">not</strong> check out or place an order.</>}</p></div>}
               <button type="button" onClick={() => void requestQuote()} disabled={locked || basketFrozen || !addressId} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-inverse px-5 py-3 text-sm font-semibold text-on-inverse shadow-[0_12px_30px_-18px_rgb(var(--shadow)/.8)] transition hover:bg-inverse-hover active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">
                 {action === "quote" ? <><CircleNotch size={17} className="animate-spin" /> Getting final bill…</> : <><Receipt size={17} /> Get final bill</>}
               </button>
@@ -602,8 +602,8 @@ export function BasketPanel({
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-warning-border bg-warning-soft">
             <div className="p-5 sm:p-6">
               <div className="flex items-start gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-[14px] bg-accent-soft text-accent"><ShieldCheck size={21} weight="fill" /></span>
-                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-accent">Final bill · approval needed</p><h3 className="mt-0.5 text-base font-semibold text-ink">Review this exact bill</h3><p className="mt-1 text-xs leading-5 text-muted">Approval is bound to this exact basket, price, and expiry. Any material change needs a fresh approval.</p></div>
+                <span className="grid size-10 shrink-0 place-items-center rounded-[14px] bg-accent-soft text-accent-ink"><ShieldCheck size={21} weight="fill" /></span>
+                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-accent-ink">Final bill · approval needed</p><h3 className="mt-0.5 text-base font-semibold text-ink">Review this exact bill</h3><p className="mt-1 text-xs leading-5 text-muted">Approval is bound to this exact basket, price, and expiry. Any material change needs a fresh approval.</p></div>
               </div>
 
               <ul className="mt-4 space-y-2 border-y border-border py-3 text-xs leading-5">

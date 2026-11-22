@@ -37,7 +37,7 @@ export function PersonalizationOnboarding({ commerceMode, swiggyConnected, zepto
 
   return (
     <section className="mt-7 border-t border-border pt-6" aria-label="Personalize from past orders">
-      <p className="text-[10px] font-semibold tracking-[.16em] text-accent">OPTIONAL PERSONALIZATION</p>
+      <p className="text-[10px] font-semibold tracking-[.16em] text-accent-ink">OPTIONAL PERSONALIZATION</p>
       <h3 className="font-display mt-2 text-xl font-semibold">Want me to learn your usuals?</h3>
       <p className="mt-2 text-xs leading-5 text-muted">With your approval, GharSaathi reads recent orders from every connected store to find repeat patterns such as your usual milk or atta. Purchase history never proves what is currently in stock at home.</p>
 

@@ -19,9 +19,9 @@ const hex = (rgb) => "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join(
 
 // [foreground, background] pairs that carry body-size text: WCAG AA 4.5:1.
 const TEXT = [
-  ...["text", "text-secondary", "text-muted", "text-subtle", "accent", "accent-strong", "danger", "success", "zepto"].flatMap((fg) => ["bg", "surface", "surface-muted"].map((bg) => [fg, bg])),
+  ...["text", "text-secondary", "text-muted", "text-subtle", "accent-ink", "accent-strong", "danger", "success", "zepto"].flatMap((fg) => ["bg", "surface", "surface-muted"].map((bg) => [fg, bg])),
   ["text", "surface-strong"], ["text-secondary", "surface-strong"], ["text-muted", "surface-strong"],
-  ["text", "accent-soft"], ["text-secondary", "accent-soft"], ["text-muted", "accent-soft"], ["text-subtle", "accent-soft"], ["accent", "accent-soft"], ["accent-strong", "accent-soft"],
+  ["text", "accent-soft"], ["text-secondary", "accent-soft"], ["text-muted", "accent-soft"], ["text-subtle", "accent-soft"], ["accent-ink", "accent-soft"], ["accent-strong", "accent-soft"],
   ["on-accent", "accent"], ["on-accent", "accent-hover"], ["on-accent", "accent-strong"], ["on-accent", "danger"], ["on-accent", "danger-hover"], ["on-accent", "success"], ["on-accent", "success-strong"], ["on-accent", "zepto-strong"], ["on-accent", "zepto-hover"],
   ["on-user-bubble", "user-bubble"], ["text-muted", "user-bubble"],
   ["on-inverse", "inverse"], ["on-inverse", "inverse-hover"],
@@ -54,7 +54,7 @@ test("the two meter colours stay distinguishable from each other", () => {
 });
 
 test("Clerk's literal colours match the tokens", () => {
-  assert.equal(CLERK_COLORS.colorPrimary, hex(tokens.accent));
+  assert.equal(CLERK_COLORS.colorPrimary, hex(tokens["accent-ink"]));
   assert.equal(CLERK_COLORS.colorText, hex(tokens.text));
   assert.equal(CLERK_COLORS.colorTextSecondary, hex(tokens["text-muted"]));
   assert.equal(CLERK_COLORS.colorBackground, hex(tokens.surface));

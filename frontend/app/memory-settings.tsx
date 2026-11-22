@@ -265,7 +265,7 @@ function PermissionCard({ state, busy, error, onToggle }: { state: "on" | "off" 
     <div className="flex items-center gap-3">
       <div className="min-w-0 flex-1"><p id={labelId} className="text-sm font-semibold">Use saved preferences</p><p id={descriptionId} className="mt-0.5 text-xs leading-5 text-muted">{description}</p></div>
       <button type="button" role="switch" aria-checked={on} aria-labelledby={labelId} aria-describedby={descriptionId} disabled={state === undefined || busy} onClick={onToggle} className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-55 ${on ? "bg-accent" : "bg-border-strong"} ${ring} focus-visible:ring-offset-2`}>
-        <span className={`absolute top-0.5 grid size-6 place-items-center rounded-full bg-white shadow transition-[left] ${on ? "left-[22px]" : "left-0.5"}`}>{busy && <CircleNotch size={12} className="animate-spin text-accent" />}</span>
+        <span className={`absolute top-0.5 grid size-6 place-items-center rounded-full bg-white shadow transition-[left] ${on ? "left-[22px]" : "left-0.5"}`}>{busy && <CircleNotch size={12} className="animate-spin text-accent-ink" />}</span>
       </button>
     </div>
     {error && <p role="alert" className="mt-2 text-[11px] text-danger">{error}</p>}

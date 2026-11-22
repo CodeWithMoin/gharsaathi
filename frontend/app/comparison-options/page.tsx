@@ -41,7 +41,7 @@ function ProductHeading() {
         <Image src="/demo-products/basmati-rice.png" alt="Basmati rice pack" fill sizes="96px" className="object-contain p-2" />
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold tracking-[.12em] text-accent">INDIA GATE</p>
+        <p className="text-[10px] font-semibold tracking-[.12em] text-accent-ink">INDIA GATE</p>
         <h2 className="mt-1 text-[17px] font-semibold leading-snug text-ink">Everyday Basmati Rice</h2>
         <p className="mt-0.5 text-xs text-muted">5 kg</p>
       </div>
