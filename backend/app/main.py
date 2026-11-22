@@ -18,6 +18,7 @@ from app.api.legal_consent import router as legal_consent_router
 from app.api.profile import router as profile_router
 from app.api.purchase_memory import router as purchase_memory_router
 from app.api.voice import router as voice_router
+from app.auth import PrivateDeploymentForbidden
 from app.core.config import get_settings
 from app.core.logging import install_sensitive_log_filters
 from app.legal_consent import LegalConsentRequired
@@ -48,7 +49,18 @@ async def lifespan(application: FastAPI):
         await close_cached_services()
 
 
-app = FastAPI(title="Household Shopping Agent API", version="0.2.0", lifespan=lifespan)
+# A private deployment does not publish its API schema or docs.
+_docs = {} if not settings.private_deployment else {
+    "docs_url": None,
+    "redoc_url": None,
+    "openapi_url": None,
+}
+app = FastAPI(
+    title="Household Shopping Agent API",
+    version="0.2.0",
+    lifespan=lifespan,
+    **_docs,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -62,6 +74,16 @@ app.add_middleware(
 @app.exception_handler(LegalConsentRequired)
 async def legal_consent_required(_: Request, exc: LegalConsentRequired) -> JSONResponse:
     # `detail` stays a string for existing clients; `code` is machine-readable.
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content={"detail": exc.message, "code": exc.code},
+    )
+
+
+@app.exception_handler(PrivateDeploymentForbidden)
+async def private_deployment_forbidden(
+    _: Request, exc: PrivateDeploymentForbidden
+) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_403_FORBIDDEN,
         content={"detail": exc.message, "code": exc.code},

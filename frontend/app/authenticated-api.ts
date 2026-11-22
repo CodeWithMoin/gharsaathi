@@ -2,6 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useCallback } from "react";
+import { PRIVATE_DEPLOYMENT_EVENT, isPrivateDeploymentRefusal } from "./private-deployment.mjs";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -21,7 +22,12 @@ export function useAuthenticatedFetch() {
 
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${token}`);
-    return fetch(input, { ...init, headers });
+    const response = await fetch(input, { ...init, headers });
+    if (response.status === 403) {
+      const payload = await response.clone().json().catch(() => null);
+      if (isPrivateDeploymentRefusal(response.status, payload)) window.dispatchEvent(new Event(PRIVATE_DEPLOYMENT_EVENT));
+    }
+    return response;
   }, [getToken]);
 }
 

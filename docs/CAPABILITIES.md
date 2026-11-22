@@ -74,7 +74,7 @@ Prompt wording, typed-chat and UI statuses are verified by review, not by the te
 
 ### Backend routes by capability
 
-- `connect_store`: `GET /api/swiggy/connection`, `GET /api/swiggy/oauth/readiness`, `GET /api/swiggy/oauth/start`, `GET /api/swiggy/oauth/callback`, `POST /api/swiggy/disconnect`, `GET /api/zepto/connection`, `GET /api/zepto/oauth/readiness`, `GET /api/zepto/oauth/start`, `GET /api/zepto/oauth/callback`, `POST /api/zepto/disconnect`
+- `connect_store`: `GET /api/swiggy/connection`, `GET /api/swiggy/oauth/readiness`, `GET /api/swiggy/oauth/start`, `POST /api/swiggy/oauth/authorization`, `GET /api/swiggy/oauth/callback`, `POST /api/swiggy/disconnect`, `GET /api/zepto/connection`, `GET /api/zepto/oauth/readiness`, `GET /api/zepto/oauth/start`, `POST /api/zepto/oauth/authorization`, `GET /api/zepto/oauth/callback`, `POST /api/zepto/disconnect`
 - `select_address`: `GET /api/swiggy/addresses`, `PUT /api/swiggy/addresses/selected`, `GET /api/zepto/addresses`, `PUT /api/zepto/addresses/selected`
 - `add_address`: `POST /api/zepto/addresses`, `POST /api/voice/sessions/{session_id}/ui-ack`
 - `product_search`: `POST /api/swiggy/search`, `POST /api/swiggy/search/personalized`, `POST /api/zepto/search`

@@ -28,11 +28,33 @@ architecture, and a demo video.
 ## Zepto
 
 Zepto's public MCP is also a remote HTTPS service. Its published callback
-allowlist currently contains localhost, loopback addresses, and a few known MCP
-clients; it does not contain `gharsaathi.app`. Open an issue in
-`zeptonow/mcp` requesting the exact production callback before enabling Zepto
-login on the hosted app.
+allowlist (checked 2026-11-22) contains `claude://…`, `https://claude.ai/…`,
+VS Code, Postman, `http://localhost`, `http://localhost/callback`,
+`http://127.0.0.1` and `http://127.0.0.1/callback`; it does not contain
+`gharsaathi.app`. GharSaathi registers its client with dynamic client
+registration (`POST https://auth.zepto.co.in/register` with
+`redirect_uris: [ZEPTO_OAUTH_REDIRECT_URI]`), so a hosted login fails until the
+exact production URI is allow-listed.
 
+The hosted flow itself needs no bridge: `POST /api/zepto/oauth/authorization`
+(signed-in owner) creates PKCE state on EFS and returns Zepto's URL; Zepto
+redirects the browser to `https://gharsaathi.app/api/zepto/oauth/callback`,
+CloudFront forwards `/api/*` to the backend, which validates state, exchanges the
+code and redirects to `https://gharsaathi.app/?zepto=connected`. The local
+port-80 bridge exists only because Zepto allows callbacks without a port; it must
+not be used for the hosted site.
+
+Request to open in `zeptonow/mcp` (GitHub issue):
+
+> Please allow-list the OAuth redirect URI
+> `https://gharsaathi.app/api/zepto/oauth/callback` for dynamic client
+> registration. GharSaathi is a private, single-owner household shopping
+> assistant (FastAPI backend on AWS, Next.js web app). Scope `tools:read`
+> today; tokens stay server-side, encrypted at rest; no order is placed without
+> the owner's tap on an order card; cash on delivery only. Expected traffic: one
+> user, a few sessions a day.
+
+## Application boundary
 ## Application boundary
 
 The browser talks only to the GharSaathi backend. The backend performs OAuth,
@@ -50,20 +72,23 @@ Provider approval alone is not enough. Before enabling live commerce on AWS:
 
 - keep Clerk JWT verification enabled and configure the production authorized
   party/domain and public verification key;
-- replace the single-user encrypted token files with per-user encrypted
-  provider connections in PostgreSQL or another durable store backed by KMS;
-- persist support/tracking state outside container `/tmp` and define retention
-  and deletion policies;
+- **multi-user only:** replace the single-user encrypted token files with per-user
+  encrypted provider connections in PostgreSQL or another durable store backed
+  by KMS. A private deployment with `ALLOWED_USER_IDS` set to the owner alone may
+  keep the single connection, because only the owner can reach any route that
+  starts OAuth or uses the connection;
+- persist support/tracking state outside container `/tmp` (done: EFS mount at
+  `backend/.data`) and define retention and deletion policies;
 - keep OAuth state, provider cooldowns, and tokens shared across tasks before
-  scaling the backend above one ECS task;
+  scaling the backend above one ECS task (the template pins it to one);
 - run the complete OAuth and read-only search acceptance suite against the
   approved production callbacks; and
-- keep cart, payment, checkout, and order placement disabled until their
-  separate approval and non-replay review is complete.
+- keep cart, payment, checkout, and order placement behind their existing
+  approval and non-replay rules (tap-confirmed order card, COD only while
+  `ZEPTO_ONLINE_PAYMENTS_ENABLED=false`).
 
-The current CloudFormation template deliberately hard-codes
-`COMMERCE_MODE=demo`. Do not turn that into a parameter until these gates are
-implemented and reviewed.
+The template takes `CommerceMode` (default `demo`); `scripts/deploy-aws.sh`
+refuses `live` unless `CONFIRM_LIVE=zepto-callback-allowlisted` is also set.
 
 ## Current official references
 

@@ -109,6 +109,7 @@ flowchart TD
 
 | Check | Location | Prevents |
 |---|---|---|
+| Private deployment: `ALLOWED_USER_IDS` allow-list on the verified Clerk subject; OAuth starts only via signed-in `POST /api/{store}/oauth/authorization` | `backend/app/auth.py` | Anyone but the owner using a hosted deployment (403 `private_deployment`, "This deployment is private.") |
 | Strict JSON schema on every tool argument | `backend/app/voice/*_tools.py`, `tools.py` | Malformed or extra arguments |
 | Not-a-product guard | `backend/app/commerce/query_guard.py` | Searching chit-chat |
 | Store connected + delivery address selected | `tools.py`, `basket_tools.py` | Search/add without a store (`not_connected`) |
