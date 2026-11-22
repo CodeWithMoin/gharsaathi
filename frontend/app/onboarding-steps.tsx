@@ -304,12 +304,12 @@ export function ConsentStep({ updatedTerms, focusHeading, onAccept }: {
       <button type="submit" disabled={saving || !legalAccepted} className={`${primaryButton} ${error ? "mt-3" : ""}`}>{saving ? <><Spinner /> Saving…</> : <>Accept and continue <ArrowRight size={17} weight="bold" /></>}</button>
     </>}
   >
-    {!updatedTerms && <ul className="divide-y divide-border border-y border-border">
+    {!updatedTerms && <ul className="space-y-4">
       {[
         { icon: <ShieldCheck size={20} weight="duotone" />, text: "No order is placed without your approval." },
         { icon: <LockKey size={20} weight="duotone" />, text: "GharSaathi never asks for your password or OTP." },
         { icon: <Trash size={20} weight="duotone" />, text: "Anything GharSaathi remembers can be deleted at any time." },
-      ].map((item) => <li key={item.text} className="flex items-start gap-3 py-3.5 text-[14px] leading-5 text-ink-secondary"><span className="mt-0.5 shrink-0 text-accent-ink">{item.icon}</span>{item.text}</li>)}
+      ].map((item) => <li key={item.text} className="flex items-center gap-3.5 text-[14px] leading-5 text-ink-secondary"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent-ink">{item.icon}</span>{item.text}</li>)}
     </ul>}
 
     <label className={`${updatedTerms ? "" : "mt-6"} relative flex cursor-pointer items-start gap-3 rounded-[20px] border border-border-strong bg-surface p-4 text-[14px] leading-6 text-ink-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus`}>
@@ -511,7 +511,7 @@ export function PersonalizeStep({ swiggyConnected, zeptoConnected, commerceMode,
     {history.permission === undefined
       ? <div className="space-y-3" aria-label="Loading">{[0, 1, 2].map((item) => <div key={item} className="h-14 animate-pulse rounded-2xl bg-surface-strong" />)}</div>
       : <>
-        <ul className="divide-y divide-border border-y border-border">
+        <ul className="space-y-3">
           {[
             { icon: <Eye size={20} weight="duotone" />, title: "Read-only", text: "Recent orders from connected stores, read-only. Nothing is added or ordered." },
             { icon: <Sparkle size={20} weight="duotone" />, title: "“The usual?” suggestions", text: "Repeat items are spotted and suggested. GharSaathi never guesses what has run out at home." },

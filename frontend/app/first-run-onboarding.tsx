@@ -78,9 +78,9 @@ export function PublicOnboarding() {
       <motion.h1 {...rise(1)} className="font-display mt-7 text-[34px] font-semibold leading-[1.08] tracking-[-.05em]">Household shopping,<br />just by asking.</motion.h1>
       <motion.p {...rise(2)} className="mt-3 max-w-[32ch] text-[15px] leading-6 text-muted">GharSaathi searches Zepto and Swiggy, compares options and keeps your basket ready.</motion.p>
 
-      <motion.ul {...rise(3)} className="mt-7 divide-y divide-border border-y border-border">
-        {PROMISES.map((item) => <li key={item.title} className="flex items-start gap-3 py-3.5">
-          <span className="mt-0.5 shrink-0 text-accent-ink">{item.icon}</span>
+      <motion.ul {...rise(3)} className="mt-8 space-y-5">
+        {PROMISES.map((item) => <li key={item.title} className="flex items-start gap-3.5">
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent-ink">{item.icon}</span>
           <span><span className="block text-[14px] font-semibold text-ink">{item.title}</span><span className="mt-0.5 block text-[13px] leading-5 text-muted">{item.text}</span></span>
         </li>)}
       </motion.ul>
