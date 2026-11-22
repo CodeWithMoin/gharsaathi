@@ -6,6 +6,17 @@ from fastapi import Depends, HTTPException, Request, status
 from app.core.config import Settings, get_settings
 
 
+PRIVATE_DEPLOYMENT_CODE = "private_deployment"
+PRIVATE_DEPLOYMENT_MESSAGE = "This deployment is private."
+
+
+class PrivateDeploymentForbidden(Exception):
+    """A verified user who is not on this private deployment's allow-list."""
+
+    code = PRIVATE_DEPLOYMENT_CODE
+    message = PRIVATE_DEPLOYMENT_MESSAGE
+
+
 def require_user_id(
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
@@ -41,7 +52,30 @@ def require_user_id(
             "Sign in to continue.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return subject.strip()
+    subject = subject.strip()
+    allowed = settings.allowed_user_id_set
+    if allowed and subject not in allowed:
+        raise PrivateDeploymentForbidden()
+    return subject
+
+
+def require_owner_if_private(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> None:
+    """Routes that are public locally still need the allow-listed owner when private."""
+
+    if settings.private_deployment:
+        require_user_id(request, settings)
+
+
+def refuse_if_private(settings: Annotated[Settings, Depends(get_settings)]) -> None:
+    """For unauthenticated browser navigations that have an authenticated replacement."""
+
+    if settings.private_deployment:
+        raise PrivateDeploymentForbidden()
 
 
 UserIdDependency = Annotated[str, Depends(require_user_id)]
+OwnerIfPrivateDependency = Depends(require_owner_if_private)
+RefuseIfPrivateDependency = Depends(refuse_if_private)

@@ -172,6 +172,40 @@ def checkout_expiring(store: str) -> PushPayload:
     )
 
 
+RIDER_QUOTE_MAX = 60
+
+
+def rider_called(
+    started_at: datetime, rider_said: str | None, outcome_text: str, *, urgent: bool = False, call_id: str | None = None
+) -> PushPayload:
+    """Rider assist: one line, the time, at most a short quote of what the rider asked.
+
+    Never an OTP-like code (hidden), never the delivery address or notes: only the
+    rider's own words, cut to one short line.
+    """
+
+    from app.rider.safety import redact_store_text
+
+    quote = ""
+    if rider_said:
+        said = redact_store_text(" ".join(rider_said.split()))
+        if len(said) > RIDER_QUOTE_MAX:
+            said = said[: RIDER_QUOTE_MAX - 1].rstrip() + "…"
+        quote = f" · ‘{said}’"
+    return PushPayload(
+        kind="rider_called",
+        title="A rider is waiting" if urgent else "Rider called",
+        body=f"{clock_time(started_at)}{quote} — {outcome_text}."[:160],
+        url="/?rider_call=" + quote_url(call_id) if call_id else "/",
+        tag=f"rider:{call_id}"[:80] if call_id else None,
+        suppress_when_visible=True,
+    )
+
+
+def quote_url(value: str) -> str:
+    return quote(value, safe="")
+
+
 def test_message() -> PushPayload:
     return PushPayload(
         kind="test",

@@ -30,6 +30,7 @@ GATED = [
         {"json": {"approval_id": APPROVAL, **FINGERPRINT}, "headers": {"Idempotency-Key": "k"}},
     ),
     ("POST", "/api/memory/purchase-history/sync", {"params": {"provider": "zepto"}}),
+    ("POST", "/api/memory/purchase-history/auto-sync/run", {"params": {"provider": "zepto"}}),
     ("POST", "/api/support/complaints/c1/prepare", {}),
     ("POST", "/api/support/complaints/c1/approve", {"json": {"expected_revision": 1}}),
     ("POST", "/api/support/complaints/c1/submit", {}),

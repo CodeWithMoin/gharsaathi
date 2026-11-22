@@ -12,6 +12,7 @@ import {
   Lifebuoy,
   MapPin,
   PencilSimple,
+  Phone,
   ShieldCheck,
   SignOut,
   Storefront,
@@ -27,6 +28,7 @@ import { MemorySettings } from "./memory-settings";
 import { NotificationsDetail, notificationsSubtitle, type NotificationsController } from "./notification-settings";
 import { profileChanges, profileDraft, type ProfileUpdate, type ProfileValues } from "./input-flows.mjs";
 import { InputDialog } from "./ui/input-dialog";
+import { RiderAssistSettings } from "./rider-assist-settings";
 
 export type AccountSettingsStore = {
   id: string;
@@ -77,7 +79,7 @@ export type AccountSettingsSheetProps = {
   notifications?: NotificationsController;
 };
 
-type SettingsSection = "stores" | "preferences" | "memory" | "privacy" | "addresses" | "notifications" | null;
+type SettingsSection = "stores" | "preferences" | "memory" | "privacy" | "addresses" | "notifications" | "rider" | null;
 
 /**
  * A controlled, mobile-first account panel. It intentionally has only an overview
@@ -146,7 +148,9 @@ export function AccountSettingsSheet({
             ? "Addresses"
             : section === "notifications"
               ? "Notifications"
-              : "Account";
+              : section === "rider"
+                ? "Rider assist"
+                : "Account";
 
   // A right-side push drawer: the page shell in page.tsx slides left by the same width with
   // the same spring and owns the backdrop, so tapping the pushed page closes this panel.
@@ -155,7 +159,7 @@ export function AccountSettingsSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${section === "memory" ? "w-[min(94vw,420px)]" : "w-3/4 max-w-[360px]"} flex-col overflow-hidden bg-surface-muted text-ink`}
+        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${section === "memory" || section === "rider" ? "w-[min(94vw,420px)]" : "w-3/4 max-w-[360px]"} flex-col overflow-hidden bg-surface-muted text-ink`}
         initial={reducedMotion ? { opacity: 0 } : { x: "100%" }}
         animate={{ x: 0, opacity: 1 }}
         exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}
@@ -182,6 +186,7 @@ export function AccountSettingsSheet({
                   <SettingsRow icon={<Brain size={21} weight="duotone" />} title="Saved preferences" subtitle="Preferences, never, rules" onClick={() => setSection("memory")} />
                   <SettingsRow icon={<ShieldCheck size={21} weight="duotone" />} title="Privacy & memory" subtitle={privacySummary} onClick={() => setSection("privacy")} />
                   {notifications && <SettingsRow icon={<Bell size={21} weight="duotone" />} title="Notifications" subtitle={notificationsSubtitle(notifications.view)} onClick={() => setSection("notifications")} />}
+                  <SettingsRow icon={<Phone size={21} weight="duotone" />} title="Rider assist (Beta)" subtitle="An AI answers missed delivery calls" onClick={() => setSection("rider")} />
                   <SettingsRow icon={<MapPin size={21} weight="duotone" />} title="Addresses" subtitle={addressSummary} onClick={() => setSection("addresses")} last={!onOpenSupport} />
                   {onOpenSupport && <SettingsRow icon={<Lifebuoy size={21} weight="duotone" />} title="Help with an order" subtitle="Missing, damaged or late items" onClick={onOpenSupport} last />}
                 </nav>
@@ -196,6 +201,7 @@ export function AccountSettingsSheet({
                 {section === "memory" && <MemorySettings />}
                 {section === "privacy" && <SimpleDetail icon={<Eye size={24} weight="duotone" />} title={privacySummary} description="You choose what GharSaathi remembers. Shopping history alone never becomes a stock prediction." action="Review privacy & memory" onAction={onManagePrivacy} />}
                 {section === "notifications" && notifications && <NotificationsDetail controller={notifications} />}
+                {section === "rider" && <RiderAssistSettings />}
                 {section === "addresses" && <AddressesDetail addresses={addresses} stores={stores} onSelectAddress={onSelectAddress} onManageAddresses={onManageAddresses} onChooseStoreAddress={onChooseStoreAddress} />}
               </motion.div>}
           </AnimatePresence>
@@ -230,13 +236,18 @@ function SimpleDetail({ icon, title, description, action, onAction }: { icon: Re
 
 type AddressForm = "masculine" | "feminine" | "neutral";
 type ReplyLanguage = "hinglish" | "hindi" | "english";
-type VoiceProfile = { first_name: string | null; address_form: AddressForm; language: ReplyLanguage };
+type ReplyStyle = "quick" | "detailed";
+type VoiceProfile = { first_name: string | null; address_form: AddressForm; language: ReplyLanguage; reply_style?: ReplyStyle };
 
 const ADDRESS_FORMS: { id: AddressForm; label: string; example: string }[] = ADDRESS_FORM_OPTIONS.map((option) => ({ id: option.value, label: option.label, example: option.example }));
 const LANGUAGES: { id: ReplyLanguage; label: string }[] = [
   { id: "hinglish", label: "Hinglish" },
   { id: "hindi", label: "Hindi" },
   { id: "english", label: "English" },
+];
+const REPLY_STYLES: { id: ReplyStyle; label: string; hint: string }[] = [
+  { id: "quick", label: "Quick", hint: "One short line. Details stay on the cards." },
+  { id: "detailed", label: "Detailed", hint: "A little more explanation, such as the main options and why." },
 ];
 const choiceClass = (selected: boolean) => `min-h-11 rounded-xl px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-60 ${selected ? "bg-accent text-on-accent" : "border border-accent-border text-ink-secondary"}`;
 
@@ -270,6 +281,15 @@ function PreferencesDetail({ languageLabel, onLanguageChange, onManagePreference
       : <div className="mt-4 h-28 animate-pulse rounded-xl bg-surface-strong" aria-label="Loading profile" />}
     <p aria-live="polite" className={`mt-2 min-h-4 text-[11px] ${loadError ? "text-danger" : "text-success"}`}>{loadError || (savedNotice ? "Saved. This applies from your next voice chat." : "")}</p>
     <button type="button" onClick={() => { setSavedNotice(false); setEditing(true); }} disabled={!profile} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-inverse px-4 text-sm font-semibold text-on-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"><PencilSimple size={16} weight="bold" />Edit profile</button>
+    {profile && <ReplyStyleSetting
+      value={profile.reply_style ?? "quick"}
+      onChange={async (reply_style) => {
+        const saved = await request<VoiceProfile>("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reply_style }) });
+        setProfile(saved);
+        setLoadError("");
+        setSavedNotice(true);
+      }}
+    />}
     {onManagePreferences && <button type="button" onClick={onManagePreferences} className="mt-3 min-h-11 w-full rounded-xl border border-accent-border px-4 text-sm font-semibold text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">More preferences</button>}
     <EditProfileDialog
       open={editing && profile !== null}
@@ -286,6 +306,25 @@ function PreferencesDetail({ languageLabel, onLanguageChange, onManagePreference
       }}
     />
   </div>;
+}
+
+/** Quick (default) or detailed replies; saved as soon as it is tapped. */
+function ReplyStyleSetting({ value, onChange }: { value: ReplyStyle; onChange: (style: ReplyStyle) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const hint = REPLY_STYLES.find((style) => style.id === value)?.hint;
+  return <fieldset className="mt-3">
+    <legend className="text-xs font-semibold text-ink-secondary">How much should GharSaathi say?</legend>
+    <div className="mt-1.5 grid grid-cols-2 gap-2">
+      {REPLY_STYLES.map((style) => <button key={style.id} type="button" aria-pressed={value === style.id} disabled={busy} onClick={async () => {
+        if (style.id === value) return;
+        setBusy(true);
+        setError("");
+        try { await onChange(style.id); } catch { setError("Could not save. Try again."); } finally { setBusy(false); }
+      }} className={choiceClass(value === style.id)}>{style.label}</button>)}
+    </div>
+    <p aria-live="polite" className={`mt-2 text-[11px] ${error ? "text-danger" : "text-muted"}`}>{error || hint}</p>
+  </fieldset>;
 }
 
 /** One "Edit profile" popup for name, how to address you and reply language; one Save. */

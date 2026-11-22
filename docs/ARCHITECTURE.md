@@ -104,11 +104,13 @@ flowchart TD
 | D9 | Apply saved rules to search | Code (`memory/household_rules.py` in `search_products`) | **Yes:** `avoid_store` skips that store's search (and an earlier option from it cannot be added), `avoid_product`/`avoid_brand` hide options unless the query asks for them (then `avoided: true`), `prefer_*` adds `preferred: true` (separate from `remembered`) |
 | D10 | Prepare an order card | Backend model calls `prepare_order` on an explicit order request | **Yes, for the order itself:** the tool only shows the card; only the user's tap on **Place order** approves and orders, and code re-checks the bound confirmation first. Calling it at the wrong time can only show a card |
 | D11 | Answer "where is my order?" | Backend model calls `get_order_status` / `list_recent_orders` | **Yes:** read-only tools scoped to the verified household; status and ETA come only from the provider; cancelling is not possible (no tool) |
+| D12 | Pick a product for "X order kar do" / "X add karo" | Code (`express_tools.pick_option`) after the model calls `express_order` / `quick_add` | **Yes:** only the remembered product or the single named brand+size match in stock is picked; otherwise `needs_choice` (one question). The order still needs the tap |
 
 ### Deterministic checks (code, every call)
 
 | Check | Location | Prevents |
 |---|---|---|
+| Private deployment: `ALLOWED_USER_IDS` allow-list on the verified Clerk subject; OAuth starts only via signed-in `POST /api/{store}/oauth/authorization` | `backend/app/auth.py` | Anyone but the owner using a hosted deployment (403 `private_deployment`, "This deployment is private.") |
 | Strict JSON schema on every tool argument | `backend/app/voice/*_tools.py`, `tools.py` | Malformed or extra arguments |
 | Not-a-product guard | `backend/app/commerce/query_guard.py` | Searching chit-chat |
 | Store connected + delivery address selected | `tools.py`, `basket_tools.py` | Search/add without a store (`not_connected`) |
@@ -126,6 +128,27 @@ flowchart TD
 | Order card tap: confirmation belongs to this user, is open (single-use, not cancelled/replaced), unexpired (5 min, capped by the bill), and the basket revision, address, approval, approval fingerprint, quote digest and payable are unchanged; Zepto only; accepted terms | `backend/app/shopping/order_confirmation.py`, `POST /api/orders/confirm` | Ordering a stale, edited, replayed, cancelled or someone else's bill |
 | Tap runs the existing approve + COD checkout: idempotency key `order-confirmation:<id>`, durable one-shot claim per approval, fresh re-quote must match, outcome-unknown never retried | `backend/app/shopping/checkout.py` | Double orders, price drift, blind retries |
 | The card binds the payment method; another method means a fresh card (`POST /api/orders/payment-method`). Prepaid methods are offered only with the flag on, allow-listed, covered by the verified response contract and listed by `get_payment_methods`; the tap re-quotes with that method's own unconfirmed preview, then makes one `create_*` call; only a provider-confirmed payment and order is placed | `backend/app/shopping/payments.py`, `backend/app/commerce/zepto/payments.py`, `checkout.py` | Paying an amount the user did not approve, guessed response fields, money claims without the provider |
+
+## Saved lists, repeat last order, recent items, clear
+
+`app/shopping/saved_lists.py`. Lists are only what the user saved and named
+(`saved_shopping_lists`, user-scoped, unique name per user, 20 lists × 40 items).
+"Repeat last order" and recent items read this household's own real orders only: an
+`ordered` basket with a `confirmed` checkout attempt that has a provider order id.
+Synthetic sample orders (`synth-` basket or order ids) and baskets without a confirmed
+attempt are never repeated.
+Adding (`add_items`, shared by `POST /api/lists/{id}/add-to-basket`,
+`POST /api/quick-actions/repeat-last`, `POST /api/quick-actions/recent-item` and the
+`add_saved_list` voice/typed tool) searches each item's name at its store and adds
+only the same variant while available, at today's price, in one revision-checked
+`BasketService.add_lines` edit per store. Unavailable, not listed, store not ready,
+store error and locked basket are reported per item; a store that fails is not
+searched again in that run. Nothing quotes, approves or orders.
+
+`BasketService.clear(household, provider, *, expected_revision=None)` empties a basket
+in one revision-checked edit, shared by the `clear_basket` voice/typed tool and the
+basket card's **Clear basket** (`POST /api/baskets/{provider}/clear`, which passes the
+revision the card shows: 409 when the basket changed since, refused in checkout).
 
 ## Placing an order (one tap)
 
@@ -383,6 +406,49 @@ sequenceDiagram
   fetch handler and no cache. A web app manifest (`/manifest.webmanifest`) makes the
   app installable; iOS/iPadOS deliver web push only to the installed Home Screen app.
 
+## Purchase-history import (consented, read-only)
+
+Imports run only with `purchase_history/proactive_reorder` consent and only when the
+user asks (Settings → "Refresh usuals" / "Re-import full history"), or, if the user
+turned on "Keep my … history up to date", lazily when the app opens. There is no
+background scheduler. Code: `app/memory/purchase_graph.py` (`sync`, `auto_sync`),
+`app/memory/history_reading.py` (reader contract, call pacer),
+`app/commerce/zepto/purchase_history.py`, `app/commerce/swiggy/history.py`.
+
+Avoiding provider rate limits is the design constraint:
+
+- **Never retried.** Readers call the tool once per step (Zepto uses
+  `recover=False`, so no session-reset retry). The first rate limit or session
+  error stops the sync; orders already read are kept, `last_error_code` is recorded
+  and a rate limit sets `rate_limited_until` (provider `Retry-After`, else 1 h).
+  Until then a sync is refused (HTTP 429) without a provider call.
+- **Zepto** returns full history. `list_order_history` (10 per page, newest first),
+  then `get_order_detail` for each delivered order not yet imported (known orders are
+  matched by the list id stored as `provider_lookup_id`). One call at a time, ≥1 s
+  apart, ≤30 detail reads and ≤100 orders per sync. Out of budget, the sync records
+  `resume_page` and the next sync continues there; once the window has been walked
+  (`backfill_complete`), later syncs stop at the first known order. A malformed detail
+  is skipped and counted (`detail_failures`).
+- **Swiggy** `get_orders` only returns **orders from the last 15 days** (live tool
+  description). We send `orderType: "INSTAMART"`, `count: 20` and follow
+  `data.nextCursor` (or a top-level `nextCursor`) for at most 2 pages, ≥2 s apart,
+  after checking the client's known cooldown. Older Instamart history exists here only
+  if earlier syncs saw it, which is why the weekly opt-in sync exists. The UI labels
+  Swiggy coverage "last 15 days".
+- **Window.** Orders older than `PURCHASE_HISTORY_LOOKBACK_DAYS` (default 365) or the
+  user's retention period, whichever is shorter, are never imported; a newest-first
+  walk stops at the first such order.
+- **Cadence.** A sync within 10 minutes of the last success returns `cached`. "Re-import
+  full history" (`full=true`) skips that cache and restarts the walk from page 1, at
+  most once per 24 h per store (HTTP 409 otherwise; `GET
+  /api/memory/purchase-history/sync-state` returns `full_resync_available_at`). The
+  weekly opt-in sync (`POST …/auto-sync/run`, called once per app open) runs only when
+  enabled, consent is current, no cooldown is recorded and the last attempt was ≥7 days
+  ago.
+- **Logs.** `event=purchase_history_sync provider= list_calls= detail_calls=
+  stopped_reason= fetched= skipped_known= detail_failures= full=`; no order or item
+  content.
+
 ## Delivery addresses (switch, add)
 
 **Switch to a saved address.** "Address change karo" calls `list_delivery_addresses`
@@ -448,6 +514,54 @@ sequenceDiagram
 - Contact number and coordinates are never prefilled; the model says the user must
   type the number.
 
+## Ask → tap: express order, quick add, clear basket
+
+Fewer model rounds is the main latency lever (see Turn latency), so simple
+intents run their safe steps in code in one tool call
+(`backend/app/voice/express_tools.py`, `BasketToolExecutor._clear`):
+
+| User says | Tool | Code does | Model then |
+|---|---|---|---|
+| "2 Amul lassi order kar do", "usual milk mangwa do" | `express_order(items[{query, quantity}], store?, payment_method?)` | Zepto only: one search per item (household rules + memory annotations, concurrently), confident pick, set the line to the asked quantity in the open basket (other lines stay; `also_in_basket` names them), then the normal `prepare_order` (bill + order card) | One line from `ready`: items, bill, address, "Place order dabaiye" |
+| "doodh add karo", "usual atta daal do" | `quick_add(items, store?)` | Same pick across ready stores (same product on both: cheaper, then the store whose basket has items); adds, never bills | "Amul Taaza 1 L, ₹54, Zepto basket mein add kiya — change karna ho to bolo." |
+| "clear cart", "basket khali karo" | `clear_basket(store?: zepto / swiggy_instamart / all)` | `BasketService.clear`: one revision-checked edit per store (supersedes its bill, so the order card is out of date); refused while checkout is pending or the outcome is unknown (`locked` with the reason) | One line from the result |
+
+**Confident pick (code, `pick_option`).** Among in-stock options that are not
+avoided and contain every product word of the query (Hinglish aliases such as
+doodh → milk) and its pack size when given: the one remembered product
+(confirmed preference before purchase history, then most bought), else the one
+product whose brand the user named. Anything else is `needs_choice` with the
+reason (`several_matches`, `confirm_single`, `not_available`, `avoided`,
+`needs_product`) and that item's options on screen; confident items are already
+in the basket, no card is shown, and the model asks one question, then calls
+the tool again with the picked product. A store-level problem
+(`provider_error`, `address_invalid`, not connected, every item failed) adds
+nothing (`failed`). Nothing here approves, pays or orders: `express_order`'s card
+is the same bound order card, placed only by the tap.
+
+**Result shape.** A multi-step tool returns every UI event it caused
+(`ToolOutcome.extra_ui_events`, then `ui_event`); the sideband and typed chat
+publish them in order. Change results (`add_to_basket`, `set_basket_quantity`,
+`clear_basket`, `quick_add`, `express_order`) carry the basket after the change,
+and their notes and the prompt say not to call `view_basket` after them.
+
+**Reply style.** `user_profiles.reply_style` (`quick` default, `detailed`;
+Settings → Preferences → "How much should GharSaathi say?") adds one rule to the
+session profile block that both the live and the backend (voice and typed)
+instructions carry.
+
+Measured with `python -m evaluation.run_turns_to_order` (real backend model,
+demo stores, one run each, prompt 1.30.0 → 1.40.0):
+
+| Scenario | Before: turns / rounds / s | After: turns / rounds / s |
+|---|---|---|
+| Express single ("2 Amul lassi order kar do") | 1 / 4 / 16.5 | 1 / 2 / 6.6 |
+| Express two items | 1 / 4 / 16.2 | 1 / 2 / 8.2 |
+| Usual milk (remembered) | 3 / 7 / 25.7 | 1 / 2 / 6.4 |
+| Ambiguous → one question → card | 4 / 10 / 37.4 | 2 / 4 / 13.9 |
+| Typed "clear cart" (2 items) | 1 / 3 / 8.7 | 1 / 2 / 6.7 |
+| **Median to order card** | **2 turns, 21.1 s** | **1 turn, 7.4 s** |
+
 ## Turn latency
 
 A shopping turn's time is almost all backend model rounds: with ~10k cached
@@ -475,6 +589,8 @@ while the demo-store tools took ~0 ms. Fewer rounds is the main lever.
   `saving_paise`, `total_variants`, and `provider_statuses` when every store
   answered (−22% tokens per search result).
 
+Per-turn traces (rounds, tools, ms, tokens; local JSONL): `DEV_TRACE=true` and
+`scripts/gs trace last` ([`DEV_TOOLS.md`](DEV_TOOLS.md)).
 Diagnostics: `VOICE_EVENT_LOG=true` logs content-free
 `event=voice_delegation_timing`, `voice_tool_timing`, `chat_tool_timing` and
 `chat_turn_timing` lines. Benchmark: `python -m evaluation.run_turn_latency`
@@ -712,5 +828,7 @@ sequenceDiagram
 
 - Feature × surface matrix: [`CAPABILITIES.md`](CAPABILITIES.md)
 - Test layers and how to run them: [`TESTING.md`](TESTING.md)
+- Local operator toolkit (`make doctor`, `scripts/gs`, `DEV_TRACE`, `/dev`): [`DEV_TOOLS.md`](DEV_TOOLS.md)
 - Opt-in real-provider smoke tests: [`LIVE_SMOKE.md`](LIVE_SMOKE.md)
 - Voice turn-taking modes: [`voice-turn-taking.md`](voice-turn-taking.md)
+- Rider assist (beta, Vobiz → OpenAI Realtime phone assistant for delivery partners): [`RIDER_ASSIST.md`](RIDER_ASSIST.md)

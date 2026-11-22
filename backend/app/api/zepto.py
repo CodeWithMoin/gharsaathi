@@ -6,7 +6,11 @@ from fastapi import APIRouter, HTTPException, Path, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 
-from app.auth import UserIdDependency
+from app.auth import (
+    OwnerIfPrivateDependency,
+    RefuseIfPrivateDependency,
+    UserIdDependency,
+)
 from app.commerce.demo import DemoZeptoService
 from app.commerce.provider_state import (
     ProviderAddressRepository,
@@ -200,8 +204,9 @@ async def connection(
         raise AssertionError("unreachable")
 
 
-@router.get("/oauth/start", response_class=RedirectResponse)
-async def oauth_start(service: ZeptoServiceDependency) -> RedirectResponse:
+async def _authorization_url(service: ZeptoServiceDependency) -> str:
+    """Check the callback listener (AGENTS.md), then create OAuth state and the URL."""
+
     try:
         settings = get_settings()
         if not await local_callback_is_ready(
@@ -212,7 +217,7 @@ async def oauth_start(service: ZeptoServiceDependency) -> RedirectResponse:
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "Zepto's local OAuth callback bridge is not running. Run `make zepto-bridge` first.",
             )
-        return RedirectResponse(await service.authorization_url(), status_code=302)
+        return await service.authorization_url()
     except HTTPException:
         raise
     except Exception as exc:
@@ -220,7 +225,27 @@ async def oauth_start(service: ZeptoServiceDependency) -> RedirectResponse:
         raise AssertionError("unreachable")
 
 
-@router.get("/oauth/readiness")
+@router.get(
+    "/oauth/start",
+    response_class=RedirectResponse,
+    dependencies=[RefuseIfPrivateDependency],
+)
+async def oauth_start(service: ZeptoServiceDependency) -> RedirectResponse:
+    """Local development only; a private deployment uses POST /oauth/authorization."""
+
+    return RedirectResponse(await _authorization_url(service), status_code=302)
+
+
+@router.post("/oauth/authorization")
+async def oauth_authorization(
+    _user: UserIdDependency, service: ZeptoServiceDependency
+) -> dict[str, str]:
+    """Signed-in replacement for the start navigation: the browser then opens the URL."""
+
+    return {"authorization_url": await _authorization_url(service)}
+
+
+@router.get("/oauth/readiness", dependencies=[OwnerIfPrivateDependency])
 async def oauth_readiness() -> dict[str, bool | str]:
     ready = await local_callback_is_ready(
         get_settings().zepto_oauth_redirect_uri,

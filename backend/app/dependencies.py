@@ -29,6 +29,7 @@ from app.core.config import get_settings
 from app.core.local_secrets import get_or_create_local_encryption_key
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
+from app.shopping.saved_lists import OrderedBasketReader, OrderedBaskets, SavedListStore
 from app.shopping.database import DatabaseApprovalRepository, DatabaseBasketRepository
 from app.shopping.checkout import (
     CheckoutService,
@@ -321,6 +322,7 @@ def get_voice_service() -> LiveSessionService:
         photo_reader=get_photo_reader(),
         order_tracking=get_order_tracking_service(),
         order_history=get_zepto_service(),
+        saved_lists=get_saved_list_store(),
     )
 
 
@@ -546,3 +548,17 @@ def get_push_events() -> PushEvents:
 
 
 PushNotifierDependency = Annotated[PushNotifier, Depends(get_push_notifier)]
+
+
+@lru_cache
+def get_saved_list_store() -> SavedListStore:
+    return SavedListStore(get_session_factory())
+
+
+@lru_cache
+def get_ordered_baskets() -> OrderedBaskets:
+    return OrderedBaskets(get_session_factory())
+
+
+SavedListStoreDependency = Annotated[SavedListStore, Depends(get_saved_list_store)]
+OrderedBasketsDependency = Annotated[OrderedBasketReader, Depends(get_ordered_baskets)]

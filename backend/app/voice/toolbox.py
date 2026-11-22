@@ -43,6 +43,7 @@ from app.voice.memory_tools import (
 from app.shopping.models import ProviderName
 from app.shopping.order_confirmation import OrderConfirmations
 from app.voice.order_tools import ORDER_TOOL_DEFINITIONS, ORDER_TOOL_NAMES, OrderToolExecutor
+from app.voice.express_tools import EXPRESS_TOOL_DEFINITIONS, EXPRESS_TOOL_NAMES, ExpressToolExecutor
 from app.voice.photo_tools import PHOTO_TOOL_DEFINITIONS, PHOTO_TOOL_NAMES, PhotoReading, PhotoToolExecutor
 from app.voice.order_status_tools import (
     ORDER_STATUS_TOOL_DEFINITIONS,
@@ -51,6 +52,12 @@ from app.voice.order_status_tools import (
     OrderStatusToolExecutor,
 )
 from app.tracking.service import OrderTrackingService
+from app.shopping.saved_lists import SavedListStore, StoreTarget
+from app.voice.saved_list_tools import (
+    SAVED_LIST_TOOL_DEFINITIONS,
+    SAVED_LIST_TOOL_NAMES,
+    SavedListToolExecutor,
+)
 from app.voice.tools import TOOL_DEFINITIONS as SEARCH_TOOL_DEFINITIONS
 from app.voice.tools import (
     MultiProviderShoppingToolExecutor,
@@ -81,9 +88,11 @@ VOICE_TOOL_DEFINITIONS = [
     *MEMORY_TOOL_DEFINITIONS,
     *MEMORY_WRITE_TOOL_DEFINITIONS,
     *ORDER_TOOL_DEFINITIONS,
+    *EXPRESS_TOOL_DEFINITIONS,
     *ADDRESS_BOOK_TOOL_DEFINITIONS,
     *PHOTO_TOOL_DEFINITIONS,
     *ORDER_STATUS_TOOL_DEFINITIONS,
+    *SAVED_LIST_TOOL_DEFINITIONS,
 ]
 
 
@@ -122,6 +131,7 @@ class VoiceToolbox:
         photo_reader: PhotoReading | None = None,
         order_tracking: OrderTrackingService | None = None,
         order_history: OrderHistoryReader | None = None,
+        saved_lists: SavedListStore | None = None,
     ) -> None:
         options: dict[str, SearchOption] = {}
         targets = [
@@ -171,6 +181,7 @@ class VoiceToolbox:
         )
         self.order = OrderToolExecutor(self.basket, order_confirmations)
         self.photo = PhotoToolExecutor(photo_reader, household_id)
+        self.express = ExpressToolExecutor(self)
         self.order_status = OrderStatusToolExecutor(
             order_tracking,
             order_history,
@@ -182,6 +193,17 @@ class VoiceToolbox:
                 else None
             ),
         )
+
+        self.saved_lists = SavedListToolExecutor(
+            saved_lists, baskets, self._list_targets, household_id
+        )
+
+    def _list_targets(self) -> dict[ProviderName, StoreTarget]:
+        # The session's current stores and addresses (use_address updates them).
+        return {
+            target.provider: StoreTarget(target.provider, target.searcher, target.address_id)
+            for target in self.search.targets
+        }
 
     def has_store(self, provider: ProviderName) -> bool:
         return provider in self.basket.stores
@@ -222,6 +244,10 @@ class VoiceToolbox:
             return await self._recall_then_search(name, raw_arguments)
         if name in ORDER_TOOL_NAMES:
             return await self.order.execute(name, raw_arguments)
+        if name in EXPRESS_TOOL_NAMES:
+            return await self.express.execute(name, raw_arguments)
+        if name in SAVED_LIST_TOOL_NAMES:
+            return await self.saved_lists.execute(name, raw_arguments)
         if name in ORDER_STATUS_TOOL_NAMES:
             return await self.order_status.execute(name, raw_arguments)
         if name in MEMORY_WRITE_TOOL_NAMES:

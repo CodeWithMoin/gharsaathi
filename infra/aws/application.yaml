@@ -1,5 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: GharSaathi safe-demo web runtime on ECS Fargate
+Description: >-
+  GharSaathi private (owner-only) runtime for ap-south-1 (Mumbai): CloudFront -> ALB ->
+  one ECS Fargate frontend task and one backend task (ARM64), RDS PostgreSQL, EFS for
+  the backend's file state, one Secrets Manager secret, optional rider-assist (Vobiz)
+  host straight to the ALB so call media stays in India. No NAT gateway.
 
 Parameters:
   DomainName:
@@ -11,30 +15,81 @@ Parameters:
     Type: AWS::EC2::VPC::Id
   PublicSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
+    Description: Exactly two public subnets in different AZs (ALB, EFS mount targets, RDS subnet group).
+  CloudFrontPrefixListId:
+    Type: String
+    Default: pl-9aa247f3
+    Description: com.amazonaws.global.cloudfront.origin-facing in this region (pl-9aa247f3 is ap-south-1, pl-82a045eb us-west-2).
   FrontendImage:
     Type: String
   BackendImage:
     Type: String
   CloudFrontCertificateArn:
     Type: String
-  AppEncryptionKey:
+  AppSecretArn:
     Type: String
-    NoEcho: true
-  OpenAIApiKey:
+    Description: >-
+      JSON secret written by scripts/aws-secrets.sh (OPENAI_API_KEY, APP_ENCRYPTION_KEY,
+      CLERK_SECRET_KEY, ORIGIN_VERIFY_SECRET, optional WEB_PUSH_*). Never pass values as parameters.
+  AllowedUserIds:
     Type: String
-    NoEcho: true
-  OriginVerifySecret:
+    Description: Comma-separated Clerk user ids allowed to use this deployment (owner only).
+    AllowedPattern: "^user_[A-Za-z0-9]+(,user_[A-Za-z0-9]+)*$"
+  ClerkPublishableKey:
     Type: String
-    NoEcho: true
+    Description: Public Clerk key (pk_live_... for a production instance); also baked into the frontend image.
+    AllowedPattern: "^pk_(live|test)_[A-Za-z0-9=_-]+$"
+  CommerceMode:
+    Type: String
+    Default: demo
+    AllowedValues: [demo, live]
+    Description: >-
+      demo until Zepto allow-lists the production callback (docs/production-mcp-access.md).
+      Swiggy stays unusable when hosted until Swiggy approves the app.
+  WebPushEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Inject WEB_PUSH_VAPID_* from the app secret (requires the codex/web-push code and keys).
+  WebPushSubject:
+    Type: String
+    Default: ""
+  PostgresEngineVersion:
+    Type: String
+    Default: "17.11"
+  RiderEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Rider assist (Vobiz). Creates rider.<domain> pointing straight at the ALB (not
+      CloudFront) for /api/rider/vobiz/* and the /api/rider/stream WebSocket, so call
+      media terminates in this region.
+  RiderIngressCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: Source range allowed to reach rider.<domain>:443 (narrow to Vobiz's published ranges if they provide them).
+  RiderNumber:
+    Type: String
+    Default: ""
+    Description: Optional Vobiz number in E.164; other called numbers are refused.
+
+Conditions:
+  WebPush: !Equals [!Ref WebPushEnabled, "true"]
+  Rider: !Equals [!Ref RiderEnabled, "true"]
 
 Resources:
   OriginCertificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
       DomainName: !Sub origin.${DomainName}
+      SubjectAlternativeNames:
+        - !Sub rider.${DomainName}
       ValidationMethod: DNS
       DomainValidationOptions:
         - DomainName: !Sub origin.${DomainName}
+          HostedZoneId: !Ref HostedZoneId
+        - DomainName: !Sub rider.${DomainName}
           HostedZoneId: !Ref HostedZoneId
       Tags:
         - Key: Project
@@ -44,9 +99,10 @@ Resources:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: gharsaathi
+      # Container Insights bills custom metrics; the default ECS/ALB/RDS metrics are enough for one owner.
       ClusterSettings:
         - Name: containerInsights
-          Value: enabled
+          Value: disabled
 
   FrontendLogGroup:
     Type: AWS::Logs::LogGroup
@@ -60,18 +116,6 @@ Resources:
       LogGroupName: /ecs/gharsaathi/backend
       RetentionInDays: 14
 
-  AppEncryptionSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Name: gharsaathi/app-encryption-key
-      SecretString: !Ref AppEncryptionKey
-
-  OpenAISecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Name: gharsaathi/openai-api-key
-      SecretString: !Ref OpenAIApiKey
-
   DatabaseSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
@@ -82,20 +126,31 @@ Resources:
         PasswordLength: 32
         ExcludeCharacters: '"@/\\'
 
+  # The ALB only accepts CloudFront's origin-facing ranges; listener rules also
+  # require the secret X-Origin-Verify header that only our distribution adds.
   AlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Public HTTPS entry point for GharSaathi
+      GroupDescription: HTTPS from CloudFront origin-facing ranges only
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          CidrIp: 0.0.0.0/0
+          SourcePrefixListId: !Ref CloudFrontPrefixListId
+
+  # Vobiz reaches rider.<domain> directly. Only the rider listener rule matches that
+  # host; everything else on the ALB still needs the CloudFront-only header.
+  AlbRiderIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: Rider
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref RiderIngressCidr
+      Description: Vobiz answer URL and media WebSocket
 
   FrontendSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -130,6 +185,67 @@ Resources:
           ToPort: 5432
           SourceSecurityGroupId: !Ref BackendSecurityGroup
 
+  FileSystemSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EFS accepts NFS only from backend tasks
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref BackendSecurityGroup
+
+  # backend/.data: encrypted provider connections + pending OAuth state, support
+  # drafts/evidence and order-tracking watches. Survives task restarts/deploys.
+  BackendDataFileSystem:
+    Type: AWS::EFS::FileSystem
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+      ThroughputMode: elastic
+      BackupPolicy:
+        Status: ENABLED
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_30_DAYS
+      FileSystemTags:
+        - Key: Name
+          Value: gharsaathi-backend-data
+        - Key: Project
+          Value: GharSaathi
+
+  BackendDataMountTargetA:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref BackendDataFileSystem
+      SubnetId: !Select [0, !Ref PublicSubnetIds]
+      SecurityGroups:
+        - !Ref FileSystemSecurityGroup
+
+  BackendDataMountTargetB:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref BackendDataFileSystem
+      SubnetId: !Select [1, !Ref PublicSubnetIds]
+      SecurityGroups:
+        - !Ref FileSystemSecurityGroup
+
+  BackendDataAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref BackendDataFileSystem
+      PosixUser:
+        Uid: "1001"
+        Gid: "1001"
+      RootDirectory:
+        Path: /backend-data
+        CreationInfo:
+          OwnerUid: "1001"
+          OwnerGid: "1001"
+          Permissions: "0700"
+
   DatabaseSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -143,19 +259,21 @@ Resources:
     Properties:
       DBInstanceIdentifier: gharsaathi
       Engine: postgres
+      EngineVersion: !Ref PostgresEngineVersion
       DBName: gharsaathi
       MasterUsername: !Sub '{{resolve:secretsmanager:${DatabaseSecret}:SecretString:username}}'
       MasterUserPassword: !Sub '{{resolve:secretsmanager:${DatabaseSecret}:SecretString:password}}'
       DBInstanceClass: db.t4g.micro
       AllocatedStorage: 20
-      MaxAllocatedStorage: 100
+      MaxAllocatedStorage: 50
       StorageType: gp3
       StorageEncrypted: true
       PubliclyAccessible: false
       MultiAZ: false
-      BackupRetentionPeriod: 1
+      BackupRetentionPeriod: 7
       AutoMinorVersionUpgrade: true
-      DeletionProtection: false
+      DeletionProtection: true
+      EnablePerformanceInsights: false
       DBSubnetGroupName: !Ref DatabaseSubnetGroup
       VPCSecurityGroups:
         - !Ref DatabaseSecurityGroup
@@ -172,6 +290,13 @@ Resources:
       SecurityGroups:
         - !Ref AlbSecurityGroup
       Subnets: !Ref PublicSubnetIds
+      LoadBalancerAttributes:
+        # Typed chat turns take up to CHAT_TURN_TIMEOUT_SECONDS; WebSockets and
+        # the voice SSE stream (15 s keepalives) also stay open through this.
+        - Key: idle_timeout.timeout_seconds
+          Value: "120"
+        - Key: routing.http.drop_invalid_header_fields.enabled
+          Value: "true"
 
   FrontendTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -181,9 +306,13 @@ Resources:
       Protocol: HTTP
       Port: 3000
       TargetType: ip
-      HealthCheckPath: /
+      HealthCheckPath: /icon.svg
+      HealthCheckIntervalSeconds: 30
       Matcher:
-        HttpCode: 200-399
+        HttpCode: "200"
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "15"
 
   BackendTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -194,21 +323,12 @@ Resources:
       Port: 8000
       TargetType: ip
       HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
       Matcher:
-        HttpCode: 200
-
-  HttpListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref LoadBalancer
-      Port: 80
-      Protocol: HTTP
-      DefaultActions:
-        - Type: redirect
-          RedirectConfig:
-            Protocol: HTTPS
-            Port: "443"
-            StatusCode: HTTP_301
+        HttpCode: "200"
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "15"
 
   HttpsListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -226,6 +346,40 @@ Resources:
             ContentType: text/plain
             MessageBody: Forbidden
 
+  # Answer URL (HTTP, Vobiz-signed) and the call-media WebSocket (signed per-call
+  # URL). ALB forwards WebSocket upgrades natively; idle timeout 120 s.
+  RiderListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: Rider
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 5
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Sub rider.${DomainName}
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /api/rider/stream
+              - /api/rider/vobiz/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+
+  RiderRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: Rider
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub rider.${DomainName}
+      Type: A
+      AliasTarget:
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        DNSName: !GetAtt LoadBalancer.DNSName
+        EvaluateTargetHealth: false
+
   BackendListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
@@ -236,7 +390,7 @@ Resources:
           HttpHeaderConfig:
             HttpHeaderName: X-Origin-Verify
             Values:
-              - !Ref OriginVerifySecret
+              - !Sub '{{resolve:secretsmanager:${AppSecretArn}:SecretString:ORIGIN_VERIFY_SECRET}}'
         - Field: path-pattern
           PathPatternConfig:
             Values:
@@ -256,7 +410,7 @@ Resources:
           HttpHeaderConfig:
             HttpHeaderName: X-Origin-Verify
             Values:
-              - !Ref OriginVerifySecret
+              - !Sub '{{resolve:secretsmanager:${AppSecretArn}:SecretString:ORIGIN_VERIFY_SECRET}}'
       Actions:
         - Type: forward
           TargetGroupArn: !Ref FrontendTargetGroup
@@ -292,11 +446,10 @@ Resources:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource:
-                  - !Ref AppEncryptionSecret
-                  - !Ref OpenAISecret
+                  - !Ref AppSecretArn
                   - !Ref DatabaseSecret
 
-  TaskRole:
+  FrontendTaskRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -307,6 +460,30 @@ Resources:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
 
+  BackendTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: MountBackendData
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - elasticfilesystem:ClientMount
+                  - elasticfilesystem:ClientWrite
+                Resource: !GetAtt BackendDataFileSystem.Arn
+                Condition:
+                  StringEquals:
+                    elasticfilesystem:AccessPointArn: !GetAtt BackendDataAccessPoint.Arn
+
   FrontendTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -316,8 +493,11 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
       ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt TaskRole.Arn
+      TaskRoleArn: !GetAtt FrontendTaskRole.Arn
       ContainerDefinitions:
         - Name: frontend
           Image: !Ref FrontendImage
@@ -325,6 +505,12 @@ Resources:
           PortMappings:
             - ContainerPort: 3000
               Protocol: tcp
+          Environment:
+            - Name: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+              Value: !Ref ClerkPublishableKey
+          Secrets:
+            - Name: CLERK_SECRET_KEY
+              ValueFrom: !Sub "${AppSecretArn}:CLERK_SECRET_KEY::"
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -341,26 +527,51 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
       ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt TaskRole.Arn
+      TaskRoleArn: !GetAtt BackendTaskRole.Arn
+      Volumes:
+        - Name: backend-data
+          EFSVolumeConfiguration:
+            FilesystemId: !Ref BackendDataFileSystem
+            TransitEncryption: ENABLED
+            AuthorizationConfig:
+              AccessPointId: !Ref BackendDataAccessPoint
+              IAM: ENABLED
       ContainerDefinitions:
         - Name: backend
           Image: !Ref BackendImage
           Essential: true
+          StopTimeout: 30
           PortMappings:
             - ContainerPort: 8000
               Protocol: tcp
+          MountPoints:
+            - SourceVolume: backend-data
+              ContainerPath: /workspace/backend/.data
+              ReadOnly: false
           Environment:
             - Name: COMMERCE_MODE
-              Value: demo
+              Value: !Ref CommerceMode
+            - Name: ALLOWED_USER_IDS
+              Value: !Ref AllowedUserIds
             - Name: FRONTEND_URL
               Value: !Sub https://${DomainName}
             - Name: CORS_ORIGINS
+              Value: !Sub https://${DomainName},https://www.${DomainName}
+            - Name: CLERK_AUTHORIZED_PARTIES_CSV
               Value: !Sub https://${DomainName},https://www.${DomainName}
             - Name: SWIGGY_OAUTH_REDIRECT_URI
               Value: !Sub https://${DomainName}/api/swiggy/oauth/callback
             - Name: ZEPTO_OAUTH_REDIRECT_URI
               Value: !Sub https://${DomainName}/api/zepto/oauth/callback
+            - Name: ZEPTO_ONLINE_PAYMENTS_ENABLED
+              Value: "false"
+            # CloudFront's origin read timeout is 60 s; answer before it gives up.
+            - Name: CHAT_TURN_TIMEOUT_SECONDS
+              Value: "50"
             - Name: DATABASE_HOST
               Value: !GetAtt Database.Endpoint.Address
             - Name: DATABASE_PORT
@@ -370,20 +581,64 @@ Resources:
             - Name: DATABASE_USER
               Value: gharsaathi
             - Name: SUPPORT_DATA_PATH
-              Value: /tmp/gharsaathi/support
+              Value: /workspace/backend/.data/support
             - Name: TRACKING_DATA_PATH
-              Value: /tmp/gharsaathi/tracking
+              Value: /workspace/backend/.data/tracking
             - Name: SWIGGY_TOKEN_STORE_PATH
-              Value: /tmp/gharsaathi/swiggy_connection.enc
+              Value: /workspace/backend/.data/swiggy_connection.enc
             - Name: ZEPTO_TOKEN_STORE_PATH
-              Value: /tmp/gharsaathi/zepto_connection.enc
+              Value: /workspace/backend/.data/zepto_connection.enc
+            - Name: WEB_PUSH_SUBJECT
+              Value: !Ref WebPushSubject
+            - Name: RIDER_ASSIST_ENABLED
+              Value: !If [Rider, "true", "false"]
+            - Name: RIDER_ASSIST_PROVIDER
+              Value: vobiz
+            - Name: RIDER_ASSIST_OWNER_USER_ID
+              Value: !Select [0, !Split [",", !Ref AllowedUserIds]]
+            - Name: RIDER_ASSIST_PUBLIC_URL
+              Value: !Sub https://rider.${DomainName}
+            - Name: RIDER_ASSIST_NUMBER
+              Value: !Ref RiderNumber
+            # Local-only operator tools (docs/DEV_TOOLS.md); never on in AWS.
+            - Name: DEV_TOOLS_ENABLED
+              Value: "false"
+            - Name: DEV_TRACE
+              Value: "false"
           Secrets:
             - Name: DATABASE_PASSWORD
               ValueFrom: !Sub "${DatabaseSecret}:password::"
             - Name: APP_ENCRYPTION_KEY
-              ValueFrom: !Ref AppEncryptionSecret
+              ValueFrom: !Sub "${AppSecretArn}:APP_ENCRYPTION_KEY::"
             - Name: OPENAI_API_KEY
-              ValueFrom: !Ref OpenAISecret
+              ValueFrom: !Sub "${AppSecretArn}:OPENAI_API_KEY::"
+            - Name: CLERK_SECRET_KEY
+              ValueFrom: !Sub "${AppSecretArn}:CLERK_SECRET_KEY::"
+            - !If
+              - WebPush
+              - Name: WEB_PUSH_VAPID_PUBLIC_KEY
+                ValueFrom: !Sub "${AppSecretArn}:WEB_PUSH_VAPID_PUBLIC_KEY::"
+              - !Ref AWS::NoValue
+            - !If
+              - WebPush
+              - Name: WEB_PUSH_VAPID_PRIVATE_KEY
+                ValueFrom: !Sub "${AppSecretArn}:WEB_PUSH_VAPID_PRIVATE_KEY::"
+              - !Ref AWS::NoValue
+            - !If
+              - Rider
+              - Name: RIDER_ASSIST_STREAM_SECRET
+                ValueFrom: !Sub "${AppSecretArn}:RIDER_ASSIST_STREAM_SECRET::"
+              - !Ref AWS::NoValue
+            - !If
+              - Rider
+              - Name: VOBIZ_AUTH_ID
+                ValueFrom: !Sub "${AppSecretArn}:VOBIZ_AUTH_ID::"
+              - !Ref AWS::NoValue
+            - !If
+              - Rider
+              - Name: VOBIZ_AUTH_TOKEN
+                ValueFrom: !Sub "${AppSecretArn}:VOBIZ_AUTH_TOKEN::"
+              - !Ref AWS::NoValue
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -402,8 +657,11 @@ Resources:
       LaunchType: FARGATE
       HealthCheckGracePeriodSeconds: 60
       DeploymentConfiguration:
-        MinimumHealthyPercent: 0
+        MinimumHealthyPercent: 100
         MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
@@ -415,19 +673,29 @@ Resources:
           ContainerPort: 3000
           TargetGroupArn: !Ref FrontendTargetGroup
 
+  # Exactly one backend task, never two: provider tokens, OAuth state, tracking
+  # watches and order cards are single-writer state. A deploy stops the old task
+  # before starting the new one (brief /api downtime) and migrations run on start.
   BackendService:
     Type: AWS::ECS::Service
-    DependsOn: BackendListenerRule
+    DependsOn:
+      - BackendListenerRule
+      - BackendDataMountTargetA
+      - BackendDataMountTargetB
     Properties:
       ServiceName: backend
       Cluster: !Ref Cluster
       TaskDefinition: !Ref BackendTaskDefinition
       DesiredCount: 1
       LaunchType: FARGATE
+      PlatformVersion: "1.4.0"
       HealthCheckGracePeriodSeconds: 180
       DeploymentConfiguration:
         MinimumHealthyPercent: 0
-        MaximumPercent: 200
+        MaximumPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
@@ -445,6 +713,7 @@ Resources:
       DistributionConfig:
         Enabled: true
         HttpVersion: http2and3
+        IPV6Enabled: true
         PriceClass: PriceClass_200
         Aliases:
           - !Ref DomainName
@@ -460,17 +729,31 @@ Resources:
               OriginProtocolPolicy: https-only
               OriginSSLProtocols:
                 - TLSv1.2
+              # 60 s is the maximum without a quota increase; typed chat answers within 50 s.
+              OriginReadTimeout: 60
+              OriginKeepaliveTimeout: 60
             OriginCustomHeaders:
               - HeaderName: X-Origin-Verify
-                HeaderValue: !Ref OriginVerifySecret
+                HeaderValue: !Sub '{{resolve:secretsmanager:${AppSecretArn}:SecretString:ORIGIN_VERIFY_SECRET}}'
         DefaultCacheBehavior:
           TargetOriginId: AppOrigin
           ViewerProtocolPolicy: redirect-to-https
           AllowedMethods: [DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT]
-          CachedMethods: [GET, HEAD, OPTIONS]
-          CachePolicyId: 413f160b-7d3b-4db2-99b8-4b8878e2f54c
+          CachedMethods: [GET, HEAD]
+          # Managed-CachingDisabled + Managed-AllViewerExceptHostHeader: every
+          # request, cookie, query string and WebSocket upgrade header reaches the origin.
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
           OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
           Compress: true
+        CacheBehaviors:
+          # Content-hashed Next.js build assets are immutable.
+          - PathPattern: /_next/static/*
+            TargetOriginId: AppOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+            Compress: true
 
   ApexRecord:
     Type: AWS::Route53::RecordSet
@@ -505,12 +788,32 @@ Resources:
         DNSName: !GetAtt Distribution.DomainName
         EvaluateTargetHealth: false
 
+  WwwIpv6Record:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub www.${DomainName}
+      Type: AAAA
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt Distribution.DomainName
+        EvaluateTargetHealth: false
+
 Outputs:
   SiteUrl:
     Value: !Sub https://${DomainName}
+  ZeptoRedirectUri:
+    Value: !Sub https://${DomainName}/api/zepto/oauth/callback
+  RiderAnswerUrl:
+    Condition: Rider
+    Value: !Sub https://rider.${DomainName}/api/rider/vobiz/answer
   DistributionId:
     Value: !Ref Distribution
   LoadBalancerDnsName:
     Value: !GetAtt LoadBalancer.DNSName
   DatabaseEndpoint:
     Value: !GetAtt Database.Endpoint.Address
+  BackendDataFileSystemId:
+    Value: !Ref BackendDataFileSystem
+  ClusterName:
+    Value: !Ref Cluster

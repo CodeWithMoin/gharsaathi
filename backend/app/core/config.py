@@ -36,12 +36,19 @@ class Settings(BaseSettings):
     # by Zepto's get_payment_methods. Cash on delivery is always offered.
     zepto_online_payments_enabled: bool = False
     zepto_payment_methods_allowed: str = "upi_reserve,wallet,online"
+    # Consented order-history import never reads orders placed before this many
+    # days ago (and never before the user's chosen retention period).
+    purchase_history_lookback_days: int = Field(default=365, ge=1, le=3 * 365)
     frontend_url: str = "http://localhost:3003"
     cors_origins: str = "http://localhost:3003,http://127.0.0.1:3003"
     app_encryption_key: str = ""
     clerk_secret_key: SecretStr = SecretStr("")
     clerk_jwt_key: str = ""
     clerk_authorized_parties_csv: str = ""
+    # Private deployment: comma-separated Clerk user ids allowed to use the API.
+    # Empty (local development) allows any verified user. When set, every other
+    # verified user gets 403 `private_deployment` and the API docs are hidden.
+    allowed_user_ids: str = ""
     local_encryption_key_path: Path = Field(
         default=Path("backend/.data/app_encryption.key")
     )
@@ -78,6 +85,13 @@ class Settings(BaseSettings):
     voice_turn_taking: Literal["native", "tuned", "smart_turn"] = "native"
     # Dev diagnostic: log content-free sideband event summaries (type, id field names, timing).
     voice_event_log: bool = False
+    # Local operator toolkit (docs/DEV_TOOLS.md). DEV_TOOLS_ENABLED opens /api/dev/* to a
+    # signed-in user on localhost only (never in a private/hosted deployment). DEV_TRACE
+    # writes one content-light JSONL record per typed/voice turn to DEV_TRACE_DIR.
+    dev_tools_enabled: bool = False
+    dev_trace: bool = False
+    dev_trace_dir: Path = Field(default=Path(".run/traces"))
+    dev_trace_keep: int = Field(default=500, ge=10, le=10_000)
     memory_extraction_model: str = "gpt-4o-mini"
     # Background rolling chat summaries (app/conversations/summarizer.py).
     conversation_summary_model: str = "gpt-6-luna"
@@ -101,6 +115,25 @@ class Settings(BaseSettings):
     web_push_vapid_public_key: str = ""
     web_push_vapid_private_key: SecretStr = SecretStr("")
     web_push_subject: str = ""
+    # Rider assist (beta, docs/RIDER_ASSIST.md): a forwarded delivery-partner call reaches
+    # a Vobiz number whose answer URL returns <Stream> to /api/rider/stream/..., bridged to
+    # OpenAI Realtime. Production: run in AWS ap-south-1 (TRAI media anchoring).
+    rider_assist_enabled: bool = False
+    rider_assist_provider: Literal["vobiz"] = "vobiz"
+    rider_assist_owner_user_id: str = ""
+    # Public HTTPS origin Vobiz calls, e.g. https://rider.example.in (no trailing path).
+    rider_assist_public_url: str = ""
+    # Signs per-call stream URLs; at least 32 characters.
+    rider_assist_stream_secret: SecretStr = SecretStr("")
+    # Optional: the Vobiz number (E.164); calls to any other number are refused.
+    rider_assist_number: str = ""
+    rider_assist_realtime_model: str = "gpt-realtime-2.1"
+    rider_assist_voice: str = "marin"
+    rider_assist_transcription_model: str = "gpt-4o-mini-transcribe"
+    rider_assist_max_call_seconds: int = Field(default=180, ge=30, le=600)
+    # Vobiz console → Settings → API (X-Auth-ID / X-Auth-Token). The token also signs webhooks.
+    vobiz_auth_id: str = ""
+    vobiz_auth_token: SecretStr = SecretStr("")
 
     @field_validator(
         "swiggy_token_store_path",
@@ -108,6 +141,7 @@ class Settings(BaseSettings):
         "local_encryption_key_path",
         "support_data_path",
         "tracking_data_path",
+        "dev_trace_dir",
         mode="after",
     )
     @classmethod
@@ -130,6 +164,16 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def allowed_user_id_set(self) -> frozenset[str]:
+        return frozenset(
+            user_id.strip() for user_id in self.allowed_user_ids.split(",") if user_id.strip()
+        )
+
+    @property
+    def private_deployment(self) -> bool:
+        return bool(self.allowed_user_id_set)
 
     @property
     def clerk_authorized_parties(self) -> list[str]:

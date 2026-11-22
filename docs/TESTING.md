@@ -24,6 +24,7 @@ make test-module        # backend -m module + npm run test:module
 make test-integration   # backend -m integration (needs PostgreSQL)
 make test-failures      # only the failure-mode tests (docs/FAILURE_MODES.md)
 make check              # all tests + frontend lint + tsc (scripts/verify.sh)
+make demo-check         # offline doctor + quick evals + household state (docs/DEV_TOOLS.md)
 ```
 
 Directly:
@@ -67,6 +68,7 @@ routers.
 - **No real orders, ever.** A test that needs the order step uses `RecordingZeptoGateway` (see `test_shopping_checkout.py`).
 - Integration tests must not touch ports 3003/8000/80 or the `equal_ai` database.
 - Known bugs get a test marked `xfail(strict=True)` that states the reason. When the bug is fixed, the test starts passing, the strict xfail fails, and the marker must be removed.
+- `/api/dev/*` routes are listed in `tests/routes.py::DEV_ROUTES`; they need a user but answer 404 unless the dev inspector is enabled (`tests/module/test_dev_api.py`).
 - A public route (no Clerk session) must be listed with a reason in `tests/routes.py::PUBLIC_ROUTES`. `tests/module/test_route_table.py` and `tests/integration/test_auth_sweep.py` enforce this. The route-table test also fails if a parameterised route captures a later literal route.
 
 ## Failure-mode tests
@@ -112,3 +114,11 @@ host, demo stores, faults injected by the harness, no order possible):
 ```bash
 cd backend && uv run --with-requirements requirements.txt python -m evaluation.run_failure_scenarios [--scenario fm_provider_down]
 ```
+
+**Turns to order.** `evaluation/run_turns_to_order.py` (scenarios in
+`evaluation/turns_to_order_scenarios.json`, report `turns_to_order_report.json`)
+drives the real backend model from one request ("2 Amul lassi order kar do",
+"clear cart", …) through scripted answers until the order card is on screen or
+the basket is empty, and records user turns, model rounds and latency per
+`--label`. Demo stores and fixtures only, DNS restricted to the OpenAI host, the
+card is never tapped.

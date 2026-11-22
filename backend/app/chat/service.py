@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 from app.conversations.context import RecentConversationContext
 from app.core.config import Settings
+from app.devtools.trace import TurnTrace, start_trace
 from app.voice.service import LiveSessionService, build_session_config
 from app.voice.timing import collect, log_timing, ms_since
 from app.voice.toolbox import ToolExecutor
@@ -283,6 +284,9 @@ class ChatTurnService:
             started = time.monotonic()
             stats: dict[str, Any] = {"rounds": 0, "tools": [], "outcome": "ok", "language": "hinglish"}
             ui_events: list[dict[str, Any]] = []
+            trace = start_trace(
+                self.settings, "typed", conversation_id=str(conversation_id) if conversation_id else None
+            )
             try:
                 async with asyncio.timeout(self.settings.chat_turn_timeout_seconds):
                     result = await self._loop(
@@ -295,6 +299,7 @@ class ChatTurnService:
                         ui_acks or [],
                         attachment_id,
                         ui_events,
+                        trace=trace,
                     )
             except TimeoutError as exc:
                 stats["outcome"] = "timeout"
@@ -312,6 +317,8 @@ class ChatTurnService:
                 stats["outcome"] = "provider_error"
                 raise
             finally:
+                if trace is not None:
+                    trace.finish(stats["outcome"])
                 # Content-free diagnostics: never message text, arguments or outputs.
                 logger.info(
                     "Chat turn %s: rounds=%d tools=%s latency_ms=%d",
@@ -333,6 +340,8 @@ class ChatTurnService:
         ui_acks: list[UiAck] | None = None,
         attachment_id: str | None = None,
         ui_events: list[dict[str, Any]] | None = None,
+        *,
+        trace: TurnTrace | None = None,
     ) -> ChatTurnResult:
         message = message or (PHOTO_ONLY_MESSAGE if attachment_id else "")
         words = getattr(session.toolbox, "user_words", None)
@@ -390,6 +399,8 @@ class ChatTurnService:
                 **{key: delegation[key] for key in ("reasoning", "service_tier") if key in delegation},
             )
             model_ms.append(ms_since(mark))
+            if trace is not None:
+                trace.model_round(model_ms[-1], getattr(response, "usage", None))
             previous_response_id = response.id
             calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
             if not calls or final:
@@ -414,14 +425,18 @@ class ChatTurnService:
                 stats["tools"].append(name if name in allowed else "unknown")
                 if name not in allowed:
                     jobs.append({"status": "error", "message": f"Unknown tool {name[:64]}."})
+                    if trace is not None:
+                        trace.tool("unknown", None, None, 0.0, status="refused_unknown")
                 elif name == SEARCH_TOOL and searches >= search_cap:
                     jobs.append(SEARCH_LIMIT_OUTPUT)
+                    if trace is not None:
+                        trace.tool(name, call.arguments, None, 0.0, status="refused_search_cap")
                 else:
                     if name == SEARCH_TOOL:
                         searches += 1
                     jobs.append((name, call.arguments))
             mark = time.perf_counter()
-            outputs = await self._execute_round(session, jobs, ui_events)
+            outputs = await self._execute_round(session, jobs, ui_events, trace=trace)
             tool_ms.append(ms_since(mark))
             request_input = [
                 {
@@ -434,7 +449,12 @@ class ChatTurnService:
         raise AssertionError("unreachable: the final round always returns")
 
     async def _execute_round(
-        self, session: ChatSession, jobs: list[Any], ui_events: list[dict[str, Any]]
+        self,
+        session: ChatSession,
+        jobs: list[Any],
+        ui_events: list[dict[str, Any]],
+        *,
+        trace: TurnTrace | None = None,
     ) -> list[dict[str, Any]]:
         """Run one round's tool calls: searches together, everything else in call order.
 
@@ -449,7 +469,7 @@ class ChatTurnService:
 
         async def run(index: int) -> None:
             name, arguments = jobs[index]
-            outputs[index] = await self._execute(session, name, arguments, events[index])
+            outputs[index] = await self._execute(session, name, arguments, events[index], trace=trace)
 
         if len(searches) > 1:
             await asyncio.gather(*(run(index) for index in searches))
@@ -532,18 +552,29 @@ class ChatTurnService:
             raise ChatProviderError("Assistant se abhi jawab nahi mila. Thodi der mein phir likhiye.") from exc
 
     async def _execute(
-        self, session: ChatSession, name: str, arguments: Any, ui_events: list[dict[str, Any]]
+        self,
+        session: ChatSession,
+        name: str,
+        arguments: Any,
+        ui_events: list[dict[str, Any]],
+        *,
+        trace: TurnTrace | None = None,
     ) -> dict[str, Any]:
+        started = time.perf_counter()
         try:
-            with collect(self.settings.voice_event_log) as stages:
-                started = time.perf_counter()
+            with collect(self.settings.voice_event_log or trace is not None) as stages:
                 outcome = await session.toolbox.execute(name, arguments if isinstance(arguments, str) else "")
             if self.settings.voice_event_log:
                 log_timing("chat_tool_timing", {"name": name[:64], "total_ms": ms_since(started), **stages})
+            if trace is not None:
+                trace.tool(name, arguments, outcome.model_output, ms_since(started), stages=stages)
         except Exception:
             logger.exception("Chat tool %s failed", name)
+            if trace is not None:
+                trace.tool(name, arguments, None, ms_since(started), status="exception")
             ui_events.append(dict(TOOL_FAILED_EVENT))
             return {"status": "error", "message": "The tool failed unexpectedly."}
+        ui_events.extend(getattr(outcome, "extra_ui_events", None) or [])
         if outcome.ui_event is not None:
             ui_events.append(outcome.ui_event)
         if outcome.model_output.get("status") == "form_requested":

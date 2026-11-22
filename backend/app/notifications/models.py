@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Every kind the user can switch off. Each one is a meaningful change to an
-# order the user placed. There is deliberately no
+# order the user placed, or (rider_called) a delivery partner's call about one. There is deliberately no
 # "you usually buy", replenishment or low-stock kind (AGENTS.md non-goals).
 PushKind = Literal[
     "order_placed",
@@ -18,6 +18,7 @@ PushKind = Literal[
     "order_check",
     "payment",
     "checkout_expiring",
+    "rider_called",
 ]
 PUSH_KINDS: tuple[PushKind, ...] = (
     "order_placed",
@@ -28,6 +29,7 @@ PUSH_KINDS: tuple[PushKind, ...] = (
     "order_check",
     "payment",
     "checkout_expiring",
+    "rider_called",
 )
 # "test" is the Settings button; it is never user-toggleable and never deduped.
 SendKind = PushKind | Literal["test"]
@@ -41,6 +43,8 @@ KIND_LABELS: dict[PushKind, str] = {
     "order_check": "Unconfirmed order checks",
     "payment": "Payment needs attention",
     "checkout_expiring": "Order card about to expire",
+    # Rider assist (beta): the AI answered a delivery partner's forwarded call.
+    "rider_called": "A delivery partner called",
 }
 
 TITLE_MAX = 48

@@ -1,7 +1,10 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from app.commerce.zepto.history import parse_order_detail, parse_order_history
 from app.commerce.zepto.purchase_history import ZeptoPurchaseHistoryAdapter
+from app.memory.history_reading import HistoryReadPlan
 
 
 def _history_payload() -> dict[str, object]:
@@ -80,27 +83,44 @@ class FakeZeptoHistoryService:
     def __init__(self) -> None:
         self.calls: list[tuple[str, object]] = []
 
-    async def order_history(self, *, limit: int, page_number: int):
+    async def order_history(self, *, limit: int, page_number: int, recover: bool = True):
+        assert recover is False
         self.calls.append(("list", (limit, page_number)))
         return parse_order_history(_history_payload(), limit=limit, page_number=page_number)
 
-    async def order_detail(self, order_id: str):
+    async def order_detail(self, order_id: str, *, recover: bool = True):
+        assert recover is False
         self.calls.append(("detail", order_id))
         return parse_order_detail(_detail_payload(order_id))
 
 
+async def _no_sleep(_: float) -> None:
+    return None
+
+
 @pytest.mark.asyncio
-async def test_zepto_personalization_reader_is_bounded_and_normalized() -> None:
+async def test_zepto_personalization_reader_is_sequential_and_normalized() -> None:
     service = FakeZeptoHistoryService()
-    history = await ZeptoPurchaseHistoryAdapter(service).orders(count=15)  # type: ignore[arg-type]
+    read = await ZeptoPurchaseHistoryAdapter(service, sleep=_no_sleep).read_history(  # type: ignore[arg-type]
+        HistoryReadPlan(
+            known_ids=frozenset({"internal-3"}),
+            cutoff=datetime(2025, 11, 20, tzinfo=UTC),
+            cutoff_reason="lookback",
+        )
+    )
 
     assert service.calls == [
-        ("list", (5, 1)),
+        ("list", (10, 1)),
         ("detail", "internal-0"),
         ("detail", "internal-1"),
         ("detail", "internal-2"),
     ]
+    assert read.skipped_known == 1
+    assert read.stopped_reason == "complete"
+    assert read.next_page is None
+    history = read
     assert len(history.orders) == 3
+    assert history.orders[0].lookup_id == "internal-0"
     assert history.orders[0].items[0].name == "Amul Taaza Milk 1 L"
     assert history.orders[0].items[0].item_id == "amul-milk-1l"
     assert history.orders[0].created_at.isoformat() == "2026-11-20T10:00:00+00:00"

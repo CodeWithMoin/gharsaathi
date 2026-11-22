@@ -22,6 +22,21 @@ PUBLIC_ROUTES: dict[str, str] = {
     # per-session token issued to the creating (Clerk-verified) user by
     # POST /api/voice/session, plus an Origin check.
     "GET /api/voice/sessions/{session_id}/events": "bound to its creator by a per-session events token",
+    # Vobiz webhooks (rider assist): HMAC-SHA256 signature over the URL + nonce with
+    # the Vobiz auth token, checked fail-closed; off unless RIDER_ASSIST_ENABLED.
+    "POST /api/rider/vobiz/answer": "Vobiz answer URL; Vobiz webhook signature (V3/V2) required",
+    "POST /api/rider/vobiz/after-stream": "Vobiz redirect after the stream; Vobiz webhook signature required",
+}
+
+# Local dev inspector (app/api/dev.py): each needs a verified user, but answers 404
+# instead of 401/403 unless DEV_TOOLS_ENABLED, loopback, unproxied and not private.
+DEV_ROUTES: dict[str, str] = {
+    "GET /api/dev/status": "inspector availability",
+    "GET /api/dev/traces": "local DEV_TRACE records",
+    "GET /api/dev/state": "the signed-in user's baskets, memory, watches, notifications",
+    "POST /api/dev/basket/clear": "owner's own basket clear",
+    "POST /api/dev/doctor": "read-only doctor",
+    "POST /api/dev/reconcile-dry-run": "read-only, budgeted Zepto history check",
 }
 
 

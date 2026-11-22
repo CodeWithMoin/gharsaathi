@@ -96,6 +96,7 @@ class UserProfileRecord(Base):
     first_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
     address_form: Mapped[str] = mapped_column(String(16), default="neutral")
     language: Mapped[str] = mapped_column(String(16), default="hinglish")
+    reply_style: Mapped[str] = mapped_column(String(16), default="quick", server_default="quick")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -361,6 +362,9 @@ class PurchaseOrderNode(Base):
     )
     provider: Mapped[str] = mapped_column(String(32))
     provider_order_id: Mapped[str] = mapped_column(String(160))
+    # The id the provider's order *list* uses, when it differs from the detail
+    # id (Zepto); lets a later import skip a known order without a detail read.
+    provider_lookup_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     status: Mapped[str] = mapped_column(String(80))
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     provider_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -506,6 +510,22 @@ class PurchaseHistorySyncState(Base):
     )
     fetched_order_count: Mapped[int] = mapped_column(Integer, default=0)
     last_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    imported_order_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_known_count: Mapped[int] = mapped_column(Integer, default=0)
+    detail_failure_count: Mapped[int] = mapped_column(Integer, default=0)
+    stopped_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Resumable backfill: the list page the next sync starts from, until the
+    # whole lookback window has been walked once.
+    resume_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    backfill_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_full_resync_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rate_limited_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Opt-in: one lazy, read-only sync per store per week when the app opens.
+    auto_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class ReorderSuggestionFeedback(Base):
@@ -697,3 +717,64 @@ class WebPushEventRecord(Base):
     # pending | sent | failed | rate_limited
     outcome: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class RiderAssistSettingsRecord(Base):
+    """Rider assist: the owner's switch and delivery notes (docs/RIDER_ASSIST.md)."""
+
+    __tablename__ = "rider_assist_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128), unique=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    landmark: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    directions: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    handoff: Mapped[str] = mapped_column(String(24), default="call_again", server_default="call_again")
+    preferred_language: Mapped[str] = mapped_column(
+        String(16), default="hinglish", server_default="hinglish"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class RiderCallRecord(Base):
+    """One forwarded call the assistant answered: a short summary only, never audio."""
+
+    __tablename__ = "rider_calls"
+    __table_args__ = (Index("ix_rider_calls_user_started", "user_id", "started_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    caller: Mapped[str] = mapped_column(String(16))
+    delivery_call: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    outcome: Mapped[str] = mapped_column(String(32))
+    urgency: Mapped[str] = mapped_column(String(16), default="normal")
+    rider_said: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    summary: Mapped[str] = mapped_column(String(600))
+    answered_from: Mapped[list[str]] = mapped_column(JSON)
+    seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SavedShoppingListRecord(Base):
+    """A shopping list the user created and named ("Weekly list"); never predicted."""
+
+    __tablename__ = "saved_shopping_lists"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name_key", name="uq_saved_shopping_lists_user_name"),
+        Index("ix_saved_shopping_lists_user_updated", "user_id", "updated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(128))
+    name: Mapped[str] = mapped_column(String(60))
+    # casefolded, whitespace-collapsed name: one "weekly list" per user.
+    name_key: Mapped[str] = mapped_column(String(60))
+    items: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

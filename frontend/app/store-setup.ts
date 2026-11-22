@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { API_BASE_URL, useApiRequest } from "./authenticated-api";
+import { useApiRequest } from "./authenticated-api";
 
 export type StoreProvider = "swiggy" | "zepto";
 export type CommerceMode = "demo" | "live";
@@ -130,7 +130,8 @@ export function useStoreSetup(enabled: boolean) {
         patch(provider, { connecting: false, connectError: readiness.message || `${storeName(provider)} sign-in is not ready yet.` });
         return;
       }
-      window.location.assign(`${API_BASE_URL}/api/${provider}/oauth/start`);
+      const { authorization_url: authorizationUrl } = await request<{ authorization_url: string }>(`/api/${provider}/oauth/authorization`, { method: "POST" });
+      window.location.assign(authorizationUrl);
     } catch (cause) {
       patch(provider, { connecting: false, connectError: cause instanceof Error ? cause.message : `Could not prepare ${storeName(provider)} sign-in.` });
     }

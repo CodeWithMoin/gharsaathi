@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  ArrowsLeftRight,
   Basket,
+  BookmarkSimple,
   CheckCircle,
   CircleNotch,
   Minus,
@@ -18,6 +20,8 @@ import { ApiError, useApiRequest } from "../authenticated-api";
 import { offerOpportunityCopy, visibleOfferOpportunities } from "./offer-opportunity.mjs";
 import { canConfirmZeptoCodOrder, checkoutStatusCopy } from "./zepto-checkout-state.mjs";
 import { STALE_BILL_TEXT, billIsStale } from "../card-lifecycle.mjs";
+import { CLEAR_CONFLICT_TEXT, basketEditState, clearBasketCopy } from "../quick-actions.mjs";
+import { ConfirmDialog } from "../ui/confirm-dialog";
 
 const MAX_QUANTITY = 50;
 
@@ -154,6 +158,10 @@ type BasketPanelProps = {
   onApprovalChange?: (approval: Approval | null) => void;
   /** Called before a new bill or approval is shown, so the chat can move this card to now. */
   onBillStep?: (provider: ProviderName, stage: "bill_ready" | "bill_approved") => void;
+  /** "Swap" on a line: show options for that item; adding one replaces the line. */
+  onSwap?: (line: BasketLine) => void;
+  /** "Save as list": open the lists popup on "Save basket as list". */
+  onSaveAsList?: () => void;
   className?: string;
 };
 
@@ -233,6 +241,8 @@ export function BasketPanel({
   onBasketChange,
   onApprovalChange,
   onBillStep,
+  onSwap,
+  onSaveAsList,
   className = "",
 }: BasketPanelProps) {
   const apiRequest = useApiRequest();
@@ -253,6 +263,8 @@ export function BasketPanel({
   const [usualNotice, setUsualNotice] = useState<string | null>(null);
   // Set when the basket changed under a bill shown here: the old bill is gone, not reusable.
   const [billOutdated, setBillOutdated] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearError, setClearError] = useState("");
   const query = useMemo(() => providerQuery(provider), [provider]);
 
   const applyBasket = useCallback((next: ShoppingBasket) => {
@@ -349,6 +361,34 @@ export function BasketPanel({
       setAction(null);
     }
   }, [applyBasket, clearQuote, provider, setLineQuantity]);
+
+  // One revision-checked request: only the basket the user saw is cleared.
+  const clearBasket = useCallback(async () => {
+    if (!basket) return;
+    setAction("clear");
+    setClearError("");
+    try {
+      const next = await apiRequest<ShoppingBasket>(`/api/baskets/${encodeURIComponent(provider)}/clear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expected_revision: basket.revision }),
+      });
+      applyBasket(next);
+      clearQuote();
+      setClearOpen(false);
+      setNotice({ text: "Basket cleared.", error: false });
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 409) {
+        setClearOpen(false);
+        setNotice({ text: CLEAR_CONFLICT_TEXT, error: true });
+        void load(true);
+      } else {
+        setClearError(cause instanceof Error ? cause.message : "Couldn't clear the basket. Try again.");
+      }
+    } finally {
+      setAction(null);
+    }
+  }, [apiRequest, applyBasket, basket, clearQuote, load, provider]);
 
   const requestQuote = useCallback(async () => {
     setAction("quote");
@@ -546,6 +586,8 @@ export function BasketPanel({
   const canConfirmZeptoCod = Boolean(approval && canConfirmZeptoCodOrder({ provider, commerceMode, approvalStatus: approval.status }));
   const providerLabel = provider === "swiggy_instamart" ? "Swiggy Instamart" : "Zepto";
   const visibleOffers = shownRequest ? visibleOfferOpportunities(shownRequest.quote.offers ?? []) as OfferOpportunity[] : [];
+  const edit = basketEditState(basket, { busy: locked });
+  const clearCopy = basket ? clearBasketCopy(basket) : null;
 
   return (
     <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`overflow-hidden rounded-[26px] border border-border-strong bg-surface shadow-[0_18px_45px_-34px_rgb(var(--shadow)/.7)] ${className}`} aria-label="Your basket" aria-busy={locked}>
@@ -588,7 +630,8 @@ export function BasketPanel({
                         <span className="min-w-6 text-center text-xs font-semibold tabular-nums" aria-live="polite">{updating ? <CircleNotch size={13} className="mx-auto animate-spin" /> : line.quantity}</span>
                         <button type="button" onClick={() => void changeQuantity(line, line.quantity + 1)} disabled={locked || basketFrozen || line.quantity >= MAX_QUANTITY || !line.available} className="grid size-8 place-items-center rounded-full text-ink-secondary transition hover:bg-accent-soft disabled:opacity-40" aria-label={`Increase quantity of ${line.name}`}><Plus size={13} weight="bold" /></button>
                       </div>
-                      <button type="button" onClick={() => void changeQuantity(line, 0)} disabled={locked || basketFrozen} className="grid size-8 place-items-center rounded-full text-subtle transition hover:bg-danger-soft hover:text-danger disabled:opacity-40" aria-label={`Remove ${line.name}`}><Trash size={15} /></button>
+                      <button type="button" onClick={() => void changeQuantity(line, 0)} disabled={locked || basketFrozen} className="grid size-8 place-items-center rounded-full text-subtle transition hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-40" aria-label={`Remove ${line.name}`}><Trash size={15} /></button>
+                      {onSwap && <button type="button" onClick={() => onSwap(line)} disabled={locked || basketFrozen} className="flex h-8 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold text-accent-ink transition-[transform,background-color] duration-150 ease-out hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:scale-[.97] disabled:opacity-40 motion-reduce:active:scale-100" aria-label={`Swap ${line.name} for another option`}><ArrowsLeftRight size={13} weight="bold" />Swap</button>}
                     </div>
                   </div>
                   <div className="flex flex-col items-end text-right">
@@ -599,6 +642,12 @@ export function BasketPanel({
               );
             })}
           </ul>
+
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border py-2.5">
+            {onSaveAsList && <button type="button" onClick={onSaveAsList} disabled={locked} className="flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold text-ink-secondary transition-[transform,background-color] duration-150 ease-out hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:scale-[.97] disabled:opacity-40 motion-reduce:active:scale-100"><BookmarkSimple size={15} />Save as list</button>}
+            <button type="button" onClick={() => { setClearError(""); setClearOpen(true); }} disabled={!edit.canClear} aria-describedby={edit.reason ? `clear-reason-${provider}` : undefined} className="ml-auto flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold text-danger-hover transition-[transform,background-color] duration-150 ease-out hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:active:scale-100"><Trash size={15} />Clear basket</button>
+            {edit.reason && <p id={`clear-reason-${provider}`} className="w-full text-right text-[11px] leading-4 text-muted">{edit.reason}</p>}
+          </div>
 
           {!shownRequest && (
             <div className="border-t border-border py-4">
@@ -671,6 +720,18 @@ export function BasketPanel({
       <AnimatePresence initial={false}>
         {notice && <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className={`mx-5 mb-5 flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs leading-5 sm:mx-6 sm:mb-6 ${notice.error ? "bg-danger-soft text-danger-hover" : "bg-success-soft text-success"}`} role="status" aria-live="polite"><span className="mt-0.5">{notice.error ? <WarningCircle size={15} weight="fill" /> : <CheckCircle size={15} weight="fill" />}</span><span>{notice.text}</span><button type="button" onClick={() => setNotice(null)} className="ml-auto -mr-1 shrink-0 rounded-full p-0.5 opacity-70 transition hover:opacity-100" aria-label="Dismiss message"><X size={14} /></button></motion.div>}
       </AnimatePresence>
+      {clearCopy && <ConfirmDialog
+        open={clearOpen}
+        tone="destructive"
+        title={clearCopy.title}
+        message={clearCopy.body}
+        confirmLabel={clearCopy.confirmLabel}
+        busyLabel={clearCopy.busyLabel}
+        busy={action === "clear"}
+        error={clearError || undefined}
+        onConfirm={() => void clearBasket()}
+        onClose={() => setClearOpen(false)}
+      />}
     </motion.section>
   );
 }

@@ -100,11 +100,13 @@ CAPABILITIES: tuple[Capability, ...] = (
             "GET /api/swiggy/connection",
             "GET /api/swiggy/oauth/readiness",
             "GET /api/swiggy/oauth/start",
+            "POST /api/swiggy/oauth/authorization",
             "GET /api/swiggy/oauth/callback",
             "POST /api/swiggy/disconnect",
             "GET /api/zepto/connection",
             "GET /api/zepto/oauth/readiness",
             "GET /api/zepto/oauth/start",
+            "POST /api/zepto/oauth/authorization",
             "GET /api/zepto/oauth/callback",
             "POST /api/zepto/disconnect",
         ),
@@ -272,6 +274,102 @@ CAPABILITIES: tuple[Capability, ...] = (
             "DELETE /api/basket/lines/{variant_id}",
         ),
         ui_files=("frontend/app/basket/BasketPanel.tsx",),
+    ),
+    Capability(
+        id="clear_basket",
+        title="Empty the basket in one step",
+        voice=S(
+            W,
+            "clear_basket empties one store or every store in one revision-checked edit; the open "
+            "bill and order card are cancelled; refused while an order outcome is unknown.",
+        ),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
+        ui=S(
+            W,
+            "Basket card 'Clear basket' opens a ConfirmDialog (destructive) naming the item "
+            "count; disabled with the reason shown while checkout is pending or the outcome is "
+            "unknown.",
+        ),
+        backend=S(
+            W,
+            "BasketService.clear (one revision-checked edit, supersedes the open bill and order "
+            "card); the route passes expected_revision = the basket the user saw (409 if it changed).",
+        ),
+        voice_tools=("clear_basket",),
+        routes=("POST /api/baskets/{provider}/clear",),
+        ui_files=("frontend/app/basket/BasketPanel.tsx",),
+    ),
+    Capability(
+        id="saved_lists",
+        title="Saved lists the user creates ('Weekly list') and adding one to the basket",
+        voice=S(
+            W,
+            "add_saved_list(name): finds the user's own list by name and adds it; items not "
+            "added are reported with the reason.",
+        ),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
+        ui=S(
+            W,
+            "Quick chip 'My lists' opens the lists popup: new list by name, save basket as "
+            "list, edit items/quantities, delete, and 'Add list to basket' with a report and a "
+            "'Get bill' offer.",
+        ),
+        backend=S(
+            W,
+            "User-scoped table (saved_shopping_lists, unique name per user, 20 lists x 40 "
+            "items). Adding re-checks each item at its store (same variant, available, today's "
+            "price) and adds per store in one revision-checked edit; never quotes or orders.",
+        ),
+        voice_tools=("add_saved_list",),
+        routes=(
+            "GET /api/lists",
+            "POST /api/lists",
+            "PATCH /api/lists/{list_id}",
+            "POST /api/lists/{list_id}/add-basket",
+            "DELETE /api/lists/{list_id}",
+            "POST /api/lists/{list_id}/add-to-basket",
+        ),
+        ui_files=("frontend/app/quick-chips.tsx", "frontend/app/saved-lists-dialog.tsx", "frontend/app/quick-actions.mjs"),
+    ),
+    Capability(
+        id="quick_actions",
+        title="Quick chips: reorder last order, recent items, live order chip",
+        voice=S(U, "Screen shortcuts; by voice the user just asks ('pichla order phir se')."),
+        typed_chat=S(U, "Screen shortcuts; 'Mera order kahan hai?' sends a normal typed turn."),
+        ui=S(
+            W,
+            "Chips on the home screen and above the composer (max 6, scrollable): Reorder last "
+            "order, Mera order kahan hai? (only while an order is active), the last 3 distinct "
+            "ordered products (toast + Undo), My lists. Header chip for an active order "
+            "(arriving / out for delivery / running late) scrolls to its status card.",
+        ),
+        backend=S(
+            W,
+            "Reads only this household's real orders (ordered basket + confirmed attempt with a "
+            "provider order id; synth- sample orders excluded); reorder and recent items re-check "
+            "each item at its store and add it; nothing is quoted or ordered.",
+        ),
+        routes=(
+            "GET /api/quick-actions",
+            "POST /api/quick-actions/repeat-last",
+            "POST /api/quick-actions/recent-item",
+        ),
+        ui_files=("frontend/app/quick-chips.tsx", "frontend/app/quick-actions.mjs", "frontend/app/page.tsx"),
+    ),
+    Capability(
+        id="express_order",
+        title="Ask → tap: order or add named items in one turn",
+        voice=S(
+            W,
+            "express_order searches, picks a confident match (remembered, or the single product of "
+            "the named brand and size), adds and shows the order card in one call; quick_add does "
+            "the same for plain adds. Ambiguous items return needs_choice (one question).",
+        ),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
+        ui=S(W, "Same order card and basket card as prepare_order and add_to_basket."),
+        backend=S(W, "app/voice/express_tools.py; never approves or orders."),
+        voice_tools=("express_order", "quick_add"),
+        ui_files=("frontend/app/page.tsx",),
     ),
     Capability(
         id="view_basket",
@@ -457,12 +555,19 @@ CAPABILITIES: tuple[Capability, ...] = (
         title="Import purchase history and personalise search (consented)",
         voice=S(M, "Permissions and import are on-screen only."),
         typed_chat=S(M, TYPED_NO_TOOL),
-        ui=S(W, "PersonalizationOnboarding in the setup sheet."),
+        ui=S(
+            W,
+            "PersonalizationOnboarding in the setup sheet: import, 'Re-import full history' "
+            "(once per 24 h per store), opt-in weekly sync on app open.",
+        ),
         backend=S(W),
         routes=(
             "GET /api/memory/permissions",
             "PUT /api/memory/permissions/{data_category}/{purpose}",
             "POST /api/memory/purchase-history/sync",
+            "GET /api/memory/purchase-history/sync-state",
+            "PUT /api/memory/purchase-history/auto-sync",
+            "POST /api/memory/purchase-history/auto-sync/run",
             "DELETE /api/memory/purchase-history",
         ),
         ui_files=("frontend/app/personalization-onboarding.tsx",),
@@ -778,6 +883,53 @@ CAPABILITIES: tuple[Capability, ...] = (
         backend=S(W, "Read-only."),
         routes=("GET /api/zepto/cart",),
     ),
+    Capability(
+        id="rider_assist",
+        title="Rider assist: an AI answers the delivery partner's forwarded call",
+        voice=S(
+            U,
+            "Not part of the user's voice session. A forwarded phone call reaches the owner's "
+            "Vobiz number; its signed answer URL returns a bidirectional <Stream> to WSS "
+            "/api/rider/stream/{call}/{token} (OpenAI Realtime, its own 4 tools: "
+            "get_active_order, get_delivery_notes, notify_owner, end_call).",
+        ),
+        typed_chat=S(M, "Not a chat feature; rider calls appear as cards in the chat."),
+        ui=S(
+            P,
+            "Settings → Rider assist (Beta): switch, delivery notes popup, setup checklist, "
+            "recent calls with delete; new calls show as a toast and a chat card (polled every "
+            "30 s) and as a 'rider_called' browser notification (user-toggleable). Not yet "
+            "verified with a real Vobiz call.",
+        ),
+        backend=S(
+            P,
+            "Off by default (RIDER_ASSIST_ENABLED). Vobiz webhook signatures (fail closed), "
+            "per-call signed stream path, single owner (RIDER_ASSIST_OWNER_USER_ID), μ-law "
+            "passthrough to Realtime audio/pcmu (L16 resampled), 40 ms playAudio frames, "
+            "barge-in clearAudio/truncate, 3 min cap, spoken apology via the after-stream "
+            "redirect when OpenAI is down; answers only from the owner's notes and confirmed "
+            "order, never OTPs, money or order changes; stores a short summary, never audio. "
+            "Unverified against a live Vobiz call.",
+        ),
+        beta=True,
+        routes=(
+            "GET /api/rider/settings",
+            "PUT /api/rider/settings",
+            "GET /api/rider/calls",
+            "POST /api/rider/calls/{call_id}/seen",
+            "DELETE /api/rider/calls",
+            "DELETE /api/rider/calls/{call_id}",
+            "POST /api/rider/vobiz/answer",
+            "POST /api/rider/vobiz/after-stream",
+        ),
+        ui_files=(
+            "frontend/app/rider-assist-settings.tsx",
+            "frontend/app/rider-assist.mjs",
+            "frontend/app/rider-calls.tsx",
+            "frontend/app/account-settings-sheet.tsx",
+            "frontend/app/page.tsx",
+        ),
+    ),
 )
 
 # Routes that are plumbing rather than a user-facing capability.
@@ -790,6 +942,13 @@ INFRASTRUCTURE_ROUTES: dict[str, str] = {
     "GET /api/swiggy/tools": "Diagnostic: live Swiggy MCP tool catalogue.",
     "GET /api/zepto/tools": "Diagnostic: live Zepto MCP tool catalogue.",
     "GET /api/zepto/capabilities": "Diagnostic: Zepto tool-policy summary.",
+    # Local dev inspector (docs/DEV_TOOLS.md): 404 unless DEV_TOOLS_ENABLED, loopback, not private.
+    "GET /api/dev/status": "Dev tools (local only): inspector availability.",
+    "GET /api/dev/traces": "Dev tools (local only): recent DEV_TRACE turn records.",
+    "GET /api/dev/state": "Dev tools (local only): the signed-in user's baskets, memory, watches, notification log.",
+    "POST /api/dev/basket/clear": "Dev tools (local only): empty the owner's own unlocked basket.",
+    "POST /api/dev/doctor": "Dev tools (local only): read-only doctor, no store calls.",
+    "POST /api/dev/reconcile-dry-run": "Dev tools (local only): read-only Zepto history check, budgeted, refused under cooldown.",
 }
 
 # API modules whose ``router`` is intentionally not mounted in ``app.main``.
@@ -807,6 +966,13 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "item_summary",
         "bill_breakdown",
         "fees_total",
+        # express_order / quick_add / clear_basket result fields and statuses.
+        "also_in_basket",
+        "items_removed",
+        "named_brand_and_size",
+        "needs_choice",
+        "picked_because",
+        "several_matches",
         # read_attached_photo item fields and photo kinds.
         "printed_name",
         "search_query",

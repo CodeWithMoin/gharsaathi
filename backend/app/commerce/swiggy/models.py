@@ -130,11 +130,14 @@ class OrderSummary(BaseModel):
     is_active: bool
     store_name: str | None = None
     items: list[OrderItem]
+    # The provider's order-list id when it differs from ``order_id`` (Zepto).
+    lookup_id: str | None = Field(default=None, exclude=True)
 
 
 class OrderList(BaseModel):
     orders: list[OrderSummary]
     has_more: bool = False
+    next_cursor: str | None = Field(default=None, exclude=True)
 
 
 class ToolDescription(BaseModel):

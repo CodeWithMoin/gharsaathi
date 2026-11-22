@@ -19,6 +19,7 @@ from app.shopping.basket import (
 from app.shopping.money import format_rupees
 from app.shopping.errors import (
     ApprovalRefused,
+    BasketConflict,
     InvalidBasketChange,
     NotFound,
     ProviderNotConnected,
@@ -336,5 +337,29 @@ async def approve(
 async def reject(approval_id: str, approvals: ApprovalServiceDependency, user_id: UserIdDependency) -> ApprovalOut:
     try:
         return approval_out(await approvals.reject(approval_id, user_id))
+    except ShoppingError as exc:
+        _raise_http(exc)
+
+
+# Store-scoped basket actions (path carries the store).
+baskets_router = APIRouter()
+
+
+class ClearRequest(BaseModel):
+    # The revision the user saw; a basket changed since then is not cleared.
+    expected_revision: int = Field(ge=0)
+
+
+@baskets_router.post("/{provider}/clear", response_model=BasketOut)
+async def clear_basket(
+    provider: ProviderName,
+    body: ClearRequest,
+    service: BasketServiceDependency,
+    user_id: ConsentedUserIdDependency,
+) -> BasketOut:
+    try:
+        return basket_out(await service.clear(user_id, provider, expected_revision=body.expected_revision))
+    except BasketConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     except ShoppingError as exc:
         _raise_http(exc)
