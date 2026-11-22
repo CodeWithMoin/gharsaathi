@@ -17,6 +17,7 @@ import hashlib
 import logging
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from app.commerce.swiggy.models import AddressList
@@ -71,6 +72,12 @@ class NameReader(Protocol):
     async def read(self, user_id: str) -> Any: ...
 
 
+class ContextLog(Protocol):
+    async def record_context(self, user_id: str, cohort_id: str, prepared_at: datetime) -> None: ...
+
+    async def clear_contexts(self, user_id: str) -> int: ...
+
+
 class Notifier(Protocol):
     async def send(self, user_id: str, payload: Any, *, dedupe_key: str | None = None) -> Any: ...
 
@@ -85,6 +92,7 @@ class InboundDeliveryService:
         *,
         client: Any = None,
         notifier: Notifier | None = None,
+        contexts: ContextLog | None = None,
         sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
     ) -> None:
         self.settings = settings
@@ -93,6 +101,9 @@ class InboundDeliveryService:
         self.profiles = profiles
         self.sarvam = SarvamCohorts(settings, client)
         self.notifier = notifier
+        # When each share was streamed (`inbound_delivery_contexts`): the call
+        # monitor polls Sarvam for calls for 2 h after it (app/inbound_calls.py).
+        self.contexts = contexts
         self.sleep = sleep
         self._cohort_owners: OrderedDict[str, str] = OrderedDict()
         self._locks: dict[str, asyncio.Lock] = {}
@@ -250,6 +261,7 @@ class InboundDeliveryService:
                 )
             raise InboundDeliveryError(exc.status_code, exc.code, exc.message) from exc
         self._remember_cohort(result.cohort_id, user_id)
+        await self._log_context(user_id, result.cohort_id)
         return self._view(await self.store.update_line(
             user_id,
             phase=_share_phase(result),
@@ -287,6 +299,7 @@ class InboundDeliveryService:
                     user_id, phase="clear_failed", reason=reason, error=exc.message, cohort_id=None
                 ))
             self._remember_cohort(result.cohort_id, user_id)
+            await self._forget_contexts(user_id)
             return self._view(await self.store.update_line(
                 user_id,
                 phase=_clear_phase(result),
@@ -295,6 +308,22 @@ class InboundDeliveryService:
                 error=None,
                 monitor_id=None,
             ))
+
+    async def _log_context(self, user_id: str, cohort_id: str) -> None:
+        if self.contexts is None:
+            return
+        try:
+            await self.contexts.record_context(user_id, cohort_id, datetime.now(UTC))
+        except Exception as exc:  # noqa: BLE001 - the share is live at Sarvam either way
+            logger.warning("event=inbound_context_record_failed error=%s", type(exc).__name__)
+
+    async def _forget_contexts(self, user_id: str) -> None:
+        if self.contexts is None:
+            return
+        try:
+            await self.contexts.clear_contexts(user_id)
+        except Exception as exc:  # noqa: BLE001 - the clear is sent either way
+            logger.warning("event=inbound_context_clear_failed error=%s", type(exc).__name__)
 
     async def status(self, user_id: str, cohort_id: str) -> DeliveryLine:
         current = await self.store.line(user_id)

@@ -8,7 +8,8 @@ export const metadata: Metadata = {
   description: "Speak naturally to search products across connected quick-commerce stores in English, Hindi, or Hinglish.",
   // The manifest lets the app be added to the Home Screen; iOS delivers web push only there.
   manifest: "/manifest.webmanifest",
-  icons: { apple: "/icons/gharsaathi-180.png" },
+  // Setting `icons` replaces the file-based app/icon.svg favicon, so list it explicitly.
+  icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }], apple: "/icons/gharsaathi-180.png" },
   appleWebApp: { capable: true, title: "GharSaathi", statusBarStyle: "default" },
 };
 

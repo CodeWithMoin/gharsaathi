@@ -1,7 +1,7 @@
 """Inbound delivery line: saved per-address directions and the line's last state.
 
 Revision ID: 20261122_line01
-Revises: 20261122_list01
+Revises: 20261122_rcall01
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision: str = "20261122_line01"
-down_revision: str | None = "20261122_list01"
+down_revision: str | None = "20261122_rcall01"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -761,6 +761,40 @@ class RiderCallRecord(Base):
     seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class InboundDeliveryContextRecord(Base):
+    """When a user prepared caller context for the Sarvam inbound line (no address kept)."""
+
+    __tablename__ = "inbound_delivery_contexts"
+    __table_args__ = (Index("ix_inbound_delivery_contexts_prepared", "prepared_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128), index=True)
+    cohort_id: Mapped[str] = mapped_column(String(200), unique=True)
+    prepared_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class InboundRiderCallRecord(Base):
+    """One call the Sarvam inbound agent took: outcome and a redacted one-liner only.
+
+    Never audio, a transcript, the caller's full number or the delivery address.
+    """
+
+    __tablename__ = "inbound_rider_calls"
+    __table_args__ = (Index("ix_inbound_rider_calls_user_started", "user_id", "started_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128))
+    # Sarvam's `<YYYYMMDD>/<id>`; one interaction belongs to one user.
+    interaction_id: Mapped[str] = mapped_column(String(160), unique=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    provider: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    outcome: Mapped[str] = mapped_column(String(32))
+    summary: Mapped[str | None] = mapped_column(String(140), nullable=True)
+    # "•••• 2590": the last four digits only.
+    caller: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class SavedShoppingListRecord(Base):
     """A shopping list the user created and named ("Weekly list"); never predicted."""
 

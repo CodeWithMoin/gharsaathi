@@ -130,7 +130,7 @@ EXPRESS_TOOL_NAMES = frozenset(tool["name"] for tool in EXPRESS_TOOL_DEFINITIONS
 
 READY_NOTE = (
     "The order card is on screen. Nothing is approved, paid or ordered yet; only the user's "
-    "tap does that. Reply in ONE line: the items with quantities, the bill (bill_breakdown "
+    "tap does that. Reply in ONE line: the items with quantities (item_summary), the bill (bill_breakdown "
     "when present, else payable) exactly as given, the payment method label and the "
     "delivery address label, then \"Place order dabaiye\". If also_in_basket is not empty, "
     "add that those items are in the same order. No question."
@@ -461,7 +461,7 @@ class ExpressToolExecutor:
                     "order": order,
                     "message": (
                         "The items were put in the Zepto basket, but the order card could not be "
-                        f"prepared: {order.get('message') or order.get('reason') or order.get('status')}"
+                        f"prepared: {order.get('reason') or order.get('message') or order.get('status')}"
                     ),
                     "note": FAILED_NOTE,
                 },

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime
 from functools import lru_cache
 from typing import Annotated
 
@@ -53,7 +54,7 @@ from app.tracking.adapters import (
     SwiggyDeliveryStatusAdapter,
     ZeptoOrderStatusAdapter,
 )
-from app.tracking.models import TrackingProvider
+from app.tracking.models import TERMINAL_STATUSES, TrackingProvider
 from app.tracking.service import OrderTrackingService
 from app.tracking.store import OrderTrackingStore
 from app.conversations.context import ConversationContextLoader
@@ -75,6 +76,7 @@ from app.notifications.sender import VapidConfig, WebPushSender
 from app.notifications.service import PushEvents, PushNotifier
 from app.notifications.store import PushStore
 from app.notifications.vapid import public_key_for
+from app.inbound_calls import InboundCallStore, RiderCallMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -568,3 +570,38 @@ def get_ordered_baskets() -> OrderedBaskets:
 
 SavedListStoreDependency = Annotated[SavedListStore, Depends(get_saved_list_store)]
 OrderedBasketsDependency = Annotated[OrderedBasketReader, Depends(get_ordered_baskets)]
+
+
+@lru_cache
+def get_inbound_call_store() -> InboundCallStore:
+    return InboundCallStore(get_session_factory())
+
+
+InboundCallStoreDependency = Annotated[InboundCallStore, Depends(get_inbound_call_store)]
+
+
+def active_order_windows(store: OrderTrackingStore) -> list[tuple[str, datetime]]:
+    """(user, tracking started) for every order still moving: the call monitor's gate."""
+
+    windows: list[tuple[str, datetime]] = []
+    for user_id in store.list_users():
+        for watch in store.list(user_id, active_only=True):
+            if watch.status in TERMINAL_STATUSES or (watch.snapshot is not None and watch.snapshot.terminal):
+                continue
+            windows.append((user_id, watch.created_at))
+    return windows
+
+
+def get_rider_call_monitor() -> RiderCallMonitor:
+    """A new monitor per application lifespan (it owns an asyncio task)."""
+
+    from app.inbound_delivery import InboundDeliveryService
+
+    tracking = get_order_tracking_service().store
+    return RiderCallMonitor(
+        get_settings(),
+        get_inbound_call_store(),
+        active_orders=lambda: active_order_windows(tracking),
+        user_key=InboundDeliveryService._user_key,
+        notifier=get_push_notifier(),
+    )

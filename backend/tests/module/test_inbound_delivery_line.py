@@ -200,7 +200,9 @@ def watch(status: TrackingStatus, provider: TrackingProvider = TrackingProvider.
 
 @pytest.mark.asyncio
 async def test_shares_the_selected_store_address_with_saved_directions(line, sarvam) -> None:
-    await line.save_directions(OWNER, directions())
+    """Default settings target agent v7: all six declared variables."""
+
+    await line.save_directions(OWNER, directions(gate_note="Ring twice"))
     shared = await line.prepare(OWNER, approve())
     assert shared.phase == "ready" and shared.provider == "zepto" and shared.address_id == "z-home"
     assert sarvam.streamed() == [{
@@ -208,22 +210,27 @@ async def test_shares_the_selected_store_address_with_saved_directions(line, sar
         "recipient_name": "Moin",
         "delivery_address": HOME,
         "landmark": "Opposite the public park",
+        "route_directions": (
+            "1) Main road pe Reliance Smart ke baad left; 2) Doosri gali; 3) Blue gate; "
+            "4) Lift se 4th floor, flat 402; 5) Gate: Ring twice"
+        ),
+        "handover_instructions": "Guard ke paas chhod dijiye",
     }]
     user = json.loads(sarvam.requests[0].content)["users"][0]
     assert user["user_identifier"] != OWNER
 
 
 @pytest.mark.asyncio
-async def test_route_directions_and_handover_are_sent_only_with_the_flag(make_line, sarvam) -> None:
-    line = make_line(sarvam_route_directions_enabled=True)
+async def test_flag_off_sends_only_the_four_agent_v5_variables(make_line, sarvam) -> None:
+    line = make_line(sarvam_route_directions_enabled=False)
     await line.save_directions(OWNER, directions(gate_note="Ring twice"))
     await line.prepare(OWNER, approve())
-    variables = sarvam.streamed()[0]
-    assert variables["route_directions"] == (
-        "1) Main road pe Reliance Smart ke baad left; 2) Doosri gali; 3) Blue gate; "
-        "4) Lift se 4th floor, flat 402; 5) Gate: Ring twice"
-    )
-    assert variables["handover_instructions"] == "Guard ke paas chhod dijiye"
+    assert sarvam.streamed() == [{
+        "caller_authorized": "yes",
+        "recipient_name": "Moin",
+        "delivery_address": HOME,
+        "landmark": "Opposite the public park. Gate: Ring twice",
+    }]
 
 
 @pytest.mark.asyncio
@@ -337,6 +344,7 @@ async def test_changing_the_selected_address_clears_the_line(line, sarvam, book,
     assert (cleared.phase, cleared.reason) == ("cleared", "address_changed")
     assert sarvam.streamed()[-1] == {
         "caller_authorized": "no", "recipient_name": "", "delivery_address": "", "landmark": "",
+        "route_directions": "", "handover_instructions": "",
     }
     assert pushes.sent[-1][1].title == "Delivery line cleared"
     assert "Lake View" not in pushes.sent[-1][1].body
@@ -356,7 +364,7 @@ async def test_reselecting_the_same_address_or_another_store_keeps_the_line(line
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status,reason", [(TrackingStatus.DELIVERED, "delivered"), (TrackingStatus.CANCELLED, "cancelled")])
 async def test_delivered_or_cancelled_order_clears_the_line(make_line, sarvam, status, reason) -> None:
-    line = make_line(sarvam_route_directions_enabled=True)
+    line = make_line()
     await line.save_directions(OWNER, directions())
     await line.prepare(OWNER, approve())
     line.tracking_updated(watch(TrackingStatus.OUT_FOR_DELIVERY))

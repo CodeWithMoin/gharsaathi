@@ -822,6 +822,31 @@ CAPABILITIES: tuple[Capability, ...] = (
         ui_files=("frontend/app/order-tracking.tsx", "frontend/app/delivery-line-panel.tsx"),
     ),
     Capability(
+        id="inbound_rider_call_summary",
+        title="Show what happened on a call to the inbound delivery line",
+        voice=S(U, "Not a voice feature; calls appear as cards in the chat."),
+        typed_chat=S(U, "Not a chat feature; calls appear as cards in the chat."),
+        ui=S(
+            P,
+            "Chat card near the order (who called, time, outcome, one-line summary), "
+            "'Rider has your directions' on the order status card, a 'rider_called' "
+            "browser notification (user-toggleable). Not yet verified with a real call.",
+        ),
+        backend=S(
+            P,
+            "RiderCallMonitor reads Sarvam's documented List interactions endpoint, read-only, "
+            "at most every 30 s and only while a user has an active order or a context "
+            "prepared in the last 2 h; stores a redacted outcome summary; deletable. Tested "
+            "with mocked Sarvam responses only.",
+        ),
+        routes=(
+            "GET /api/inbound-delivery/calls",
+            "DELETE /api/inbound-delivery/calls",
+            "DELETE /api/inbound-delivery/calls/{call_id}",
+        ),
+        ui_files=("frontend/app/inbound-calls.tsx", "frontend/app/order-status-card.tsx"),
+    ),
+    Capability(
         id="support_complaint",
         title="Prepare a support complaint with evidence",
         voice=S(
@@ -1027,6 +1052,11 @@ UNMOUNTED_ROUTERS: dict[str, str] = {
 # be a defined voice tool.
 PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
     {
+        # Bill/order failure status (codex/voice-reliability).
+        "bill_failed",
+        "item_summary",
+        "bill_breakdown",
+        "fees_total",
         # summarize_my_memory and search_products household-fact fields.
         "more_on_screen",
         "nothing_saved",
@@ -1034,7 +1064,6 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "usual_quantity",
         # express_order / quick_add / clear_basket result fields and statuses.
         "also_in_basket",
-        "bill_breakdown",
         "items_removed",
         "named_brand_and_size",
         "needs_choice",

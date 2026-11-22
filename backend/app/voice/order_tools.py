@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.shopping.approval import latest_open_approval
 from app.shopping.money import format_rupees, money_fields
-from app.shopping.errors import ShoppingError
+from app.shopping.errors import ProviderUnavailable, ShoppingError
 from app.shopping.models import Approval, ApprovalStatus, Basket, PaymentMethod, ProviderName
 from app.shopping.order_confirmation import (
     ORDERABLE_PROVIDERS,
@@ -31,6 +31,9 @@ from app.shopping.order_confirmation import (
 from app.shopping.payments import PAYMENT_LABELS, PAYMENT_METHODS, payment_label
 from app.voice.basket_tools import (
     _STORE_PARAMETER,
+    bill_breakdown,
+    bill_failed,
+    item_summary,
     BasketStore,
     BasketToolExecutor,
     _ambiguous,
@@ -67,7 +70,8 @@ ORDER_TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "current final bill (requesting it if needed) and shows an order card with the "
             "payment methods the store offers now, a 'Place order' (or 'Pay') button and "
             "Cancel. This tool never approves or places an order and never pays: only the "
-            "user's tap does. "
+            "user's tap does. Call it on every such request, also when a card is already on "
+            "screen; it refreshes the card. "
             "Zepto only."
         ),
         "parameters": {
@@ -84,9 +88,10 @@ ORDER_TOOL_NAMES = frozenset(tool["name"] for tool in ORDER_TOOL_DEFINITIONS)
 
 ORDER_NOTE = (
     "An order card is on screen. Nothing is approved, paid or ordered yet; only the "
-    "user's tap does that. In one short line say the store, item count, the payable "
-    "string exactly as given, the payment method label and the delivery address label, "
-    "then ask the user to tap 'Place order' (for a prepaid method the button says 'Pay'). "
+    "user's tap does that. In one or two short lines say the store with item_summary "
+    "(the item names, never only a count), bill_breakdown when present (else payable) "
+    "exactly as given, the payment method label and the delivery address label, then "
+    "ask the user to tap 'Place order' (for a prepaid method the button says 'Pay'). "
     "Never say the order is placed or paid "
     "until an order result arrives."
 )
@@ -149,6 +154,8 @@ class OrderToolExecutor:
             return await self._prepare(PrepareOrderArguments.model_validate(arguments))
         except ValidationError:
             return _error("Invalid arguments for this tool.")
+        except ProviderUnavailable as exc:
+            return bill_failed(exc)
         except ShoppingError as exc:
             return _error(str(exc))
 
@@ -295,7 +302,13 @@ class OrderToolExecutor:
                 "store_id": store.provider,
                 "item_count": item_count,
                 "items": items,
+                "item_summary": item_summary(basket.lines),
                 **money_fields("payable", approval.payable_paise),
+                **(
+                    bill_breakdown(approval.quote)
+                    if approval.quote is not None and approval.quote.payable_paise == approval.payable_paise
+                    else {}
+                ),
                 "payment": _payment_value(confirmation.payment_method),
                 "payment_method_label": payment_label(confirmation.payment_method),
                 "payment_methods": [payment_label(item) for item in confirmation.payment_methods],

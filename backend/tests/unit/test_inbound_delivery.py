@@ -325,7 +325,9 @@ def service(**overrides: object) -> InboundDeliveryService:
 def test_config_masks_the_caller_and_names_the_owner_guard() -> None:
     owner = service().config("owner-1")
     assert owner.enabled is True and owner.approved_caller_hint == "•••• 3210"
-    assert owner.route_directions_enabled is False
+    # Agent v7 declares route_directions and handover_instructions: on by default.
+    assert owner.route_directions_enabled is True
+    assert Settings(_env_file=None).sarvam_route_directions_enabled is True
     other = service().config("someone-else")
     assert (other.enabled, other.reason, other.inbound_phone_number, other.approved_caller_hint) == (
         False, "not_owner", None, None,
@@ -344,7 +346,7 @@ def test_config_is_off_without_complete_setup_and_ignores_commerce_mode() -> Non
     assert service(sarvam_demo_recipient_number="98765").config("owner-1").reason == "not_configured"
     assert service(sarvam_voice_agent_api_key="").config("owner-1").reason == "not_configured"
     assert service(commerce_mode="live").config("owner-1").enabled is True
-    assert service(sarvam_route_directions_enabled=True).config("owner-1").route_directions_enabled is True
+    assert service(sarvam_route_directions_enabled=False).config("owner-1").route_directions_enabled is False
 
 
 def test_cohort_owner_map_is_capped() -> None:

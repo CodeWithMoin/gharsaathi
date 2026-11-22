@@ -1,3 +1,8 @@
+import os
+
+# Tests never poll Sarvam: the shared .env may hold a real Voice Agents key.
+os.environ["SARVAM_CALL_MONITOR_ENABLED"] = "false"
+
 import re
 from pathlib import Path
 

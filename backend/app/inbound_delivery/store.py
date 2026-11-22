@@ -13,6 +13,12 @@ from app.database.upsert import insert_if_absent
 from app.inbound_delivery.models import DeliveryLine, DirectionsUpdate, SavedDirections
 
 
+async def delete_user_directions(session: AsyncSession, user_id: str) -> None:
+    """For "forget everything": inside the caller's transaction."""
+
+    await session.execute(delete(DeliveryDirectionsRecord).where(DeliveryDirectionsRecord.user_id == user_id))
+
+
 def _directions(record: DeliveryDirectionsRecord) -> SavedDirections:
     return SavedDirections.model_construct(
         provider=record.provider,

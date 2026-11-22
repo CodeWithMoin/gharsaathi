@@ -22,6 +22,8 @@ import { conversationIntent, conversationReply } from "./conversation-intent.mjs
 import { FirstRunOnboarding } from "./first-run-onboarding";
 import { AccountSettingsSheet, type SettingsSection } from "./account-settings-sheet";
 import { RiderCallCard, useRiderCalls } from "./rider-calls";
+import { InboundCallCard, useInboundCalls } from "./inbound-calls";
+import { placeInboundCalls, riderDirectionsLine } from "./inbound-calls.mjs";
 import { placeRiderCalls } from "./rider-assist.mjs";
 import { OrderNotificationPrompt, useNotifications } from "./notification-settings";
 import { orderFromUrl } from "./push-notifications.mjs";
@@ -139,6 +141,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const latestMessageIdRef = useRef<string | null>(null);
   latestMessageIdRef.current = latestMessageId(chatMessages);
   const riderCalls = useRiderCalls({ latestMessageIdRef, onToast: setOrderToast });
+  // Calls to the Sarvam inbound delivery line: a card next to the order, and a status line.
+  const inboundCalls = useInboundCalls({ onToast: setOrderToast });
   const conversationIdRef = useRef<string | null>(null);
   // Set when the saved chat could not be loaded, so the first save starts a new chat instead of overwriting it.
   const startFreshConversationRef = useRef(false);
@@ -1203,14 +1207,15 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         </motion.div>
 
         <AnimatePresence initial={false}>
-          {placeRiderCalls(withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard), riderCalls.cards).map((item) => {
+          {placeInboundCalls(placeRiderCalls(withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard), riderCalls.cards), inboundCalls.cards).map((item) => {
+            if (item.kind === "inbound-call") return <InboundCallCard key={`inbound-call-${item.card.id}`} call={item.card} onDismiss={inboundCalls.dismiss} />;
             if (item.kind === "rider-call") return <RiderCallCard key={`rider-call-${item.card.id}`} call={item.card} onDismiss={riderCalls.dismiss} />;
             if (item.kind === "order-card") {
               const { card } = item;
               if (card.superseded) return <motion.div key={orderCardKey(card)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12"><p role="status" className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted"><ShoppingCartSimple size={13} className="shrink-0 text-subtle" /><span className="truncate">{supersededOrderText(card)}</span></p></motion.div>;
               return <OrderConfirmationCard key={orderCardKey(card)} confirmation={card.confirmation} onResult={(state) => handleOrderCardResult(card, state)} />;
             }
-            if (item.kind === "order-status") return <OrderStatusCard key={`order-status-${item.card.orderId}`} card={item.card} onChange={handleOrderStatusChange} onUpdate={setOrderToast} />;
+            if (item.kind === "order-status") return <OrderStatusCard key={`order-status-${item.card.orderId}`} card={item.card} onChange={handleOrderStatusChange} onUpdate={setOrderToast} riderLine={riderDirectionsLine(inboundCalls.calls, item.card)} />;
             if (item.kind === "results") return item.group ? <div key={`results-${item.group.key}`} className="contents">{renderResultGroup(item.group as ResultGroup<Product>)}</div> : null;
             if (item.kind === "basket-summary") {
               const { card } = item;

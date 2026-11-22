@@ -39,7 +39,7 @@ def get_inbound_delivery_service() -> InboundDeliveryService:
     from app.commerce.provider_state import SavedAddressBook
     from app.core.config import get_settings
     from app.database.session import get_session_factory
-    from app.dependencies import get_push_notifier
+    from app.dependencies import get_inbound_call_store, get_push_notifier
     from app.inbound_delivery.store import DeliveryLineStore
     from app.user_profile import DatabaseProfileReader
 
@@ -51,6 +51,7 @@ def get_inbound_delivery_service() -> InboundDeliveryService:
         DemoAddressBook() if settings.commerce_mode == "demo" else SavedAddressBook(sessions),
         DatabaseProfileReader(sessions),
         notifier=get_push_notifier(),
+        contexts=get_inbound_call_store(),
     )
 
 

@@ -76,8 +76,11 @@ HISTORY_OFF_NOTE = (
 FOUND_NOTE = (
     "These are past choices, not current stock or need. Offer the best match (most recent "
     "or most bought) in one question naming its size, for example 'Pichli baar aapne Diet "
-    "Coke 330 ml can li thi; wahi ek add karun?'. Search only after the user answers; on "
-    "yes, search that exact product and add it in the same turn. Prices come only from search."
+    "Coke 330 ml can li thi; wahi ek add karun?'. If the user asked to see options ('dikha "
+    "do', 'options dikhao'), search their item now as they said it (results mark the "
+    "remembered option) and ask that question about the screen; otherwise search only "
+    "after they answer. On yes, search that exact product and add it in the same turn. "
+    "Prices come only from search."
 )
 
 
