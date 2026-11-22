@@ -86,6 +86,22 @@ class Settings(BaseSettings):
     support_data_path: Path = Field(default=Path("backend/.data/support"))
     tracking_data_path: Path = Field(default=Path("backend/.data/tracking"))
     tracking_polling_enabled: bool = True
+    # Rider assist (beta, docs/RIDER_ASSIST.md): an Exotel Voicebot applet streams a
+    # forwarded delivery-partner call to /api/rider/stream, bridged to OpenAI Realtime.
+    rider_assist_enabled: bool = False
+    rider_assist_owner_user_id: str = ""
+    # Optional: the ExoPhone the flow is attached to; calls to another number are refused.
+    rider_assist_exophone: str = ""
+    rider_assist_realtime_model: str = "gpt-realtime-2.1"
+    rider_assist_voice: str = "marin"
+    rider_assist_transcription_model: str = "gpt-4o-mini-transcribe"
+    rider_assist_max_call_seconds: int = Field(default=180, ge=30, le=600)
+    exotel_stream_user: str = ""
+    exotel_stream_password: SecretStr = SecretStr("")
+    exotel_account_sid: str = ""
+    exotel_api_key: str = ""
+    exotel_api_token: SecretStr = SecretStr("")
+    exotel_subdomain: str = "api.in.exotel.com"
 
     @field_validator(
         "swiggy_token_store_path",

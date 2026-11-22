@@ -17,6 +17,7 @@ from app.api.memory import router as memory_router
 from app.api.legal_consent import router as legal_consent_router
 from app.api.profile import router as profile_router
 from app.api.purchase_memory import router as purchase_memory_router
+from app.api.rider import router as rider_router
 from app.api.voice import router as voice_router
 from app.core.config import get_settings
 from app.core.logging import install_sensitive_log_filters
@@ -91,6 +92,7 @@ app.include_router(basket_router, prefix="/api/basket", tags=["Basket"])
 app.include_router(orders_router, prefix="/api/orders", tags=["Orders"])
 app.include_router(support_router, prefix="/api/support", tags=["Customer Support"])
 app.include_router(tracking_router, prefix="/api/tracking", tags=["Order Tracking"])
+app.include_router(rider_router, prefix="/api/rider", tags=["Rider assist"])
 app.include_router(
     conversations_router,
     prefix="/api/conversations",

@@ -633,3 +633,45 @@ class MemoryChoiceSignal(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class RiderAssistSettingsRecord(Base):
+    """Rider assist: the owner's switch and delivery notes (docs/RIDER_ASSIST.md)."""
+
+    __tablename__ = "rider_assist_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128), unique=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    landmark: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    directions: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    handoff: Mapped[str] = mapped_column(String(24), default="call_again", server_default="call_again")
+    preferred_language: Mapped[str] = mapped_column(
+        String(16), default="hinglish", server_default="hinglish"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class RiderCallRecord(Base):
+    """One forwarded call the assistant answered: a short summary only, never audio."""
+
+    __tablename__ = "rider_calls"
+    __table_args__ = (Index("ix_rider_calls_user_started", "user_id", "started_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    caller: Mapped[str] = mapped_column(String(16))
+    delivery_call: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    outcome: Mapped[str] = mapped_column(String(32))
+    urgency: Mapped[str] = mapped_column(String(16), default="normal")
+    rider_said: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    summary: Mapped[str] = mapped_column(String(600))
+    answered_from: Mapped[list[str]] = mapped_column(JSON)
+    seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
