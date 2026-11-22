@@ -260,8 +260,9 @@ sequenceDiagram
   tracking stops.
 - **Updates.** `app/tracking/notifications.py` keeps only four changes: out for
   delivery, delivered, delayed (ETA moved later by ≥10 min) and cancelled. They are
-  stored on the monitor; the card shows each one once as an in-app toast. No push,
-  SMS or calls.
+  stored on the monitor; the card shows each one once as an in-app toast, and they
+  are sent as browser notifications to people who turned them on (below). No SMS or
+  calls.
 - **Voice/typed.** `get_order_status` (household-scoped monitor, else the newest
   Zepto history entry marked `order_history`) and `list_recent_orders` (≤5, Zepto
   history) are read-only. A non-final status older than 5 min is `stale` with
@@ -313,6 +314,75 @@ stateDiagram-v2
   every 15 s (20 times at most).
 - Unrecognised responses are logged as key paths and types only
   (`zepto_payment_response_unrecognised`) and never become money claims.
+
+## Browser notifications
+
+Opt-in Web Push for meaningful order updates, so they arrive while GharSaathi is in
+the background or closed. **live** when the server has VAPID keys (`make vapid-keys`).
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant P as Page
+  participant SW as Service worker (/sw.js)
+  participant B as Backend
+  participant PS as Browser push service
+  U->>P: Settings → Notifications switch (or "Turn on" after the first order)
+  P->>P: Notification.requestPermission() (only now, from the tap)
+  P->>SW: register /sw.js, pushManager.subscribe(VAPID public key)
+  P->>B: POST /api/notifications/subscriptions (endpoint + keys)
+  B->>B: encrypt (Fernet, APP_ENCRYPTION_KEY), store by SHA-256(endpoint)
+  Note over B: later: order placed / tracking change / payment / card expiring
+  B->>B: setting on? dedupe key new? under the rate limit?
+  B->>PS: encrypted payload (pywebpush, VAPID-signed)
+  PS->>SW: push
+  SW->>SW: app tab visible and focused? then show nothing
+  SW-->>U: system notification
+  U->>SW: tap
+  SW->>P: focus + "show order" (or open /?order=<id>)
+```
+
+- **What is sent** (`app/notifications/service.py` `PushEvents`, text in
+  `messages.py`): order placed (from the tap, the Basket Approve + COD path or a
+  prepaid status check; "confirmed your earlier order" when a reconciliation settles
+  it), out for delivery, delivered (Zepto's delivered time), running late, cancelled,
+  an unconfirmed order still unknown after the bounded checks, payment needs
+  action/unclear/failed (only with `ZEPTO_ONLINE_PAYMENTS_ENABLED`), and one reminder a
+  minute before an untapped order card expires. Hooks: `CheckoutService.push`,
+  `CheckoutReconciler.push`, `OrderTrackingService.push`, `OrderConfirmations.push`.
+  Nothing for packing, small ETA drift, a first reading, an unknown outcome at the tap
+  (the card is on screen), or anything about stock, replenishment or "usual" buys.
+- **Generic entry point.** `PushNotifier.notify(user_id, kind, title, body, url, *,
+  dedupe_key=None)` (`get_push_notifier()` in `app/dependencies.py`). `kind` must be one
+  of `PUSH_KINDS` so it has a user switch; `url` must be a same-origin path.
+- **Payload.** `{kind, title ≤48, body ≤160, url, tag, suppress_when_visible}`: no
+  address, no amount but the order total, at most two product names, `tag =
+  order:<id>` so later updates replace earlier ones. TTL 1 hour.
+- **Dedupe and limits.** `web_push_events` has one row per (user, dedupe key), e.g.
+  `order_placed:zepto:<order id>`, `track:<monitor>:delivered`,
+  `track:<monitor>:delayed:<eta>`, `payment:<attempt>:<status>`,
+  `checkout_expiring:<basket>:<revision>`. At most 8 order notifications per user per
+  10 minutes; test notifications 3 per minute. Rows older than 30 days are pruned.
+  Sends for one user run in order in the background, so "delivered" never arrives
+  before "out for delivery" and a slow push service never delays an order.
+- **Subscriptions.** `web_push_subscriptions`: endpoint and keys Fernet-encrypted with
+  the app encryption key; looked up by SHA-256 of the endpoint. Only endpoints on the
+  browser vendors' push services are accepted (FCM, Mozilla, Apple, Windows), so the
+  backend never POSTs to an arbitrary host. A new user subscribing the same browser
+  takes it over; 404/410 from the push service deletes it. On load the page re-posts
+  an existing subscription so the server copy stays in sync.
+- **No double notifications.** Chosen: the service worker skips the system
+  notification while a GharSaathi tab is visible and focused (`clients.matchAll`); that
+  tab shows the in-app toast/card. The Settings test always shows. (The backend doesn't
+  track tab visibility.) A visible but unfocused desktop window still gets both.
+- **Settings.** `web_push_preferences` stores switched-off kinds per user (all on by
+  default once notifications are on) and whether the one-time order prompt was answered.
+- **Logs.** `event=web_push result=<outcome> kind=<kind> delivered=<n> removed=<n>`;
+  never titles, bodies, endpoints, keys or user ids. The private VAPID key is only read
+  from `.env`; `make vapid-keys` prints a new pair to the terminal only.
+- **Service worker** (`frontend/public/sw.js`): `push` and `notificationclick` only; no
+  fetch handler and no cache. A web app manifest (`/manifest.webmanifest`) makes the
+  app installable; iOS/iPadOS deliver web push only to the installed Home Screen app.
 
 ## Delivery addresses (switch, add)
 

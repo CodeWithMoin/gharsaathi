@@ -31,7 +31,7 @@ import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import Clock, utc_now
@@ -295,6 +295,7 @@ class OrderConfirmations:
         ttl: timedelta = CONFIRMATION_TTL,
         payments: PaymentOptions | None = None,
         reconciler: CheckoutReconciler | None = None,
+        push: Any = None,
     ) -> None:
         self.baskets = baskets
         self.approvals = approvals
@@ -303,6 +304,8 @@ class OrderConfirmations:
         self.payments = payments
         # Read-only order-history checks for unknown outcomes (app/shopping/reconciliation.py).
         self.reconciler = reconciler
+        # Browser notifications: one reminder before an untapped card expires.
+        self.push = push
         self._items: dict[str, OrderConfirmation] = {}
         self._lock = asyncio.Lock()
 
@@ -375,6 +378,8 @@ class OrderConfirmations:
                     other.state = "superseded"
                     other.closed_at = now
             self._items[confirmation.id] = confirmation
+        if self.push is not None:
+            self.push.card_prepared(confirmation)
         return confirmation
 
     async def available_methods(self, household_id: str) -> tuple[PaymentMethod, ...]:
