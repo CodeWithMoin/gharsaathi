@@ -19,6 +19,7 @@ export function orderCardKey(card: LiveOrderCard): string;
 export function withOrderResult(card: LiveOrderCard | null, confirmationId: string, result: OrderCardState["status"]): LiveOrderCard | null;
 export function supersedeOrderCard(card: LiveOrderCard | null, basket: BasketLike): LiveOrderCard | null;
 export function basketFromEvent(raw: unknown, provider: Store | undefined): BasketLike | null;
+export function orderCardInFlight(card: LiveOrderCard | null | undefined): boolean;
 export function orderCardInteractive(card: LiveOrderCard): boolean;
 export function supersededOrderText(card: LiveOrderCard): string;
 export function cartBadgeCount(baskets: Partial<Record<Store, BasketLike | undefined>>): number;

@@ -9,7 +9,7 @@ import { DRAWER_PANEL_TRANSITION, DRAWER_SPRING, pushOffset, restoreScrollTarget
 import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, useSetBasketLineQuantity, type Approval, type ApprovalRequest, type BasketLine, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
 import { ProductOptions, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
-import { basketSummary, collapseBasketCard, dropResultGroup, emptyTimeline, finishResultGroup, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordOrderCard, recordResultGroup, restoreTimeline, summaryText, updateOrderCard, withResultGroups, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
+import { basketSummary, collapseBasketCard, dropResultGroup, emptyTimeline, finishResultGroup, isNearBottom, latestMessageId, moveBasketCard, placeTimelineItems, recordOrderCard, recordResultGroup, restoreTimeline, summaryText, updateOrderCard, withResultGroups, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
 import { directSearchOutcome, restoreResultGroups, resultGroupIdentity, type ResultGroup } from "./result-groups.mjs";
 import { conversationTitle, relativeChatDate, searchConversations, visibleConversations, type ConversationSummary } from "./chat-list.mjs";
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
@@ -43,7 +43,7 @@ import { ApiError, useApiRequest } from "./authenticated-api";
 import { ADDRESS_REMOVED_MESSAGE, applyAssistantEvent } from "./assistant-events.mjs";
 import { zeptoAddressSelection } from "./zepto-address-refresh.mjs";
 import { OrderConfirmationCard } from "./order-confirmation-card";
-import { cartBadgeCount, newOrderCard, orderCardKey, orderedSummary, supersedeOrderCard, supersededOrderText, withOrderResult, type BasketLike, type LiveOrderCard } from "./card-lifecycle.mjs";
+import { cartBadgeCount, newOrderCard, orderCardInFlight, orderCardKey, orderedSummary, supersedeOrderCard, supersededOrderText, withOrderResult, type BasketLike, type LiveOrderCard } from "./card-lifecycle.mjs";
 import { orderCardIndex, type OrderCardState, type OrderConfirmation } from "./order-confirmation.mjs";
 import { OrderStatusCard } from "./order-status-card";
 import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
@@ -52,6 +52,7 @@ import { attachmentIdFor, canSend, photoBubbleText, photoMessageContent } from "
 import { QuickChips, QuickToastView, useQuickActions } from "./quick-chips";
 import { headerOrderChip, swapQuery } from "./quick-actions.mjs";
 import { SavedListsDialog } from "./saved-lists-dialog";
+import { CartSheet } from "./cart-sheet";
 import { ComparisonCard } from "./comparison-card-ui";
 import { withComparisonCard, type Comparison, type LiveComparisonCard } from "./comparison-card.mjs";
 
@@ -92,6 +93,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   // The one-tap order card prepared by voice or typed chat; it is not saved with the chat.
   // Once its order is placed it becomes a live status card in the (saved) timeline.
   const [orderCard, setOrderCard] = useState<LiveOrderCard | null>(null);
+  // The header cart opens a bottom sheet; the chat timeline keeps the basket cards' history.
+  const [cartOpen, setCartOpen] = useState(false);
   // At most one live comparison card (compare_options); a new one replaces it. Not saved with the chat.
   const [comparisonCard, setComparisonCard] = useState<LiveComparisonCard | null>(null);
   // In-app order updates (out for delivery, delivered, delayed, cancelled). Browser
@@ -1178,8 +1181,6 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   const cartProvider: ProviderName = storeItemCount(basketProvider) > 0
     ? basketProvider
     : (["zepto", "swiggy_instamart"] as ProviderName[]).find((provider) => storeItemCount(provider) > 0) ?? basketProvider;
-  const headerCard = liveCard(timeline, cartProvider);
-  const headerCardIsNewest = headerCard !== null && headerCard.seq === timeline.seq && headerCard.afterMessageId === latestMessageId(chatMessages);
   const hasChat = Boolean(submittedQuery || chatMessages.length);
   // Swiggy-style address block in the header, and "Where should we deliver?" before the greeting.
   const storeAddresses = {
@@ -1270,7 +1271,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       accountOpen={accountSettingsOpen}
       onOpenChats={() => openDrawer("chats")}
       onOpenAddress={openHeaderAddress}
-      onOpenBasket={() => { if (headerCardIsNewest) { hideBasket(cartProvider); return; } followScrollRef.current = true; setBasketProvider(cartProvider); showBasketAtLatest(cartProvider, billStageRef.current[cartProvider] ?? "updated"); }}
+      onOpenBasket={() => setCartOpen((open) => !open)}
       onOpenAccount={() => openDrawer("settings")}
       onOpenOrder={(orderId) => document.getElementById(`order-status-${orderId}`)?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" })}
     />
@@ -1437,6 +1438,23 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         onChangeAddress={() => setAddressPicker(directionsStore)}
       />}
     </InputDialog>
+    <CartSheet
+      open={cartOpen}
+      onClose={() => setCartOpen(false)}
+      preferred={cartProvider}
+      baskets={baskets}
+      commerceMode={commerceMode}
+      stores={{ zepto: { connected: zeptoConnected === true, addressId: zeptoAddressId }, swiggy_instamart: { connected: connected === true, addressId } }}
+      orderInFlightStore={orderCard && orderCardInFlight(orderCard) ? orderCard.confirmation.provider : null}
+      onBasketChange={handleBasketChange}
+      onSwap={(provider, line) => { setCartOpen(false); startSwap(provider, line); }}
+      onSaveAsList={() => quick.openLists("save-basket")}
+      onBill={(provider, request) => { followScrollRef.current = true; setVoiceApproval({ provider, request }); showBasketAtLatest(provider, "bill_ready"); }}
+      chips={chips}
+      chipsBusyKey={quick.busyKey}
+      chipsDisabled={chipsLocked}
+      onChip={(chip) => { setCartOpen(false); followScrollRef.current = true; void quick.run(chip); }}
+    />
     <SavedListsDialog open={quick.lists.open} mode={quick.lists.mode} basketStores={basketStores} addingListId={quick.addingListId} onClose={quick.closeLists} onAddList={(list) => void quick.addList(list)} onChanged={() => void quick.reload()} />
     <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} onTrackOrder={() => { setSupportOpen(false); setTrackingOpen(true); }} />
     <AddressFormSheet open={addressPopupOpen} prefillRequest={addressPrefillRequest} onAdded={applyAddedZeptoAddress} onClose={closeAddressPopup} onPrefillApplied={handleAddressPrefillApplied} />
