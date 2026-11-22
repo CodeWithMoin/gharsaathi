@@ -152,14 +152,16 @@ export function AccountSettingsSheet({
 
   // A right-side push drawer: the page shell in page.tsx slides left by the same width with
   // the same spring and owns the backdrop, so tapping the pushed page closes this panel.
-  return <AnimatePresence>
+  return <>
+    {open && section === "stores" && <div aria-hidden="true" className="pointer-events-none fixed inset-y-0 left-0 z-[34] bg-scrim" style={{ width: "calc(100vw - min(85vw, 400px))" }} />}
+    <AnimatePresence>
     {open && <motion.section
         ref={panelRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${SETTINGS_DRAWER_CLASS} flex-col overflow-hidden bg-surface-muted text-ink outline-none`}
+        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${SETTINGS_DRAWER_CLASS} flex-col overflow-hidden ${section === "stores" ? "" : "rounded-l-[28px]"} bg-surface-muted text-ink outline-none`}
         initial={reducedMotion ? { opacity: 0 } : { x: "100%" }}
         animate={{ x: 0, opacity: 1 }}
         exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}
@@ -208,7 +210,8 @@ export function AccountSettingsSheet({
           </AnimatePresence>
         </div>
       </motion.section>}
-  </AnimatePresence>;
+    </AnimatePresence>
+  </>;
 }
 
 /** A 44px+ account trigger whose fallback label is the requested M-style initial. */
