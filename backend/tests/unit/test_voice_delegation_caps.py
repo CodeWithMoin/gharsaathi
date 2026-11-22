@@ -80,23 +80,22 @@ def test_caps_are_small() -> None:
 
 
 @pytest.mark.asyncio
-async def test_third_search_in_a_delegation_is_not_run() -> None:
-    events = [
-        call("d1", "c1", "search_products", "e1"),
-        call("d1", "c2", "search_products", "e2"),
-        call("d1", "c3", "search_products", "e3"),
-        call("d1", "c4", "view_basket", "e4"),
-        done("d1", "e5"),
-        call("d2", "c5", "search_products", "e6"),
-        done("d2", "e7"),
+async def test_search_past_the_cap_in_a_delegation_is_not_run() -> None:
+    cap = MAX_SEARCHES_PER_DELEGATION
+    events = [call("d1", f"s{n}", "search_products", f"e{n}") for n in range(cap + 1)]
+    events += [
+        call("d1", "v1", "view_basket", "ev"),
+        done("d1", "ed"),
+        call("d2", "other", "search_products", "eo"),
+        done("d2", "eo-done"),
     ]
     connection, executor = await run(events)
 
-    assert executor.calls == ["search_products", "search_products", "view_basket", "search_products"]
+    assert executor.calls == ["search_products"] * cap + ["view_basket", "search_products"]
     results = outputs(connection)
-    assert results["c3"]["status"] == "limit_reached"
-    assert "results you already have" in results["c3"]["message"]
-    assert results["c5"]["status"] == "ok"  # another delegation has its own budget
+    assert results[f"s{cap}"]["status"] == "limit_reached"
+    assert "results you already have" in results[f"s{cap}"]["message"]
+    assert results["other"]["status"] == "ok"  # another delegation has its own budget
     assert [event["type"] for event in connection.sent].count("response.create") == 2
 
 
