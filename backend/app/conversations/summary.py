@@ -45,7 +45,7 @@ def searched_items(state: Mapping[str, Any]) -> list[str]:
             (group for group in groups if isinstance(group, Mapping)),
             key=lambda group: group.get("seq") if isinstance(group.get("seq"), int) else 0,
         )
-        queries = [_text(group.get("query")) for group in ordered]
+        queries = [_text(group.get("item_label")) or _text(group.get("query")) for group in ordered]
     elif state.get("searched") or state.get("products"):
         queries = [_text(state.get("submitted_query"))]
     seen: set[str] = set()
@@ -55,6 +55,23 @@ def searched_items(state: Mapping[str, Any]) -> list[str]:
             seen.add(query.casefold())
             unique.append(query)
     return unique
+
+
+def discussed_items(state: object, limit: int = 5) -> list[str]:
+    """Distinct items discussed, newest first: result-group labels, else product names."""
+
+    if not isinstance(state, Mapping):
+        return []
+    items = list(reversed(searched_items(state)))
+    if not items:
+        products = state.get("products")
+        seen: set[str] = set()
+        for product in products if isinstance(products, list) else []:
+            name = _text(product.get("name")) if isinstance(product, Mapping) else ""
+            if name and name.casefold() not in seen:
+                seen.add(name.casefold())
+                items.append(name)
+    return [item[:60] for item in items[:limit]]
 
 
 def is_empty_conversation(state: object) -> bool:

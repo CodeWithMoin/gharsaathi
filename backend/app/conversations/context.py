@@ -247,7 +247,7 @@ def _result_groups(state: Mapping[str, Any]) -> list[tuple[str, list[Mapping[str
             found.append(
                 (
                     seq if isinstance(seq, int) and not isinstance(seq, bool) else index,
-                    str(raw.get("query") or ""),
+                    str(raw.get("item_label") or raw.get("query") or ""),
                     [item for item in products if isinstance(item, Mapping)] if isinstance(products, list) else [],
                 )
             )

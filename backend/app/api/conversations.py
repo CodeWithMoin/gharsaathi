@@ -3,7 +3,12 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.conversations.repository import ConversationRepository
-from app.conversations.summary import conversation_title, is_empty_conversation
+from app.conversations.summary import (
+    conversation_title,
+    discussed_items,
+    is_empty_conversation,
+    message_count,
+)
 from app.dependencies import ConversationSummariesDependency
 from app.conversations.schemas import (
     ConversationStateResponse,
@@ -33,6 +38,8 @@ def _summary(conversation: Conversation) -> ConversationSummary:
         preview=preview_source[:160],
         updated_at=conversation.updated_at,
         is_active=conversation.archived_at is None,
+        message_count=message_count(state),
+        items=discussed_items(state),
     )
 
 

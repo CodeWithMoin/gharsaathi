@@ -85,15 +85,21 @@ class ChatTimelineSnapshot(BaseModel):
         return value
 
 
-MAX_RESULT_GROUPS = 12
-MAX_PRODUCTS_PER_GROUP = 40
+MAX_RESULT_GROUPS = 20
+MAX_PRODUCTS_PER_GROUP = 50
 
 
 class ResultGroupSnapshot(BaseModel):
-    """One searched item's results, placed after a chat message by ``seq``."""
+    """One searched item's results, placed after a chat message by ``seq``.
 
-    key: str = Field(min_length=1, max_length=120)
-    query: str = Field(min_length=1, max_length=120)
+    ``item_key``/``item_label`` match the voice ``tool.results`` event fields.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    item_key: str = Field(min_length=1, max_length=120)
+    item_label: str = Field(min_length=1, max_length=120)
+    query: str = Field(default="", max_length=120)
     products: list[ProductSnapshot] = Field(default_factory=list, max_length=MAX_PRODUCTS_PER_GROUP)
     after_message_id: str | None = Field(default=None, max_length=128)
     seq: int = Field(default=0, ge=0)
@@ -111,10 +117,10 @@ class ConversationStateUpsert(BaseModel):
 
     @field_validator("result_groups")
     @classmethod
-    def unique_group_keys(cls, value: list[ResultGroupSnapshot]) -> list[ResultGroupSnapshot]:
-        if len({group.key for group in value}) != len(value):
-            raise ValueError("result group keys must be unique")
-        return value
+    def one_group_per_item(cls, value: list[ResultGroupSnapshot]) -> list[ResultGroupSnapshot]:
+        # The latest group for an item wins, as on screen; a duplicate must not reject the save.
+        latest = {group.item_key: group for group in value}
+        return [group for group in value if latest[group.item_key] is group]
 
     @field_validator("submitted_query")
     @classmethod
@@ -133,3 +139,6 @@ class ConversationSummary(BaseModel):
     preview: str
     updated_at: datetime
     is_active: bool
+    # Messages with text, and up to five distinct items searched in the chat.
+    message_count: int = 0
+    items: list[str] = Field(default_factory=list, max_length=5)

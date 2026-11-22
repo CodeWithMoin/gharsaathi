@@ -310,3 +310,54 @@ async def test_voice_session_without_context_has_no_history(reader: FixedContext
     session = await create_session(reader)
     assert "input" not in session
     assert "This chat so far" not in str(session["instructions"])
+
+
+def result_group(key: str, label: str, seq: int) -> dict[str, object]:
+    return {
+        "item_key": key,
+        "item_label": label,
+        "query": f"{key} chahiye",
+        "after_message_id": "m0",
+        "seq": seq,
+        "products": [{"product_id": key, "sku_id": key, "name": f"{label} 1 kg", "price": {"mrp": 50, "offer_price": 41}, "available": True}],
+    }
+
+
+@pytest.mark.asyncio
+async def test_result_groups_persist_and_old_saved_state_still_loads(client, factory) -> None:
+    body = chat(2, result_groups=[result_group("atta", "Atta", 1), result_group("dahi", "Dahi", 2)])
+    await client.put("/api/conversations/current", headers=user("moin"), json=body)
+    current = (await client.get("/api/conversations/current", headers=user("moin"))).json()
+    assert [(group["item_key"], group["item_label"], group["seq"]) for group in current["result_groups"]] == [
+        ("atta", "Atta", 1),
+        ("dahi", "Dahi", 2),
+    ]
+
+    # A chat saved before result groups existed.
+    async with factory() as session:
+        await session.execute(update(Conversation).values(state={"submitted_query": "oil", "searched": True, "products": []}))
+        await session.commit()
+    old = (await client.get("/api/conversations/current", headers=user("moin"))).json()
+    assert old["result_groups"] == [] and old["submitted_query"] == "oil"
+
+
+@pytest.mark.asyncio
+async def test_chat_list_reports_message_count_and_items(client) -> None:
+    groups = [result_group(key, key.title(), seq) for seq, key in enumerate(["atta", "dahi", "atta2", "oil", "ghee", "chai"])]
+    await client.put("/api/conversations/current", headers=user("moin"), json=chat(3, "Atta aur dahi", result_groups=groups))
+    [listed] = (await client.get("/api/conversations?exclude_empty=true", headers=user("moin"))).json()
+    assert listed["title"] == "Atta aur dahi"
+    assert listed["message_count"] == 3
+    assert listed["items"] == ["Chai", "Ghee", "Oil", "Atta2", "Dahi"]  # newest first, at most five
+
+
+@pytest.mark.asyncio
+async def test_loader_on_screen_state_lists_each_result_group(client, factory) -> None:
+    body = chat(2, result_groups=[result_group("atta", "Atta", 1), result_group("dahi", "Dahi", 2)])
+    await client.put("/api/conversations/current", headers=user("moin"), json=body)
+    context = await ConversationContextLoader(factory).load("moin")
+    assert context is not None
+    assert context.on_screen == (
+        'Results "Dahi": Dahi 1 kg (₹41)',
+        'Results "Atta": Atta 1 kg (₹41)',
+    )

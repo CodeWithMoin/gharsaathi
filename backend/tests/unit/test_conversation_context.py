@@ -46,8 +46,9 @@ def session_state() -> dict[str, object]:
         ],
         "result_groups": [
             {
-                "key": "atta",
-                "query": "atta",
+                "item_key": "atta",
+                "item_label": "Atta",
+                "query": "atta chahiye",
                 "seq": 1,
                 "after_message_id": "m1",
                 "products": [
@@ -57,7 +58,7 @@ def session_state() -> dict[str, object]:
                     product("Extra Atta", 99),
                 ],
             },
-            {"key": "dahi", "query": "dahi", "seq": 2, "products": [product("Desi Farms Malai Dahi", 45)]},
+            {"item_key": "dahi", "item_label": "Dahi", "query": "dahi", "seq": 2, "products": [product("Desi Farms Malai Dahi", 45)]},
         ],
     }
 
@@ -101,7 +102,7 @@ def test_current_chat_context_keeps_last_turns_and_on_screen_groups() -> None:
     assert [turn.role for turn in context.turns] == ["user", "assistant", "user"]
     screen = "\n".join(context.on_screen)
     # Both searched items are on screen, newest first, top three options each.
-    assert screen.index('"dahi"') < screen.index('"atta"')
+    assert screen.index('Results "Dahi"') < screen.index('Results "Atta"')
     assert "Daily Good Sharbati Atta (1 kg, ₹41, Zepto)" in screen
     assert "Extra Atta" not in screen and "+1 more" in screen
     assert "Zepto basket: 2 x Aashirvaad Atta 1 kg; items ₹138" in screen
@@ -144,7 +145,7 @@ def test_live_input_uses_documented_message_items() -> None:
 def ordered_chat(stage: str) -> dict[str, object]:
     return {
         "messages": [message(1, "user", "Amul doodh chahiye")],
-        "result_groups": [{"key": "amul doodh", "query": "Amul doodh", "seq": 1, "products": []}],
+        "result_groups": [{"item_key": "amul doodh", "item_label": "Amul doodh", "query": "amul doodh chahiye", "seq": 1, "products": []}],
         "timeline": {
             "summaries": [
                 {"provider": "zepto", "seq": 2, "stage": "updated", "item_count": 1, "item_total_paise": 3000},
@@ -184,7 +185,7 @@ def test_worst_case_context_block_stays_within_600_tokens(filler: str) -> None:
     state = {
         "messages": [message(i, "user" if i % 2 else "assistant", long) for i in range(30)],
         "result_groups": [
-            {"key": f"k{g}", "query": long[:120], "seq": g, "products": [product(long[:200], 10) for _ in range(5)]}
+            {"item_key": f"k{g}", "item_label": long[:120], "query": long[:120], "seq": g, "products": [product(long[:200], 10) for _ in range(5)]}
             for g in range(8)
         ],
     }

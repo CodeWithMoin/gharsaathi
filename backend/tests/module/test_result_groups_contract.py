@@ -56,8 +56,9 @@ async def test_failed_and_unconnected_searches_carry_the_item_key_too() -> None:
 
 def group(key: str, seq: int) -> dict[str, object]:
     return {
-        "key": key,
-        "query": key.title(),
+        "item_key": key,
+        "item_label": key.title(),
+        "query": f"{key} chahiye",
         "seq": seq,
         "after_message_id": "m1",
         "products": [{"product_id": "p", "sku_id": "s", "name": "Atta", "price": {"mrp": 1, "offer_price": 1}, "available": True}],
@@ -66,14 +67,34 @@ def group(key: str, seq: int) -> dict[str, object]:
 
 def test_result_groups_round_trip_and_old_chats_still_load() -> None:
     saved = ConversationStateUpsert.model_validate({"result_groups": [group("atta", 1), group("dahi", 2)]})
-    assert [item.key for item in saved.result_groups] == ["atta", "dahi"]
+    assert [(item.item_key, item.item_label) for item in saved.result_groups] == [("atta", "Atta"), ("dahi", "Dahi")]
     assert ConversationStateUpsert.model_validate(saved.model_dump(mode="json")) == saved
     old = ConversationStateUpsert.model_validate({"submitted_query": "atta", "products": [], "searched": True})
     assert old.result_groups == []
 
 
-def test_result_groups_reject_duplicate_keys_and_too_many_groups() -> None:
+def test_result_groups_keep_the_latest_group_per_item_and_enforce_limits() -> None:
+    saved = ConversationStateUpsert.model_validate({"result_groups": [group("atta", 1), group("dahi", 2), group("atta", 3)]})
+    assert [(item.item_key, item.seq) for item in saved.result_groups] == [("dahi", 2), ("atta", 3)]
+    assert len(ConversationStateUpsert.model_validate({"result_groups": [group(f"item {i}", i) for i in range(20)]}).result_groups) == 20
     with pytest.raises(ValidationError):
-        ConversationStateUpsert.model_validate({"result_groups": [group("atta", 1), group("atta", 2)]})
+        ConversationStateUpsert.model_validate({"result_groups": [group(f"item {i}", i) for i in range(21)]})
+    too_many_products = group("atta", 1)
+    too_many_products["products"] = too_many_products["products"] * 51  # type: ignore[operator]
     with pytest.raises(ValidationError):
-        ConversationStateUpsert.model_validate({"result_groups": [group(f"item {i}", i) for i in range(13)]})
+        ConversationStateUpsert.model_validate({"result_groups": [too_many_products]})
+    with pytest.raises(ValidationError):
+        ConversationStateUpsert.model_validate({"result_groups": [{**group("atta", 1), "query": "q" * 121}]})
+
+
+def test_frontend_snapshot_shape_is_accepted() -> None:
+    # As written by frontend/app/result-groups.mjs resultGroupsSnapshot().
+    snapshot = {
+        "item_key": "fortune cooking oil",
+        "item_label": "Fortune cooking oil",
+        "query": "Fortune cooking oil 1 litre",
+        "products": [{**group("x", 0)["products"][0], "provider": "zepto", "provider_label": "Zepto", "delivery_value": "10", "delivery_unit": "min"}],  # type: ignore[index]
+        "after_message_id": None,
+        "seq": 4,
+    }
+    assert ConversationStateUpsert.model_validate({"result_groups": [snapshot]}).result_groups[0].seq == 4
