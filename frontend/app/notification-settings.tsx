@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BellSlash, CircleNotch, PaperPlaneTilt } from "@phosphor-icons/react";
+import { Bell, CircleNotch } from "@phosphor-icons/react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { ApiError, useApiRequest } from "./authenticated-api";
 import {
@@ -141,45 +141,28 @@ export function useNotifications(): NotificationsController {
   return { view, kinds: server?.kinds ?? [], offerOrderPrompt, testNotice, testing, enable, disable, setKind, answerOrderPrompt, sendTest };
 }
 
-export function notificationsSubtitle(view: NotificationView) {
-  if (view.state === "on") return "On for this device";
-  if (view.state === "hidden") return "Not set up";
-  if (view.state === "loading") return "Loading…";
-  if (view.state === "denied") return "Blocked in this browser";
-  if (view.state === "unsupported" || view.state === "insecure" || view.state === "ios-install") return "Not available here";
-  return "Off";
-}
-
-/** Settings → Notifications. */
-export function NotificationsDetail({ controller }: { controller: NotificationsController }) {
-  const { view, kinds } = controller;
-  const switchId = useId();
+/**
+ * Settings → Profile: one "Notifications" switch with its status and hint. Every kind of
+ * update stays on (the server default); the browser asks for permission only after the tap.
+ */
+export function NotificationSwitch({ controller }: { controller: NotificationsController }) {
+  const { view } = controller;
+  const labelId = useId();
+  const statusId = useId();
   const on = view.checked;
-  return <div className="rounded-2xl border border-border bg-surface p-4">
-    <span className="grid size-11 place-items-center rounded-xl bg-accent-soft text-accent-hover">{on ? <Bell size={24} weight="duotone" /> : <BellSlash size={24} weight="duotone" />}</span>
-    <h3 className="mt-4 text-base font-semibold tracking-[-.02em]">Order updates as notifications</h3>
-    <p className="mt-2 text-sm leading-6 text-muted">Order placed, out for delivery, delivered, running late or cancelled, even when GharSaathi is in the background or closed. Only for orders you place.</p>
-    {view.state !== "hidden" && view.state !== "loading" && <div className="mt-4 flex min-h-12 items-center gap-3 rounded-xl border border-border px-3">
-      <label htmlFor={switchId} className="min-w-0 flex-1 text-sm font-semibold">Notifications on this device</label>
-      <button id={switchId} type="button" role="switch" aria-checked={on} disabled={view.disabled} onClick={() => void (on ? controller.disable() : controller.enable())} className={`relative h-7 w-12 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 ${on ? "bg-accent" : "bg-border-strong"}`}>
-        <span className={`absolute top-1 grid size-5 place-items-center rounded-full bg-surface transition-[left] ${on ? "left-6" : "left-1"}`}>{(view.state === "turning-on" || view.state === "turning-off") && <CircleNotch size={12} className="animate-spin text-muted" />}</span>
-      </button>
-    </div>}
-    <p role="status" aria-live="polite" className={`mt-2 text-xs leading-5 ${view.state === "denied" || view.state === "error" ? "text-danger" : "text-muted"}`}>{view.message}</p>
-    {view.hint && <p className="mt-1 text-[11px] leading-5 text-subtle">{view.hint}</p>}
-    {view.state === "on" && kinds.length > 0 && <fieldset className="mt-4">
-      <legend className="text-xs font-semibold text-ink-secondary">Tell me when</legend>
-      <div className="mt-1.5 divide-y divide-border rounded-xl border border-border">
-        {kinds.map((kind) => <label key={kind.id} className="flex min-h-11 items-center gap-3 px-3 text-sm">
-          <span className="min-w-0 flex-1">{kind.label}</span>
-          <input type="checkbox" checked={kind.enabled} onChange={(event) => void controller.setKind(kind.id, event.target.checked)} className="size-5 accent-[rgb(var(--color-accent))]" />
-        </label>)}
+  const busy = view.state === "turning-on" || view.state === "turning-off";
+  const showSwitch = view.state !== "hidden" && view.state !== "loading";
+  return <div className="rounded-2xl border border-border bg-surface p-3.5">
+    <div className="flex items-center gap-3">
+      <div className="min-w-0 flex-1">
+        <p id={labelId} className="text-sm font-semibold">Notifications</p>
+        <p id={statusId} role="status" aria-live="polite" className={`mt-0.5 text-xs leading-5 ${view.state === "denied" || view.state === "error" ? "text-danger" : "text-muted"}`}>{view.state === "loading" ? "Loading…" : view.state === "hidden" ? "Not set up on this server." : view.message || "Order placed, out for delivery, delivered, late or cancelled."}</p>
       </div>
-    </fieldset>}
-    {view.canTest && <button type="button" onClick={() => void controller.sendTest()} disabled={controller.testing} className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-accent-border px-4 text-sm font-semibold text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-55">
-      {controller.testing ? <CircleNotch size={16} className="animate-spin" /> : <PaperPlaneTilt size={16} weight="bold" />}Send a test notification
-    </button>}
-    {controller.testNotice && <p role="status" className="mt-2 text-xs text-muted">{controller.testNotice}</p>}
+      {showSwitch && <button type="button" role="switch" aria-checked={on} aria-labelledby={labelId} aria-describedby={statusId} disabled={view.disabled} onClick={() => void (on ? controller.disable() : controller.enable())} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors after:absolute after:-inset-x-1 after:-inset-y-2 after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:opacity-50 ${on ? "bg-accent" : "bg-border-strong"}`}>
+        <span className={`absolute left-0.5 top-0.5 grid size-6 place-items-center rounded-full bg-white shadow transition-transform duration-200 ease-[cubic-bezier(.23,1,.32,1)] motion-reduce:transition-none ${on ? "translate-x-5" : "translate-x-0"}`}>{busy && <CircleNotch size={12} className="animate-spin text-muted" />}</span>
+      </button>}
+    </div>
+    {view.hint && <p className="mt-1.5 text-[11px] leading-4 text-subtle">{view.hint}</p>}
   </div>;
 }
 

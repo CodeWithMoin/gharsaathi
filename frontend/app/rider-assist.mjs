@@ -67,6 +67,15 @@ export function notesPayload(draft) {
 }
 
 /**
+ * Whether the server has rider assist on for this account. Settings shows the Rider assist
+ * row and the chat polls for rider calls only then; a missing or failed read counts as off.
+ * @param {{ feature_enabled?: boolean, owner_configured?: boolean } | null | undefined} settings
+ */
+export function riderAssistAvailable(settings) {
+  return settings?.feature_enabled === true && settings.owner_configured === true;
+}
+
+/**
  * @param {{ feature_enabled: boolean, owner_configured: boolean, stream_auth_configured: boolean, enabled: boolean } | null | undefined} settings
  */
 export function riderStatus(settings) {
