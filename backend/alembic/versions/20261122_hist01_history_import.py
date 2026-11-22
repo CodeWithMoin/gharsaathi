@@ -1,7 +1,7 @@
 """Resumable, rate-limit-aware purchase-history import and opt-in weekly sync.
 
 Revision ID: 20261122_hist01
-Revises: 20261122_rider01
+Revises: 20261122_style01
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision: str = "20261122_hist01"
-down_revision: str | None = "20261122_rider01"
+down_revision: str | None = "20261122_style01"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
