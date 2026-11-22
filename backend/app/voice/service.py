@@ -122,6 +122,7 @@ def build_session_config(
                 "tools": tool_definitions if tool_definitions is not None else TOOL_DEFINITIONS,
                 "tool_choice": "auto",
                 "parallel_tool_calls": True,
+                **_backend_tuning(settings),
             },
         },
     }
@@ -129,6 +130,17 @@ def build_session_config(
     if history:
         session["input"] = history
     return session
+
+
+def _backend_tuning(settings: Settings) -> dict[str, Any]:
+    # Responses delegation accepts the backend model's reasoning settings:
+    # https://developers.openai.com/api/docs/guides/live-delegation#reduce-backend-latency
+    effort = settings.live_backend_reasoning_effort
+    tier = settings.live_backend_service_tier
+    return {
+        **({"reasoning": {"effort": effort}} if effort else {}),
+        **({"service_tier": tier} if tier else {}),
+    }
 
 
 class LiveSessionService:
@@ -176,6 +188,32 @@ class LiveSessionService:
         self._shared_loop: asyncio.AbstractEventLoop | None = None
         self._last_openai_use = float("-inf")
         self._warmups: set[asyncio.Task[bool]] = set()
+        self._prewarms: set[asyncio.Task[None]] = set()
+
+    def _prewarm_zepto(self, address_id: str | None) -> None:
+        """Open the Zepto MCP session and select the address while voice connects.
+
+        The first search then skips session setup. Read-only; failures only log.
+        """
+
+        prewarm = getattr(self.zepto_searcher, "prewarm", None)
+        if not address_id or not callable(prewarm):
+            return
+        task = asyncio.create_task(self._timed_zepto_prewarm(prewarm, address_id))
+        self._prewarms.add(task)
+        task.add_done_callback(self._prewarms.discard)
+
+    async def _timed_zepto_prewarm(self, prewarm: Any, address_id: str) -> None:
+        started = time.perf_counter()
+        outcome = "ok"
+        try:
+            await prewarm(address_id)
+        except Exception as exc:  # noqa: BLE001 - the first search retries setup itself
+            outcome = type(exc).__name__
+        if self.settings.voice_event_log:
+            logger.warning(
+                "event=voice_zepto_prewarm outcome=%s ms=%.0f", outcome, _ms_since(started)
+            )
 
     def _warmup_finished(self, task: "asyncio.Task[bool]") -> None:
         self._warmups.discard(task)
@@ -329,6 +367,7 @@ class LiveSessionService:
         warm = asyncio.create_task(_timed(timings, "connect", self.prewarm()))
         self._warmups.add(warm)
         warm.add_done_callback(self._warmup_finished)
+        self._prewarm_zepto(zepto_address_id)
         profile, household_memory, context = await asyncio.gather(
             _timed(timings, "profile", self.profile(household_id, VOICE_START_READ_TIMEOUT_SECONDS)),
             _timed(

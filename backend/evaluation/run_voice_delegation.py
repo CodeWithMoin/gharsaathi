@@ -466,6 +466,7 @@ async def run_turn(
             parallel_tool_calls=delegation["parallel_tool_calls"],
             input=request_input,
             previous_response_id=previous,
+            **{key: delegation[key] for key in ("reasoning", "service_tier") if key in delegation},
         )
         previous = response.id
         function_calls = [item for item in response.output if item.type == "function_call"]
@@ -495,6 +496,20 @@ async def run_turn(
                     "ui_prefill": (outcome.ui_event or {}).get("prefill"),
                 }
             )
+            embedded = outcome.model_output.get("search")
+            if item.name == "recall_household_preferences" and isinstance(embedded, dict):
+                # A no_memory recall runs the search itself; check it like a search call.
+                calls.append(
+                    {
+                        "name": "search_products",
+                        "arguments": {"query": outcome.model_output.get("item", "")},
+                        "status": embedded.get("status"),
+                        "model_output": embedded,
+                        "ui_event_type": (outcome.ui_event or {}).get("type"),
+                        "ui_prefill": None,
+                        "embedded_in": "recall_household_preferences",
+                    }
+                )
             request_input.append(
                 {
                     "type": "function_call_output",
@@ -886,6 +901,7 @@ async def main() -> None:
     report = {
         "generated_at": datetime.now(UTC).isoformat(),
         "model": delegation["model"],
+        "reasoning": delegation.get("reasoning"),
         "prompt_version": VOICE_PROMPT_VERSION,
         "tool_names": [tool["name"] for tool in delegation["tools"]],
         "network": {

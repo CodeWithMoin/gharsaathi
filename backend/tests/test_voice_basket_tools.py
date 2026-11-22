@@ -161,7 +161,7 @@ async def test_voice_adds_zepto_option_to_zepto_basket_like_the_add_button() -> 
     box = two_store_box(world, [product("Oil", 154, 180)], [zepto_product("Milk", 27.5, 30)])
     search = await call(box, "search_products", query="Amul milk")
     zepto_result = next(r for r in search["model_output"]["results"] if r["provider"] == "Zepto")
-    assert zepto_result["add_supported"] is True
+    assert "option_id" in zepto_result and "add_supported" not in zepto_result
     assert zepto_result["store_id"] == "zepto"
 
     added = await call(box, "add_to_basket", option_id=zepto_result["option_id"], quantity=2)

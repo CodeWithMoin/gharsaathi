@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 import unicodedata
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -32,12 +33,17 @@ from app.memory.household_rules import (
 from app.memory.remembered import remembered_for
 from app.shopping.models import ProviderName, rupees_to_paise
 from app.shopping.money import money_fields
+from app.voice.timing import ms_since, record, stage
 
 
 logger = logging.getLogger(__name__)
 
 
 MAX_RESULTS_FOR_MODEL = 6
+# Once one store has answered, a slower store gets this long before the search
+# returns without it; with no answer yet, the search waits up to the hard cap.
+PROVIDER_SEARCH_TIMEOUT_SECONDS = 4.0
+PROVIDER_SEARCH_HARD_TIMEOUT_SECONDS = 20.0
 # Options shown for one searched item. The browser numbers cards by `position`.
 MAX_OPTIONS_PER_ITEM = 8
 POSITION_NOTE = (
@@ -169,8 +175,10 @@ def _product_for_model(product: Product) -> dict[str, Any]:
         entry["pack_size"] = product.pack_size
     mrp = rupees_to_paise(product.price.mrp)
     if mrp > price:
-        entry.update(money_fields("mrp", mrp))
-        entry.update(money_fields("saving", mrp - price))
+        # Display strings only: the prompt matches amounts on price_paise, and
+        # mrp/saving are quoted, never computed with.
+        entry["mrp"] = money_fields("mrp", mrp)["mrp"]
+        entry["saving"] = money_fields("saving", mrp - price)["saving"]
     if product.price.unit_level_price:
         entry["unit_price"] = product.price.unit_level_price
     if product.delivery_value and product.delivery_unit:
@@ -354,11 +362,15 @@ class MultiProviderShoppingToolExecutor:
         *,
         memory: HouseholdMemoryReader | None = None,
         household_id: str = "",
+        provider_timeout: float = PROVIDER_SEARCH_TIMEOUT_SECONDS,
+        provider_hard_timeout: float = PROVIDER_SEARCH_HARD_TIMEOUT_SECONDS,
     ) -> None:
         self.targets = targets
         self.options = options if options is not None else {}
         self.memory = memory
         self.household_id = household_id
+        self.provider_timeout = provider_timeout
+        self.provider_hard_timeout = provider_hard_timeout
 
     async def _household_memory(self) -> HouseholdMemory | None:
         if self.memory is None or not self.household_id:
@@ -417,7 +429,8 @@ class MultiProviderShoppingToolExecutor:
             )
 
         # Household memory first: an active avoid_store rule skips that store's call.
-        memory = await self._household_memory()
+        with stage("memory_ms"):
+            memory = await self._household_memory()
         rules = rules_from_memory(memory)
         skipped: list[dict[str, str]] = []
         allowed: list[ProviderSearchTarget] = []
@@ -446,11 +459,24 @@ class MultiProviderShoppingToolExecutor:
                 },
             )
         ready = allowed
-        outcomes = list(
-            await asyncio.gather(
-                *(self._search_target(target, without_store_names(arguments.query)) for target in ready)
-            )
-        ) + address_problems
+        outcomes = (
+            await self._search_targets(ready, without_store_names(arguments.query)) + address_problems
+        )
+        post_started = time.perf_counter()
+        try:
+            return self._results(arguments.query, outcomes, memory, rules, skipped)
+        finally:
+            record("post_ms", ms_since(post_started))
+
+    def _results(
+        self,
+        query: str,
+        outcomes: list[dict[str, Any]],
+        memory: HouseholdMemory | None,
+        rules: Any,
+        skipped: list[dict[str, str]],
+    ) -> ToolOutcome:
+        arguments = SearchProductsArguments(query=query)
         successful = [outcome for outcome in outcomes if outcome["status"] == "ok"]
         unreachable = [
             {"store": outcome["store"], "store_id": outcome["store_id"], "reason": outcome["reason"]}
@@ -538,7 +564,8 @@ class MultiProviderShoppingToolExecutor:
                 "position": position,
                 "provider": target.store,
                 "store_id": target.provider,
-                "add_supported": target.add_supported,
+                # Addable results carry an option_id; only the exception is spelled out.
+                **({} if target.add_supported else {"add_supported": False}),
                 **_product_for_model(product),
                 **decisions.get(id(product), {}),
             }
@@ -568,9 +595,7 @@ class MultiProviderShoppingToolExecutor:
             "stores_checked": stores,
             "query": arguments.query,
             **item_fields(arguments.query),
-            "total_variants": len(ui_products),
             "results": model_results,
-            "provider_statuses": [_provider_status(outcome) for outcome in outcomes],
             "note": (
                 "Current item prices only; quote the price strings exactly. Nothing was added. "
                 "Only results with an "
@@ -587,6 +612,9 @@ class MultiProviderShoppingToolExecutor:
                 + (AVOIDED_NOTE if any(entry.get("avoided") for entry in model_results) else "")
             ),
         }
+        if any(outcome["status"] != "ok" for outcome in outcomes):
+            # stores_checked already names the stores that answered.
+            model_output["provider_statuses"] = [_provider_status(outcome) for outcome in outcomes]
         if skipped:
             model_output["skipped_stores"] = skipped
         if filtered_count:
@@ -606,7 +634,58 @@ class MultiProviderShoppingToolExecutor:
             ui_event.update(_address_removed(unreachable))
         return ToolOutcome(model_output=model_output, ui_event=ui_event)
 
+    async def _search_targets(
+        self, targets: list[ProviderSearchTarget], query: str
+    ) -> list[dict[str, Any]]:
+        """Search every store concurrently; a slow store does not hold back a fast one.
+
+        A store still running after the soft timeout (once another store has
+        answered) is reported unreachable with reason "timeout". Its search keeps
+        running in the background, so its result lands in the provider's cache.
+        """
+
+        tasks = [asyncio.create_task(self._search_target(target, query)) for target in targets]
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        pending = set(tasks)
+        while pending:
+            answered = any(task.done() and task.result()["status"] == "ok" for task in tasks)
+            limit = self.provider_timeout if answered else self.provider_hard_timeout
+            remaining = started + limit - loop.time()
+            if remaining <= 0:
+                break
+            _, pending = await asyncio.wait(
+                pending, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+            )
+        outcomes: list[dict[str, Any]] = []
+        for target, task in zip(targets, tasks):
+            if task.done():
+                outcomes.append(task.result())
+                continue
+            task.add_done_callback(_discard_result)
+            logger.warning("event=voice_search_store_slow provider=%s", target.provider)
+            outcomes.append(
+                {
+                    "store": target.store,
+                    "store_id": target.provider,
+                    "target": target,
+                    "products": [],
+                    "status": "provider_error",
+                    "reason": "timeout",
+                }
+            )
+        return outcomes
+
     async def _search_target(
+        self, target: ProviderSearchTarget, query: str
+    ) -> dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            return await self._search_one(target, query)
+        finally:
+            record(f"{target.provider}_ms", ms_since(started))
+
+    async def _search_one(
         self, target: ProviderSearchTarget, query: str
     ) -> dict[str, Any]:
         assert target.address_id is not None
@@ -627,6 +706,11 @@ class MultiProviderShoppingToolExecutor:
         except (SwiggyError, ZeptoError):
             return {**base, "status": "provider_error", "reason": "unavailable"}
         return {**base, "status": "ok", "products": result.products}
+
+
+def _discard_result(task: "asyncio.Task[dict[str, Any]]") -> None:
+    if not task.cancelled() and task.exception() is not None:
+        logger.warning("event=voice_search_store_failed error=%s", type(task.exception()).__name__)
 
 
 def _address_problem(target: ProviderSearchTarget) -> str | None:
@@ -653,6 +737,7 @@ def _provider_status(outcome: dict[str, Any]) -> dict[str, Any]:
 PROVIDER_ERROR_REASONS = {
     "unavailable": "is not responding right now",
     "rate_limited": "is briefly limiting requests",
+    "timeout": "did not answer in time, so its results are not included",
     "session_expired": "needs to be reconnected on screen",
     "address_invalid": (
         "no longer has the selected saved address (it was changed or deleted in the "

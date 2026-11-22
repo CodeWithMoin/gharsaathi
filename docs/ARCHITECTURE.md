@@ -378,6 +378,38 @@ sequenceDiagram
 - Contact number and coordinates are never prefilled; the model says the user must
   type the number.
 
+## Turn latency
+
+A shopping turn's time is almost all backend model rounds: with ~10k cached
+input tokens, each gpt-6-luna round took 2.2–3.5 s even for ~25 output tokens,
+while the demo-store tools took ~0 ms. Fewer rounds is the main lever.
+
+- **Recall + search in one call.** When `recall_household_preferences` finds
+  nothing for the item, `VoiceToolbox` runs the search in the same tool call
+  and returns it under `search` (UI event included), so "dark chocolate
+  chahiye" is recall → reply (2 rounds) instead of recall → search → reply. A
+  remembered item still stops at the recall so the user is asked first.
+- **Reasoning effort** is a setting, `LIVE_BACKEND_REASONING_EFFORT` (default
+  `medium`, the model default). At medium the backend used only ~0–80
+  reasoning tokens per turn; `low`/`none` were not faster per round and dropped
+  the add in "Instamart se Amul Taaza doodh 1 litre add karo" in 4 of 11 runs
+  (medium: 0 of 9). `LIVE_BACKEND_SERVICE_TIER=priority` is optional (~0.2 s per
+  round, higher price).
+- **Stores.** Searched concurrently; once one store answered, a slower one gets
+  4 s (`PROVIDER_SEARCH_TIMEOUT_SECONDS`) and is then reported unreachable with
+  reason `timeout` (its search keeps running and fills the 60 s cache). A known
+  Swiggy cooldown is answered before waiting for the provider lock. Voice start
+  prewarms the Zepto MCP session and `select_saved_address` in the background.
+- **Typed chat** runs a round's searches concurrently (other tools keep order).
+- **Payload.** Search results omit `add_supported` when true, `mrp_paise` /
+  `saving_paise`, `total_variants`, and `provider_statuses` when every store
+  answered (−22% tokens per search result).
+
+Diagnostics: `VOICE_EVENT_LOG=true` logs content-free
+`event=voice_delegation_timing`, `voice_tool_timing`, `chat_tool_timing` and
+`chat_turn_timing` lines. Benchmark: `python -m evaluation.run_turn_latency`
+(offline fakes; `--live` for OpenAI with demo catalogues).
+
 ## Context size per turn (prompt 1.8.0, o200k tokens)
 
 What each model sees before the conversation itself. Measured with
