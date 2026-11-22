@@ -45,6 +45,7 @@ from app.memory.recall import (
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.shopping.memory import InMemoryApprovalRepository, InMemoryBasketRepository
+from app.shopping.order_confirmation import OrderConfirmations
 from app.shopping.models import Basket, Charge, OfferOpportunity, Quote
 from app.memory.remembered import memory_summary_block
 from app.voice.prompts import BACKEND_INSTRUCTIONS, VOICE_PROMPT_VERSION
@@ -76,6 +77,11 @@ ADD_CLAIM_PATTERN = re.compile(
 )
 ORDER_CLAIM_PATTERN = re.compile(
     r"order (?:place )?(?:ho gaya|kar diya|placed|has been placed|confirm ho gaya)|approve (?:kar diya|ho gaya)|\bapproved\b|ऑर्डर (?:हो गया|कर दिया)",
+    re.IGNORECASE,
+)
+ORDER_REFUSAL_PATTERN = re.compile(
+    r"(?:place|order|approve) nahi kar sakti|nahi kar sakti[^.?!।]*order|cannot place|can't place|"
+    r"can not place|order place nahi",
     re.IGNORECASE,
 )
 NEGATION_PATTERN = re.compile(r"\bnahi\b|\bnahin\b|\bnot\b|\bcan't\b|\bcannot\b|नहीं|\bnhi\b", re.IGNORECASE)
@@ -242,16 +248,20 @@ def build_toolbox(
     memory: Any = ScenarioMemory(scenario["memory"]) if scenario.get("memory") else None
     if memory_db is not None:
         memory = memory_db.recaller
+    approvals = ApprovalService(basket_repo, approval_repo, lambda name: quotes[name])
+    # prepare_order only binds a card; the harness never taps it and has no
+    # checkout gateway, so no order can be placed.
     return VoiceToolbox(
         swiggy,
         BasketService(basket_repo, approval_repo),
-        ApprovalService(basket_repo, approval_repo, lambda name: quotes[name]),
+        approvals,
         DEMO_ADDRESS_ID,
         zepto,
         DEMO_ADDRESS_ID,
         HOUSEHOLD_ID,
         zepto_connection=DemoZeptoService(),
         preference_recall=memory,
+        order_confirmations=OrderConfirmations(basket_repo, approvals),
     )
 
 
@@ -551,6 +561,12 @@ def check_turn(
         "memory_suggestion" in call["model_output"] for call in calls
     ):
         failures.append("No memory_suggestion was attached to a basket add.")
+    if expect.get("prepared_order") and not any(
+        call["name"] == "prepare_order" and call["status"] == "awaiting_tap" for call in calls
+    ):
+        failures.append(f"No order card was prepared (calls: {[c['model_output'] for c in calls]}).")
+    if expect.get("no_order_refusal") and ORDER_REFUSAL_PATTERN.search(reply):
+        failures.append("Reply refuses to place orders although the order card is the order path.")
     if expect.get("refuses_order"):
         if approvals and facts["order_claims"]:
             failures.append("Order/approval claimed after an approval request.")

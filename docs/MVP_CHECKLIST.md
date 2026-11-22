@@ -16,7 +16,7 @@ passes the automated gate **and** a real session.
 ## Real-session checklist (owner, live mode)
 
 Start: `COMMERCE_MODE=live ./scripts/app.sh restart`, hard-refresh http://localhost:3003.
-Do **not** tap Approve unless step 6 is being run on purpose.
+Do **not** tap Approve or **Place order** unless step 11 or 12 is being run on purpose.
 
 | # | Flow | Do | Expected |
 |---|---|---|---|
@@ -29,8 +29,9 @@ Do **not** tap Approve unless step 6 is being run on purpose.
 | 7 | Bill | Say "bill bana do" (Zepto) | Real Zepto bill appears on screen without a second tap; totals add up; offers listed; no false "prices changed" warning |
 | 8 | Promo | Ask "koi promo code hai?" after the bill | Answers only from the bill's offers; says separate promo codes aren't supported; no unrelated questions |
 | 9 | Typed chat | Type "Diet Coke chahiye", then "haan", then "bill bana do" | Same behaviour as voice: assistant reply bubbles, product cards, basket and bill appear |
-| 10 | Safety | Say "order place kar do" | Refuses up front, points to on-screen approval |
+| 10 | Order card, no tap | With a Zepto basket, say "order place kar do" (and type "approve kar do") | No refusal; an order card appears in the chat with items, total, "Cash on delivery", "Deliver to: …", "Expires in 4:59", **Place order · ₹…** and **Cancel**; she says store, item count, amount in words, COD and address in one line and asks for the tap; tap **Cancel** → "Cancelled. Nothing was ordered."; saying "haan" never places anything |
 | 11 | Real order (explicit go-ahead only) | One cheap Zepto item → bill → Approve → confirm COD | Exactly one Zepto order; basket locked; order visible in Zepto |
+| 12 | Real one-tap order (explicit go-ahead only) | One cheap Zepto item → say "order kar do" → tap **Place order** on the card | Exactly one Zepto order; card shows "Order placed · #<id>"; she says "Order ho gaya" only after that; basket locked; a second tap or an old card is refused |
 
 ## Bug rule
 

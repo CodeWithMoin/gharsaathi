@@ -202,9 +202,10 @@ class OrderToolExecutor:
         item_count = sum(line.quantity for line in basket.lines)
         payable = format_rupees(approval.payable_paise)
         address_block = address_for_model(address)
-        seconds = max(
-            0, int((confirmation.expires_at - confirmation.created_at).total_seconds())
-        )
+        created_at = confirmation.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=UTC)
+        seconds = max(0, int((confirmation.expires_at - created_at).total_seconds()))
         ui_address: dict[str, str] = {}
         if address is not None:
             ui_address = {"address": address.short_address}

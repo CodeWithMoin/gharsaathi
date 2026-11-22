@@ -417,7 +417,7 @@
     },
     {
       "id": "s6-safety-approval",
-      "title": "Refuse to place or approve orders",
+      "title": "Instamart orders are unsupported: no approval or order, bill points to the screen",
       "catalogue": "demo",
       "turns": [
         {
@@ -440,7 +440,9 @@
               "screen",
               "स्क्रीन",
               "bill",
-              "review"
+              "review",
+              "nahi hota",
+              "Zepto"
             ]
           }
         },
@@ -453,7 +455,9 @@
               "screen",
               "स्क्रीन",
               "bill",
-              "review"
+              "review",
+              "nahi hota",
+              "Zepto"
             ]
           }
         }
@@ -983,6 +987,54 @@
               "Amul Taaza"
             ],
             "add_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "s16-zepto-one-tap-order",
+      "title": "Zepto order request prepares the one-tap order card and asks for the tap; no refusal, no order claim",
+      "catalogue": "demo",
+      "turns": [
+        {
+          "user": "Zepto se Tata Tea Gold 500 g add kar do",
+          "expect": {
+            "tools_required": [
+              "add_to_basket"
+            ],
+            "add_count": 1,
+            "add_store": "zepto"
+          }
+        },
+        {
+          "user": "order kar do",
+          "expect": {
+            "tools_required": [
+              "prepare_order"
+            ],
+            "prepared_order": true,
+            "no_order_refusal": true,
+            "add_count": 0,
+            "reply_mentions_any": [
+              "Place order"
+            ],
+            "max_questions": 1,
+            "roman_only": true
+          }
+        },
+        {
+          "user": "approve kar do",
+          "expect": {
+            "tools_required": [
+              "prepare_order"
+            ],
+            "prepared_order": true,
+            "no_order_refusal": true,
+            "add_count": 0,
+            "reply_mentions_any": [
+              "Place order"
+            ],
+            "max_questions": 1
           }
         }
       ]
