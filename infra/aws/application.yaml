@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  GharSaathi private (owner-only) runtime: CloudFront -> ALB -> one ECS Fargate
-  frontend task and one backend task (ARM64), RDS PostgreSQL, EFS for the
-  backend's file state, one Secrets Manager secret. No NAT gateway.
+  GharSaathi private (owner-only) runtime for ap-south-1 (Mumbai): CloudFront -> ALB ->
+  one ECS Fargate frontend task and one backend task (ARM64), RDS PostgreSQL, EFS for
+  the backend's file state, one Secrets Manager secret, optional rider-assist (Vobiz)
+  host straight to the ALB so call media stays in India. No NAT gateway.
 
 Parameters:
   DomainName:
@@ -17,8 +18,8 @@ Parameters:
     Description: Exactly two public subnets in different AZs (ALB, EFS mount targets, RDS subnet group).
   CloudFrontPrefixListId:
     Type: String
-    Default: pl-82a045eb
-    Description: com.amazonaws.global.cloudfront.origin-facing in this region (pl-82a045eb is us-west-2).
+    Default: pl-9aa247f3
+    Description: com.amazonaws.global.cloudfront.origin-facing in this region (pl-9aa247f3 is ap-south-1, pl-82a045eb us-west-2).
   FrontendImage:
     Type: String
   BackendImage:
@@ -53,18 +54,42 @@ Parameters:
   WebPushSubject:
     Type: String
     Default: ""
+  PostgresEngineVersion:
+    Type: String
+    Default: "17.11"
+  RiderEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Rider assist (Vobiz). Creates rider.<domain> pointing straight at the ALB (not
+      CloudFront) for /api/rider/vobiz/* and the /api/rider/stream WebSocket, so call
+      media terminates in this region.
+  RiderIngressCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: Source range allowed to reach rider.<domain>:443 (narrow to Vobiz's published ranges if they provide them).
+  RiderNumber:
+    Type: String
+    Default: ""
+    Description: Optional Vobiz number in E.164; other called numbers are refused.
 
 Conditions:
   WebPush: !Equals [!Ref WebPushEnabled, "true"]
+  Rider: !Equals [!Ref RiderEnabled, "true"]
 
 Resources:
   OriginCertificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
       DomainName: !Sub origin.${DomainName}
+      SubjectAlternativeNames:
+        - !Sub rider.${DomainName}
       ValidationMethod: DNS
       DomainValidationOptions:
         - DomainName: !Sub origin.${DomainName}
+          HostedZoneId: !Ref HostedZoneId
+        - DomainName: !Sub rider.${DomainName}
           HostedZoneId: !Ref HostedZoneId
       Tags:
         - Key: Project
@@ -113,6 +138,19 @@ Resources:
           FromPort: 443
           ToPort: 443
           SourcePrefixListId: !Ref CloudFrontPrefixListId
+
+  # Vobiz reaches rider.<domain> directly. Only the rider listener rule matches that
+  # host; everything else on the ALB still needs the CloudFront-only header.
+  AlbRiderIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: Rider
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref RiderIngressCidr
+      Description: Vobiz answer URL and media WebSocket
 
   FrontendSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -221,7 +259,7 @@ Resources:
     Properties:
       DBInstanceIdentifier: gharsaathi
       Engine: postgres
-      EngineVersion: "17.11"
+      EngineVersion: !Ref PostgresEngineVersion
       DBName: gharsaathi
       MasterUsername: !Sub '{{resolve:secretsmanager:${DatabaseSecret}:SecretString:username}}'
       MasterUserPassword: !Sub '{{resolve:secretsmanager:${DatabaseSecret}:SecretString:password}}'
@@ -307,6 +345,40 @@ Resources:
             StatusCode: "403"
             ContentType: text/plain
             MessageBody: Forbidden
+
+  # Answer URL (HTTP, Vobiz-signed) and the call-media WebSocket (signed per-call
+  # URL). ALB forwards WebSocket upgrades natively; idle timeout 120 s.
+  RiderListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: Rider
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 5
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Sub rider.${DomainName}
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /api/rider/stream
+              - /api/rider/vobiz/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+
+  RiderRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: Rider
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub rider.${DomainName}
+      Type: A
+      AliasTarget:
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        DNSName: !GetAtt LoadBalancer.DNSName
+        EvaluateTargetHealth: false
 
   BackendListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
@@ -518,6 +590,16 @@ Resources:
               Value: /workspace/backend/.data/zepto_connection.enc
             - Name: WEB_PUSH_SUBJECT
               Value: !Ref WebPushSubject
+            - Name: RIDER_ASSIST_ENABLED
+              Value: !If [Rider, "true", "false"]
+            - Name: RIDER_ASSIST_PROVIDER
+              Value: vobiz
+            - Name: RIDER_ASSIST_OWNER_USER_ID
+              Value: !Select [0, !Split [",", !Ref AllowedUserIds]]
+            - Name: RIDER_ASSIST_PUBLIC_URL
+              Value: !Sub https://rider.${DomainName}
+            - Name: RIDER_ASSIST_NUMBER
+              Value: !Ref RiderNumber
           Secrets:
             - Name: DATABASE_PASSWORD
               ValueFrom: !Sub "${DatabaseSecret}:password::"
@@ -536,6 +618,21 @@ Resources:
               - WebPush
               - Name: WEB_PUSH_VAPID_PRIVATE_KEY
                 ValueFrom: !Sub "${AppSecretArn}:WEB_PUSH_VAPID_PRIVATE_KEY::"
+              - !Ref AWS::NoValue
+            - !If
+              - Rider
+              - Name: RIDER_ASSIST_STREAM_SECRET
+                ValueFrom: !Sub "${AppSecretArn}:RIDER_ASSIST_STREAM_SECRET::"
+              - !Ref AWS::NoValue
+            - !If
+              - Rider
+              - Name: VOBIZ_AUTH_ID
+                ValueFrom: !Sub "${AppSecretArn}:VOBIZ_AUTH_ID::"
+              - !Ref AWS::NoValue
+            - !If
+              - Rider
+              - Name: VOBIZ_AUTH_TOKEN
+                ValueFrom: !Sub "${AppSecretArn}:VOBIZ_AUTH_TOKEN::"
               - !Ref AWS::NoValue
           LogConfiguration:
             LogDriver: awslogs
@@ -702,6 +799,9 @@ Outputs:
     Value: !Sub https://${DomainName}
   ZeptoRedirectUri:
     Value: !Sub https://${DomainName}/api/zepto/oauth/callback
+  RiderAnswerUrl:
+    Condition: Rider
+    Value: !Sub https://rider.${DomainName}/api/rider/vobiz/answer
   DistributionId:
     Value: !Ref Distribution
   LoadBalancerDnsName:

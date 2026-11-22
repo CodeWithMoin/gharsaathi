@@ -9,15 +9,18 @@
 # has ALLOWED_USER_IDS and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY. Images are tagged with
 # the git commit (ECR tags are immutable), so the working tree must be clean.
 #
-# Env overrides: AWS_PROFILE (hackathon-bedrock), AWS_REGION (us-west-2),
-# COMMERCE_MODE (demo), SUBNET_IDS (two comma-separated public subnets),
-# ALLOW_DIRTY=1 (tag <sha>-dirty-<time>; for a review build only).
+# Env overrides: AWS_PROFILE (gharsaathi), AWS_REGION (ap-south-1: TRAI keeps rider
+# call media in India), DOMAIN_STACK_REGION (region of the gharsaathi-domain stack;
+# default AWS_REGION) or HOSTED_ZONE_ID, COMMERCE_MODE (demo), RIDER_ENABLED (false),
+# SUBNET_IDS (two comma-separated public subnets), ALLOW_DIRTY=1 (review builds only).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ACTION="${1:-}"
-export AWS_PROFILE="${AWS_PROFILE:-hackathon-bedrock}"
-REGION="${AWS_REGION:-us-west-2}"
+export AWS_PROFILE="${AWS_PROFILE:-gharsaathi}"
+REGION="${AWS_REGION:-ap-south-1}"
+DOMAIN_STACK_REGION="${DOMAIN_STACK_REGION:-${REGION}}"
+RIDER_ENABLED="${RIDER_ENABLED:-false}"
 STACK="gharsaathi-application"
 COMMERCE_MODE="${COMMERCE_MODE:-demo}"
 ENV_AWS="${GHARSAATHI_ENV_AWS:-${REPO_ROOT}/.env.aws}"
@@ -40,17 +43,30 @@ say "AWS account $(aws sts get-caller-identity --query Account --output text) ·
 ALLOWED_USER_IDS="$(env_value ALLOWED_USER_IDS)"
 CLERK_PK="$(env_value NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)"
 WEB_PUSH_SUBJECT="$(env_value WEB_PUSH_SUBJECT)"
+RIDER_NUMBER="$(env_value RIDER_ASSIST_NUMBER)"
 [[ -n "${ALLOWED_USER_IDS}" ]] || die "set ALLOWED_USER_IDS (the owner's Clerk user id) in ${ENV_AWS}"
 [[ -n "${CLERK_PK}" ]] || die "set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY in ${ENV_AWS}"
 [[ "${CLERK_PK}" == pk_live_* ]] || say "warning: Clerk publishable key is not pk_live_ (development instance)"
+export AWS_REGION="${REGION}"
 "${REPO_ROOT}/scripts/aws-secrets.sh" --check >/dev/null || die "gharsaathi/app is missing required keys; run scripts/aws-secrets.sh"
 APP_SECRET_ARN="$(aws_ secretsmanager describe-secret --secret-id gharsaathi/app --query ARN --output text)"
 WEB_PUSH_ENABLED=false
-if "${REPO_ROOT}/scripts/aws-secrets.sh" --check | grep -q 'WEB_PUSH_VAPID_PRIVATE_KEY: set'; then WEB_PUSH_ENABLED=true; fi
+SECRET_KEYS="$("${REPO_ROOT}/scripts/aws-secrets.sh" --check)"
+if grep -q 'WEB_PUSH_VAPID_PRIVATE_KEY: set' <<<"${SECRET_KEYS}"; then WEB_PUSH_ENABLED=true; fi
+if [[ "${RIDER_ENABLED}" == true ]] && ! grep -q 'VOBIZ_AUTH_TOKEN: set' <<<"${SECRET_KEYS}"; then
+  die "RIDER_ENABLED=true needs VOBIZ_AUTH_ID/VOBIZ_AUTH_TOKEN in gharsaathi/app (scripts/aws-secrets.sh)"
+fi
+
+say "ensure ECR repositories (gharsaathi-registry) in ${REGION}"
+aws_ cloudformation deploy --stack-name gharsaathi-registry --template-file "${REPO_ROOT}/infra/aws/registry.yaml" \
+  --no-fail-on-empty-changeset --tags Project=GharSaathi ManagedBy=CloudFormation >/dev/null
+PG_VERSION="${PG_VERSION:-17.11}"
+aws_ rds describe-db-engine-versions --engine postgres --engine-version "${PG_VERSION}" --query 'DBEngineVersions[0].EngineVersion' --output text | grep -qx "${PG_VERSION}" \
+  || die "PostgreSQL ${PG_VERSION} is not offered in ${REGION}; set PG_VERSION"
 
 FRONTEND_REPO="$(output "${REGION}" gharsaathi-registry FrontendRepositoryUri)"
 BACKEND_REPO="$(output "${REGION}" gharsaathi-registry BackendRepositoryUri)"
-HOSTED_ZONE_ID="$(output "${REGION}" gharsaathi-domain HostedZoneId)"
+HOSTED_ZONE_ID="${HOSTED_ZONE_ID:-$(output "${DOMAIN_STACK_REGION}" gharsaathi-domain HostedZoneId)}"
 CERT_ARN="$(output us-east-1 gharsaathi-certificate CertificateArn)"
 PREFIX_LIST_ID="$(aws_ ec2 describe-managed-prefix-lists --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing --query 'PrefixLists[0].PrefixListId' --output text)"
 VPC_ID="${VPC_ID:-$(aws_ ec2 describe-vpcs --filters Name=isDefault,Values=true --query 'Vpcs[0].VpcId' --output text)}"
@@ -100,6 +116,9 @@ PARAMS=(
   "CommerceMode=${COMMERCE_MODE}"
   "WebPushEnabled=${WEB_PUSH_ENABLED}"
   "WebPushSubject=${WEB_PUSH_SUBJECT}"
+  "PostgresEngineVersion=${PG_VERSION}"
+  "RiderEnabled=${RIDER_ENABLED}"
+  "RiderNumber=${RIDER_NUMBER}"
 )
 DEPLOY_ARGS=(
   cloudformation deploy --stack-name "${STACK}" --template-file infra/aws/application.yaml

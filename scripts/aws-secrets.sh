@@ -7,14 +7,15 @@
 #
 # Values come from .env.aws (gitignored by `.env.*`), falling back to .env for
 # OPENAI_API_KEY only. Keys already in the stored secret are kept unless the file
-# provides a new value. APP_ENCRYPTION_KEY and ORIGIN_VERIFY_SECRET are generated
+# provides a new value. APP_ENCRYPTION_KEY, ORIGIN_VERIFY_SECRET and
+# RIDER_ASSIST_STREAM_SECRET are generated
 # once if absent and then preserved (changing APP_ENCRYPTION_KEY would make the
 # stored provider connections on EFS unreadable).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export AWS_PROFILE="${AWS_PROFILE:-hackathon-bedrock}"
-export AWS_REGION="${AWS_REGION:-us-west-2}"
+export AWS_PROFILE="${AWS_PROFILE:-gharsaathi}"
+export AWS_REGION="${AWS_REGION:-ap-south-1}"
 export GHARSAATHI_SECRET_NAME="${GHARSAATHI_SECRET_NAME:-gharsaathi/app}"
 export GHARSAATHI_ENV_AWS="${GHARSAATHI_ENV_AWS:-${REPO_ROOT}/.env.aws}"
 export GHARSAATHI_ENV_LOCAL="${REPO_ROOT}/.env"
@@ -30,11 +31,19 @@ import sys
 import tempfile
 
 REQUIRED = ["OPENAI_API_KEY", "APP_ENCRYPTION_KEY", "CLERK_SECRET_KEY", "ORIGIN_VERIFY_SECRET"]
-OPTIONAL = ["CLERK_JWT_KEY", "WEB_PUSH_VAPID_PUBLIC_KEY", "WEB_PUSH_VAPID_PRIVATE_KEY"]
+OPTIONAL = [
+    "CLERK_JWT_KEY",
+    "WEB_PUSH_VAPID_PUBLIC_KEY",
+    "WEB_PUSH_VAPID_PRIVATE_KEY",
+    "VOBIZ_AUTH_ID",
+    "VOBIZ_AUTH_TOKEN",
+    "RIDER_ASSIST_STREAM_SECRET",
+]
 FALLBACK_FROM_LOCAL = {"OPENAI_API_KEY"}
 GENERATED = {
     "APP_ENCRYPTION_KEY": lambda: base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
     "ORIGIN_VERIFY_SECRET": lambda: secrets.token_urlsafe(48),
+    "RIDER_ASSIST_STREAM_SECRET": lambda: secrets.token_urlsafe(32),
 }
 
 name = os.environ["GHARSAATHI_SECRET_NAME"]

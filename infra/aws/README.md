@@ -38,6 +38,27 @@ make the new `.app` domain fail because `.app` requires HTTPS.
 
 ## Application runtime (private, owner-only)
 
+### Region: ap-south-1 (Mumbai), in an AWS account the owner controls
+
+Rider assist answers Indian (Vobiz) numbers, and TRAI requires the call media to
+be anchored on servers in India, so the runtime runs in `ap-south-1`. A
+single-region runtime is the simplest option for one owner, and Mumbai is also
+closer to the owner and to Zepto. The hackathon account (`WSParticipantRole`,
+policy `ws-default-policy`) denies every regional service outside `us-west-2`
+and `us-east-1`, ECS, RDS, EFS, ECR, Secrets Manager, Logs, EC2 and Lightsail
+included, so this stack must be deployed in the owner's own account (profile
+`gharsaathi`). Re-create `domain.yaml` (any region; Route 53 is global) and
+`certificate.yaml` (`us-east-1`) there and re-delegate the Name.com nameservers.
+
+Rider traffic does not go through CloudFront: the edge that terminates TLS is
+not guaranteed to be in India. With `RIDER_ENABLED=true`, `rider.gharsaathi.app`
+points straight at the Mumbai ALB, which forwards only `/api/rider/vobiz/*` (the
+Vobiz-signed answer URL) and the `/api/rider/stream` WebSocket to the backend.
+ALB forwards WebSocket upgrades natively. Everything else on that host gets the
+ALB's 403. The rider bridge sends call audio to OpenAI Realtime, which is outside
+India unless the OpenAI project has India data residency. Confirm that before
+enabling rider assist with real calls.
+
 `registry.yaml` creates immutable ECR repositories for the frontend and backend.
 `application.yaml` creates the private runtime:
 
@@ -77,10 +98,12 @@ browser ──HTTPS──> CloudFront (gharsaathi.app, www) ──HTTPS + X-Orig
 ### Deploy
 
 ```bash
+export AWS_PROFILE=gharsaathi AWS_REGION=ap-south-1
 cp .env.aws.example .env.aws          # fill in ALLOWED_USER_IDS and the Clerk production keys
 scripts/aws-secrets.sh                # create/update gharsaathi/app (prints key names only)
-scripts/deploy-aws.sh plan            # build + push images tagged with the git sha, change set only
+scripts/deploy-aws.sh plan            # ECR stack + images tagged with the git sha, change set only
 scripts/deploy-aws.sh deploy          # deploy, wait for ECS and https://gharsaathi.app/health
+RIDER_ENABLED=true scripts/deploy-aws.sh deploy   # later: adds rider.gharsaathi.app
 ```
 
 `COMMERCE_MODE` defaults to `demo`. `COMMERCE_MODE=live` additionally needs
