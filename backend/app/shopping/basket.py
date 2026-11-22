@@ -64,23 +64,6 @@ def quote_item_total_matches(quote: Quote, basket: Basket) -> bool:
     )
 
 
-def format_rupees(paise: int) -> str:
-    sign = "-" if paise < 0 else ""
-    rupees, remainder = divmod(abs(paise), 100)
-    digits = str(rupees)
-    if len(digits) > 3:
-        head, tail = digits[:-3], digits[-3:]
-        groups: list[str] = []
-        while len(head) > 2:
-            groups.insert(0, head[-2:])
-            head = head[:-2]
-        if head:
-            groups.insert(0, head)
-        digits = ",".join([*groups, tail])
-    fraction = f".{remainder:02d}" if remainder else ""
-    return f"{sign}₹{digits}{fraction}"
-
-
 def same_variant(a: ProductRef, b: ProductRef) -> bool:
     return (a.provider, a.product_id, a.variant_id) == (b.provider, b.product_id, b.variant_id)
 

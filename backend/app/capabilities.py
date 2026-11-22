@@ -545,7 +545,11 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "confirmed_preference",
         # Fields, statuses and enum values shown in the backend few-shot examples.
         "swiggy_instamart",
-        "price_rupees",
+        "price_paise",
+        "line_total_paise",
+        "item_total_paise",
+        "payable_paise",
+        "amount_paise",
         "pack_size",
         "line_total",
         "item_total",

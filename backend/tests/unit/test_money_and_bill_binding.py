@@ -7,13 +7,13 @@ import pytest
 
 from app.shopping.approval import check_quote
 from app.shopping.basket import (
-    format_rupees,
     item_total_paise,
     line_savings_paise,
     same_variant,
     savings_vs_mrp_paise,
 )
 from app.shopping.errors import ApprovalRefused
+from app.shopping.money import format_rupees, money_fields
 from app.shopping.models import Basket, BasketLine, ProductRef, Quote, basket_fingerprint, rupees_to_paise
 
 NOW = datetime(2026, 11, 22, 10, 0, tzinfo=UTC)
@@ -74,6 +74,12 @@ def test_rupees_to_paise_is_exact_and_rounds_half_up(value, paise: int) -> None:
 )
 def test_format_rupees_uses_indian_grouping_and_exact_paise(paise: int, text: str) -> None:
     assert format_rupees(paise) == text
+
+
+def test_money_fields_carry_paise_next_to_the_display_string() -> None:
+    assert money_fields("price", 17200) == {"price_paise": 17200, "price": "₹172"}
+    assert money_fields("amount", -2500) == {"amount_paise": -2500, "amount": "-₹25"}
+    assert money_fields("payable", 124950) == {"payable_paise": 124950, "payable": "₹1,249.50"}
 
 
 def test_totals_and_savings_ignore_mrp_below_the_selling_price() -> None:

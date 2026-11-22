@@ -45,13 +45,15 @@ from app.conversations.summary import (
 )
 from app.memory.repository import MemoryRepository
 from app.shopping.approval import latest_open_approval
-from app.shopping.basket import format_rupees, item_total_paise
+from app.shopping.basket import item_total_paise
+from app.shopping.money import format_rupees
 from app.shopping.models import (
     Approval,
     ApprovalStatus,
     Basket,
     BasketStatus,
     ProviderName,
+    rupees_to_paise,
 )
 
 logger = logging.getLogger(__name__)
@@ -218,7 +220,7 @@ def _turns(messages: object, max_turns: int) -> tuple[ContextTurn, ...]:
 def _price(value: object) -> str | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
         return None
-    return format_rupees(round(value * 100))
+    return format_rupees(rupees_to_paise(value))
 
 
 def _product_line(raw: Mapping[str, Any]) -> str | None:
