@@ -281,7 +281,7 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
 }
 
 function edgeFade(atStart: boolean, atEnd: boolean): string {
-  const left = atStart ? "black 0" : "transparent 0, black 28px";
-  const right = atEnd ? "black 100%" : "black calc(100% - 44px), transparent 100%";
+  const left = atStart ? "black 0" : "rgb(0 0 0 / .55) 0, black 14px";
+  const right = atEnd ? "black 100%" : "black calc(100% - 20px), rgb(0 0 0 / .55) 100%";
   return `linear-gradient(to right, ${left}, ${right})`;
 }
