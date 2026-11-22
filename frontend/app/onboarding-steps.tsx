@@ -303,23 +303,23 @@ export function ConsentStep({ updatedTerms, focusHeading, onAccept }: {
       <button type="submit" disabled={saving || !legalAccepted} className={`${primaryButton} ${error ? "mt-3" : ""}`}>{saving ? <><Spinner /> Saving…</> : <>Accept and continue <ArrowRight size={17} weight="bold" /></>}</button>
     </>}
   >
-    {!updatedTerms && <ul className="space-y-4">
+    {!updatedTerms && <ul className="mt-2 space-y-6">
       {[
         { icon: <ShieldCheck size={20} weight="duotone" />, text: "No order is placed without your approval." },
         { icon: <LockKey size={20} weight="duotone" />, text: "GharSaathi never asks for your password or OTP." },
         { icon: <Trash size={20} weight="duotone" />, text: "Anything GharSaathi remembers can be deleted at any time." },
-      ].map((item) => <li key={item.text} className="flex items-center gap-3.5 text-[14px] leading-5 text-ink-secondary"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent-ink">{item.icon}</span>{item.text}</li>)}
+      ].map((item) => <li key={item.text} className="flex items-center gap-4 text-[15px] leading-6 text-ink"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent-ink">{item.icon}</span>{item.text}</li>)}
     </ul>}
 
-    <label className={`${updatedTerms ? "" : "mt-6"} relative flex cursor-pointer items-start gap-3 rounded-[20px] border border-border-strong bg-surface p-4 text-[14px] leading-6 text-ink-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus`}>
+    <label className={`${updatedTerms ? "" : "mt-12"} relative flex cursor-pointer items-start gap-3 rounded-[20px] border border-border-strong bg-surface p-4 text-[14px] leading-6 text-ink-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus`}>
       <input type="checkbox" checked={legalAccepted} onChange={(event) => { setLegalAccepted(event.target.checked); if (event.target.checked) setError(""); }} className="peer mt-0.5 size-[22px] shrink-0 cursor-pointer appearance-none rounded-[7px] border-[1.5px] border-border-strong bg-surface transition-colors checked:border-accent checked:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/50" /><svg aria-hidden="true" viewBox="0 0 16 16" className="pointer-events-none absolute left-[20px] top-[22px] size-[14px] text-on-accent opacity-0 peer-checked:opacity-100"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
       <span>I agree to GharSaathi&apos;s <a href="/terms" target="_blank" rel="noreferrer" className="font-semibold text-accent-strong underline underline-offset-2">Terms</a> and <a href="/privacy" target="_blank" rel="noreferrer" className="font-semibold text-accent-strong underline underline-offset-2">Privacy Policy</a>.</span>
     </label>
-    <label className="relative mt-3 flex cursor-pointer items-start gap-3 rounded-[20px] bg-surface-strong p-4 text-[14px] leading-6 text-ink-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus">
+    <label className="relative mt-4 flex cursor-pointer items-start gap-3 rounded-[20px] bg-surface-strong p-4 text-[14px] leading-6 text-ink-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus">
       <input type="checkbox" checked={personalizationAllowed} onChange={(event) => setPersonalizationAllowed(event.target.checked)} className="peer mt-0.5 size-[22px] shrink-0 cursor-pointer appearance-none rounded-[7px] border-[1.5px] border-border-strong bg-surface transition-colors checked:border-accent checked:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/50" /><svg aria-hidden="true" viewBox="0 0 16 16" className="pointer-events-none absolute left-[20px] top-[22px] size-[14px] text-on-accent opacity-0 peer-checked:opacity-100"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-      <span><strong className="font-semibold text-ink-secondary">Optional:</strong> Turn on Memory, so GharSaathi uses what you tell it (brands, sizes, things to avoid). Order-history import stays a separate choice and is never turned on automatically.</span>
+      <span><strong className="font-semibold text-ink-secondary">Optional:</strong> Turn on Memory so GharSaathi remembers your brands, sizes and things to avoid.</span>
     </label>
-    <p className="mt-3 text-[12px] leading-5 text-muted">You can change personalisation choices later. Accepting Terms is required; personalisation is not.</p>
+    <p className="mt-4 text-[12px] leading-5 text-muted">Terms are required; Memory is optional and can be changed anytime in Settings. Order history is never imported unless you ask.</p>
   </StepFrame>;
 }
 
