@@ -159,7 +159,7 @@ export function AccountSettingsSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${SETTINGS_DRAWER_CLASS} flex-col overflow-hidden rounded-l-[28px] bg-surface-muted text-ink shadow-[-18px_0_40px_-28px_rgb(var(--shadow)/.55)] outline-none`}
+        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${SETTINGS_DRAWER_CLASS} flex-col overflow-hidden rounded-l-[28px] bg-surface-muted text-ink outline-none`}
         initial={reducedMotion ? { opacity: 0 } : { x: "100%" }}
         animate={{ x: 0, opacity: 1 }}
         exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}
