@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.auth import UserIdDependency
 from app.rider.service import RiderAssistService, get_rider_service
+from app.rider.vobiz import STREAM_PARAM, split_stream_param
 from app.rider.store import RiderCall, RiderSettings, RiderSettingsUpdate
 
 
@@ -87,10 +88,9 @@ async def vobiz_after_stream(request: Request, service: RiderServiceDependency) 
     return _xml(await service.after_stream(await _form(request), request.headers))
 
 
-@router.websocket("/stream/{call_id}/{token}")
-async def rider_stream(
-    websocket: WebSocket, call_id: str, token: str, service: RiderServiceDependency
-) -> None:
-    """Vobiz bidirectional <Stream>. The path is signed per call by the answer URL."""
+@router.websocket("/stream")
+async def rider_stream(websocket: WebSocket, service: RiderServiceDependency) -> None:
+    """Vobiz bidirectional <Stream>. ``?s=<call id>.<token>`` is signed per call by the answer URL."""
 
+    call_id, token = split_stream_param(websocket.query_params.get(STREAM_PARAM))
     await service.handle(websocket, call_id, token)

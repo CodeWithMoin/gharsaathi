@@ -212,7 +212,7 @@ async def test_call_is_capped_with_a_spoken_wrap_up() -> None:
 
 
 @pytest.mark.asyncio
-async def test_barge_in_clears_exotel_audio_and_truncates_the_item() -> None:
+async def test_barge_in_clears_queued_audio_and_truncates_the_item() -> None:
     call = FakeVobiz()
     call.start()
     realtime = FakeRealtime(

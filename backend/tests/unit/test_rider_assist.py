@@ -124,12 +124,14 @@ def test_stream_tokens_are_bound_to_the_call_and_expire() -> None:
     assert not vobiz.stream_token_valid(SECRET, "call-0001-uuid", tampered, now=1_800_000_060)
     assert not vobiz.stream_token_valid(SECRET, "../etc", token, now=1_800_000_060)
     url = vobiz.stream_url("https://rider.example.in", SECRET, "call-0001-uuid", now=1_800_000_000)
-    assert url == f"wss://rider.example.in/api/rider/stream/call-0001-uuid/{token}"
+    assert url == f"wss://rider.example.in/api/rider/stream?s=call-0001-uuid.{token}"
+    assert vobiz.split_stream_param(url.split("?s=")[1]) == ("call-0001-uuid", token)
+    assert vobiz.split_stream_param(None) == ("", "")
 
 
 def test_answer_xml_streams_mulaw_and_redirects_after() -> None:
-    xml = vobiz.answer_xml("wss://h/api/rider/stream/c/t", "https://h/api/rider/vobiz/after-stream", timeout_seconds=210)
-    assert '<Stream bidirectional="true" keepCallAlive="true" audioTrack="inbound" contentType="audio/x-mulaw;rate=8000" streamTimeout="210">wss://h/api/rider/stream/c/t</Stream>' in xml
+    xml = vobiz.answer_xml("wss://h/api/rider/stream?s=c.t", "https://h/api/rider/vobiz/after-stream", timeout_seconds=210)
+    assert '<Stream bidirectional="true" keepCallAlive="true" audioTrack="inbound" contentType="audio/x-mulaw;rate=8000" streamTimeout="210">wss://h/api/rider/stream?s=c.t</Stream>' in xml
     assert '<Redirect method="POST">https://h/api/rider/vobiz/after-stream</Redirect>' in xml
     assert "&amp;" in vobiz.answer_xml("wss://h/s?a=1&b=2", "https://h/a", timeout_seconds=1)
     sorry = vobiz.after_stream_xml(apologise=True, language="hinglish")

@@ -42,8 +42,8 @@ class RedactOAuthCallbackFilter(logging.Filter):
         return True
 
 
-# Rider assist stream URLs carry a per-call signed token in the path.
-RIDER_STREAM_TOKEN = re.compile(r"(/api/rider/stream/[^/\s?\"]+/)[^/\s?\"]+")
+# Rider assist stream URLs carry a per-call signed token in the query string.
+RIDER_STREAM_TOKEN = re.compile(r"(/api/rider/stream\?)[^\s\"]+")
 
 
 class RedactRiderStreamFilter(logging.Filter):

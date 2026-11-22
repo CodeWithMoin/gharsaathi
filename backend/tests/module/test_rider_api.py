@@ -128,7 +128,7 @@ async def test_answer_url_needs_a_valid_signature_and_streams_to_a_signed_path(c
     assert answered.status_code == 200 and answered.headers["content-type"].startswith("application/xml")
     xml = answered.text
     assert 'contentType="audio/x-mulaw;rate=8000"' in xml and 'bidirectional="true"' in xml
-    assert "wss://rider.example.in/api/rider/stream/9a0e0208-d01a-4572/" in xml
+    assert "wss://rider.example.in/api/rider/stream?s=9a0e0208-d01a-4572." in xml
     assert "<Redirect method=\"POST\">https://rider.example.in/api/rider/vobiz/after-stream</Redirect>" in xml
     v2 = await client.post(vobiz.ANSWER_PATH, data=CALL, headers=signed(vobiz.ANSWER_PATH, version="V2"))
     assert v2.status_code == 200

@@ -65,7 +65,7 @@ def service(store: MemoryStore, connections: Connections, *, pushes: Pushes | No
 
 
 def path(call_id: str = CALL_ID, token: str | None = None) -> str:
-    return f"{vobiz.STREAM_PATH}/{call_id}/{token or vobiz.stream_token(SECRET, call_id)}"
+    return f"{vobiz.STREAM_PATH}?s={call_id}.{token or vobiz.stream_token(SECRET, call_id)}"
 
 
 def start_message(call_id: str = CALL_ID) -> str:

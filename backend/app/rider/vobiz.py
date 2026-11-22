@@ -8,8 +8,8 @@ Sources (Vobiz docs, read 2026-11-22; cited in docs/RIDER_ASSIST.md):
   https://www.vobiz.ai/docs/xml/stream/audio-formats
 * Webhook signatures (HMAC-SHA256 over base URL + nonce with the auth token):
   https://www.vobiz.ai/docs/concepts/validating-callbacks
-* extraHeaders cannot authenticate the socket, so the secret rides in the URL path:
-  https://www.vobiz.ai/docs/integrations/deepgram
+* extraHeaders cannot authenticate the socket (they arrive only in ``start``), so the
+  per-call secret rides in the stream URL: https://www.vobiz.ai/docs/integrations/deepgram
 """
 
 from __future__ import annotations
@@ -129,8 +129,19 @@ def stream_token_valid(secret: str, call_id: str, token: str, *, now: float | No
     return hmac.compare_digest(match.group(2), _token_mac(secret, call_id, expiry))
 
 
+STREAM_PARAM = "s"
+
+
 def stream_url(public_url: str, secret: str, call_id: str, *, now: float | None = None) -> str:
-    return f"{ws_origin(public_url)}{STREAM_PATH}/{call_id}/{stream_token(secret, call_id, now=now)}"
+    """``wss://host/api/rider/stream?s=<call id>.<signed token>`` (one parameter, so the
+    XML needs no ``&``; the path stays exactly ``/api/rider/stream`` for the ALB rule)."""
+
+    return f"{ws_origin(public_url)}{STREAM_PATH}?{STREAM_PARAM}={call_id}.{stream_token(secret, call_id, now=now)}"
+
+
+def split_stream_param(value: str | None) -> tuple[str, str]:
+    call_id, _, token = (value or "").rpartition(".")
+    return call_id, token
 
 
 def _speak(language: str, text: str) -> str:
