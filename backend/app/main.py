@@ -32,6 +32,7 @@ from app.legal_consent import LegalConsentRequired
 from app.dependencies import (
     close_cached_services,
     get_order_tracking_service,
+    get_rider_call_monitor,
 )
 from app.tracking.service import OrderTrackingPoller
 
@@ -48,11 +49,18 @@ async def lifespan(application: FastAPI):
     application.state.order_tracking_service = tracking_service
     if settings.tracking_polling_enabled:
         tracking_poller.start()
+    # Read-only Sarvam interactions poll; idle (no request) unless someone has an
+    # active order or a delivery context prepared in the last 2 h.
+    call_monitor = get_rider_call_monitor() if settings.sarvam_call_monitor_enabled else None
+    if call_monitor is not None and call_monitor.configured:
+        call_monitor.start()
     try:
         yield
     finally:
         if settings.tracking_polling_enabled:
             await tracking_poller.aclose()
+        if call_monitor is not None:
+            await call_monitor.aclose()
         await close_cached_services()
 
 

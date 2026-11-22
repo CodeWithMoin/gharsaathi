@@ -1,10 +1,12 @@
 """Server-side registration of one approved inbound delivery caller."""
 
 import hashlib
+import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated, Literal
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Annotated, Literal
 from uuid import uuid4
 
 import httpx
@@ -13,6 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.config import Settings, get_settings
 
+if TYPE_CHECKING:
+    from app.inbound_calls import InboundCallStore
+
+logger = logging.getLogger(__name__)
 
 _E164 = re.compile(r"^\+[1-9]\d{7,14}$")
 _SARVAM_SCHEDULING_URL = "https://apps.sarvam.ai/api/scheduling"
@@ -49,9 +55,16 @@ class DeliveryContextStatus(BaseModel):
 
 
 class InboundDeliveryService:
-    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        client: httpx.AsyncClient | None = None,
+        contexts: "InboundCallStore | None" = None,
+    ) -> None:
         self.settings = settings
         self.client = client
+        # When each context was prepared: the call monitor polls Sarvam for 2 h after.
+        self.contexts = contexts
         self._cohort_owners: dict[str, str] = {}
 
     @staticmethod
@@ -160,6 +173,11 @@ class InboundDeliveryService:
                 "Sarvam returned an invalid delivery-context response.",
             ) from exc
         self._cohort_owners[parsed.cohort_id] = self._user_key(user_id)
+        if self.contexts is not None:
+            try:
+                await self.contexts.record_context(user_id, parsed.cohort_id, datetime.now(UTC))
+            except Exception as exc:  # noqa: BLE001 - the context is live at Sarvam either way
+                logger.warning("event=inbound_context_record_failed error=%s", type(exc).__name__)
         return parsed
 
     async def status(self, user_id: str, cohort_id: str) -> DeliveryContextStatus:
@@ -197,7 +215,9 @@ _service: InboundDeliveryService | None = None
 def get_inbound_delivery_service() -> InboundDeliveryService:
     global _service
     if _service is None:
-        _service = InboundDeliveryService(get_settings())
+        from app.dependencies import get_inbound_call_store
+
+        _service = InboundDeliveryService(get_settings(), contexts=get_inbound_call_store())
     return _service
 
 

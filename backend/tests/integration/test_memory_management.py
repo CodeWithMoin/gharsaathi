@@ -226,3 +226,28 @@ async def test_conversation_save_turns_repeated_choices_into_a_pending_suggestio
     assert suggestion["origin"] == "inferred"
     assert suggestion["value"]["brand"] == "Amul" and suggestion["value"]["pack_size"] == "1 L"
     assert _active(api, frank) == []
+
+
+@pytest.mark.asyncio
+async def test_forget_all_also_removes_inbound_delivery_calls(api: TestClient, session_factory) -> None:
+    from app.inbound_calls import InboundCallStore, ParsedCall
+
+    store = InboundCallStore(session_factory)
+    started = datetime.now(UTC) - timedelta(minutes=5)
+    for user, n in (("gita-memory", 1), ("hari-memory", 2)):
+        await store.record_context(user, f"cohort-{user}", started)
+        call = ParsedCall(
+            interaction_id=f"20261122/forget-{n}", started_at=started, ended_at=None, provider="zepto",
+            outcome="route_confirmed", summary="Guided to the gate.", caller="•••• 2590",
+            user_identifier=None, cohort_id=None,
+        )
+        assert await store.add_call(user, call, "route_confirmed", started) is not None
+    gita = as_user("gita-memory")
+    assert len(api.get("/api/inbound-delivery/calls", headers=gita).json()["calls"]) == 1
+
+    token = api.post("/api/memory/forget-all/token", headers=gita).json()["confirm_token"]
+    assert api.post("/api/memory/forget-all", headers=gita, json={"confirm_token": token}).status_code == 204
+
+    assert api.get("/api/inbound-delivery/calls", headers=gita).json()["calls"] == []
+    assert len(await store.list_calls("hari-memory")) == 1
+    assert {context.user_id for context in await store.contexts_since(started - timedelta(minutes=1))} == {"hari-memory"}

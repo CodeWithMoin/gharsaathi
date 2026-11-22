@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CheckCircle, Circle, Clock, DeviceMobile, MapPin, Package, Truck, XCircle } from "@phosphor-icons/react";
+import { CheckCircle, Circle, Clock, DeviceMobile, MapPin, Package, Phone, Truck, XCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApiRequest } from "./authenticated-api";
 import { LiveOrderTracking } from "./order-tracking";
@@ -13,8 +13,10 @@ import { InputDialog } from "./ui/input-dialog";
  * tracking monitor. It asks the backend only while the tab is visible and the
  * order is still moving, at the provider's allowed interval.
  */
-export function OrderStatusCard({ card, onChange, onUpdate }: {
+export function OrderStatusCard({ card, onChange, onUpdate, riderLine = null }: {
   card: Card;
+  /** From a call to the inbound delivery line, e.g. "Rider has your directions". */
+  riderLine?: string | null;
   /** Something worth saving with the chat changed (status, ETA, tracking stopped, a seen update). */
   onChange: (card: Card) => void;
   /** A new in-app update (out for delivery, delivered, delayed, cancelled) to show as a toast. */
@@ -115,6 +117,7 @@ export function OrderStatusCard({ card, onChange, onUpdate }: {
         <span>{orderHeadline(live)}</span>
       </p>
       {eta && <p className={`mt-1 flex items-center gap-1.5 text-sm ${late ? "font-semibold text-ink" : "text-ink-secondary"}`}><MapPin size={15} weight="fill" className="shrink-0 text-accent-ink" />{eta}</p>}
+      {riderLine && !isFinal(live) && <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-secondary"><Phone size={15} weight="fill" className="shrink-0 text-accent-ink" />{riderLine}</p>}
       {delivered && deliveredLine && <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-secondary"><Clock size={15} className="shrink-0 text-success" />{deliveredLine}</p>}
       {placed && !cancelled && <p className="mt-1 flex items-center gap-1.5 text-xs text-muted"><Clock size={13} className="shrink-0" />{placed}</p>}
       <ol className="mt-4 grid grid-cols-4 gap-1.5" aria-label="Order steps">
