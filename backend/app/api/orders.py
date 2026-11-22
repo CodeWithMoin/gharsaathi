@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.auth import UserIdDependency
 from app.dependencies import CheckoutServiceDependency, OrderConfirmationsDependency
 from app.legal_consent import ConsentedUserIdDependency
-from app.shopping.basket import format_rupees
+from app.shopping.money import format_rupees
 from app.shopping.errors import (
     ApprovalRefused,
     NotFound,

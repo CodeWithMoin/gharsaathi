@@ -27,7 +27,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from app.shopping.approval import ApprovalService
-from app.shopping.basket import Clock, format_rupees, utc_now
+from app.shopping.basket import Clock, utc_now
+from app.shopping.money import format_rupees
 from app.shopping.checkout import CheckoutService
 from app.shopping.errors import ApprovalRefused, NotFound, ShoppingError
 from app.shopping.models import (

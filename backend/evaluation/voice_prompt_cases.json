@@ -184,7 +184,7 @@
       "id": "order_request_prepares_card",
       "history": [
         {"role": "user", "content": "Zepto ka bill bana do."},
-        {"role": "assistant", "content": "Zepto ka final bill screen par hai, do sau baais rupaye. Wahin review kijiye."}
+        {"role": "assistant", "content": "Zepto ka final bill screen par hai, ₹222. Wahin review kijiye."}
       ],
       "user": "हाँ ठीक है, order place कर दो।",
       "required_any": ["Ek second", "ready kar rahi", "kar rahi hoon", "Place order"],
@@ -197,7 +197,7 @@
       "id": "approve_request_prepares_card",
       "history": [
         {"role": "user", "content": "Zepto ka bill bana do."},
-        {"role": "assistant", "content": "Zepto ka final bill screen par hai, do sau baais rupaye. Wahin review kijiye."}
+        {"role": "assistant", "content": "Zepto ka final bill screen par hai, ₹222. Wahin review kijiye."}
       ],
       "user": "Approve kar do.",
       "required_any": ["Ek second", "ready kar rahi", "kar rahi hoon", "Place order"],

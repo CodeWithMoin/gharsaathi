@@ -18,7 +18,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.shopping.approval import latest_open_approval
-from app.shopping.basket import format_rupees
+from app.shopping.money import format_rupees, money_fields
 from app.shopping.errors import ShoppingError
 from app.shopping.models import Approval, ApprovalStatus, Basket
 from app.shopping.order_confirmation import (
@@ -71,7 +71,7 @@ ORDER_TOOL_NAMES = frozenset(tool["name"] for tool in ORDER_TOOL_DEFINITIONS)
 ORDER_NOTE = (
     "An order card with a 'Place order' button is on screen. Nothing is approved or ordered "
     "yet; only the user's tap places it. In one short line say the store, item count, "
-    "payable amount, cash on delivery and the delivery address label, then ask the user to "
+    "the payable string exactly as given, cash on delivery and the delivery address label, then ask the user to "
     "tap 'Place order'. Never say the order is placed until an order result arrives."
 )
 
@@ -239,7 +239,7 @@ class OrderToolExecutor:
                 "store_id": store.provider,
                 "item_count": item_count,
                 "items": items,
-                "payable": payable,
+                **money_fields("payable", approval.payable_paise),
                 "payment": "cash_on_delivery",
                 **address_block,
                 "expires_in_seconds": seconds,

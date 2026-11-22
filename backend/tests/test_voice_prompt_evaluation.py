@@ -174,7 +174,7 @@ def test_build_input_appends_latest_turn_after_history() -> None:
         ),
         (
             "order_request_prepares_card",
-            "Zepto, do items, do sau baais rupaye, cash on delivery, Home par. Screen par 'Place order' dabaiye.",
+            "Zepto, do items, ₹222, cash on delivery, Home par. Screen par 'Place order' dabaiye.",
             "Order ho gaya, Zepto ne confirm kar diya.",
         ),
         (
