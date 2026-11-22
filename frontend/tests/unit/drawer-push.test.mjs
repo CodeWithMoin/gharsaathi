@@ -28,7 +28,7 @@ test("only one drawer is open at a time", () => {
 });
 
 test("both drawers share one spring and panels slide with it, fading fast", () => {
-  assert.deepEqual({ ...DRAWER_SPRING }, { type: "spring", stiffness: 420, damping: 40 });
+  assert.deepEqual({ ...DRAWER_SPRING }, { type: "spring", stiffness: 420, damping: 40, restDelta: 0.5, restSpeed: 20 });
   assert.equal(DRAWER_PANEL_TRANSITION.stiffness, DRAWER_SPRING.stiffness);
   assert.equal(DRAWER_PANEL_TRANSITION.damping, DRAWER_SPRING.damping);
   assert.ok(DRAWER_PANEL_TRANSITION.opacity.duration <= 0.15);

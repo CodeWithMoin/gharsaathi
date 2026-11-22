@@ -1,7 +1,7 @@
 /** Push-drawer and viewport maths for the chat shell (chats drawer on the left, account settings on the right). */
 
 /** Same spring for both drawers and the pushed page. */
-export const DRAWER_SPRING = Object.freeze({ type: "spring", stiffness: 420, damping: 40 });
+export const DRAWER_SPRING = Object.freeze({ type: "spring", stiffness: 420, damping: 40, restDelta: 0.5, restSpeed: 20 });
 
 /** Drawer panels slide with the page edge; opacity is only used for reduced motion and is fast. */
 export const DRAWER_PANEL_TRANSITION = Object.freeze({ ...DRAWER_SPRING, opacity: { duration: 0.12 } });
