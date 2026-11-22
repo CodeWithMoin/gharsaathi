@@ -1,6 +1,6 @@
 # GharSaathi demo video
 
-Video file: **`demo.mp4`** at the root of the submission folder.
+Video: **[Watch the GharSaathi live demo on Loom](https://www.loom.com/share/ce3eb455ab484b059d11ee0382ed2d65)**
 
 - Length: ~4 minutes
 - App URL: `http://localhost:3003`
