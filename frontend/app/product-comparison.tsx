@@ -280,8 +280,9 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
   );
 }
 
-function edgeFade(atStart: boolean, atEnd: boolean): string {
-  const left = atStart ? "black 0" : "rgb(0 0 0 / .55) 0, black 14px";
+function edgeFade(_atStart: boolean, atEnd: boolean): string {
+  // Cards snap to the left edge, so a left fade would wash out their border: right side only.
+  const left = "black 0";
   const right = atEnd ? "black 100%" : "black calc(100% - 20px), rgb(0 0 0 / .55) 100%";
   return `linear-gradient(to right, ${left}, ${right})`;
 }
