@@ -56,11 +56,11 @@
         {"role": "user", "content": "Mujhe ek deodorant chahiye."},
         {"role": "assistant", "content": "Ek second, dekh rahi hoon."},
         {"role": "user", "content": "AXE wala."},
-        {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml, do sau ninyanve rupaye; AXE Apollo 150 ml, do sau ninyanve rupaye; AXE Signature 215 ml, teen sau pachas rupaye. Sab Instamart par available hain."}
+        {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml, ₹299; AXE Apollo 150 ml, ₹299; AXE Signature 215 ml, ₹350. Sab Instamart par available hain."}
       ],
       "user": "Dark",
       "required_any": ["Dark"],
-      "forbidden_any": ["Apollo", "Signature", "kaunsa chahiye", "kaun sa chahiye", "which one", "add ho gaya", "add kar diya", "added", "bahattar", "Zepto"],
+      "forbidden_any": ["Apollo", "Signature", "kaunsa chahiye", "kaun sa chahiye", "which one", "add ho gaya", "add kar diya", "added", "bahattar", "₹172", "Zepto"],
       "max_questions": 0,
       "max_sentences": 2
     },
@@ -70,11 +70,11 @@
         {"role": "user", "content": "Mujhe ek deodorant chahiye."},
         {"role": "assistant", "content": "Ek second, dekh rahi hoon."},
         {"role": "user", "content": "AXE wala."},
-        {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml, do sau ninyanve rupaye; AXE Apollo 150 ml, do sau ninyanve rupaye; AXE Signature 215 ml, teen sau pachas rupaye. Sab Instamart par available hain."}
+        {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml, ₹299; AXE Apollo 150 ml, ₹299; AXE Signature 215 ml, ₹350. Sab Instamart par available hain."}
       ],
       "user": "इतना तामझाम नहीं… सीधा जो बोला है, फटाक से करके बता देते। दस सवाल मत पूछना। AXE Dark wala.",
       "required_any": ["Dark"],
-      "forbidden_any": ["Apollo", "Signature", "kaunsa", "कौन सा", "which one", "add ho gaya", "add kar diya", "added", "bahattar", "Zepto"],
+      "forbidden_any": ["Apollo", "Signature", "kaunsa", "कौन सा", "which one", "add ho gaya", "add kar diya", "added", "bahattar", "₹172", "Zepto"],
       "max_questions": 0,
       "max_sentences": 2
     },
@@ -82,11 +82,11 @@
       "id": "smallest_size_no_reask",
       "history": [
         {"role": "user", "content": "AXE Dark Temptation deodorant dikhao."},
-        {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml, do sau ninyanve rupaye; AXE Dark Temptation 215 ml, teen sau pachas rupaye. Dono Instamart par available hain; delivery time result mein nahi aaya."}
+        {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml, ₹299; AXE Dark Temptation 215 ml, ₹350. Dono Instamart par available hain; delivery time result mein nahi aaya."}
       ],
       "user": "Sabse chhota size aur kitna time lagega?",
       "required_any": ["150"],
-      "forbidden_any": ["215", "kaunsa size", "kaun sa size", "which size", "10 minute", "minute mein", "minutes mein", "Dove", "chauvan"],
+      "forbidden_any": ["215", "kaunsa size", "kaun sa size", "which size", "10 minute", "minute mein", "minutes mein", "Dove", "chauvan", "₹350", "ninyanve rupaye"],
       "max_questions": 1,
       "max_sentences": 3
     },
@@ -111,11 +111,11 @@
       "id": "devanagari_transcript_roman_hinglish_price",
       "history": [
         {"role": "user", "content": "मुझे AXE का deodorant चाहिए।"},
-        {"role": "assistant", "content": "हाँ, AXE के भी मिल गए हैं। Dark Temptation 150 ml एक सौ बहत्तर रुपए में Zepto पर है, और Apollo 150 ml दो सौ निन्यानवे रुपए में Instamart पर।"}
+        {"role": "assistant", "content": "हाँ, AXE के भी मिल गए हैं। Dark Temptation 150 ml ₹172 में Zepto पर है, और Apollo 150 ml ₹299 में Instamart पर।"}
       ],
       "user": "अच्छा, सबसे सस्ता कौन सा है?",
-      "required_any": ["bahattar rupaye", "bahattar rupay"],
-      "forbidden_any": ["रुपए", "रुपये", "बहत्तर", "172"],
+      "required_any": ["₹172"],
+      "forbidden_any": ["रुपए", "रुपये", "बहत्तर", "bahattar", "₹170"],
       "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05
@@ -170,7 +170,7 @@
       "id": "refuse_order_after_bill_on_screen",
       "history": [
         {"role": "user", "content": "Instamart ka bill bana do."},
-        {"role": "assistant", "content": "Instamart ka final bill screen par hai, teen sau baavan rupaye. Wahin review kijiye."}
+        {"role": "assistant", "content": "Instamart ka final bill screen par hai, ₹352. Wahin review kijiye."}
       ],
       "user": "हाँ ठीक है, order place कर दो।",
       "required_any": ["place nahi", "nahi hota", "nahi kar sakti", "screen"],
@@ -278,14 +278,14 @@
       "max_devanagari_ratio": 0.05
     },
     {
-      "id": "price_spoken_in_words",
+      "id": "price_repeated_as_exact_amount",
       "history": [
         {"role": "user", "content": "AXE Apollo dikhao."},
         {"role": "assistant", "content": "Instamart par AXE Apollo 150 ml ₹199 mein available hai."}
       ],
       "user": "Kitne ka bataya? Ek baar phir bolo.",
-      "required_any": ["ninyanve", "ninyaanve", "ninyannave", "nineteen"],
-      "forbidden_any": ["₹", "199", "Rs."],
+      "required_any": ["₹199"],
+      "forbidden_any": ["ninyanve", "ninyaanve", "ninyannave", "nineteen", "rupaye", "₹200", "Rs."],
       "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05
@@ -294,7 +294,7 @@
       "id": "explicit_add_same_item_two_stores_picks_cheaper",
       "history": [
         {"role": "user", "content": "Surf Excel 2 kg dikhao."},
-        {"role": "assistant", "content": "Surf Excel Matic 2 kg Instamart par paanch sau unchaas rupaye aur Zepto par paanch sau painsath rupaye hai."}
+        {"role": "assistant", "content": "Surf Excel Matic 2 kg Instamart par ₹549 aur Zepto par ₹565 hai."}
       ],
       "user": "इतना तामझाम नहीं, सीधा Surf Excel 2 kg add करो।",
       "required_any": ["Surf Excel", "Instamart", "Swiggy"],
@@ -341,8 +341,8 @@
         {"role": "assistant", "content": "Zepto par Diet Coke 330 ml can aur teen can ka pack hai."}
       ],
       "user": "तीन वाला कितने का है, और पिछली बार मैंने कौनसा लिया था?",
-      "required_any": ["rupaye", "pichli", "Pichli", "pichhli", "Pichhli", "liya", "li thi", "dekh"],
-      "forbidden_any": ["₹"],
+      "required_any": ["pichli", "Pichli", "pichhli", "Pichhli", "liya", "li thi", "dekh"],
+      "forbidden_any": ["₹", "rupaye", "rupees"],
       "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.0

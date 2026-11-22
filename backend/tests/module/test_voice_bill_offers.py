@@ -69,7 +69,8 @@ def setup() -> tuple[VoiceToolbox, OfferProvider]:
 EXPECTED_OFFERS = [
     {"title": "Free Delivery", "kind": "free_delivery", "status": "applied"},
     {"title": "Snacks Saver", "kind": "promo", "status": "not_unlocked",
-     "possible_saving": "₹50", "add_more_to_unlock": "₹300"},
+     "possible_saving_paise": 5000, "possible_saving": "₹50",
+     "add_more_to_unlock_paise": 30000, "add_more_to_unlock": "₹300"},
 ]
 
 
@@ -84,7 +85,7 @@ async def test_bill_reports_only_provider_confirmed_offers(setup) -> None:
     assert bill["status"] == "awaiting_user_approval"
     assert bill["bill_offers"] == EXPECTED_OFFERS
     assert bill["promo_code_entry"] == "not_available"
-    assert {"label": "Discount", "amount": "-₹25"} in bill["charges"]
+    assert {"label": "Discount", "amount_paise": -2500, "amount": "-₹25"} in bill["charges"]
     assert "Never invent" in bill["note"]
 
 

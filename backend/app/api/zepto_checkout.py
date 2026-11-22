@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.legal_consent import ConsentedUserIdDependency
 from app.dependencies import CheckoutServiceDependency
-from app.shopping.basket import format_rupees
+from app.shopping.money import format_rupees
 from app.shopping.errors import (
     ApprovalRefused,
     NotFound,

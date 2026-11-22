@@ -30,6 +30,7 @@ from app.memory.household_rules import (
 )
 from app.memory.remembered import remembered_for
 from app.shopping.models import ProviderName, rupees_to_paise
+from app.shopping.money import money_fields
 
 
 logger = logging.getLogger(__name__)
@@ -142,19 +143,20 @@ class ToolOutcome(BaseModel):
 
 
 def _product_for_model(product: Product) -> dict[str, Any]:
+    price = rupees_to_paise(product.price.offer_price)
     entry: dict[str, Any] = {
         "name": product.name,
-        "price_rupees": product.price.offer_price,
+        **money_fields("price", price),
         "available": product.available,
     }
     if product.brand:
         entry["brand"] = product.brand
     if product.pack_size:
         entry["pack_size"] = product.pack_size
-    if product.price.mrp > product.price.offer_price:
-        entry["mrp_rupees"] = product.price.mrp
-        saving = rupees_to_paise(product.price.mrp) - rupees_to_paise(product.price.offer_price)
-        entry["saving_rupees"] = saving / 100
+    mrp = rupees_to_paise(product.price.mrp)
+    if mrp > price:
+        entry.update(money_fields("mrp", mrp))
+        entry.update(money_fields("saving", mrp - price))
     if product.price.unit_level_price:
         entry["unit_price"] = product.price.unit_level_price
     if product.delivery_value and product.delivery_unit:
@@ -263,7 +265,7 @@ class ShoppingToolExecutor:
                     for product in products[:MAX_RESULTS_FOR_MODEL]
                 ],
                 "note": (
-                    "Prices are the store's current prices in rupees. Nothing was added. "
+                    "Prices are the store's current prices; quote the price strings exactly. Nothing was added. "
                     "Use option_id with add_to_basket only when the user asks."
                 ),
             },
@@ -461,7 +463,8 @@ class MultiProviderShoppingToolExecutor:
                 for outcome in outcomes
             ],
             "note": (
-                "Current item prices only; nothing was added. Only results with an "
+                "Current item prices only; quote the price strings exactly. Nothing was added. "
+                "Only results with an "
                 "option_id can be added, to that store's own local basket."
                 + (REMEMBERED_NOTE if remembered_count else "")
                 + (

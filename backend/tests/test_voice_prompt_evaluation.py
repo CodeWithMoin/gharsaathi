@@ -3,6 +3,7 @@ import re
 
 import pytest
 
+from app.shopping.money import format_rupees
 from app.voice.address_tools import OpenAddressFormArguments
 from app.voice.basket_tools import AddArguments, QuantityArguments, StoreArguments
 from app.voice.memory_tools import RecallArguments
@@ -46,7 +47,7 @@ REGRESSION_CASE_IDS = {
     "brand_reference_single_question",
     "smallest_then_only_variant_question",
     "gender_neutral_user_address",
-    "price_spoken_in_words",
+    "price_repeated_as_exact_amount",
     "explicit_add_same_item_two_stores_picks_cheaper",
     "branded_item_delegates_without_confirm",
     "promo_answered_from_bill_offers_no_drift",
@@ -113,7 +114,7 @@ def test_build_input_appends_latest_turn_after_history() -> None:
         ),
         (
             "smallest_size_no_reask",
-            "Sabse chhota AXE Dark Temptation 150 ml hai, do sau ninyanve rupaye; delivery time abhi result mein nahi dikha.",
+            "Sabse chhota AXE Dark Temptation 150 ml hai, ₹299; delivery time abhi result mein nahi dikha.",
             "150 ml aur 215 ml hain, kaunsa size chahiye?",
         ),
         (
@@ -128,7 +129,7 @@ def test_build_input_appends_latest_turn_after_history() -> None:
         ),
         (
             "devanagari_transcript_roman_hinglish_price",
-            "AXE Dark Temptation 150 ml sabse sasta hai, ek sau bahattar rupaye, Zepto par.",
+            "AXE Dark Temptation 150 ml sabse sasta hai, ₹172, Zepto par.",
             "सबसे सस्ता AXE Dark Temptation 150 ml है—एक सौ बहत्तर रुपए, Zepto पर।",
         ),
         (
@@ -199,7 +200,7 @@ def test_build_input_appends_latest_turn_after_history() -> None:
         (
             "pick_variant_single_word",
             "AXE Dark Temptation 150 ml Instamart basket mein daal rahi hoon.",
-            "AXE Dark Temptation 150 ml, ek sau bahattar rupaye, Zepto par.",
+            "AXE Dark Temptation 150 ml, ₹172, Zepto par.",
         ),
         (
             "brand_reference_single_question",
@@ -217,13 +218,13 @@ def test_build_input_appends_latest_turn_after_history() -> None:
             "Aap spray deodorant dhoondh rahi hain ya roll-on?",
         ),
         (
-            "price_spoken_in_words",
-            "AXE Apollo 150 ml ek sau ninyanve rupaye ka hai, Instamart par.",
-            "AXE Apollo 150 ml ₹199 ka hai.",
+            "price_repeated_as_exact_amount",
+            "AXE Apollo 150 ml ₹199 ka hai, Instamart par.",
+            "AXE Apollo 150 ml ek sau ninyanve rupaye ka hai.",
         ),
         (
             "explicit_add_same_item_two_stores_picks_cheaper",
-            "Instamart par sasta hai, paanch sau unchaas rupaye; wahin add kar rahi hoon.",
+            "Instamart par sasta hai, ₹549; wahin add kar rahi hoon.",
             "Surf Excel Matic 2 kg dono par hai, kaunse store ke basket mein add karun?",
         ),
         (
@@ -243,7 +244,7 @@ def test_build_input_appends_latest_turn_after_history() -> None:
         ),
         (
             "mixed_hinglish_numbers_and_verbs_stay_roman",
-            "Teen can ka pack dedh sau rupaye ka hai; pichhli baar aapne single can li thi.",
+            "Teen can ka pack ka price screen par hai; pichhli baar aapne single can li thi.",
             "Teen can ka pack डेढ़ sau rupaye ka hai; pichhli baar aapne single can ली थी।",
         ),
         (
@@ -318,7 +319,7 @@ def test_live_prompt_defaults_to_roman_hinglish() -> None:
     assert "A Devanagari transcript is not a request for Hindi" in LIVE_INSTRUCTIONS
     assert '"Hindi mein bolo"' in LIVE_INSTRUCTIONS
     assert "keep using it for the rest of the session" in " ".join(LIVE_INSTRUCTIONS.split())
-    assert "ek sau bahattar rupaye" in LIVE_INSTRUCTIONS
+    assert "use the exact amount strings from the backend results" in " ".join(LIVE_INSTRUCTIONS.split())
     assert "Mirror the user" not in LIVE_INSTRUCTIONS
     assert "Roman-script Hinglish, even when the user's transcript is" in BACKEND_INSTRUCTIONS
     assert "karti hoon" in LIVE_INSTRUCTIONS
@@ -459,52 +460,67 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
             assert previous["status"] == "added", line
 
 
-_SPOKEN_PRICES = {
-    "ek sau bahattar rupaye": 172,
-    "do sau unchaas rupaye": 249,
-    "paanch sau unchaas rupaye": 549,
-    "ek sau sattanave rupaye": 197,
-    "chaalis rupaye": 40,
-    "one hundred and ninety-nine rupees": 199,
-    "अट्ठाईस रुपये": 28,
-}
-_PRICE_WORD = re.compile(r"rupaye|rupees|रुपये")
+_AMOUNT = re.compile(r"-?₹\d+(?:,\d+)*(?:\.\d{2})?")
+_WORD_PRICE = re.compile(r"\b(?:rupaye|rupaiye|rupay|rupees?|rupaya|rs)\b|रुपये|रुपए|रुपया", re.IGNORECASE)
 _GENDERED_USER_ADDRESS = re.compile(
     r"\b(?:rahi|rahe|chahti|chahte|karti|karte|leti|lete|sakti|sakte) hain\b", re.IGNORECASE
 )
 
 
 @pytest.mark.parametrize(("prompt", "heading"), _EXAMPLE_BLOCKS)
-def test_example_replies_speak_prices_in_words_and_address_user_neutrally(
+def test_example_replies_copy_amount_strings_and_address_user_neutrally(
     prompt: str, heading: str
 ) -> None:
+    """Every amount an example reply states appears verbatim in an earlier tool result.
+
+    Backend examples quote ``Tool result:`` lines; live examples quote the
+    bracketed backend lines. No reply spells a price in words or states an
+    amount the backend did not return.
+    """
+
+    sources: list[str] = []
+    stated = 0
     for line in _examples(prompt, heading):
-        if line.startswith("Assistant:"):
-            assert "₹" not in line, line
-            assert not re.search(r"\d+\s*(?:rupaye|rupees|rs\b)", line, re.IGNORECASE), line
+        if line.startswith("Tool result:") or line.startswith("[Backend"):
+            sources.append(line)
+        elif line.startswith("Assistant:"):
+            reply = line.removeprefix("Assistant:")
+            assert not _WORD_PRICE.search(reply), line
+            assert not re.search(r"\d\s*(?:/-|rupaye|rupees|rs\b)", reply, re.IGNORECASE), line
+            for amount in _AMOUNT.findall(reply):
+                stated += 1
+                assert any(
+                    re.search(rf"{re.escape(amount)}(?!\d|[,.]\d)", source) for source in sources
+                ), (amount, line)
             assert not _GENDERED_USER_ADDRESS.search(line), line
+    assert stated >= 3
 
 
-def test_backend_example_prices_come_from_tool_results() -> None:
-    seen_prices: set[int] = set()
+def test_backend_example_amounts_are_display_strings_of_their_paise() -> None:
     for line in _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n"):
-        if line.startswith("Tool result:"):
-            result = json.loads(line.removeprefix("Tool result:"))
-            seen_prices.update(item["price_rupees"] for item in result.get("results", []))
-            for key in ("payable", "item_total"):
-                if key in result:
-                    seen_prices.add(int(result[key].removeprefix("₹").replace(",", "")))
-        elif line.startswith("Assistant:") and _PRICE_WORD.search(line):
-            spoken = [amount for phrase, amount in _SPOKEN_PRICES.items() if phrase in line]
-            assert spoken, line
-            assert set(spoken) <= seen_prices, line
+        if not line.startswith("Tool result:"):
+            continue
+
+        def walk(value: object) -> None:
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if key.endswith("_paise"):
+                        assert value[key.removesuffix("_paise")] == format_rupees(item), line
+                    walk(item)
+            elif isinstance(value, list):
+                for item in value:
+                    walk(item)
+
+        result = json.loads(line.removeprefix("Tool result:"))
+        walk(result)
+        assert "price_rupees" not in line
 
 
 def test_backend_example_adds_cheaper_store_without_asking() -> None:
     lines = _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n")
     start = next(i for i, line in enumerate(lines) if "seedha Surf Excel 2 kg add karo" in line)
     search = json.loads(lines[start + 2].removeprefix("Tool result:"))["results"]
-    cheapest = min((item for item in search if item["available"]), key=lambda item: item["price_rupees"])
+    cheapest = min((item for item in search if item["available"]), key=lambda item: item["price_paise"])
     add = lines[start + 3]
     assert add.startswith("Tool call: add_to_basket")
     assert json.loads(add.split(" ", 3)[3])["option_id"] == cheapest["option_id"]

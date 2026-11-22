@@ -58,10 +58,11 @@ async def test_search_returns_provider_prices_and_ui_products() -> None:
     )
     assert searcher.calls == [("Fortune oil 1 litre", "addr_home", 0)]
     first = outcome.model_output["results"][0]
-    assert first["price_rupees"] == 154
-    assert first["mrp_rupees"] == 180
-    assert first["saving_rupees"] == 26
-    assert "mrp_rupees" not in outcome.model_output["results"][1]
+    assert (first["price_paise"], first["price"]) == (15400, "₹154")
+    assert (first["mrp_paise"], first["mrp"]) == (18000, "₹180")
+    assert (first["saving_paise"], first["saving"]) == (2600, "₹26")
+    assert not {"price_rupees", "mrp_rupees", "saving_rupees"} & set(first)
+    assert "mrp" not in outcome.model_output["results"][1]
     assert outcome.model_output["results"][1]["available"] is False
     assert outcome.ui_event is not None
     assert len(outcome.ui_event["products"]) == 2
