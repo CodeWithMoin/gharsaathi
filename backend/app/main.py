@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.basket import router as basket_router
+from app.api.chat import router as chat_router
 from app.api.conversations import router as conversations_router
 from app.api.swiggy import router as swiggy_router
 from app.api.support import router as support_router
@@ -84,6 +85,7 @@ app.include_router(
     tags=["Zepto Checkout"],
 )
 app.include_router(voice_router, prefix="/api/voice", tags=["Voice"])
+app.include_router(chat_router, prefix="/api/chat", tags=["Typed chat"])
 app.include_router(basket_router, prefix="/api/basket", tags=["Basket"])
 app.include_router(support_router, prefix="/api/support", tags=["Customer Support"])
 app.include_router(tracking_router, prefix="/api/tracking", tags=["Order Tracking"])

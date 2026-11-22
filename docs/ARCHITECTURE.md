@@ -97,7 +97,7 @@ flowchart TD
 | D2 | Is the request clear? Ask for more context? | Backend model (instructions) | No — rules: at most one question, never re-ask what was said |
 | D3 | Check memory first | Backend model calls `recall_household_preferences` | **Today: no** (model may skip it — the Diet Coke miss). **In progress:** memory summary at session start + memory-annotated search results, so remembered items are always in front of the model |
 | D4 | Add vs ask which variant/store | Backend model (instructions + few-shot examples) | Partly — store ambiguity on bills returns `needs_store` from code |
-| D5 | Call another tool or answer | Backend model | **In progress:** hard cap of 6 rounds / 2 searches per turn |
+| D5 | Call another tool or answer | Backend model | Typed chat: yes, hard cap of 6 rounds / 2 searches per turn (`app/chat/service.py`). Voice: **in progress** |
 
 ### Deterministic checks (code, every call)
 
@@ -134,12 +134,48 @@ Largest backend sections: examples 1,327 · household memory 325 · basket 267 �
 task 256 · decisive selection 227 · return the result 214. Largest live sections:
 examples 589 · decisive replies 499 · delegation 336 · language 312.
 
-## Typed chat (today)
+## Typed chat
 
-Typed text does **not** go through either model: `frontend/app/page.tsx` sends it
-straight to `/api/swiggy/search/personalized` and `/api/zepto/search`. So D1–D5,
-memory and clarifying questions only apply to voice. Routing typed chat through the
-same backend model is the top queued item.
+Typed text goes through the same backend model as voice (branch
+`codex/typed-chat-assistant`):
+
+```mermaid
+flowchart LR
+  T(["User types"]) --> L{"Local intent?<br/>(conversation-intent.mjs:<br/>greeting, connection status)"}
+  L -- yes --> R1["Local reply"]
+  L -- no --> C["POST /api/chat/turn<br/>{conversation_id, message,<br/>selected address per store}"]
+  C --> B["Backend model, same delegation config as voice:<br/>BACKEND_INSTRUCTIONS + session profile,<br/>same 7 tools, same VoiceToolbox"]
+  B --> D5{"Tool loop<br/>cap 6 rounds · 2 searches · timeout"}
+  D5 --> OUT["{reply, ui_events[]}"]
+  OUT --> UI["Assistant bubble + the event handler voice uses<br/>(assistant-events.mjs): results, basket, bill, address form"]
+  C -. "error" .-> FB["Hinglish error +<br/>'Seedha search karein' = old direct search"]
+```
+
+- **Same decisions.** D2–D5 above apply unchanged: the request uses
+  `build_session_config(...)["delegation"]["responses"]`, so model, instructions,
+  profile block, tool definitions and `tool_choice` are the voice ones. There is no
+  typed-only prompt. D1 does not exist for typed text (there is no front model).
+- **Context per turn.** The last 12 messages of the user's own conversation (at most
+  about 6,000 characters), plus this server's last turns if the browser has not saved
+  them yet, plus the last 2 search results of this chat as a developer message, so
+  "Dark" or "haan wahi" can add an `option_id` the user already saw.
+- **Per-conversation state.** `backend/app/chat/service.py` keeps one `VoiceToolbox`
+  per (verified user, conversation) in memory (200 sessions, 1 h idle), with turns
+  serialised by a lock. A different selected address rebuilds it. After a backend
+  restart the earlier `option_id`s are gone and the model searches again.
+- **Hard caps (code).** 6 tool rounds, then one forced text answer
+  (`tool_choice: "none"`); a third `search_products` in one turn is refused without
+  running; a tool name outside the definitions is refused; per-turn timeout
+  `CHAT_TURN_TIMEOUT_SECONDS` (default 60 s).
+- **Checks.** Clerk identity and accepted current terms on the route (like
+  `POST /api/voice/session`). Every deterministic check in the table above runs,
+  because the tools are the same. Logs carry the outcome, rounds, tool names and
+  latency only, never message text.
+- **Persistence.** The browser appends the typed message and the reply to the open
+  conversation and saves it with `PUT /api/conversations/current`, exactly like
+  voice transcripts.
+- **Known gap.** The backend prompt is written for speech, so typed replies also
+  spell prices in words ("ek sau ninyanve rupaye").
 
 ## Where to look
 

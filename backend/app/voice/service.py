@@ -109,7 +109,11 @@ class LiveSessionService:
     def basket_enabled(self) -> bool:
         return self.baskets is not None and self.approvals is not None
 
-    def _tool_executor(
+    @property
+    def tool_definitions(self) -> list[dict[str, Any]]:
+        return VOICE_TOOL_DEFINITIONS if self.basket_enabled else TOOL_DEFINITIONS
+
+    def tool_executor(
         self, address_id: str | None, zepto_address_id: str | None, household_id: str
     ) -> ToolExecutor:
         if self.basket_enabled:
@@ -137,7 +141,7 @@ class LiveSessionService:
             )
         return ShoppingToolExecutor(self.searcher, address_id)
 
-    async def _profile(self, household_id: str) -> UserProfile | None:
+    async def profile(self, household_id: str) -> UserProfile | None:
         if self.profile_reader is None or not household_id:
             return None
         try:
@@ -162,16 +166,12 @@ class LiveSessionService:
         api_key = self.settings.openai_api_key.get_secret_value().strip()
         if not api_key:
             raise VoiceConfigurationError("Set OPENAI_API_KEY in .env to enable voice.")
-        profile = await self._profile(household_id)
+        profile = await self.profile(household_id)
         try:
             response = await self._post(
                 f"{self.settings.openai_base_url.rstrip('/')}/live/sessions",
                 json={
-                    "session": build_session_config(
-                        self.settings,
-                        VOICE_TOOL_DEFINITIONS if self.basket_enabled else TOOL_DEFINITIONS,
-                        profile,
-                    ),
+                    "session": build_session_config(self.settings, self.tool_definitions, profile),
                     "transport": {"type": "webrtc", "sdp": offer_sdp},
                 },
                 headers={"Authorization": f"Bearer {api_key}"},
@@ -194,7 +194,7 @@ class LiveSessionService:
         events_token = secrets.token_urlsafe(32)
         self.hub.start(
             session_id,
-            self._tool_executor(swiggy_address_id, zepto_address_id, household_id),
+            self.tool_executor(swiggy_address_id, zepto_address_id, household_id),
             owner_id=household_id,
             events_token=events_token,
         )

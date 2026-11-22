@@ -39,6 +39,7 @@ GATED = [
         {"json": {"name": "prepare_support_complaint", "arguments": {"complaint_id": "c1"}}},
     ),
     ("POST", "/api/voice/session", {"json": {"sdp": "v=0\r\nm=audio 9 UDP 0\r\n"}}),
+    ("POST", "/api/chat/turn", {"json": {"message": "Fortune tel add karo"}}),
 ]
 
 
