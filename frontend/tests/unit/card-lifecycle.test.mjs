@@ -192,3 +192,54 @@ test("a delivered or store-cancelled order collapses to one line, and the line s
   timeline = recordOrderCard(timeline, cancelled);
   assert.equal(timeline.orders.length, 1); // same order: replaced in place
 });
+
+test("an assistant basket edit collapses the open order card at once, without a basket re-read or a tap", async () => {
+  const { applyAssistantEvent } = await import("../../app/assistant-events.mjs");
+  // page.tsx's handleBasketTouched: the event's basket supersedes the card; no BasketPanel is mounted.
+  let card = newOrderCard(orderEvent(4, 2, "₹75", 7500), "m1");
+  const touched = [];
+  const handlers = {
+    onBasketTouched(provider, next) {
+      touched.push(provider);
+      if (next) card = supersedeOrderCard(card, next);
+    },
+  };
+  const updated = (revision, quantity, extra = {}) => ({
+    type: "basket.updated",
+    provider: "zepto",
+    basket: { id: "basket-1", provider: "zepto", store: "Zepto", revision, status: "draft", item_count: quantity, item_total: "₹55", lines: [{ item_id: "v1", name: LASSI, quantity }], ...extra },
+  });
+
+  // The same revision (the edit the card was prepared from) leaves it tappable.
+  applyAssistantEvent(updated(4, 2), handlers);
+  assert.equal(orderCardInteractive(card), true);
+  // "Ek hi kar do": the basket moves to revision 5 and the ₹75 card is out of date now.
+  applyAssistantEvent(updated(5, 1), handlers);
+  assert.equal(card.superseded, true);
+  assert.equal(orderCardInteractive(card), false);
+  assert.equal(supersededOrderText(card), "Zepto order · 2 items · ₹75 · Out of date — basket changed");
+  assert.deepEqual(touched, ["zepto", "zepto"]);
+});
+
+test("an assistant basket edit never collapses a card whose order may exist", async () => {
+  const { applyAssistantEvent } = await import("../../app/assistant-events.mjs");
+  for (const result of ["placing", "unknown", "awaiting_payment", "checking", "payment_unknown"]) {
+    const base = newOrderCard(orderEvent(4, 2, "₹75", 7500), null);
+    let card = withOrderResult(base, base.confirmation.id, result);
+    applyAssistantEvent(
+      { type: "basket.updated", provider: "zepto", basket: { id: "basket-1", provider: "zepto", revision: 9, status: "draft", lines: [] } },
+      { onBasketTouched: (_provider, next) => { if (next) card = supersedeOrderCard(card, next); } },
+    );
+    assert.equal(card.superseded, false, result);
+  }
+});
+
+test("basketFromEvent reads only a well-formed basket for the event's store", async () => {
+  const { basketFromEvent } = await import("../../app/card-lifecycle.mjs");
+  assert.deepEqual(basketFromEvent({ id: "b", provider: "zepto", revision: 2, status: "draft", lines: [{ quantity: 1 }] }, "zepto"), { id: "b", provider: "zepto", revision: 2, status: "draft", lines: [{ quantity: 1 }] });
+  assert.equal(basketFromEvent({ id: "b", provider: "zepto", revision: 2 }, "swiggy_instamart"), null);
+  assert.equal(basketFromEvent({ id: "b", provider: "zepto", revision: "2" }, "zepto"), null);
+  assert.equal(basketFromEvent({ provider: "zepto", revision: 2 }, "zepto"), null);
+  assert.equal(basketFromEvent(null, "zepto"), null);
+  assert.equal(basketFromEvent([], "zepto"), null);
+});

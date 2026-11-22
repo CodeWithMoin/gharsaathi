@@ -30,7 +30,7 @@ import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
 import { ADDRESS_REMOVED_MESSAGE, applyAssistantEvent } from "./assistant-events.mjs";
 import { zeptoAddressSelection } from "./zepto-address-refresh.mjs";
 import { OrderConfirmationCard } from "./order-confirmation-card";
-import { cartBadgeCount, newOrderCard, orderCardKey, orderedSummary, supersedeOrderCard, supersededOrderText, withOrderResult, type LiveOrderCard } from "./card-lifecycle.mjs";
+import { cartBadgeCount, newOrderCard, orderCardKey, orderedSummary, supersedeOrderCard, supersededOrderText, withOrderResult, type BasketLike, type LiveOrderCard } from "./card-lifecycle.mjs";
 import { orderCardIndex, type OrderCardState, type OrderConfirmation } from "./order-confirmation.mjs";
 import { OrderStatusCard } from "./order-status-card";
 import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
@@ -151,8 +151,11 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     billStageRef.current = { ...billStageRef.current, [provider]: stage };
     setBasketProvider(provider);
   }, []);
-  const handleBasketTouched = useCallback((provider?: ProviderName) => {
+  const handleBasketTouched = useCallback((provider?: ProviderName, basket?: BasketLike) => {
     const store = provider ?? basketProviderRef.current;
+    // An assistant edit changes the revision: an open order card for the old one is out of date now,
+    // not only after the basket panel re-reads the basket.
+    if (basket) setOrderCard((current) => supersedeOrderCard(current, basket));
     window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
     const stage = pendingBillStageRef.current[store] ?? "updated";
     pendingBillStageRef.current = { ...pendingBillStageRef.current, [store]: undefined };
