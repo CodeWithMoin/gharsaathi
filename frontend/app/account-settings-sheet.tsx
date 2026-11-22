@@ -169,7 +169,7 @@ export function AccountSettingsSheet({
           <button type="button" onClick={close} className="grid size-11 place-items-center rounded-full text-ink-secondary transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Close account settings"><X size={20} weight="bold" /></button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] [scrollbar-gutter:stable]">
+        <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] [scrollbar-gutter:stable]">
           <AnimatePresence mode="popLayout" initial={false}>
             {section === null
               ? <motion.div key="overview" initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: "-18%" }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: "-18%" }} transition={SUBPAGE_TRANSITION}>
