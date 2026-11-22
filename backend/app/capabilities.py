@@ -736,6 +736,8 @@ UNMOUNTED_ROUTERS: dict[str, str] = {
 # be a defined voice tool.
 PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
     {
+        # Bill/order failure status (codex/voice-reliability).
+        "bill_failed",
         # Order status tool fields and statuses (codex/order-tracking-status).
         "order_ref",
         "order_status",
