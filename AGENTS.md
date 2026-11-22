@@ -1,3 +1,169 @@
+# Run GharSaathi (for reviewers)
+
+GharSaathi is a voice-first, Hinglish shopping agent (Next.js frontend + FastAPI
+backend + PostgreSQL). Reviewers should run it in **demo mode**
+(`COMMERCE_MODE=demo`): a built-in sample catalogue and address, deterministic
+fees, and **no Zepto/Swiggy account and no real store, cart, payment or order
+calls**. Everything below was verified on a fresh clone.
+
+## 1. Prerequisites
+
+| Tool | Version | Notes |
+|---|---|---|
+| OS | macOS or Linux | `make start-demo` uses macOS-friendly helpers; on Linux use the direct commands in step 4b. |
+| Python | 3.12 (3.11+ works) | Managed by **`uv`** ≥ 0.7 (`curl -LsSf https://astral.sh/uv/install.sh \| sh`). No virtualenv to create; scripts use `uv run --with-requirements backend/requirements.txt`. |
+| Node.js | 22 LTS (20+ OK) + npm | Next.js 15 / React 19. |
+| PostgreSQL | 17 (15+ OK) | Must listen on `127.0.0.1:5432`. |
+| `curl`, `git` | any | |
+| `cloudflared` | optional | Only to expose the app over https to a phone (needed for the mic off-localhost). |
+
+Create a database and a role (pick your own names/password):
+
+```bash
+# macOS (Homebrew): brew install postgresql@17 && brew services start postgresql@17
+# Linux (Debian/Ubuntu): sudo apt-get install -y postgresql && sudo systemctl start postgresql
+sudo -u postgres psql -c "CREATE ROLE gharsaathi LOGIN PASSWORD 'gharsaathi' CREATEDB;"   # Linux
+sudo -u postgres createdb -O gharsaathi gharsaathi                                         # Linux
+# macOS Homebrew: your OS user is already a superuser, so just: createdb -h 127.0.0.1 gharsaathi
+```
+
+## 2. Environment files
+
+```bash
+git clone <repo-url> equal-ai && cd equal-ai
+python3 -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"   # -> APP_ENCRYPTION_KEY
+```
+
+**`.env`** (repository root — the backend and Alembic both read this file):
+
+```dotenv
+COMMERCE_MODE=demo
+OPENAI_API_KEY=<your key>
+DATABASE_URL=postgresql+asyncpg://gharsaathi:gharsaathi@127.0.0.1:5432/gharsaathi
+APP_ENCRYPTION_KEY=<output of the python command above>
+CLERK_SECRET_KEY=__CLERK_SECRET_KEY__
+CLERK_AUTHORIZED_PARTIES_CSV=http://localhost:3003,http://127.0.0.1:3003
+FRONTEND_URL=http://localhost:3003
+CORS_ORIGINS=http://localhost:3003,http://127.0.0.1:3003
+```
+
+(macOS Homebrew with no password: `DATABASE_URL=postgresql+asyncpg://<your-os-user>@127.0.0.1:5432/gharsaathi`.)
+
+**`frontend/.env.local`**:
+
+```dotenv
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=__CLERK_PUBLISHABLE_KEY__
+CLERK_SECRET_KEY=__CLERK_SECRET_KEY__
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/
+NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/
+```
+
+Everything else in `.env.example` is **optional** — leave it unset for review:
+
+- `JEV_API_KEY` / `JEV_*` — optional search reranker; without it the deterministic ranker is used.
+- `SARVAM_*` — inbound phone "delivery line" (owner-only live demo).
+- `WEB_PUSH_VAPID_PUBLIC_KEY` / `WEB_PUSH_VAPID_PRIVATE_KEY` / `WEB_PUSH_SUBJECT` — browser notifications (`make vapid-keys` generates them).
+- `SWIGGY_*` / `ZEPTO_*` / `ZEPTO_ONLINE_PAYMENTS_ENABLED` — live stores only; unused in demo mode.
+- `RIDER_ASSIST_*` / `VOBIZ_*` — rider-call beta, off by default.
+- `ALLOWED_USER_IDS` — leave empty (otherwise non-listed users get 403).
+- Model overrides (`LIVE_MODEL`, `PHOTO_EXTRACTION_MODEL`, …) — sensible defaults built in.
+
+## 3. Install and migrate
+
+```bash
+(cd frontend && npm ci --no-audit --no-fund)
+(cd backend && uv run --with-requirements requirements.txt alembic upgrade head)   # creates all tables
+```
+
+The first `uv run` downloads Python deps (~1 min). Alembic reads `DATABASE_URL` from the root `.env`.
+
+## 4. Start
+
+**4a. macOS one-command (ports 3003/8000):**
+
+```bash
+export DATABASE_URL=postgresql+asyncpg://gharsaathi:gharsaathi@127.0.0.1:5432/gharsaathi   # REQUIRED: the script ignores .env's DATABASE_URL and otherwise uses $USER@127.0.0.1/equal_ai
+make start-demo        # = ./scripts/start.sh demo: checks .env, runs migrations, starts both in background, waits for health
+make status            # health of both
+make logs              # follow logs (.run/app.log)
+make stop              # stop
+```
+
+**4b. Any OS, direct commands (two terminals; use this on Linux or for custom ports):**
+
+```bash
+# terminal 1 — backend on :8000
+cd backend && uv run --with-requirements requirements.txt uvicorn app.main:app --host 127.0.0.1 --port 8000 --env-file ../.env
+# terminal 2 — frontend on :3003
+cd frontend && npm run dev
+```
+
+Stop with Ctrl-C in each terminal. Ports `3003`/`8000` are hard-coded in the
+scripts and `npm run dev`. For other ports (verified with 3051/8051): run
+`cd frontend && npm run prepare:ort && npx next dev -p 3051`, start uvicorn with
+`--port 8051`, set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8051`, and put
+the new frontend origin in `CLERK_AUTHORIZED_PARTIES_CSV`, `FRONTEND_URL` and
+`CORS_ORIGINS`.
+
+**Check:**
+
+```bash
+curl -s http://127.0.0.1:8000/health          # {"status":"ok"}
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3003/   # 200 (first compile takes ~10 s)
+```
+
+Open **http://localhost:3003**. API docs: http://127.0.0.1:8000/docs.
+
+**Tests:** `make test` (backend pytest + frontend `node --test`; integration
+tests create and drop their own throwaway PostgreSQL database). `make check`
+adds lint and type-check. Tests read the root `.env`, so run them with the
+default 3003 origins in `FRONTEND_URL`/`CORS_ORIGINS`/`CLERK_AUTHORIZED_PARTIES_CSV`
+(3 voice origin tests fail if those point to a custom port).
+
+## 5. Test login (Clerk development instance)
+
+Click **Sign up** and use a **new** test email such as **`reviewer-<anything>+clerk_test@example.com`**
+(e.g. `reviewer-42+clerk_test@example.com`), verification code **`424242`**. Use a fresh address
+to see the full 5-step first-run onboarding (profile → promises & terms → stores → address → personalisation);
+an address someone already used skips the steps it has finished. Any address containing `+clerk_test` is a
+Clerk test-mode address: no email is sent and the code is always `424242`. This only works with the
+Clerk *development* (`pk_test_…`) keys.
+
+## 6. Journeys to try (demo catalogue)
+
+Chat, voice and photo understanding need `OPENAI_API_KEY`; the catalogue,
+basket arithmetic, order card and tracking are deterministic backend code.
+
+1. **First run** — accept the consent screen, pick/confirm the sample delivery address.
+2. **Express order** — type `2 Amul doodh order kar do` → the bill and an order card appear with the exact basket and payable amount → tap **Place order**. Demo mode never calls a store, so the card answers *"Order not placed: Real Zepto checkout is unavailable while COMMERCE_MODE=demo"* — that is expected and proves only a tap can order. A typed or spoken "yes" never places an order.
+3. **Add to basket** — `doodh add karo` (adds milk; asks which one if ambiguous).
+4. **Compare** — type `atta search karo`, then `difference in price?` → a side-by-side comparison card (e.g. "Swiggy Instamart is ₹7 cheaper"), computed in code, not by the model.
+5. **Quick chips + My lists** — tap the suggestion chips under the composer; open **My lists** to save/reuse a list (e.g. "Weekly list").
+6. **Photo** — tap 📎 and upload a photo of a product/pack; it is matched to the catalogue (needs OpenAI).
+7. **Voice** — tap the mic and speak Hinglish (OpenAI Realtime; browser mic needs `localhost` or https).
+8. **Tracking** — live order tracking needs a real placed order (live mode); in demo mode you see the order card and its blocked result. The demo catalogue has no lassi — try milk (doodh), atta, Diet Coke, eggs.
+9. **Settings drawer** — Profile, Stores (Swiggy/Zepto cards; connecting is live-only), *What GharSaathi knows* (view/delete learned preferences), Delivery line.
+10. **Recent chats** — start a **New chat**, then reopen/search the previous one from the drawer.
+
+## 7. Live-only / out of scope for reviewers
+
+- Zepto and Swiggy account connection (provider OAuth; Zepto also needs a port-80 callback bridge) and real carts/orders — `make start` (live) is for the owner only.
+- Sarvam phone delivery line **+91 80 6426 4240** — wired to the owner's account and an allow-listed caller.
+- Online/prepaid payments are **off** (`ZEPTO_ONLINE_PAYMENTS_ENABLED` unset); live mode supports cash on delivery only.
+
+## 8. Troubleshooting
+
+- **Port in use** — `lsof -i :3003 -i :8000`, stop that process (or `make stop`), or use the custom-port recipe in 4b.
+- **DB connection refused / role or database does not exist** — check Postgres is on `127.0.0.1:5432`, `DATABASE_URL` uses the `postgresql+asyncpg://` scheme, the database exists, and (for `make start-demo`) that you exported `DATABASE_URL` in the shell. Re-run `alembic upgrade head`.
+- **Clerk "unauthorized party" / every API call 401** — the frontend origin you open (e.g. `http://localhost:3003` vs `http://127.0.0.1:3003`) must be in `CLERK_AUTHORIZED_PARTIES_CSV`, and the backend needs `CLERK_SECRET_KEY` (in root `.env` for 4b) from the **same** Clerk instance as the publishable key. Restart the backend after editing `.env`.
+- **Mic does nothing** — browsers allow the microphone only on `http://localhost` or https; for another device use `cloudflared tunnel --url http://localhost:3003` and add that https origin to `CLERK_AUTHORIZED_PARTIES_CSV`/`CORS_ORIGINS` (and point `NEXT_PUBLIC_API_BASE_URL` at a tunnel for :8000).
+- **Chat replies with an error** — `OPENAI_API_KEY` missing/invalid in root `.env`; restart the backend.
+
+---
+
 # AGENTS.md — Household Shopping Agent
 
 ## Mission
