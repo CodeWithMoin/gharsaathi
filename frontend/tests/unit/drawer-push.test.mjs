@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DRAWER_SPRING, drawerState, drawerWidth, pushOffset, restoreScrollTarget, viewportInsets } from "../../app/drawer-push.mjs";
+import { DRAWER_PANEL_TRANSITION, DRAWER_SPRING, drawerState, drawerWidth, pushOffset, restoreScrollTarget, viewportInsets } from "../../app/drawer-push.mjs";
 
 test("drawer width is 75% of the viewport, capped at 360px", () => {
   assert.equal(drawerWidth(390), 292.5);
@@ -27,8 +27,11 @@ test("only one drawer is open at a time", () => {
   assert.deepEqual(drawerState(null), { chatsOpen: false, settingsOpen: false });
 });
 
-test("both drawers share one spring", () => {
-  assert.deepEqual({ ...DRAWER_SPRING }, { type: "spring", stiffness: 360, damping: 36 });
+test("both drawers share one spring and panels slide with it, fading fast", () => {
+  assert.deepEqual({ ...DRAWER_SPRING }, { type: "spring", stiffness: 420, damping: 40 });
+  assert.equal(DRAWER_PANEL_TRANSITION.stiffness, DRAWER_SPRING.stiffness);
+  assert.equal(DRAWER_PANEL_TRANSITION.damping, DRAWER_SPRING.damping);
+  assert.ok(DRAWER_PANEL_TRANSITION.opacity.duration <= 0.15);
 });
 
 test("closing a drawer returns the reader to their scroll position, clamped", () => {

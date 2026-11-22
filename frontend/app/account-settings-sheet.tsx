@@ -18,7 +18,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import Image from "next/image";
-import { DRAWER_SPRING } from "./drawer-push.mjs";
+import { DRAWER_PANEL_TRANSITION } from "./drawer-push.mjs";
 import { ADDRESS_FORM_OPTIONS } from "./onboarding-flow.mjs";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useApiRequest } from "./authenticated-api";
@@ -149,10 +149,10 @@ export function AccountSettingsSheet({
         aria-modal="true"
         aria-labelledby={titleId}
         className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${section === "memory" ? "w-[min(94vw,420px)]" : "w-3/4 max-w-[360px]"} flex-col overflow-hidden bg-surface-muted text-ink`}
-        initial={{ x: reducedMotion ? 0 : 24, opacity: 0 }}
+        initial={reducedMotion ? { opacity: 0 } : { x: "100%" }}
         animate={{ x: 0, opacity: 1 }}
-        exit={{ x: reducedMotion ? 0 : 24, opacity: 0 }}
-        transition={DRAWER_SPRING}
+        exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}
+        transition={DRAWER_PANEL_TRANSITION}
       >
         <header className="flex items-center justify-between px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
           {section ? <button type="button" onClick={() => setSection(null)} className="grid size-11 place-items-center rounded-full text-ink-secondary transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Back to account settings"><ArrowLeft size={20} weight="bold" /></button> : <span className="size-11" />}

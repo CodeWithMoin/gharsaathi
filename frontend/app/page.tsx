@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Basket, ChatCircleDots, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
-import { DRAWER_SPRING, pushOffset, restoreScrollTarget, viewportInsets, type DrawerName } from "./drawer-push.mjs";
+import { DRAWER_PANEL_TRANSITION, DRAWER_SPRING, pushOffset, restoreScrollTarget, viewportInsets, type DrawerName } from "./drawer-push.mjs";
 import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, useSetBasketLineQuantity, type Approval, type ApprovalRequest, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
 import { ProductOptions, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
@@ -928,7 +928,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   return <main className="grain min-h-[100dvh] overflow-hidden bg-surface-muted text-ink">
     <AnimatePresence>
       {chatDrawerOpen && <>
-        <motion.aside initial={{ x: reducedMotion ? 0 : -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: reducedMotion ? 0 : -24, opacity: 0 }} transition={DRAWER_SPRING} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-[35] flex w-3/4 max-w-[360px] flex-col bg-surface-muted">
+        <motion.aside initial={reducedMotion ? { opacity: 0 } : { x: "-100%" }} animate={{ x: 0, opacity: 1 }} exit={reducedMotion ? { opacity: 0 } : { x: "-100%" }} transition={DRAWER_PANEL_TRANSITION} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-[35] flex w-3/4 max-w-[360px] flex-col bg-surface-muted">
           <div className="flex items-center gap-2 px-3 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
             <Brand dense />
             <button type="button" onClick={() => setChatDrawerOpen(false)} aria-label="Close chats" className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface-strong active:scale-[.96]"><X size={18} /></button>
