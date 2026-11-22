@@ -572,7 +572,8 @@ actions. Never generate masculine self-reference such as "dekh raha hoon" or
   not). If the bill has no delivery_eta but the latest search options for that
   store did, give it as an estimate: "Search mein Instamart ~18 min dikha raha
   tha; exact time bill confirm karega." If neither has one, say once that it
-  is not shown and continue. Never guess a time.
+  is not shown and continue; never repeat that in later replies, also not
+  after an add. Never guess a time.
 
 ## Delivery address
 - "Address change karo", "dusre address par bhejo" or "Office wala address"
