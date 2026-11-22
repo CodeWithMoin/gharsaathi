@@ -1,6 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+
+// iOS-like push between drawer pages: a soft ease-out slide with a short cross-fade.
+const SUBPAGE_TRANSITION = { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const };
 import {
   ArrowLeft,
   Brain,
@@ -167,9 +170,9 @@ export function AccountSettingsSheet({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] [scrollbar-gutter:stable]">
-          <AnimatePresence mode="wait" initial={false}>
+          <AnimatePresence mode="popLayout" initial={false}>
             {section === null
-              ? <motion.div key="overview" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: .16 }}>
+              ? <motion.div key="overview" initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: "-18%" }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: "-18%" }} transition={SUBPAGE_TRANSITION}>
                 <button type="button" onClick={() => setSection("profile")} aria-label={`Profile: ${identity.name}`} className="flex min-h-[76px] w-full items-center gap-3 rounded-[22px] border border-border bg-surface p-3.5 text-left transition hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                   {identity.imageUrl ? <Image src={identity.imageUrl} alt="" width={48} height={48} className="size-12 rounded-2xl object-cover" /> : <span aria-hidden="true" className="grid size-12 shrink-0 place-items-center rounded-2xl bg-accent text-base font-bold text-on-accent">{initials(identity.name)}</span>}
                   <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{identity.name}</span><span className="mt-0.5 block truncate text-xs text-muted">{identity.email ?? `Profile · ${languageLabel}`}</span></span>
@@ -193,7 +196,7 @@ export function AccountSettingsSheet({
                   </button>
                 </div>
               </motion.div>
-              : <motion.div key={section} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 14 }} transition={{ duration: .16 }}>
+              : <motion.div key={section} initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: "28%" }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: "28%" }} transition={SUBPAGE_TRANSITION}>
                 {section === "profile" && <div className="space-y-4"><ProfileDetail languageLabel={languageLabel} onLanguageChange={onLanguageChange} />{notifications && <NotificationSwitch controller={notifications} />}</div>}
                 {section === "stores" && <StoresDetail stores={stores} commerceMode={commerceMode} connectingStoreId={connectingStoreId} error={storeError} onConnectStore={onConnectStore} onDisconnectStore={onDisconnectStore} onChooseStoreAddress={onChooseStoreAddress} />}
                 {section === "memory" && <MemorySettings onEditProfile={() => setSection("profile")} commerceMode={commerceMode} swiggyConnected={storeConnected("swiggy")} zeptoConnected={storeConnected("zepto")} />}
