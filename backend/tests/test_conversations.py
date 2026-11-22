@@ -1,22 +1,34 @@
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.database.base import Base
+from app.database.models import Conversation
 from app.database.session import get_db_session
 from app.main import app
 
 
 @pytest_asyncio.fixture
-async def conversation_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
+async def conversation_factory(tmp_path: Path) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'conversations.db'}")
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
+    yield async_sessionmaker(engine, expire_on_commit=False)
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def conversation_client(
+    conversation_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncClient]:
+    factory = conversation_factory
 
     async def override_session() -> AsyncIterator[AsyncSession]:
         async with factory() as session:
@@ -29,7 +41,6 @@ async def conversation_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
     ) as client:
         yield client
     app.dependency_overrides.pop(get_db_session, None)
-    await engine.dispose()
 
 
 def headers(user_id: str) -> dict[str, str]:
@@ -326,6 +337,30 @@ async def test_voice_chat_reopens_from_drawer_with_its_turns_and_sorts_first(
 
 
 @pytest.mark.asyncio
+async def test_a_reopened_chat_sorts_first_even_if_another_chat_was_created_later(
+    conversation_client: AsyncClient, conversation_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    # "Open" archives the other chat with the same timestamp it gives the reopened one;
+    # the tie must never fall back to creation time (a newer chat would sort first).
+    user = headers("drawer-tie-user")
+    first = (await conversation_client.put("/api/conversations/current", headers=user, json=state("atta"))).json()
+    await conversation_client.post("/api/conversations/new", headers=user)
+    second = (await conversation_client.put("/api/conversations/current", headers=user, json=state("tea"))).json()
+    async with conversation_factory() as session:
+        await session.execute(
+            update(Conversation)
+            .where(Conversation.id == UUID(second["id"]))
+            .values(created_at=datetime.now(UTC) + timedelta(seconds=5))
+        )
+        await session.commit()
+
+    await conversation_client.post(f"/api/conversations/{first['id']}/open", headers=user)
+
+    listed = (await conversation_client.get("/api/conversations", headers=user)).json()
+    assert [(item["id"], item["is_active"]) for item in listed] == [(first["id"], True), (second["id"], False)]
+
+
+@pytest.mark.asyncio
 async def test_chat_timeline_round_trips_with_the_chat(
     conversation_client: AsyncClient,
 ) -> None:
@@ -369,3 +404,23 @@ async def test_chat_timeline_round_trips_with_the_chat(
         json={**body, "timeline": duplicate_live},
     )
     assert rejected.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_background_choice_check_uses_the_request_database_not_the_configured_one(
+    conversation_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Tests (and the app) must never reach the configured database from a background task
+    # that runs on a different engine than the request's session.
+    import app.database.session as database_session
+
+    def configured_database() -> None:
+        raise AssertionError("the configured database was used")
+
+    monkeypatch.setattr(database_session, "get_session_factory", configured_database)
+    user = headers("choice-check-user")
+    with caplog.at_level("WARNING"):
+        await conversation_client.put("/api/conversations/current", headers=user, json=state("oil"))
+        await conversation_client.post("/api/conversations/new", headers=user)
+
+    assert "memory_choice_check_failed" not in caplog.text
