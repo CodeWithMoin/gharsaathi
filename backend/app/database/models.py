@@ -361,6 +361,9 @@ class PurchaseOrderNode(Base):
     )
     provider: Mapped[str] = mapped_column(String(32))
     provider_order_id: Mapped[str] = mapped_column(String(160))
+    # The id the provider's order *list* uses, when it differs from the detail
+    # id (Zepto); lets a later import skip a known order without a detail read.
+    provider_lookup_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     status: Mapped[str] = mapped_column(String(80))
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     provider_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -506,6 +509,22 @@ class PurchaseHistorySyncState(Base):
     )
     fetched_order_count: Mapped[int] = mapped_column(Integer, default=0)
     last_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    imported_order_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_known_count: Mapped[int] = mapped_column(Integer, default=0)
+    detail_failure_count: Mapped[int] = mapped_column(Integer, default=0)
+    stopped_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Resumable backfill: the list page the next sync starts from, until the
+    # whole lookback window has been walked once.
+    resume_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    backfill_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_full_resync_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rate_limited_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Opt-in: one lazy, read-only sync per store per week when the app opens.
+    auto_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class ReorderSuggestionFeedback(Base):

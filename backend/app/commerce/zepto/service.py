@@ -229,21 +229,29 @@ class ZeptoService:
         return await self._recovering(("view_cart",), read)
 
     async def order_history(
-        self, *, limit: int = 10, page_number: int = 1
+        self, *, limit: int = 10, page_number: int = 1, recover: bool = True
     ) -> ZeptoOrderHistory:
+        """``recover=False`` makes exactly one call: no session reset, no retry."""
+
         async def read() -> ZeptoOrderHistory:
             raw = await self.client.call_tool(
                 "list_order_history", {"limit": limit, "pageNumber": page_number}
             )
             return parse_order_history(raw, limit=limit, page_number=page_number)
 
+        if not recover:
+            return await read()
         return await self._recovering(("list_order_history",), read)
 
-    async def order_detail(self, order_id: str) -> ZeptoOrderDetail:
+    async def order_detail(
+        self, order_id: str, *, recover: bool = True
+    ) -> ZeptoOrderDetail:
         async def read() -> ZeptoOrderDetail:
             raw = await self.client.call_tool("get_order_detail", {"orderId": order_id})
             return parse_order_detail(raw)
 
+        if not recover:
+            return await read()
         return await self._recovering(("get_order_detail",), read)
 
     async def search(
