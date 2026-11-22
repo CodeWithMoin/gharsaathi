@@ -193,6 +193,39 @@ CAPABILITIES: tuple[Capability, ...] = (
         voice_tools=("search_products",),
     ),
     Capability(
+        id="shop_from_photo",
+        title="Shop from a photo (product pack, shopping list, list screenshot, shelf/fridge)",
+        voice=S(
+            P,
+            "The user attaches a photo with the button beside the voice pill and refers to it "
+            "('photo dekho'); the backend model calls read_attached_photo, confirms the list in "
+            "one line, then searches each item (at most 4 searches per request). GPT-Live is "
+            "not told when a photo arrives, so the user must mention it.",
+        ),
+        typed_chat=S(
+            W,
+            "A message with attachment_id reads the photo before the model runs; one confirm "
+            "line, then up to 5 searches per message while a photo list is open. "
+            + TYPED_VIA_ASSISTANT,
+        ),
+        ui=S(
+            W,
+            "Composer photo button: Take photo (camera) or Choose from gallery; client-side "
+            "downscale to 1600 px JPEG (drops EXIF); thumbnail chip with remove; send with or "
+            "without text; the saved chat keeps only a 'Photo' placeholder.",
+        ),
+        backend=S(
+            W,
+            "Magic-byte type check, 8 MB cap, Pillow decode, all metadata stripped, re-encoded "
+            "JPEG kept in memory per user for at most 15 min and deleted right after reading. "
+            "Strict-JSON vision extraction (PHOTO_EXTRACTION_MODEL), image text treated as data, "
+            "prices stripped, at most 15 items.",
+        ),
+        voice_tools=("read_attached_photo",),
+        routes=("POST /api/chat/attachments", "DELETE /api/chat/attachments/{attachment_id}"),
+        ui_files=("frontend/app/page.tsx", "frontend/app/photo-attachment.tsx", "frontend/app/photo-attachment.mjs"),
+    ),
+    Capability(
         id="add_to_basket",
         title="Add a product to the basket",
         voice=S(W, "Swiggy and Zepto: each option_id adds to its own store's basket."),
@@ -745,6 +778,10 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "cash_on_delivery",
         "item_count",
         "delivery_address",
+        # read_attached_photo result statuses and fields (codex/photo-to-basket).
+        "no_items",
+        "no_photo",
+        "shopping_list",
     }
 )
 
@@ -796,13 +833,27 @@ API_CONTRACTS: dict[str, tuple[str, ...]] = {
         '"ui_acks": [{"ack_id": "<from address_form.open>", "form_visible": true, "reason": null, '
         '"filled_fields": ["building_name"], "kept_user_fields": []}]}',
         "conversation_id null means the current conversation; another user's id is 404. "
-        "message: 1-2000 characters; unknown keys are 422.",
+        "message: 1-2000 characters (may be empty when attachment_id is set); unknown keys are 422. "
+        'attachment_id: "ph_..." from POST /api/chat/attachments; the photo is read (and deleted) before the model runs.',
         'Response 200: {"conversation_id": "<uuid>" | null, "reply": "Roman-script Hinglish text", '
         '"ui_events": [{"type": "tool.results" | "basket.updated" | "basket.approval_requested" | '
-        '"order.confirmation_requested" | "address_form.open" | "address_form.unavailable" | "address.selected" | "tool.not_connected" | "tool.error" | '
+        '"order.confirmation_requested" | "photo.read" | "address_form.open" | "address_form.unavailable" | "address.selected" | "tool.not_connected" | "tool.error" | '
         '"memory.changed", ...}]}',
         "ui_events use the voice sideband shapes. Caps per turn: 6 tool rounds, 2 searches. "
         "Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS).",
+    ),
+    "POST /api/chat/attachments": (
+        "Auth: Clerk bearer token and accepted current terms. multipart/form-data with one `file` field.",
+        "Accepted by magic bytes: JPEG, PNG, WebP, HEIC/HEIF; at most 8 MB (413), other types 415, unreadable 422.",
+        "The image is decoded, EXIF orientation applied, every metadata block (EXIF/GPS/XMP/ICC) dropped, "
+        "downscaled to 1600 px and re-encoded as JPEG; kept in memory for this user only, at most 15 minutes, "
+        "and deleted as soon as its items are read. Never written to disk or the database.",
+        'Response 201: {"attachment_id": "ph_...", "expires_in_seconds": 900, "width": 1200, "height": 1600}',
+        "Send it with POST /api/chat/turn as attachment_id (message may then be empty).",
+    ),
+    "DELETE /api/chat/attachments/{attachment_id}": (
+        "Auth: Clerk bearer token and accepted current terms. Removes a pending photo of this user. "
+        "Response 204; idempotent, and another user's id is a no-op.",
     ),
     "GET /api/profile": (
         "Auth: Clerk bearer token; the record belongs to the verified user only.",

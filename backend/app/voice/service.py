@@ -26,6 +26,7 @@ from app.voice.address_prefill import RecentUserWords
 from app.voice.address_tools import ZeptoConnectionChecker
 from app.voice.profile_context import with_profile
 from app.voice.basket_tools import AddressDescriber
+from app.voice.photo_tools import PhotoReading
 from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS
 from app.voice.sideband import SidebandHub
 from app.voice.toolbox import ToolExecutor, VOICE_TOOL_DEFINITIONS, VoiceToolbox
@@ -144,6 +145,7 @@ class LiveSessionService:
         context_reader: ConversationContextReader | None = None,
         order_confirmations: OrderConfirmations | None = None,
         address_book: AddressBook | None = None,
+        photo_reader: PhotoReading | None = None,
         order_tracking: OrderTrackingService | None = None,
         order_history: OrderHistoryReader | None = None,
     ) -> None:
@@ -160,6 +162,7 @@ class LiveSessionService:
         self.context_reader = context_reader
         self.order_confirmations = order_confirmations
         self.address_book = address_book
+        self.photo_reader = photo_reader
         self.order_tracking = order_tracking
         self.order_history = order_history
         self._http_client = http_client
@@ -204,6 +207,7 @@ class LiveSessionService:
                 order_confirmations=self.order_confirmations,
                 address_book=self.address_book,
                 user_words=RecentUserWords(lambda: self.saved_user_words(household_id)),
+                photo_reader=self.photo_reader,
                 order_tracking=self.order_tracking,
                 order_history=self.order_history,
             )
