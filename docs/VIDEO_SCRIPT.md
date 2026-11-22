@@ -24,10 +24,11 @@ GharSaathi. **VO** = your voice-over to the viewer.
 ## 0:00–0:15 — Hook
 
 - **DO:** Open on the chat screen, idle. Optional: quick cut of you holding the phone.
-- **VO:** "Ghar ka saaman mangwana roz ka kaam hai — five apps, prices compare karo,
-  coupon check karo, delivery wale ko raasta samjhao. This is GharSaathi: a voice-first,
-  Hinglish shopping saathi for Indian homes. Aap bolo, woh kaam karta hai — decision
-  aapka rehta hai."
+- **VO:** "Hi, this is GharSaathi. Ghar ka saaman order karna simple lagta hai, but every
+  time you're switching apps, comparing prices, remembering everyone's preferences, and
+  then explaining the address to the rider. GharSaathi handles all of that in one natural
+  Hinglish conversation. Aap bas bolo, it does the work. But every important decision,
+  especially placing an order, still stays with you."
 
 ## 0:15–0:35 — Header + address first
 
