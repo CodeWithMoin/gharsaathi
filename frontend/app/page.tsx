@@ -1255,9 +1255,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         </motion.aside>
       </>}
     </AnimatePresence>
-    <motion.div animate={{ x: pushOffset(drawer, viewportWidth, reducedMotion) }} transition={DRAWER_SPRING} transformTemplate={(_, generated) => push ? generated : "none"} onAnimationComplete={() => { if (!drawer) releasePush(); }} className={`${push ? "fixed inset-0 overflow-hidden" : "relative min-h-[100dvh]"} z-30 bg-surface-muted transition-[border-radius] duration-150 ease-out ${push && !reducedMotion ? `${drawer ? (push.side === "chats" ? "rounded-l-[36px]" : "rounded-r-[36px]") : "rounded-none"} [corner-shape:squircle]` : ""}`}>
+    <motion.div animate={{ x: pushOffset(drawer, viewportWidth, reducedMotion) }} transition={DRAWER_SPRING} transformTemplate={(_, generated) => push ? generated : "none"} onAnimationComplete={() => { if (!drawer) releasePush(); }} className={`${push ? "fixed inset-0 overflow-hidden" : "relative min-h-[100dvh]"} z-30 bg-surface-muted transition-[border-radius] duration-150 ease-out ${push && !reducedMotion && drawer === "chats" ? "rounded-l-[36px] [corner-shape:squircle]" : "rounded-none"}`}>
     <AnimatePresence>
-      {drawer && <motion.button type="button" aria-label={drawer === "chats" ? "Close chats" : "Close account settings"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12, ease: "easeOut" }} onClick={() => { setChatDrawerOpen(false); setAccountSettingsOpen(false); }} className="fixed inset-0 z-40 bg-scrim/20" />}
+      {drawer && <motion.button type="button" aria-label={drawer === "chats" ? "Close chats" : "Close account settings"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12, ease: "easeOut" }} onClick={() => { setChatDrawerOpen(false); setAccountSettingsOpen(false); }} className={`fixed inset-0 z-40 ${drawer === "settings" ? "bg-scrim" : "bg-scrim/20"}`} />}
     </AnimatePresence>
     <HomeHeader
       top={insets.top}
