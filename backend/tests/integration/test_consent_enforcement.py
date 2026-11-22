@@ -41,6 +41,12 @@ GATED = [
     ),
     ("POST", "/api/voice/session", {"json": {"sdp": "v=0\r\nm=audio 9 UDP 0\r\n"}}),
     ("POST", "/api/chat/turn", {"json": {"message": "Fortune tel add karo"}}),
+    (
+        "POST",
+        "/api/inbound-delivery/contexts",
+        {"json": {"provider": "zepto", "address_id": "demo-home", "confirmed": True}},
+    ),
+    ("PUT", "/api/inbound-delivery/line/settings", {"json": {"auto_share": True, "confirmed": True}}),
 ]
 
 

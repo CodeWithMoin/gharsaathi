@@ -37,6 +37,8 @@ from app.shopping.checkout import (
     ZeptoCodGateway,
 )
 from app.database.session import get_session_factory
+from app.inbound_delivery import get_inbound_delivery_service
+from app.inbound_delivery.service import LineClearingAddressBook
 from app.shopping.order_confirmation import OrderConfirmations
 from app.shopping.reconciliation import CheckoutReconciler
 from app.shopping.payments import PrepaidGateway
@@ -314,10 +316,11 @@ def get_voice_service() -> LiveSessionService:
         addresses=SavedAddressDirectory(get_session_factory()),
         context_reader=get_conversation_context_loader(),
         order_confirmations=get_order_confirmations(),
-        address_book=(
+        address_book=LineClearingAddressBook(
             DemoAddressBook()
             if get_settings().commerce_mode == "demo"
-            else SavedAddressBook(get_session_factory())
+            else SavedAddressBook(get_session_factory()),
+            get_inbound_delivery_service(),
         ),
         photo_reader=get_photo_reader(),
         order_tracking=get_order_tracking_service(),
@@ -505,7 +508,10 @@ def get_order_tracking_service() -> OrderTrackingService:
             ),
         }
     return OrderTrackingService(
-        OrderTrackingStore(settings.tracking_data_path), providers, push=get_push_events()
+        OrderTrackingStore(settings.tracking_data_path),
+        providers,
+        push=get_push_events(),
+        delivery_line=get_inbound_delivery_service(),
     )
 
 

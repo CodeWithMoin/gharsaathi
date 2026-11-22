@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     # One consenting caller for the controlled stage demo. The browser cannot
     # override this number; production must obtain provider-authorised routing.
     sarvam_demo_recipient_number: str = ""
+    # Only this signed-in user may prepare or clear the delivery line. When empty,
+    # ALLOWED_USER_IDS is the guard; with neither set the feature stays off.
+    sarvam_inbound_owner_user_id: str = ""
+    # Send route_directions and handover_instructions. Keep false until the
+    # deployed agent version declares both variables (agent v5 does not).
+    sarvam_route_directions_enabled: bool = False
     openai_base_url: str = "https://api.openai.com/v1"
     live_model: str = "gpt-live-1.1"
     live_voice: str = "nira"
