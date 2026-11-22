@@ -252,10 +252,16 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="approve_bill",
         title="Approve or reject the exact bill",
-        voice=S(U, "Approval is bound to the on-screen bill; a spoken 'yes' is not approval."),
-        typed_chat=S(U, "Same as voice: approval happens only on the bill review."),
-        ui=S(W),
-        backend=S(W, "Fingerprint-bound approval."),
+        voice=S(
+            W,
+            "Only through the order card: prepare_order shows it and the user's tap on "
+            "'Place order' approves this exact bill and places the order. A spoken 'yes' is "
+            "not approval.",
+        ),
+        typed_chat=S(W, "Same as voice: prepare_order shows the order card; the tap approves."),
+        ui=S(W, "BasketPanel approve/reject, or the order card's 'Place order' tap."),
+        backend=S(W, "Fingerprint-bound approval; the tap re-checks the bound confirmation first."),
+        voice_tools=("prepare_order",),
         routes=(
             "POST /api/basket/approval/{approval_id}/approve",
             "POST /api/basket/approval/{approval_id}/reject",
@@ -265,18 +271,45 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="order_zepto_cod",
         title="Place a Zepto cash-on-delivery order",
-        voice=S(U, "The final order action is on-screen only, after bill approval."),
-        typed_chat=S(U, "Final order action is on-screen only."),
-        ui=S(W, "Live mode only, after approval (zepto-checkout-state.mjs)."),
-        backend=S(W, "Idempotency-key, approval- and fingerprint-bound."),
-        routes=("POST /api/zepto/checkout/cod",),
-        ui_files=("frontend/app/basket/BasketPanel.tsx", "frontend/app/basket/zepto-checkout-state.mjs"),
+        voice=S(
+            W,
+            "On an explicit order request prepare_order shows the order card (store, items, "
+            "payable, COD, address, expiry); only the user's tap places it. The result is spoken "
+            "via session.commentary.append.",
+        ),
+        typed_chat=S(
+            W,
+            "Same prepare_order card; the tap result reaches the next typed turn as a server "
+            "note. " + TYPED_VIA_ASSISTANT,
+        ),
+        ui=S(
+            W,
+            "Order card in the chat timeline (order-confirmation-card.tsx) with Place order / "
+            "Cancel and a countdown; BasketPanel's COD button after approval (live mode only).",
+        ),
+        backend=S(
+            W,
+            "Single-use, 5-minute confirmation bound to user, basket revision, approval, quote "
+            "and address (app/shopping/order_confirmation.py), then the existing approve + "
+            "idempotent COD checkout.",
+        ),
+        voice_tools=("prepare_order",),
+        routes=(
+            "POST /api/zepto/checkout/cod",
+            "POST /api/orders/confirm",
+            "POST /api/orders/cancel",
+        ),
+        ui_files=(
+            "frontend/app/basket/BasketPanel.tsx",
+            "frontend/app/basket/zepto-checkout-state.mjs",
+            "frontend/app/order-confirmation-card.tsx",
+        ),
     ),
     Capability(
         id="order_swiggy",
         title="Place a Swiggy Instamart order",
-        voice=S(U, "The final order action is on-screen only."),
-        typed_chat=S(U, "Final order action is on-screen only."),
+        voice=S(U, "prepare_order returns unsupported for Instamart; only the bill can be reviewed."),
+        typed_chat=S(U, "Same as voice."),
         ui=S(M, "A Swiggy bill can be approved but there is no order action."),
         backend=S(M, "No Swiggy checkout; only Zepto COD exists (app/shopping/checkout.py)."),
     ),
@@ -615,6 +648,11 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "last_purchased_on",
         "purchase_count",
         "saved_preferences",
+        # prepare_order result fields and statuses.
+        "awaiting_tap",
+        "cash_on_delivery",
+        "item_count",
+        "delivery_address",
     }
 )
 
@@ -667,7 +705,7 @@ API_CONTRACTS: dict[str, tuple[str, ...]] = {
         "message: 1-2000 characters; unknown keys are 422.",
         'Response 200: {"conversation_id": "<uuid>" | null, "reply": "Roman-script Hinglish text", '
         '"ui_events": [{"type": "tool.results" | "basket.updated" | "basket.approval_requested" | '
-        '"address_form.open" | "address_form.unavailable" | "tool.not_connected" | "tool.error" | '
+        '"order.confirmation_requested" | "address_form.open" | "address_form.unavailable" | "tool.not_connected" | "tool.error" | '
         '"memory.changed", ...}]}',
         "ui_events use the voice sideband shapes. Caps per turn: 6 tool rounds, 2 searches. "
         "Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS).",

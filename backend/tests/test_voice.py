@@ -122,8 +122,13 @@ async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
         "search_products", "add_to_basket", "set_basket_quantity", "view_basket", "request_approval",
         "open_address_form", "recall_household_preferences", "remember_preference",
         "update_preference", "forget_preference", "list_preferences", "confirm_memory",
+        "prepare_order",
     }
-    assert all("order" not in name and "checkout" not in name for name in names)
+    # prepare_order only shows the order card; no tool can approve, check out or order.
+    assert all("checkout" not in name and "approve" not in name for name in names)
+    assert [name for name in names if "order" in name] == ["prepare_order"]
+    prepare = next(tool for tool in tools if tool["name"] == "prepare_order")
+    assert "never approves or places an order" in prepare["description"]
 
 
 @pytest.mark.asyncio

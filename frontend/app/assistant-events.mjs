@@ -1,5 +1,6 @@
 import { sanitizeAddressPrefill } from "./voice-address-prefill.mjs";
 import { voiceApprovalFromToolEvent } from "./voice-approval.mjs";
+import { orderConfirmationFromEvent } from "./order-confirmation.mjs";
 
 const PROVIDERS = new Set(["swiggy_instamart", "zepto"]);
 
@@ -20,6 +21,7 @@ const ADDRESS_UNAVAILABLE_MESSAGES = {
  *   onBasketTouched?: (provider?: "swiggy_instamart" | "zepto") => void,
  *   onApprovalRequested?: (provider: "swiggy_instamart" | "zepto", request: any) => void,
  *   onAddressForm?: (request: { prefill: Record<string, string> } | { unavailable: string }) => void,
+ *   onOrderConfirmation?: (confirmation: import("./order-confirmation.mjs").OrderConfirmation) => void,
  * }} handlers
  */
 export function applyAssistantEvent(raw, handlers) {
@@ -62,6 +64,19 @@ export function applyAssistantEvent(raw, handlers) {
       kind: "bill",
       message: "Final bill is ready—review it on screen.",
       notice: `${typeof event.store === "string" && event.store ? `${event.store} · ` : ""}Final bill${payable ? ` · ${payable}` : ""}`,
+    };
+  }
+  if (event.type === "order.confirmation_requested") {
+    const confirmation = orderConfirmationFromEvent(event);
+    if (!confirmation) return null;
+    // A freshly requested bill travels with the card, in the basket.approval_requested shape.
+    const approval = voiceApprovalFromToolEvent({ ...event, type: "basket.approval_requested" });
+    if (approval) handlers.onApprovalRequested?.(approval.provider, approval.request);
+    handlers.onOrderConfirmation?.(confirmation);
+    return {
+      kind: "order_confirmation",
+      message: "Your order is ready—tap Place order to confirm.",
+      notice: `${confirmation.store} · Place order · ${confirmation.payable}`,
     };
   }
   if (event.type === "address_form.open" && event.provider === "zepto") {

@@ -18,6 +18,7 @@ from app.memory.remembered import memory_summary_block
 from app.user_profile import ProfileReader, UserProfile
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
+from app.shopping.order_confirmation import OrderConfirmations
 from app.voice.address_tools import ZeptoConnectionChecker
 from app.voice.profile_context import with_profile
 from app.voice.basket_tools import AddressDescriber
@@ -125,6 +126,7 @@ class LiveSessionService:
         profile_reader: ProfileReader | None = None,
         addresses: AddressDescriber | None = None,
         context_reader: ConversationContextReader | None = None,
+        order_confirmations: OrderConfirmations | None = None,
     ) -> None:
         self.settings = settings
         self.searcher = searcher
@@ -137,6 +139,7 @@ class LiveSessionService:
         self.profile_reader = profile_reader
         self.addresses = addresses
         self.context_reader = context_reader
+        self.order_confirmations = order_confirmations
         self._http_client = http_client
 
     @property
@@ -165,6 +168,7 @@ class LiveSessionService:
                 zepto_connection=self.zepto_connection,
                 preference_recall=self.preference_recall,
                 addresses=self.addresses,
+                order_confirmations=self.order_confirmations,
             )
         if self.zepto_searcher is not None:
             return MultiProviderShoppingToolExecutor(

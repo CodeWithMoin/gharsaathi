@@ -21,7 +21,7 @@ flowchart LR
   subgraph Backend["FastAPI backend (127.0.0.1:8000)"]
     API["REST API<br/>every route needs sign-in<br/>(except OAuth + health)"]
     SB["Voice sideband<br/>runs tool calls,<br/>posts results, continues"]
-    TOOLS["Voice tools<br/>search · basket · bill ·<br/>address form · memory recall"]
+    TOOLS["Voice tools<br/>search · basket · bill ·<br/>order card · address form · memory"]
     CORE["Shopping core<br/>per-store baskets, deterministic bill maths,<br/>approval bound to exact basket revision"]
     MEM["Memory<br/>confirmed preferences +<br/>consented purchase history + profile"]
     ADP["Provider adapters<br/>schema-validated MCP calls,<br/>Swiggy 429 cooldown"]
@@ -54,7 +54,7 @@ flowchart LR
 flowchart TD
   U(["User speaks"]) --> T["GPT-Live transcribes<br/>(may mishear: 'Bed cook' for 'Diet Coke')"]
   T --> D1{"D1 · Answer directly or hand off?<br/>(model, LIVE_INSTRUCTIONS)"}
-  D1 -- "greeting, capability, repeat-back,<br/>order/approve request → refuse" --> SPEAK
+  D1 -- "greeting, capability, repeat-back,<br/>Instamart order → not supported" --> SPEAK
   D1 -- "shopping need" --> B["Backend model receives the request<br/>+ BACKEND_INSTRUCTIONS<br/>+ session profile (name, address form)<br/>+ household memory summary ⟨in progress⟩"]
 
   B --> D2{"D2 · Is the request clear enough?<br/>(model)"}
@@ -93,7 +93,7 @@ flowchart TD
 
 | # | Decision | Decided by | Enforced in code? |
 |---|---|---|---|
-| D1 | Answer directly vs hand off to the backend model | GPT-Live (instructions) | No — but voice has no order/approve tool, so it can't act wrongly |
+| D1 | Answer directly vs hand off to the backend model | GPT-Live (instructions) | No — and no answer can order: the only order path is the user's tap on the order card |
 | D2 | Is the request clear? Ask for more context? | Backend model (instructions) | No — rules: at most one question, never re-ask what was said |
 | D3 | Check memory first | Backend model calls `recall_household_preferences` | **Today: no** (model may skip it — the Diet Coke miss). **In progress:** memory summary at session start + memory-annotated search results, so remembered items are always in front of the model |
 | D4 | Add vs ask which variant/store | Backend model (instructions + few-shot examples) | Partly — store ambiguity on bills returns `needs_store` from code |
@@ -102,6 +102,7 @@ flowchart TD
 | D7 | Remember on request ("yaad rakhna…") | Backend model: `remember_preference` `mode: "explicit"` → read-back → `confirm_memory` | **Yes:** stays a pending proposal until `confirm_memory(confirm)`; forget-all needs a token issued in the same session |
 | D8 | Suggest a preference from repeated choices (tier 2) | Code: basket adds are recorded; after a conversation save/archive `choice_signals.propose_from_choices` creates a pending proposal (same brand+pack in ≥3 conversations, or the same store every time both offered it) | **Yes:** never active without a yes; offered at most once per session (attached to a matching `add_to_basket` result); rejected/deleted suggestions never return |
 | D9 | Apply saved rules to search | Code (`memory/household_rules.py` in `search_products`) | **Yes:** `avoid_store` skips that store's search (and an earlier option from it cannot be added), `avoid_product`/`avoid_brand` hide options unless the query asks for them (then `avoided: true`), `prefer_*` adds `preferred: true` (separate from `remembered`) |
+| D10 | Prepare an order card | Backend model calls `prepare_order` on an explicit order request | **Yes, for the order itself:** the tool only shows the card; only the user's tap on **Place order** approves and orders, and code re-checks the bound confirmation first. Calling it at the wrong time can only show a card |
 
 ### Deterministic checks (code, every call)
 
@@ -119,7 +120,39 @@ flowchart TD
 | Bill arithmetic in paise | `backend/app/shopping/basket.py` | Model-generated maths |
 | Approval bound to basket revision, conditional DB writes | `backend/app/shopping/approval.py`, `checkout.py` | Approving/ordering a basket the user didn't see |
 | Accepted current terms for consequential actions | `backend/app/legal_consent.py` dependency | Acting before consent |
-| No voice tool can approve or place orders | tool list | Spoken "yes" becoming an order |
+| No voice/typed tool can approve or place orders; `prepare_order` only shows the order card | `backend/app/voice/order_tools.py` | Spoken or typed "yes" becoming an order |
+| Order card tap: confirmation belongs to this user, is open (single-use, not cancelled/replaced), unexpired (5 min, capped by the bill), and the basket revision, address, approval, approval fingerprint, quote digest and payable are unchanged; Zepto only; accepted terms | `backend/app/shopping/order_confirmation.py`, `POST /api/orders/confirm` | Ordering a stale, edited, replayed, cancelled or someone else's bill |
+| Tap runs the existing approve + COD checkout: idempotency key `order-confirmation:<id>`, durable one-shot claim per approval, fresh re-quote must match, outcome-unknown never retried | `backend/app/shopping/checkout.py` | Double orders, price drift, blind retries |
+
+## Placing an order (one tap)
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant A as Assistant (voice or typed)
+  participant B as Backend
+  participant Z as Zepto
+  U->>A: "order kar do"
+  A->>B: prepare_order(store)
+  B->>B: current bill? else request_approval path (quote)
+  B->>B: bind confirmation (user, basket rev, approval, quote digest, payable, address; 5 min, single use)
+  B-->>U: order card: items, total, Cash on delivery, Deliver to, Expires in, Place order · ₹…, Cancel
+  A-->>U: "Zepto, do items, … rupaye, cash on delivery, Home par. Screen par 'Place order' dabaiye."
+  U->>B: tap Place order → POST /api/orders/confirm
+  B->>B: re-check every binding, consume the confirmation
+  B->>B: approve (fingerprint) → COD checkout claim
+  B->>Z: confirm COD (once)
+  Z-->>B: order id
+  B-->>U: card: "Order placed · #id"
+  B-->>A: voice: session.commentary.append · typed: server note on the next turn
+  A-->>U: "Order ho gaya" (only now)
+```
+
+Cancel (`POST /api/orders/cancel`) invalidates the confirmation at once. A newer card
+for the same store replaces the older one. Confirmations live in backend memory; a
+restart drops them and the user asks again. The order stays one-shot across processes
+because the checkout claim is unique per approval in PostgreSQL. Swiggy Instamart has
+no checkout, so `prepare_order` returns `unsupported` there.
 
 ## Context size per turn (prompt 1.8.0, o200k tokens)
 

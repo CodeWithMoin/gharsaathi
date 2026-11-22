@@ -9,6 +9,7 @@ import { createVoiceEventRecorder, voiceEventLogEnabled } from "./voice-event-re
 import type { ApprovalRequest } from "./basket/BasketPanel";
 import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
 import { applyAssistantEvent, type AssistantAddressFormRequest } from "./assistant-events.mjs";
+import type { OrderConfirmation } from "./order-confirmation.mjs";
 import { SmartTurnController, loadSmartTurnModel } from "./smart-turn";
 
 type VoiceStatus = "connecting" | "live" | "closing" | "error";
@@ -58,13 +59,13 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   });
 }
 
-export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, beforeSessionStart }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[], item: { itemKey?: string; itemLabel?: string }) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void; onApprovalRequested?: (provider: VoiceStore, request: ApprovalRequest) => void; onAddressForm?: (request: VoiceAddressFormRequest) => void; beforeSessionStart?: () => Promise<void> }) {
+export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onOrderConfirmation, beforeSessionStart }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[], item: { itemKey?: string; itemLabel?: string }) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void; onApprovalRequested?: (provider: VoiceStore, request: ApprovalRequest) => void; onAddressForm?: (request: VoiceAddressFormRequest) => void; onOrderConfirmation?: (confirmation: OrderConfirmation) => void; beforeSessionStart?: () => Promise<void> }) {
   const authenticatedFetch = useAuthenticatedFetch();
   // Parent callbacks change identity on unrelated re-renders (e.g. commerceMode);
   // reading them through a ref keeps the live session from restarting.
-  const callbacksRef = useRef({ onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, beforeSessionStart, authenticatedFetch });
+  const callbacksRef = useRef({ onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onOrderConfirmation, beforeSessionStart, authenticatedFetch });
   useEffect(() => {
-    callbacksRef.current = { onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, beforeSessionStart, authenticatedFetch };
+    callbacksRef.current = { onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onOrderConfirmation, beforeSessionStart, authenticatedFetch };
   });
   const [status, setStatus] = useState<VoiceStatus>("connecting");
   const [message, setMessage] = useState("Connecting voice…");

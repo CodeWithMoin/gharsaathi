@@ -22,6 +22,7 @@ The product should do the work; the user should make important decisions. Do not
 - Offers: calculate whether thresholds/coupons genuinely save money. Never add irrelevant items just to unlock an offer.
 - Memory: learn explicit household preferences such as brands, sizes, quantities, and corrections. Purchase history does not prove current stock or consumption.
 - Approval: every purchase requires explicit user approval. Approval is bound to the exact basket and price; material changes require renewed approval.
+- Orders are placed only by the user's explicit tap on "Place order" on the exact order card in the chat. The card is bound, server-side, to the user, the exact basket revision, the open bill (approval, quote and payable amount) and the delivery address; it is single-use, expires after 5 minutes, and Cancel invalidates it. Voice and typed chat may prepare the card (`prepare_order`) when the user explicitly asks to order, and ask for the tap; they can never approve or place an order themselves. A spoken or typed "yes" is not approval. Say an order was placed only after the provider confirmed it. Only Zepto cash on delivery is supported.
 - Account linking: use provider-authorised OAuth/login flows. Never ask users to paste passwords or OTPs into chat.
 - Before opening any Swiggy or Zepto OAuth page, verify the configured callback listener and full return path are reachable. Refuse to begin OAuth with a clear setup error if the callback is unavailable. For local Zepto development, this includes the privileged port-80 callback bridge.
 - Support: allow users to return to the same conversation, explain an issue in voice/text, and attach photos/videos. Support channels are used only when officially supported and permitted.
@@ -30,7 +31,7 @@ The product should do the work; the user should make important decisions. Do not
 ## Explicit non-goals
 
 - No predictive replenishment or inferred low-stock alerts.
-- No automatic purchases without explicit approval.
+- No automatic purchases without explicit approval (the user's tap on the bound order card, or the on-screen approve + COD buttons).
 - No unsolicited calls to the user.
 - No general-purpose assistant.
 - No automatic refund/replacement decisions.
