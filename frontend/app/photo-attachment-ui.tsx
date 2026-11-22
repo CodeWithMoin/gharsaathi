@@ -3,7 +3,7 @@
 import { Camera, CircleNotch, Image as ImageIcon, Paperclip, WarningCircle, X } from "@phosphor-icons/react";
 import { type ChangeEvent, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
-import { CAMERA_ACCEPT, GALLERY_ACCEPT, JPEG_QUALITY, MAX_UPLOAD_BYTES, attachmentIdFor, downscaleSize, idlePhoto, isHeif, photoReducer, uploadErrorMessage, validatePhotoFile, type PhotoState } from "./photo-attachment.mjs";
+import { CAMERA_ACCEPT, GALLERY_ACCEPT, JPEG_QUALITY, MAX_UPLOAD_BYTES, attachmentIdFor, downscaleSize, idlePhoto, isHeif, isPhotoThumbnail, photoReducer, uploadErrorMessage, validatePhotoFile, type PhotoState } from "./photo-attachment.mjs";
 import { CameraDialog, detectCameraPath } from "./camera-dialog";
 import { InputDialog } from "./ui/input-dialog";
 
@@ -87,13 +87,16 @@ export function usePhotoAttachment() {
       dispatch({ type: "rejected", token, message: problem ?? "No photo was chosen." });
       return;
     }
-    dispatch({ type: "start", token, previewUrl: null });
+    // Shown at once from the picked file; replaced by the prepared JPEG below.
+    const early = isHeif(file) ? null : URL.createObjectURL(file);
+    setPreview(early);
+    dispatch({ type: "start", token, previewUrl: early });
     try {
       const blob = await preparePhoto(file);
       if (token !== tokenRef.current) return;
       const previewUrl = isHeif(file) && blob === file ? null : URL.createObjectURL(blob);
       setPreview(previewUrl);
-      dispatch({ type: "start", token, previewUrl });
+      dispatch({ type: "preview", token, previewUrl });
       const body = new FormData();
       body.append("file", blob, blob === file ? file.name || "photo.heic" : "photo.jpg");
       const response = await authenticatedFetch(`${API_BASE_URL}/api/chat/attachments`, { method: "POST", body, cache: "no-store" });
@@ -101,13 +104,13 @@ export function usePhotoAttachment() {
         dispatch({ type: "failed", token, message: uploadErrorMessage(response.status) });
         return;
       }
-      const data = await response.json() as { attachment_id?: unknown };
+      const data = await response.json() as { attachment_id?: unknown; thumbnail?: unknown };
       if (typeof data.attachment_id !== "string") throw new Error("The photo couldn't be uploaded. Try again.");
       if (token !== tokenRef.current) {
         discardOnServer(data.attachment_id);
         return;
       }
-      dispatch({ type: "uploaded", token, attachmentId: data.attachment_id });
+      dispatch({ type: "uploaded", token, attachmentId: data.attachment_id, thumbnail: typeof data.thumbnail === "string" ? data.thumbnail : null });
     } catch (cause) {
       dispatch({ type: "failed", token, message: cause instanceof Error && cause.message ? cause.message : "The photo couldn't be uploaded. Try again." });
     }
@@ -128,7 +131,14 @@ export function usePhotoAttachment() {
     dispatch({ type: "consumed", attachmentId });
   }, []);
 
-  return { state, attach, remove, consumed };
+  /** Hand the current preview URL to a chat bubble; the hook no longer revokes it. */
+  const takePreview = useCallback(() => {
+    const url = previewRef.current;
+    previewRef.current = null;
+    return url;
+  }, []);
+
+  return { state, attach, remove, consumed, takePreview };
 }
 
 /** Photo button: opens a small sheet with Take photo / Choose from gallery. */
@@ -179,6 +189,33 @@ export function PhotoAttachButton({ onFile, disabled = false, compact = false }:
       </div>
     </InputDialog>
     <CameraDialog open={cameraOpen} onClose={() => setCameraOpen(false)} onPhoto={onFile} onChooseFiles={chooseFiles} />
+  </>;
+}
+
+/** The photo in the user's chat bubble; tap opens a larger view. Old chats have no photo and show text only. */
+export function PhotoBubbleImage({ thumbnail, preview }: { thumbnail?: string | null; preview?: string | null }) {
+  const [open, setOpen] = useState(false);
+  // This session's sharper local copy first; reopened chats have only the saved thumbnail.
+  const local = preview?.startsWith("blob:") ? preview : null;
+  const small = local ?? (isPhotoThumbnail(thumbnail) ? thumbnail : null);
+  const large = small;
+  if (!small) return null;
+  return <>
+    <button type="button" onClick={() => setOpen(true)} aria-label="View attached photo" aria-haspopup="dialog" className="block overflow-hidden rounded-2xl border border-accent-border bg-surface-muted transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+      {/* eslint-disable-next-line @next/next/no-img-element -- local data/blob thumbnail, never a remote image */}
+      <img src={small} alt="Attached photo" className="block max-h-48 w-auto max-w-[min(14rem,60vw)] object-cover" />
+    </button>
+    <InputDialog
+      open={open}
+      title="Your photo"
+      description="The full photo was deleted after GharSaathi read it; this is a small copy saved with the chat."
+      onClose={() => setOpen(false)}
+      widthClassName="sm:max-w-2xl"
+      footer={({ requestClose }) => <button type="button" onClick={() => requestClose("cancel")} className="min-h-11 w-full rounded-full border border-accent-border px-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">Close</button>}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- local data/blob image, never a remote image */}
+      {large && <img src={large} alt="Attached photo, larger view" className="mx-auto max-h-[70dvh] w-auto max-w-full rounded-2xl object-contain" />}
+    </InputDialog>
   </>;
 }
 
