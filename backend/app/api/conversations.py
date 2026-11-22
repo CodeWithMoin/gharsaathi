@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 
 from app.conversations.repository import ConversationRepository
 from app.conversations.schemas import (
@@ -10,6 +10,8 @@ from app.conversations.schemas import (
 )
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 from app.database.models import Conversation
+from app.database.session import get_session_factory
+from app.memory.choice_signals import run_choice_check
 
 
 router = APIRouter()
@@ -78,11 +80,14 @@ async def save_current_conversation(
     body: ConversationStateUpsert,
     session: DbSessionDependency,
     actor: MemoryActorDependency,
+    background: BackgroundTasks,
 ) -> ConversationStateResponse:
     conversation = await ConversationRepository(session).upsert(
         actor.id,
         body.model_dump(mode="json"),
     )
+    # Repeated basket choices may become a pending memory suggestion (never active).
+    background.add_task(run_choice_check, get_session_factory(), actor.id)
     return ConversationStateResponse(
         id=conversation.id,
         updated_at=conversation.updated_at,
@@ -94,8 +99,10 @@ async def save_current_conversation(
 async def start_new_conversation(
     session: DbSessionDependency,
     actor: MemoryActorDependency,
+    background: BackgroundTasks,
 ) -> None:
     await ConversationRepository(session).archive_current(actor.id)
+    background.add_task(run_choice_check, get_session_factory(), actor.id)
 
 
 @router.post("/{conversation_id}/open", response_model=ConversationStateResponse)

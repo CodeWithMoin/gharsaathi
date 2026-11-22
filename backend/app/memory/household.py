@@ -106,11 +106,11 @@ _STORE_ALIASES: dict[str, str] = {
 }
 
 RULE_LABELS: dict[str, str] = {
-    "prefer_cheapest": "Sabse sasta option pehle",
-    "prefer_fastest_delivery": "Jaldi delivery wala option pehle",
-    "prefer_larger_packs": "Bade pack pehle",
-    "prefer_smaller_packs": "Chhote pack pehle",
-    "ask_before_substitute": "Badalne se pehle poochna",
+    "prefer_cheapest": "Show the cheapest option first",
+    "prefer_fastest_delivery": "Show the fastest delivery first",
+    "prefer_larger_packs": "Prefer larger packs",
+    "prefer_smaller_packs": "Prefer smaller packs",
+    "ask_before_substitute": "Ask before substituting an item",
 }
 
 MAX_ITEM_CHARS = 60
@@ -260,21 +260,24 @@ class PreferenceSpec(BaseModel):
 
 
 def summary_for(kind: str, item: str | None, value: str) -> str:
-    """A short Roman-Hinglish line built from structured fields only."""
+    """A short, language-neutral English line built from structured fields only.
+
+    The assistant rephrases it in the user's reply language; it is never spoken verbatim.
+    """
     store = STORE_LABELS.get(value, value)
     scope = f" ({item})" if item else ""
     if kind == "prefer_brand":
-        return f"{item}: hamesha {value}"
+        return f"{item}: always {value}"
     if kind == "prefer_pack_size":
-        return f"{item}: {value} wala pack"
+        return f"{item}: {value} pack"
     if kind == "prefer_store":
-        return f"{item or 'Saamaan'}: {store} se"
+        return f"{item or 'Shopping'}: order from {store}"
     if kind == "avoid_store":
-        return f"{store} se order nahi{scope}"
+        return f"Never order from {store}{scope}"
     if kind == "avoid_product":
-        return f"{value} kabhi suggest nahi karna"
+        return f"Never suggest {value}"
     if kind == "avoid_brand":
-        return f"{value} brand nahi{scope}"
+        return f"Avoid {value}{scope}"
     return RULE_LABELS.get(value, value)
 
 

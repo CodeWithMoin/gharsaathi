@@ -17,9 +17,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import (
+    MemoryChoiceSignal,
     MemoryEventType,
     MemoryItem,
     MemorySourceType,
@@ -190,11 +192,16 @@ class HouseholdPreferenceService:
         origin: MemoryOrigin,
         conversation_id: str | None,
         source: MemorySourceType,
+        extra_value: dict[str, str] | None = None,
     ) -> MemoryProposal:
+        extra = {key: value for key, value in (extra_value or {}).items() if value}
+        text = spec.summary()
+        if extra.get("pack_size"):
+            text = f"{text}, {extra['pack_size']}"
         return MemoryProposal(
             memory_type=spec.memory_type,
-            value=spec.to_value(origin),
-            text=spec.summary(),
+            value={**spec.to_value(origin), **extra},
+            text=text,
             source_type=source,
             source_conversation_id=conversation_id,
             sensitivity="low",
@@ -210,6 +217,7 @@ class HouseholdPreferenceService:
         origin: MemoryOrigin = "explicit",
         conversation_id: str | None = None,
         supersedes: MemoryItem | None = None,
+        extra_value: dict[str, str] | None = None,
     ) -> tuple[MemoryItem, bool]:
         """A pending proposal; returns (memory, created). Never active until confirmed."""
         check_policy(spec)
@@ -226,7 +234,7 @@ class HouseholdPreferenceService:
             else MemorySourceType.EXPLICIT_STATEMENT
         )
         memory = await self.memory.propose(
-            actor, await self._proposal(spec, origin, conversation_id, source)
+            actor, await self._proposal(spec, origin, conversation_id, source, extra_value)
         )
         if supersedes is not None:
             memory.supersedes_memory_id = supersedes.id
@@ -325,6 +333,11 @@ class HouseholdPreferenceService:
         items = await self.repository.list_memories(actor.id, None, include_deleted=False)
         for item in items:
             await self.memory.forget(actor, item.id)
+        # Repeated-choice signals go too, so nothing is re-suggested from before.
+        await self.session.execute(
+            delete(MemoryChoiceSignal).where(MemoryChoiceSignal.subject_id == actor.id)
+        )
+        await self.session.commit()
         return len(items)
 
     async def _owned(self, actor: MemorySubject, memory_id: UUID) -> MemoryItem:

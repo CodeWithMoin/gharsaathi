@@ -98,6 +98,10 @@ flowchart TD
 | D3 | Check memory first | Backend model calls `recall_household_preferences` | **Today: no** (model may skip it — the Diet Coke miss). **In progress:** memory summary at session start + memory-annotated search results, so remembered items are always in front of the model |
 | D4 | Add vs ask which variant/store | Backend model (instructions + few-shot examples) | Partly — store ambiguity on bills returns `needs_store` from code |
 | D5 | Call another tool or answer | Backend model | Hard cap: 6 rounds / 4 searches per turn (code, `sideband.py`) |
+| D6 | Remember a preference stated in passing (tier 1) | Backend model calls `remember_preference` / `update_preference` with `mode: "stated"` | **Yes:** code saves only with habit/rule words (`hamesha`, `kabhi nahi`, `sirf`, `mat … karna`) and refuses one-off words (`is baar`); a stated update must match a remembered item. Saved active at once; reply acknowledges with undo; `forget_preference` within 24 h restores what it replaced |
+| D7 | Remember on request ("yaad rakhna…") | Backend model: `remember_preference` `mode: "explicit"` → read-back → `confirm_memory` | **Yes:** stays a pending proposal until `confirm_memory(confirm)`; forget-all needs a token issued in the same session |
+| D8 | Suggest a preference from repeated choices (tier 2) | Code: basket adds are recorded; after a conversation save/archive `choice_signals.propose_from_choices` creates a pending proposal (same brand+pack in ≥3 conversations, or the same store every time both offered it) | **Yes:** never active without a yes; offered at most once per session (attached to a matching `add_to_basket` result); rejected/deleted suggestions never return |
+| D9 | Apply saved rules to search | Code (`memory/household_rules.py` in `search_products`) | **Yes:** `avoid_store` skips that store's search (and an earlier option from it cannot be added), `avoid_product`/`avoid_brand` hide options unless the query asks for them (then `avoided: true`), `prefer_*` adds `preferred: true` (separate from `remembered`) |
 
 ### Deterministic checks (code, every call)
 
@@ -109,6 +113,8 @@ flowchart TD
 | Opaque `option_id` → stored search result | search → basket | Invented products or prices |
 | Which store for the bill | `basket_tools.py` | Guessing a store (`needs_store`) |
 | Consent + household scoping | `backend/app/memory/recall.py` | Using history without consent or another user's data |
+| Preference memory policy: structured kinds, length caps, sensitive categories (health, religion/caste, finances, gender/sexuality, age, family details) refused | `backend/app/memory/household.py`, `household_service.py` | Storing free-text instructions or sensitive traits, in every tier and from the Settings edit route |
+| Preference consent (Settings switch) before any write or suggestion | `backend/app/memory/household_service.py` | Remembering when memory is off |
 | Swiggy 429 cooldown | `backend/app/commerce/swiggy/client.py` | Hammering a rate-limited account |
 | Bill arithmetic in paise | `backend/app/shopping/basket.py` | Model-generated maths |
 | Approval bound to basket revision, conditional DB writes | `backend/app/shopping/approval.py`, `checkout.py` | Approving/ordering a basket the user didn't see |

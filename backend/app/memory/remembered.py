@@ -97,7 +97,9 @@ def _product_size(product: Product) -> tuple[int, float, str] | None:
 
 def _matches(product: Product, store_id: str, item: RememberedItem) -> bool:
     if item.source == "confirmed_preference":
-        if item.preference == "product_avoidance":
+        if item.preference == "product_avoidance" or (
+            item.kind is not None and item.kind not in {"prefer_brand", "prefer_pack_size"}
+        ):
             return False
         haystack = f"{product.brand or ''} {product.name}"
         if item.brand and not name_tokens(item.brand) <= name_tokens(haystack):
@@ -164,7 +166,19 @@ def _summary_line(item: RememberedItem) -> str | None:
         return None
     if item.source == "confirmed_preference":
         size = clean_text(item.pack_size or "", 20)
-        label = "Avoids" if item.preference == "product_avoidance" else "Prefers"
+        if item.kind == "avoid_store" and item.store_id:
+            scope = clean_text(item.item or "", 30)
+            return f"- Never order from: {STORE_LABELS[item.store_id]}{f' ({scope})' if scope else ''}"
+        if item.kind == "rule":
+            return f"- Rule: {name}"
+        if item.kind == "prefer_store" and item.store_id:
+            scope = clean_text(item.item or "", 30)
+            return f"- Prefers store: {STORE_LABELS[item.store_id]}{f' ({scope})' if scope else ''}"
+        label = (
+            "Avoids"
+            if item.preference == "product_avoidance" or item.kind in {"avoid_product", "avoid_brand"}
+            else "Prefers"
+        )
         return f"- {label}: {name}{f', {size}' if size and size not in name else ''}"
     parts = [name]
     if item.store_id:

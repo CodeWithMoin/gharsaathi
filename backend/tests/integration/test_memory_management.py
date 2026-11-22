@@ -198,3 +198,31 @@ def test_forget_all_needs_a_single_use_token_for_the_same_person(api: TestClient
     assert api.post(
         "/api/memory/forget-all", headers=alice, json={"confirm_token": token["confirm_token"]}
     ).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_conversation_save_turns_repeated_choices_into_a_pending_suggestion(
+    api: TestClient, session_factory
+) -> None:
+    from app.database.models import MemoryChoiceSignal
+
+    frank = as_user("frank-memory")
+    _allow(api, frank)
+    async with session_factory() as session:
+        actor = await MemoryService(session).actor_for_external_id("frank-memory")
+        for occasion in ("c1", "c2", "c3"):
+            session.add(
+                MemoryChoiceSignal(
+                    subject_id=actor.id, occasion_key=occasion, provider="swiggy_instamart",
+                    item="milk", product_name="Amul Taaza Toned Milk", brand="Amul",
+                    pack_size="1 L", competing_providers=[],
+                )
+            )
+        await session.commit()
+
+    saved = api.put("/api/conversations/current", headers=frank, json={"submitted_query": "doodh"})
+    assert saved.status_code == 200
+    (suggestion,) = api.get("/api/memory?status=proposed", headers=frank).json()
+    assert suggestion["origin"] == "inferred"
+    assert suggestion["value"]["brand"] == "Amul" and suggestion["value"]["pack_size"] == "1 L"
+    assert _active(api, frank) == []

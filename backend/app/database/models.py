@@ -591,3 +591,30 @@ class ProviderAddressState(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class MemoryChoiceSignal(Base):
+    """One product the person added to a basket, for repeated-choice suggestions.
+
+    Recorded only while preference memory is on, and deleted by forget-all. It is
+    behaviour, not a preference: at most it creates a pending proposal.
+    """
+
+    __tablename__ = "memory_choice_signals"
+    __table_args__ = (Index("ix_memory_choice_signals_subject_created", "subject_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    subject_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("memory_subjects.id", ondelete="CASCADE"), index=True
+    )
+    # The open conversation when the choice was made, else the voice/chat session.
+    occasion_key: Mapped[str] = mapped_column(String(128))
+    provider: Mapped[str] = mapped_column(String(32))
+    item: Mapped[str] = mapped_column(String(120))
+    product_name: Mapped[str] = mapped_column(String(500))
+    brand: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    pack_size: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    competing_providers: Mapped[list[str]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
