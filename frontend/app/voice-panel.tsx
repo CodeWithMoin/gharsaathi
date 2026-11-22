@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "framer-motion";
-import { ArrowClockwise, CircleNotch, Microphone, ShieldCheck, SpeakerHigh, Stop, WarningCircle } from "@phosphor-icons/react";
+import { ArrowClockwise, CircleNotch, Keyboard, Microphone, ShieldCheck, SpeakerHigh, Stop, WarningCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mapRealtimeBoundaryEvent, mapRealtimeTranscriptEvent } from "./voice-transcript.mjs";
 import { createTranscriptTurnTracker } from "./voice-transcript-turns.mjs";
@@ -13,6 +13,7 @@ import type { OrderConfirmation } from "./order-confirmation.mjs";
 import { SmartTurnController, loadSmartTurnModel } from "./smart-turn";
 import { CHAT_SAVE_WAIT_MS, VOICE_DATA_CHANNEL_ID, canRequestSessionBeforeMic, createStartTimer, createThrottle, microphonePermission, settleWithin } from "./voice-start.mjs";
 import { voicePillLabel, type VoiceSpeaker } from "./voice-levels.mjs";
+import { VOICE_START_TIMEOUT_MS, startDeadline, voiceFailureView, voiceStartError, voiceStartTimeoutError, voiceSupport, type VoiceFailureView } from "./voice-mic.mjs";
 import { VoiceLevelMeter } from "./voice-meter";
 
 type VoiceStatus = "connecting" | "live" | "closing" | "error";
@@ -58,7 +59,7 @@ const prewarmAllowed = createThrottle(PREWARM_INTERVAL_MS);
 export function useVoicePrewarm() {
   const authenticatedFetch = useAuthenticatedFetch();
   return useCallback(() => {
-    if (!prewarmAllowed()) return;
+    if (voiceSupport(window) !== "ok" || !prewarmAllowed()) return;
     void authenticatedFetch(`${API_BASE_URL}/api/voice/prewarm`, { method: "POST" }).catch(() => undefined);
   }, [authenticatedFetch]);
 }
@@ -71,7 +72,7 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       peer.removeEventListener("icegatheringstatechange", onChange);
-      reject(new Error("The voice connection took too long to start. Please try again."));
+      reject(voiceStartTimeoutError());
     }, 10_000);
     function onChange() {
       if (peer.iceGatheringState !== "complete") return;
@@ -103,6 +104,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
   const [speaker, setSpeaker] = useState<VoiceSpeaker>(null);
   const [expanded, setExpanded] = useState(false);
   const [playBlocked, setPlayBlocked] = useState(false);
+  const [canRetry, setCanRetry] = useState(true);
   const reduceMotion = useReducedMotion() ?? false;
   const meterRef = useRef<VoiceLevelMeter | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -117,8 +119,11 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
   const assistantScriptRef = useRef<"roman" | "native">("roman");
   const eventRecorderRef = useRef<ReturnType<typeof voiceEventRecorder> | null>(null);
   const attemptRef = useRef(0);
+  const deadlineRef = useRef<{ clear(): void } | null>(null);
 
   const cleanup = useCallback(() => {
+    deadlineRef.current?.clear();
+    deadlineRef.current = null;
     micRef.current?.getTracks().forEach((track) => track.stop());
     micRef.current = null;
     channelRef.current?.close();
@@ -135,6 +140,17 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     if (audioRef.current) audioRef.current.muted = false;
     if (audioRef.current) audioRef.current.srcObject = null;
   }, []);
+
+  // Every failed start or session ends here: mic tracks stopped, peer closed,
+  // any pending step of this attempt ignored.
+  const fail = useCallback((view: VoiceFailureView) => {
+    attemptRef.current += 1;
+    cleanup();
+    setStatus("error");
+    setBusy(false);
+    setCanRetry(view.retry);
+    setMessage(view.message);
+  }, [cleanup]);
 
   const handleTranscriptEvent = useCallback((event: LiveEvent) => {
     const boundary = mapRealtimeBoundaryEvent(event);
@@ -239,6 +255,14 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     setSpeaker(null);
     setBusy(false);
     setPlayBlocked(false);
+    setCanRetry(true);
+    // Outside https/localhost the browser has no mic API: no session, no prompt.
+    const support = voiceSupport(window);
+    if (support !== "ok") {
+      fail(voiceFailureView({ support }));
+      return;
+    }
+    deadlineRef.current = startDeadline(VOICE_START_TIMEOUT_MS, (error) => { if (current()) fail(voiceFailureView({ error })); });
     const meter = new VoiceLevelMeter((next) => { if (current()) setSpeaker(next); });
     meterRef.current = meter;
     meter.setCanvas(canvasRef.current, reduceMotionRef.current);
@@ -246,15 +270,17 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     // The server reads this chat's context at session start, so the pending save
     // gets a short head start, but never holds voice back for long.
     const chatSaved = settleWithin(callbacksRef.current.beforeSessionStart?.(), CHAT_SAVE_WAIT_MS);
-    const permission = microphonePermission(typeof navigator === "undefined" ? undefined : navigator);
-    let micError: unknown = null;
-    const micReady = navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS }).then((stream) => {
-      timer.mark("mic");
-      if (!current()) stream.getTracks().forEach((track) => track.stop());
-      return stream;
-    });
-    micReady.catch((error: unknown) => { micError = error; });
+    let pendingMic: Promise<MediaStream> | null = null;
     try {
+      const permission = microphonePermission(navigator);
+      let micError: unknown = null;
+      const micReady = navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS }).then((stream) => {
+        timer.mark("mic");
+        if (!current()) stream.getTracks().forEach((track) => track.stop());
+        return stream;
+      });
+      pendingMic = micReady;
+      micReady.catch((error: unknown) => { micError = error; });
       const peer = new RTCPeerConnection();
       peerRef.current = peer;
       // The audio m-line is negotiated now; the mic track is swapped in when it opens.
@@ -278,12 +304,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         });
       });
       peer.addEventListener("connectionstatechange", () => {
-        if (current() && peer.connectionState === "failed") {
-          attemptRef.current += 1;
-          setStatus("error");
-          setMessage("The voice connection dropped. Please try again.");
-          cleanup();
-        }
+        if (current() && peer.connectionState === "failed") fail(voiceFailureView({ error: voiceStartError("The voice connection dropped. Please try again.") }));
       });
 
       const channel = peer.createDataChannel("oai-events", { negotiated: true, id: VOICE_DATA_CHANNEL_ID });
@@ -296,6 +317,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
           eventRecorderRef.current?.record(event, "datachannel");
           if (event.type === "session.started") {
             timer.mark("session_started");
+            deadlineRef.current?.clear();
             eventRecorderRef.current?.recordTiming(timer.stages(), "client");
             setStatus("live");
             setMessage("Listening—say what you need.");
@@ -304,9 +326,8 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
           } else if (event.type === "error" && event.error?.client_event_id?.startsWith(YIELD_EVENT_PREFIX)) {
             // A rejected yield request is not fatal; GPT-Live keeps its native turn-taking.
           } else if (event.type === "error") {
-            setStatus("error");
-            setMessage("The voice session stopped. Please try again.");
             console.warn("[voice] session error", event.error?.message);
+            fail(voiceFailureView({ error: voiceStartError("The voice session stopped. Please try again.") }));
           } else if (event.type === "session.closed") callbacksRef.current.onClose();
         } catch {
           // Ignore malformed realtime events.
@@ -319,7 +340,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       timer.mark("ice");
       if (!current()) return;
       const sdp = peer.localDescription?.sdp;
-      if (!sdp) throw new Error("Could not set up the mic connection. Please try again.");
+      if (!sdp) throw voiceStartError("Could not set up the mic connection. Please try again.");
       let mic: MediaStream | null = null;
       // A session is billed once created, so with a permission prompt pending
       // the request waits for the user's answer.
@@ -345,7 +366,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       const payload = await response.json().catch(() => null);
       timer.mark("session_created");
       if (!current()) return;
-      if (!response.ok) throw new Error(payload && typeof payload.detail === "string" ? payload.detail : "Could not start GharSaathi voice. Please try again.");
+      if (!response.ok) throw voiceStartError(payload && typeof payload.detail === "string" ? payload.detail : "Could not start GharSaathi voice. Please try again.");
       eventRecorderRef.current?.recordTiming(payload.start_timing_ms, "server");
       await peer.setRemoteDescription({ type: "answer", sdp: payload.sdp });
       timer.mark("answer_applied");
@@ -360,14 +381,11 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         void startSmartTurn(attempt, mic, payload.turn_taking.yield_instruction);
       }
     } catch (error) {
+      void pendingMic?.then((stream) => stream.getTracks().forEach((track) => track.stop()), () => undefined);
       if (!current()) return;
-      const denied = error instanceof DOMException && error.name === "NotAllowedError";
-      setStatus("error");
-      setMessage(denied ? "Voice shopping needs microphone permission." : error instanceof Error ? error.message : "Could not start voice. Please try again.");
-      cleanup();
-      void micReady.then((stream) => stream.getTracks().forEach((track) => track.stop()), () => undefined);
+      fail(voiceFailureView({ error }));
     }
-  }, [cleanup, handleTranscriptEvent, listenForToolEvents, startSmartTurn]);
+  }, [cleanup, fail, handleTranscriptEvent, listenForToolEvents, startSmartTurn]);
 
   useEffect(() => {
     void start();
@@ -442,7 +460,8 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
           <span className="ml-auto flex min-w-0 items-center gap-1"><ShieldCheck size={12} className="shrink-0" /><span className="truncate">Mic is on until you stop · chat is saved</span></span>
         </div>
         {(status === "error" || playBlocked) && <div className="mt-3 flex gap-2">
-          {status === "error" && <button type="button" onClick={() => void start()} className="flex items-center gap-1.5 rounded-full bg-inverse px-4 py-2 text-xs font-semibold text-on-inverse transition-transform duration-150 ease-out active:scale-[.97]"><ArrowClockwise size={14} /> Try again</button>}
+          {status === "error" && canRetry && <button type="button" onClick={() => void start()} className="flex items-center gap-1.5 rounded-full bg-inverse px-4 py-2 text-xs font-semibold text-on-inverse transition-transform duration-150 ease-out active:scale-[.97]"><ArrowClockwise size={14} /> Try again</button>}
+          {status === "error" && <button type="button" onClick={closeConversation} className="flex items-center gap-1.5 rounded-full border border-border-strong px-4 py-2 text-xs font-semibold text-ink transition-transform duration-150 ease-out active:scale-[.97]"><Keyboard size={14} /> Type instead</button>}
           {playBlocked && status !== "error" && <button type="button" onClick={playVoice} className="flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-on-accent transition-transform duration-150 ease-out active:scale-[.97]"><SpeakerHigh size={14} weight="fill" /> Turn on sound</button>}
         </div>}
       </motion.div>}
