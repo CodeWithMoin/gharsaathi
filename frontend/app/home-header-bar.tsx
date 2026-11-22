@@ -31,7 +31,7 @@ export function HomeHeader({ address, basketCount, orderChip, userName, userImag
 }) {
   // The header blends into the page; a hairline and soft shadow appear only once content scrolls under it.
   const scrolled = useScrolled();
-  return <header style={{ top }} className={`fixed inset-x-0 top-0 z-30 border-b bg-surface-muted/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl backdrop-saturate-150 transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none ${scrolled ? "border-border shadow-[0_12px_30px_-26px_rgb(var(--shadow)/.55)]" : "border-transparent shadow-none"}`}>
+  return <header style={{ top }} className={`fixed inset-x-0 top-0 z-30 border-b bg-surface-muted pt-[env(safe-area-inset-top)] transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none ${scrolled ? "border-border shadow-[0_12px_30px_-26px_rgb(var(--shadow)/.55)]" : "border-transparent shadow-none"}`}>
     <div className="mx-auto flex h-[68px] max-w-4xl items-center gap-2 pl-3 pr-4 sm:px-6">
       <button type="button" onClick={onOpenChats} aria-label="Open shopping chats" className={iconButton}><List size={22} weight="bold" /></button>
       <button type="button" onClick={onOpenAddress} disabled={address.state === "checking"} aria-label={address.accessibleLabel} data-testid="header-address" className="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 rounded-2xl px-1.5 py-1 text-left outline-none transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-focus/50 disabled:cursor-default">
