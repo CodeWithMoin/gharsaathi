@@ -2,13 +2,16 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, field_validator, model_serializer
 
+from app.photos.images import validate_thumbnail
 from app.shopping.models import DisplayedPrice
 
 # A long voice session produces many spoken turns, and a single turn can run long.
 MAX_CHAT_MESSAGES = 1_000
 MAX_CHAT_MESSAGE_CHARS = 20_000
+# Photo thumbnails kept per chat (newest win); older photo turns keep their text.
+MAX_CHAT_THUMBNAILS = 20
 
 
 class PriceSnapshot(DisplayedPrice):
@@ -46,6 +49,21 @@ class ChatMessageSnapshot(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_CHAT_MESSAGE_CHARS)
     modality: Literal["text", "voice"] = "text"
     created_at: datetime
+    # The attached photo's small thumbnail (user turns only). An invalid one is
+    # dropped instead of rejecting the save; chats saved before this load with None.
+    photo_thumbnail: str | None = None
+
+    @field_validator("photo_thumbnail", mode="before")
+    @classmethod
+    def checked_thumbnail(cls, value: object) -> str | None:
+        return validate_thumbnail(value)
+
+    @model_serializer(mode="wrap")
+    def omit_missing_thumbnail(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        data = handler(self)
+        if data.get("photo_thumbnail") is None:
+            data.pop("photo_thumbnail", None)
+        return data
 
     @field_validator("content", mode="before")
     @classmethod
@@ -156,6 +174,19 @@ class ConversationStateUpsert(BaseModel):
     timeline: ChatTimelineSnapshot = Field(default_factory=ChatTimelineSnapshot)
     # One entry per searched item; chats saved before this field load with [].
     result_groups: list[ResultGroupSnapshot] = Field(default_factory=list, max_length=MAX_RESULT_GROUPS)
+
+    @field_validator("messages")
+    @classmethod
+    def capped_thumbnails(cls, value: list[ChatMessageSnapshot]) -> list[ChatMessageSnapshot]:
+        kept = 0
+        for message in reversed(value):
+            if message.photo_thumbnail is None:
+                continue
+            if message.role != "user" or kept >= MAX_CHAT_THUMBNAILS:
+                message.photo_thumbnail = None
+            else:
+                kept += 1
+        return value
 
     @field_validator("result_groups")
     @classmethod

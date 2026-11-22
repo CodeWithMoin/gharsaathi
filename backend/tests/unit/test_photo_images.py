@@ -1,5 +1,6 @@
 """Photo upload sanitising: type by magic bytes, size cap, corrupt files, metadata stripped."""
 
+import base64
 import io
 
 import pytest
@@ -7,11 +8,16 @@ from PIL import Image
 
 from app.photos.images import (
     MAX_LONG_SIDE,
+    MAX_THUMBNAIL_BYTES,
     MAX_UPLOAD_BYTES,
+    THUMBNAIL_LONG_SIDE,
+    THUMBNAIL_PREFIX,
     PhotoRejected,
     fit_within,
+    make_thumbnail,
     sanitize_photo,
     sniff_type,
+    validate_thumbnail,
 )
 
 GPS_IFD = 0x8825
@@ -137,3 +143,46 @@ def test_empty_upload_is_refused() -> None:
     with pytest.raises(PhotoRejected) as caught:
         sanitize_photo(b"")
     assert caught.value.reason == "empty"
+
+
+def test_thumbnail_is_small_metadata_free_and_validates() -> None:
+    noisy = Image.effect_noise((1600, 1200), 90).convert("RGB")
+    out = io.BytesIO()
+    noisy.save(out, format="JPEG", quality=95)
+    clean = sanitize_photo(out.getvalue())
+
+    thumbnail = make_thumbnail(clean.jpeg)
+
+    assert thumbnail is not None and thumbnail.startswith(THUMBNAIL_PREFIX)
+    data = base64.b64decode(thumbnail[len(THUMBNAIL_PREFIX):])
+    assert len(data) <= MAX_THUMBNAIL_BYTES
+    with Image.open(io.BytesIO(data)) as image:
+        assert max(image.size) <= THUMBNAIL_LONG_SIDE
+        assert len(image.getexif()) == 0 and "exif" not in image.info
+    assert validate_thumbnail(thumbnail) == thumbnail
+
+
+def as_data_url(data: bytes, prefix: str = THUMBNAIL_PREFIX) -> str:
+    return prefix + base64.b64encode(data).decode("ascii")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        42,
+        "https://example.com/photo.jpg",
+        "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+        THUMBNAIL_PREFIX + "not base64!!",
+        THUMBNAIL_PREFIX + "A" * (MAX_THUMBNAIL_BYTES * 2),
+    ],
+)
+def test_thumbnail_validation_refuses_anything_else(value) -> None:
+    assert validate_thumbnail(value) is None
+
+
+def test_thumbnail_validation_refuses_png_large_or_exif_jpegs() -> None:
+    assert validate_thumbnail(as_data_url(encoded("PNG", (40, 30)))) is None
+    assert validate_thumbnail(as_data_url(encoded("JPEG", (640, 480)))) is None
+    assert validate_thumbnail(as_data_url(jpeg_with_gps((64, 48)))) is None
+    assert validate_thumbnail(as_data_url(encoded("JPEG", (64, 48)))) is not None

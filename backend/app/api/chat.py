@@ -15,7 +15,7 @@ from app.database.session import get_session_factory
 from app.dependencies import ChatServiceDependency, PhotoStoreDependency
 from app.legal_consent import ConsentedUserIdDependency
 from app.memory.service import MemoryService
-from app.photos.images import MAX_UPLOAD_BYTES, PhotoRejected, sanitize_photo
+from app.photos.images import MAX_UPLOAD_BYTES, PhotoRejected, make_thumbnail, sanitize_photo
 from app.photos.store import TTL_SECONDS
 from app.voice.ui_ack import UiAck
 
@@ -58,6 +58,8 @@ class AttachmentResponse(BaseModel):
     expires_in_seconds: int
     width: int
     height: int
+    # Small metadata-free JPEG data URL for the chat bubble; saved with the chat.
+    thumbnail: str | None = None
 
 
 class ChatTurnResponse(BaseModel):
@@ -146,6 +148,7 @@ async def upload_attachment(
         expires_in_seconds=int(TTL_SECONDS),
         width=clean.width,
         height=clean.height,
+        thumbnail=make_thumbnail(clean.jpeg),
     )
 
 

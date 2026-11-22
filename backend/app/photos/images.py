@@ -9,6 +9,8 @@ carried over.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import io
 import warnings
 from dataclasses import dataclass
@@ -29,6 +31,13 @@ MAX_LONG_SIDE = 1600
 JPEG_QUALITY = 85
 # Decoded pixel cap (about 7000 x 7000); larger files are refused, not decoded.
 MAX_DECODED_PIXELS = 50_000_000
+# Chat-bubble thumbnail kept with the conversation after the full image is discarded.
+THUMBNAIL_LONG_SIDE = 320
+MAX_THUMBNAIL_BYTES = 40 * 1024
+THUMBNAIL_PREFIX = "data:image/jpeg;base64,"
+MAX_THUMBNAIL_CHARS = len(THUMBNAIL_PREFIX) + (MAX_THUMBNAIL_BYTES + 2) // 3 * 4
+_THUMBNAIL_QUALITIES = (72, 60, 48, 36)
+_METADATA_KEYS = {"exif", "icc_profile", "xmp", "XML:com.adobe.xmp", "photoshop", "comment", "adobe", "iptc"}
 _HEIF_BRANDS = {b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1"}
 
 
@@ -107,3 +116,61 @@ def sanitize_photo(data: bytes) -> CleanPhoto:
     out = io.BytesIO()
     clean.save(out, format="JPEG", quality=JPEG_QUALITY, optimize=True)
     return CleanPhoto(jpeg=out.getvalue(), width=clean.width, height=clean.height)
+
+
+def _pixels_only(image: Image.Image) -> Image.Image:
+    return Image.frombytes("RGB", image.size, image.convert("RGB").tobytes())
+
+
+def make_thumbnail(clean_jpeg: bytes) -> str | None:
+    """A <=320 px, <=40 KB JPEG data URL made from an already-sanitised photo.
+
+    Re-encoded from pixels only, so it carries no metadata. None if it cannot be
+    made within the cap (the chat then shows the text placeholder only).
+    """
+
+    try:
+        with Image.open(io.BytesIO(clean_jpeg)) as image:
+            image.load()
+            small = image.convert("RGB")
+    except (UnidentifiedImageError, OSError, ValueError, SyntaxError, EOFError):
+        return None
+    for side in (THUMBNAIL_LONG_SIDE, 240, 160):
+        size = fit_within(small.width, small.height, side)
+        resized = _pixels_only(small.resize(size, Image.Resampling.LANCZOS) if size != small.size else small)
+        for quality in _THUMBNAIL_QUALITIES:
+            out = io.BytesIO()
+            resized.save(out, format="JPEG", quality=quality, optimize=True)
+            data = out.getvalue()
+            if len(data) <= MAX_THUMBNAIL_BYTES:
+                return THUMBNAIL_PREFIX + base64.b64encode(data).decode("ascii")
+    return None
+
+
+def validate_thumbnail(value: object) -> str | None:
+    """The data URL if it is a small, metadata-free JPEG thumbnail; otherwise None.
+
+    Saved chats come from the browser, so a thumbnail is checked again on every
+    save instead of being trusted.
+    """
+
+    if not isinstance(value, str) or not value.startswith(THUMBNAIL_PREFIX) or len(value) > MAX_THUMBNAIL_CHARS:
+        return None
+    try:
+        data = base64.b64decode(value[len(THUMBNAIL_PREFIX):], validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    if not data or len(data) > MAX_THUMBNAIL_BYTES or sniff_type(data) != "jpeg":
+        return None
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(data)) as image:
+                if image.format != "JPEG" or max(image.size) > THUMBNAIL_LONG_SIDE or min(image.size) < 1:
+                    return None
+                if _METADATA_KEYS & set(image.info) or image.getexif():
+                    return None
+                image.load()
+    except (UnidentifiedImageError, Image.DecompressionBombError, Image.DecompressionBombWarning, OSError, ValueError, SyntaxError, EOFError):
+        return None
+    return value

@@ -32,14 +32,14 @@ import { OrderConfirmationCard } from "./order-confirmation-card";
 import { orderCardIndex, type OrderCardState, type OrderConfirmation } from "./order-confirmation.mjs";
 import { OrderStatusCard } from "./order-status-card";
 import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
-import { PhotoAttachButton, PhotoChip, usePhotoAttachment } from "./photo-attachment-ui";
-import { attachmentIdFor, canSend, photoMessageContent } from "./photo-attachment.mjs";
+import { PhotoAttachButton, PhotoBubbleImage, PhotoChip, usePhotoAttachment } from "./photo-attachment-ui";
+import { attachmentIdFor, canSend, photoBubbleText, photoMessageContent } from "./photo-attachment.mjs";
 
 const LEGACY_CHAT_STORAGE_KEY = "gharsaathi:conversation:v1";
 
 type Address = { id: string; address_line: string; category?: string; tag?: string };
 type CommerceMode = "demo" | "live";
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string };
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string; photo_thumbnail?: string | null; photo_preview?: string | null };
 type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; timeline?: unknown; result_groups?: unknown; updated_at: string };
 type LegacyConversation = { submittedQuery?: string; products?: Product[]; searched?: boolean };
 type ChatTurnResponse = { conversation_id: string | null; reply: string; ui_events: unknown[] };
@@ -757,8 +757,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     const swiggyReady = connected === true && Boolean(addressId);
     const zeptoReady = zeptoConnected === true && Boolean(zeptoAddressId);
     followScrollRef.current = true;
-    // A photo is never saved with the chat; the turn shows a "Photo" placeholder.
-    const userMessage: ChatMessage = { id: `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, role: "user", content: attachmentId ? photoMessageContent(clean) : clean, modality: "text", created_at: new Date().toISOString() };
+    // The full photo is never saved with the chat: the turn keeps a "Photo" placeholder and
+    // the server-made small thumbnail; the sharper local preview lives only in this session.
+    const photoFields = attachmentId && photo.state.status === "ready" ? { photo_thumbnail: photo.state.thumbnail, photo_preview: photo.takePreview() } : {};
+    const userMessage: ChatMessage = { id: `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, role: "user", content: attachmentId ? photoMessageContent(clean) : clean, modality: "text", created_at: new Date().toISOString(), ...photoFields };
     const withUser = [...chatMessagesRef.current, userMessage];
     chatMessagesRef.current = withUser;
     setChatMessages(withUser);
@@ -1055,7 +1057,12 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
             const chatMessage = item.message;
             return chatMessage.role === "user" ? (
               <motion.div key={chatMessage.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 flex justify-end pl-8 sm:pl-12">
-                <div className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[22px_8px_22px_22px] border border-accent-border bg-user-bubble px-5 py-3.5 text-[15px] leading-6 text-on-user-bubble">{chatMessage.content}</div>
+                {chatMessage.photo_thumbnail || chatMessage.photo_preview ? (
+                  <div className="flex max-w-full flex-col items-end gap-1.5">
+                    <PhotoBubbleImage thumbnail={chatMessage.photo_thumbnail} preview={chatMessage.photo_preview} />
+                    {photoBubbleText(chatMessage.content) && <div className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[22px_8px_22px_22px] border border-accent-border bg-user-bubble px-5 py-3.5 text-[15px] leading-6 text-on-user-bubble">{photoBubbleText(chatMessage.content)}</div>}
+                  </div>
+                ) : <div className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[22px_8px_22px_22px] border border-accent-border bg-user-bubble px-5 py-3.5 text-[15px] leading-6 text-on-user-bubble">{chatMessage.content}</div>}
               </motion.div>
             ) : (
               <motion.div key={chatMessage.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">

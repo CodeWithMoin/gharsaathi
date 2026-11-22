@@ -5,6 +5,7 @@
  */
 
 import { emptyTimeline, timelineSnapshot } from "./chat-timeline.mjs";
+import { savedPhotoFields } from "./photo-attachment.mjs";
 import { resultGroupsSnapshot } from "./result-groups.mjs";
 import { stripNonSpeechAnnotations } from "./transcript-annotations.mjs";
 
@@ -30,13 +31,14 @@ export function conversationSnapshot(state) {
     .map((message) => ({ ...message, content: (message.modality === "voice" ? stripNonSpeechAnnotations(message.content) : message.content).trim().slice(0, MAX_CHAT_MESSAGE_CHARS) }))
     .filter((message) => message.content)
     .slice(-MAX_CHAT_MESSAGES);
+  const savedMessages = savedPhotoFields(messages);
   const timeline = state.timeline ?? emptyTimeline();
   const groups = resultGroupsSnapshot(timeline.groups ?? []);
   return {
     submitted_query: state.submittedQuery.trim().slice(0, MAX_SUBMITTED_QUERY_CHARS),
     products: (groups.length ? groups.flatMap((group) => group.products) : state.products).slice(0, MAX_PRODUCTS),
     searched: groups.length ? true : state.searched,
-    messages,
+    messages: savedMessages,
     results_after_message_id: groups.length ? groups[groups.length - 1].after_message_id : state.resultsAfterMessageId,
     timeline: timelineSnapshot(timeline),
     result_groups: groups,
