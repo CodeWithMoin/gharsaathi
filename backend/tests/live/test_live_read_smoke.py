@@ -169,3 +169,37 @@ async def test_zepto_saved_addresses_shape(live_zepto: Any) -> None:
 async def test_zepto_product_search_parses(live_zepto: Any) -> None:
     address = _address_for("zepto")
     _record_search(live_zepto, await live_zepto.service.search(SEARCH_QUERY, address))
+
+
+async def test_zepto_payment_methods_shape(live_zepto: Any) -> None:
+    """Payment contract discovery: one ``get_payment_methods`` call, shape only.
+
+    The response's key paths and JSON types land in the report under
+    ``responses[tool == "get_payment_methods"]``; no value is recorded. They are
+    the input for ``app/commerce/zepto/payments.py::VERIFIED_CONTRACT``.
+    """
+
+    from app.commerce.zepto.payments import (
+        VERIFIED_CONTRACT,
+        PaymentShapeUnknown,
+        parse_payment_methods,
+    )
+
+    payload = await live_zepto.client.call_tool(
+        "get_payment_methods", {}, retry_on_auth=False
+    )
+    facts: dict[str, Any] = {
+        "top_level_type": type(payload).__name__,
+        "top_level_key_count": len(payload) if isinstance(payload, dict) else None,
+        "text_envelope": isinstance(payload, dict) and set(payload) == {"content_text"},
+        "contract_verified": VERIFIED_CONTRACT is not None,
+    }
+    if VERIFIED_CONTRACT is not None:
+        try:
+            facts["contract_methods"] = sorted(
+                parse_payment_methods(payload, VERIFIED_CONTRACT.methods)
+            )
+        except PaymentShapeUnknown as exc:
+            facts["contract_step_failed"] = exc.step
+    live_zepto.recorder.record_check("zepto", "payment_methods_shape", **facts)
+    assert isinstance(payload, dict)

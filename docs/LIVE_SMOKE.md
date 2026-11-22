@@ -39,6 +39,7 @@ Each check makes one controlled request per provider:
 | `tools/list` catalogue vs committed snapshot | `tests/fixtures/swiggy_tools_catalogue_*.json` (if present) | `tests/fixtures/zepto_tools_catalogue_2026-11-21.json` |
 | Saved addresses (shape only) | `get_addresses` | `list_saved_addresses` |
 | One product search (`atta`) parses into `Product` | `search_products` | `select_saved_address` + `search_products` |
+| Payment methods (shape only) | — | `get_payment_methods` with `{}` |
 
 **What it changes:** nothing in your cart. Zepto's search needs a selected delivery
 address, so the app calls `select_saved_address` on the server, just as normal search
@@ -73,16 +74,27 @@ This follows the same path as `ZeptoQuoteProvider.quote_unlocked`:
 If the cleanup can't be confirmed, the test fails and tells you to remove the item in the
 Zepto app.
 
+A second tier-2 check, `test_zepto_prepaid_previews_record_shapes_only`, seeds the
+cart the same way, then calls `create_online_payment_order`, `create_wallet_order`
+and `create_upi_reserve_pay_order`, each once with exactly
+`{"confirmOrder": false, "userAddressId": …}`, records their shapes plus
+content-free facts (`payment_method_is_cod`, `parses_with_cod_bill_rules`,
+`payable_equals_cod_preview`, `cause_step`), and cleans up the cart in `finally`.
+
 **It can never place an order.** Every provider call goes through `GuardedToolClient` in
 `tests/live/harness.py`, which checks the call before the real client is touched:
 
 - Only allow-listed tools can be called in each tier. For Zepto's cart tier, the extra
   tools are `view_cart`, `update_cart` and `create_order`.
-- Names matching `confirm|checkout|pay|place|wallet|upi|cancel|refund|reserve` are always
-  refused. This covers `create_online_payment_order`, `get_payment_methods` and similar
-  tools.
-- `create_order` needs `confirmOrder` to be exactly `False`. Leaving it out, or sending
-  `True`, `"true"` or `1`, is refused. The only other key allowed is `userAddressId`.
+- Payment contract discovery is allowed by exact name only: `get_payment_methods`
+  (both tiers, no arguments) and, in the cart tier, `create_online_payment_order`,
+  `create_wallet_order` and `create_upi_reserve_pay_order`.
+- Every other name matching `confirm|checkout|pay|place|wallet|upi|cancel|refund|reserve`
+  is always refused. `check_payment_status` is refused in every tier, and any `poll`
+  argument at any depth must be exactly `False`, so payment polling can never start.
+- Every `create_*` tool needs `confirmOrder` to be exactly `False`. Leaving it out, or
+  sending `True`, `"true"` or `1`, is refused. The only other key allowed is
+  `userAddressId` (no `useZeptoCash`, no `riderTip`).
 - Any `*confirm*` argument at any depth must be exactly `False`.
 - Cart-tier calls also check `GHARSAATHI_LIVE_SMOKE_CART=1` again at the moment of the
   call.
@@ -90,6 +102,25 @@ Zepto app.
 A blocked call raises `ForbiddenLiveCall`, which is a `BaseException`. Production code
 like `quote_unlocked` catches `Exception`, so it can't hide this error. Unit tests show
 that the production confirmation gateway can't get past the guard.
+
+## Discovering the payment response contract
+
+Online payment stays off until `VERIFIED_CONTRACT` in
+`backend/app/commerce/zepto/payments.py` is filled in. With the account owner's
+consent:
+
+1. `make live-smoke` (tier 1). In `backend/.live-smoke/latest.json`, read
+   `responses` where `tool == "get_payment_methods"` and the
+   `payment_methods_shape` check.
+2. Empty the Zepto cart in the app, then `make live-smoke-cart` (tier 2). Read
+   `responses` for the three prepaid `create_*` tools and the
+   `prepaid_preview_shapes` check.
+3. The reports hold key paths and types only. The contract also needs a few
+   enum values (the method identifiers and the preview `paymentMethod` values);
+   read those with the owner in a supervised session, never into the report.
+4. The shapes of a *confirmed* prepaid order and of `check_payment_status` can
+   only be seen by paying for a real order. That needs the owner's explicit
+   go-ahead for that exact order (docs/MVP_CHECKLIST.md step 17).
 
 ## Rate limits
 

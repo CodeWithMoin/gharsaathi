@@ -35,6 +35,7 @@ from app.shopping.checkout import (
 )
 from app.database.session import get_session_factory
 from app.shopping.order_confirmation import OrderConfirmations
+from app.shopping.payments import PrepaidGateway
 from app.shopping.errors import ProviderUnavailable
 from app.shopping.models import Basket, ProviderName, Quote
 from app.shopping.ports import QuoteProvider
@@ -314,10 +315,40 @@ def get_approval_service() -> ApprovalService:
 
 
 @lru_cache
+def get_zepto_payment_gateway() -> PrepaidGateway | None:
+    """Prepaid Zepto orders, or None in demo mode (cash on delivery only)."""
+
+    settings = get_settings()
+    if settings.commerce_mode == "demo":
+        return None
+    from app.commerce.zepto.payments import (
+        VERIFIED_CONTRACT,
+        ZeptoPaymentGateway,
+        parse_allowed_methods,
+    )
+    from app.commerce.zepto.quote_provider import ZeptoQuoteProvider
+
+    client = get_live_zepto_service().client
+    checkout_lock = get_zepto_checkout_lock()
+    return ZeptoPaymentGateway(
+        client=client,
+        quotes=ZeptoQuoteProvider(client, checkout_lock=checkout_lock),
+        enabled=settings.zepto_online_payments_enabled,
+        allowed=parse_allowed_methods(settings.zepto_payment_methods_allowed),
+        contract=VERIFIED_CONTRACT,
+        checkout_lock=checkout_lock,
+    )
+
+
+@lru_cache
 def get_order_confirmations() -> OrderConfirmations:
     """One registry per process, shared by voice, typed chat and the tap endpoint."""
 
-    return OrderConfirmations(get_basket_repository(), get_approval_service())
+    return OrderConfirmations(
+        get_basket_repository(),
+        get_approval_service(),
+        payments=get_zepto_payment_gateway(),
+    )
 
 
 OrderConfirmationsDependency = Annotated[OrderConfirmations, Depends(get_order_confirmations)]
@@ -370,6 +401,7 @@ def get_zepto_checkout_service() -> CheckoutService:
         quote_provider,
         gateway,
         checkout_lock=checkout_lock,
+        payments=get_zepto_payment_gateway(),
     )
 
 
