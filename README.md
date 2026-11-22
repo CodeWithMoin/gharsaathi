@@ -406,6 +406,15 @@ or id values.
 - Backend sideband: set `VOICE_EVENT_LOG=true` in `.env` and restart the backend.
   Lines are logged at WARNING (so they show without extra logging setup) as
   `Voice sideband event {...}`.
+- Start latency: with either flag on, each voice start also records
+  `voice.start_timing` entries (stage names and milliseconds only). The browser
+  entry (`source: "client"`) has `offer`, `mic`, `ice`, `chat_saved`,
+  `session_created`, `answer_applied`, `channel_open` and `session_started`,
+  each measured from the tap. With `VOICE_EVENT_LOG=true` the backend logs
+  `event=voice_session_start_timing profile_ms=… context_ms=… openai_ms=… total_ms=…`
+  and returns the same numbers to the browser (`source: "server"`). An offline
+  benchmark of the backend stages with fakes:
+  `cd backend && PYTHONPATH=. uv run --with-requirements requirements.txt python scripts/bench_voice_start.py`.
 
 ## Verification
 

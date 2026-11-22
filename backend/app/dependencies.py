@@ -117,6 +117,8 @@ async def close_cached_services() -> None:
         await get_live_swiggy_service().client.aclose()
     if get_live_zepto_service.cache_info().currsize:
         await get_live_zepto_service().client.aclose()
+    if get_voice_service.cache_info().currsize:
+        await get_voice_service().aclose()
 
 
 SwiggyServiceDependency = Annotated[

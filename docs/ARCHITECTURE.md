@@ -259,7 +259,10 @@ flowchart LR
   conversation and saves it with `PUT /api/conversations/current`, exactly like
   voice transcripts. Saves are debounced 250 ms; the page flushes a pending save
   before `POST /api/chat/turn` and before `POST /api/voice/session`, so the
-  server-side context includes the latest turn.
+  server-side context includes the latest turn. Voice start waits at most
+  150 ms for that save (it runs alongside mic and WebRTC setup), and the
+  backend waits at most 300 ms for voice context (typed chat: 2 s); past
+  either limit the session starts without the newest context.
 
 ## Where to look
 

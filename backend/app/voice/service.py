@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import secrets
-from typing import Any, Literal
+import time
+from collections.abc import Awaitable
+from typing import Any, Literal, TypeVar
 
 import httpx
 from pydantic import BaseModel, Field
@@ -36,9 +38,17 @@ from app.voice.tools import (
 
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
-# Voice start never waits long for chat context; without it the session starts blank.
+# Typed chat waits up to 2 s for chat context; voice start never waits long,
+# because without context the session simply starts blank.
 CONTEXT_TIMEOUT_SECONDS = 2.0
+VOICE_START_CONTEXT_TIMEOUT_SECONDS = 0.3
+# Profile and memory are small reads; the voice cap only matters when the database stalls.
+VOICE_START_READ_TIMEOUT_SECONDS = 1.0
+# The shared OpenAI connection is kept open between session starts and prewarms.
+KEEPALIVE_SECONDS = 120.0
+PREWARM_INTERVAL_SECONDS = 30.0
 
 
 class VoiceError(Exception):
@@ -67,6 +77,8 @@ class LiveSession(BaseModel):
     # arrive in Devanagari. "roman" lets the client show them in Roman Hinglish;
     # "native" (Hindi chosen in the profile) leaves captions untouched.
     assistant_transcript_script: Literal["roman", "native"] = "roman"
+    # Content-free stage timings (ms), returned only when VOICE_EVENT_LOG is on.
+    start_timing_ms: dict[str, float] | None = None
 
 
 def build_session_config(
@@ -141,6 +153,17 @@ class LiveSessionService:
         self.context_reader = context_reader
         self.order_confirmations = order_confirmations
         self._http_client = http_client
+        # One kept-alive connection to OpenAI per event loop, so a session start
+        # does not pay for a fresh TLS handshake (and client setup) every time.
+        self._shared_client: httpx.AsyncClient | None = None
+        self._shared_loop: asyncio.AbstractEventLoop | None = None
+        self._last_openai_use = float("-inf")
+        self._warmups: set[asyncio.Task[bool]] = set()
+
+    def _warmup_finished(self, task: "asyncio.Task[bool]") -> None:
+        self._warmups.discard(task)
+        if not task.cancelled() and task.exception() is not None:
+            logger.warning("Voice connection warm-up failed: %s", type(task.exception()).__name__)
 
     @property
     def basket_enabled(self) -> bool:
@@ -179,41 +202,84 @@ class LiveSessionService:
             )
         return ShoppingToolExecutor(self.searcher, address_id)
 
-    async def profile(self, household_id: str) -> UserProfile | None:
+    async def profile(
+        self, household_id: str, timeout: float | None = None
+    ) -> UserProfile | None:
         if self.profile_reader is None or not household_id:
             return None
         try:
-            return await self.profile_reader.read(household_id)
+            return await asyncio.wait_for(self.profile_reader.read(household_id), timeout)
         except Exception as exc:  # noqa: BLE001 - a missing profile must not block voice
             logger.warning("Voice profile read failed: %s", type(exc).__name__)
             return None
 
-    async def household_memory(self, household_id: str) -> HouseholdMemory | None:
+    async def household_memory(
+        self, household_id: str, timeout: float | None = None
+    ) -> HouseholdMemory | None:
         reader = getattr(self.preference_recall, "household_memory", None)
         if not callable(reader) or not household_id:
             return None
         try:
-            return await reader(household_id)
+            return await asyncio.wait_for(reader(household_id), timeout)
         except Exception as exc:  # noqa: BLE001 - memory must not block voice
             logger.warning("Voice memory summary failed: %s", type(exc).__name__)
             return None
 
-    async def conversation_context(self, household_id: str) -> RecentConversationContext | None:
+    async def conversation_context(
+        self, household_id: str, timeout: float = CONTEXT_TIMEOUT_SECONDS
+    ) -> RecentConversationContext | None:
         if self.context_reader is None or not household_id:
             return None
         try:
-            return await asyncio.wait_for(
-                self.context_reader.load(household_id), CONTEXT_TIMEOUT_SECONDS
-            )
+            return await asyncio.wait_for(self.context_reader.load(household_id), timeout)
         except Exception as exc:  # noqa: BLE001 - missing context must not block voice
             logger.warning("Voice chat context read failed: %s", type(exc).__name__)
             return None
 
-    async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
+    def _client(self) -> httpx.AsyncClient:
         if self._http_client is not None:
-            return await self._http_client.post(url, **kwargs)
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            return await client.post(url, **kwargs)
+            return self._http_client
+        loop = asyncio.get_running_loop()
+        if self._shared_client is None or self._shared_client.is_closed or self._shared_loop is not loop:
+            self._shared_client = httpx.AsyncClient(
+                timeout=30.0, limits=httpx.Limits(keepalive_expiry=KEEPALIVE_SECONDS)
+            )
+            self._shared_loop = loop
+            self._last_openai_use = float("-inf")
+        return self._shared_client
+
+    async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
+        response = await self._client().post(url, **kwargs)
+        self._last_openai_use = time.monotonic()
+        return response
+
+    def _connection_is_warm(self) -> bool:
+        return time.monotonic() - self._last_openai_use < PREWARM_INTERVAL_SECONDS
+
+    async def prewarm(self) -> bool:
+        """Open the OpenAI connection ahead of a session start.
+
+        The request carries no API key and no user data; any response (an
+        unauthenticated 401) leaves a kept-alive TLS connection in the pool.
+        """
+
+        if self._http_client is not None or self._connection_is_warm():
+            return False
+        if not self.settings.openai_api_key.get_secret_value().strip():
+            return False
+        client = self._client()
+        self._last_openai_use = time.monotonic()
+        try:
+            await client.get(f"{self.settings.openai_base_url.rstrip('/')}/models", timeout=5.0)
+        except httpx.HTTPError:
+            self._last_openai_use = float("-inf")
+            return False
+        return True
+
+    async def aclose(self) -> None:
+        if self._shared_client is not None:
+            await self._shared_client.aclose()
+            self._shared_client = None
 
     async def create(
         self,
@@ -221,32 +287,56 @@ class LiveSessionService:
         swiggy_address_id: str | None = None,
         zepto_address_id: str | None = None,
         household_id: str = "",
+        data_channel_id: int | None = None,
     ) -> LiveSession:
         api_key = self.settings.openai_api_key.get_secret_value().strip()
         if not api_key:
             raise VoiceConfigurationError("Set OPENAI_API_KEY in .env to enable voice.")
+        timings: dict[str, float] = {}
+        started = time.perf_counter()
+        # The warm-up overlaps the reads. If it has finished, the POST reuses its
+        # connection; if not, the POST opens its own instead of waiting for it.
+        warm = asyncio.create_task(_timed(timings, "connect", self.prewarm()))
+        self._warmups.add(warm)
+        warm.add_done_callback(self._warmup_finished)
         profile, household_memory, context = await asyncio.gather(
-            self.profile(household_id),
-            self.household_memory(household_id),
-            self.conversation_context(household_id),
+            _timed(timings, "profile", self.profile(household_id, VOICE_START_READ_TIMEOUT_SECONDS)),
+            _timed(
+                timings,
+                "memory",
+                self.household_memory(household_id, VOICE_START_READ_TIMEOUT_SECONDS),
+            ),
+            _timed(
+                timings,
+                "context",
+                self.conversation_context(household_id, VOICE_START_CONTEXT_TIMEOUT_SECONDS),
+            ),
         )
+        timings["reads"] = _ms_since(started)
+        mark = time.perf_counter()
+        session_config = build_session_config(
+            self.settings,
+            self.tool_definitions,
+            profile,
+            household_memory if self.basket_enabled else None,
+            context=context,
+        )
+        transport: dict[str, Any] = {"type": "webrtc", "sdp": offer_sdp}
+        if data_channel_id is not None:
+            # Pre-negotiated data channel (WARP), see
+            # https://developers.openai.com/api/docs/guides/realtime-webrtc-warp#connect-to-gpt-live
+            transport["dcid"] = data_channel_id
+        timings["config"] = _ms_since(mark)
+        mark = time.perf_counter()
         try:
             response = await self._post(
                 f"{self.settings.openai_base_url.rstrip('/')}/live/sessions",
-                json={
-                    "session": build_session_config(
-                        self.settings,
-                        self.tool_definitions,
-                        profile,
-                        household_memory if self.basket_enabled else None,
-                        context=context,
-                    ),
-                    "transport": {"type": "webrtc", "sdp": offer_sdp},
-                },
+                json={"session": session_config, "transport": transport},
                 headers={"Authorization": f"Bearer {api_key}"},
             )
         except httpx.HTTPError as exc:
             raise VoiceProviderError("Could not reach OpenAI to start voice.") from exc
+        timings["openai"] = _ms_since(mark)
 
         if response.status_code >= 400:
             raise VoiceProviderError(
@@ -267,6 +357,12 @@ class LiveSessionService:
             owner_id=household_id,
             events_token=events_token,
         )
+        timings["total"] = _ms_since(started)
+        if self.settings.voice_event_log:
+            logger.warning(
+                "event=voice_session_start_timing %s",
+                " ".join(f"{name}_ms={value:.0f}" for name, value in timings.items()),
+            )
         return LiveSession(
             session_id=session_id,
             sdp=answer_sdp,
@@ -275,7 +371,20 @@ class LiveSessionService:
             assistant_transcript_script=(
                 "native" if profile is not None and profile.language == "hindi" else "roman"
             ),
+            start_timing_ms=dict(timings) if self.settings.voice_event_log else None,
         )
+
+
+async def _timed(timings: dict[str, float], name: str, work: Awaitable[T]) -> T:
+    started = time.perf_counter()
+    try:
+        return await work
+    finally:
+        timings[name] = _ms_since(started)
+
+
+def _ms_since(started: float) -> float:
+    return round((time.perf_counter() - started) * 1000, 1)
 
 
 def _error_message(response: httpx.Response) -> str:
