@@ -7,6 +7,8 @@ const ACK_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
 const PROVIDERS = new Set(["swiggy_instamart", "zepto"]);
 
+export const ADDRESS_REMOVED_MESSAGE = "Your Zepto address changed — choose a delivery address";
+
 const ADDRESS_UNAVAILABLE_MESSAGES = {
   zepto_not_connected: "Connect Zepto first to add a new address.",
   demo_mode: "New addresses can't be added in demo mode.",
@@ -27,12 +29,20 @@ const ADDRESS_UNAVAILABLE_MESSAGES = {
  *   onOrderConfirmation?: (confirmation: import("./order-confirmation.mjs").OrderConfirmation) => void,
  *   onAddressSelected?: (selection: { provider: "swiggy_instamart" | "zepto", addressId: string, label?: string, billCancelled: boolean }) => void,
  *   onSupportOpen?: () => void,
+ *   onAddressRemoved?: (provider: "swiggy_instamart" | "zepto") => void,
  * }} handlers
  */
 export function applyAssistantEvent(raw, handlers) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const event = /** @type {Record<string, any>} */ (raw);
   const provider = PROVIDERS.has(event.provider) ? event.provider : undefined;
+
+  // The store's selected saved address was deleted there: ask the user to pick again.
+  const removed = PROVIDERS.has(event.address_removed) ? event.address_removed : event.type === "address.selection_removed" ? provider : undefined;
+  if (removed) handlers.onAddressRemoved?.(removed);
+  if (event.type === "address.selection_removed") {
+    return removed ? { kind: "address", message: ADDRESS_REMOVED_MESSAGE, notice: ADDRESS_REMOVED_MESSAGE } : null;
+  }
 
   if (event.type === "tool.results") {
     if (!Array.isArray(event.products)) return null;

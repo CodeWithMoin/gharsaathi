@@ -67,6 +67,12 @@ class ZeptoService:
         self._selected_address: tuple[int, str] | None = None
         self._search_cache: dict[tuple[str, str, int], tuple[float, ProductSearchResult]] = {}
         self._search_lock = asyncio.Lock()
+        # Saved-address ids Zepto no longer has (from a refresh or a failed selection).
+        self._removed_addresses: set[str] = set()
+        self._selection_needed = False
+        # Called with the verified live list when a selected address is found missing.
+        self.on_address_removed: Callable[[AddressList, str], Awaitable[None]] | None = None
+        self._background: set[asyncio.Task[None]] = set()
 
     async def connection_status(self) -> ConnectionStatus:
         return await self.oauth.status()
@@ -148,7 +154,54 @@ class ZeptoService:
                 await self.client.call_tool("list_saved_addresses", {})
             )
 
-        return await self._recovering(("list_saved_addresses",), read)
+        live = await self._recovering(("list_saved_addresses",), read)
+        self._removed_addresses -= {address.id for address in live.addresses}
+        return live
+
+    def mark_address_removed(self, address_id: str) -> None:
+        """A refreshed snapshot no longer has ``address_id``; searches stop using it."""
+
+        self._removed_addresses.add(address_id)
+        self._selection_needed = True
+        if self._selected_address is not None and self._selected_address[1] == address_id:
+            self._selected_address = None
+
+    def address_selected(self) -> None:
+        """The user chose a delivery address again."""
+
+        self._selection_needed = False
+
+    def address_problem(self) -> str | None:
+        """Why Zepto has no usable address, when that is known (not just unselected)."""
+
+        return "address_invalid" if self._selection_needed else None
+
+    async def _select_address(self, address_id: str) -> None:
+        try:
+            await self.client.call_tool("select_saved_address", {"addressId": address_id})
+        except ZeptoRateLimited:
+            raise
+        except ZeptoProviderError as exc:
+            # Is the address still in the account? If listing also fails, the
+            # original error stands (and the session is reset and retried once).
+            live = parse_addresses(await self.client.call_tool("list_saved_addresses", {}))
+            if address_id in {address.id for address in live.addresses}:
+                raise
+            self.mark_address_removed(address_id)
+            if self.on_address_removed is not None:
+                task = asyncio.create_task(self._notify_removed(live, address_id))
+                self._background.add(task)
+                task.add_done_callback(self._background.discard)
+            raise ZeptoAddressInvalid(
+                "The selected Zepto address is no longer saved in the account."
+            ) from exc
+
+    async def _notify_removed(self, live: AddressList, address_id: str) -> None:
+        assert self.on_address_removed is not None
+        try:
+            await self.on_address_removed(live, address_id)
+        except Exception as exc:  # noqa: BLE001 - the search already reported the problem
+            logger.warning("event=zepto_address_removed_apply_failed error=%s", type(exc).__name__)
 
     async def add_address(self, arguments: dict[str, Any]) -> AddressList:
         """Add one user-confirmed address, then fetch provider truth.
@@ -201,12 +254,16 @@ class ZeptoService:
         queries = _split_queries(normalized)
         tool = "search_multiple_products" if len(queries) > 1 else "search_products"
 
+        if address_id in self._removed_addresses:
+            raise ZeptoAddressInvalid(
+                "The selected Zepto address is no longer saved in the account."
+            )
+        self._selection_needed = False
+
         async def run() -> ProductSearchResult:
             generation = await self.client.prepare_session()
             if self._selected_address != (generation, address_id):
-                await self.client.call_tool(
-                    "select_saved_address", {"addressId": address_id}
-                )
+                await self._select_address(address_id)
                 self._selected_address = (self.client.session_generation, address_id)
             if len(queries) > 1:
                 raw = await self.client.call_tool(

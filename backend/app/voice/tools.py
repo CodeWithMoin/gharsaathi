@@ -394,7 +394,20 @@ class MultiProviderShoppingToolExecutor:
             )
 
         ready = [target for target in self.targets if target.address_id]
-        if not ready:
+        # A store whose saved address vanished is reported, not silently skipped.
+        address_problems = [
+            {
+                "status": "provider_error",
+                "reason": problem,
+                "store": target.store,
+                "store_id": target.provider,
+                "target": target,
+                "products": [],
+            }
+            for target in self.targets
+            if not target.address_id and (problem := _address_problem(target)) is not None
+        ]
+        if not ready and not address_problems:
             return ToolOutcome(
                 model_output={
                     "status": "not_connected",
@@ -414,7 +427,7 @@ class MultiProviderShoppingToolExecutor:
                 allowed.append(target)
             else:
                 skipped.append({"store": target.store, "household_rule": store_rule_label(rule)})
-        if not allowed:
+        if not allowed and not address_problems:
             return ToolOutcome(
                 model_output={
                     "status": "skipped_by_household_rule",
@@ -433,9 +446,11 @@ class MultiProviderShoppingToolExecutor:
                 },
             )
         ready = allowed
-        outcomes = await asyncio.gather(
-            *(self._search_target(target, without_store_names(arguments.query)) for target in ready)
-        )
+        outcomes = list(
+            await asyncio.gather(
+                *(self._search_target(target, without_store_names(arguments.query)) for target in ready)
+            )
+        ) + address_problems
         successful = [outcome for outcome in outcomes if outcome["status"] == "ok"]
         unreachable = [
             {"store": outcome["store"], "store_id": outcome["store_id"], "reason": outcome["reason"]}
@@ -467,6 +482,7 @@ class MultiProviderShoppingToolExecutor:
                     "message": unreachable_ui_message(unreachable)
                     if unreachable
                     else "Connected stores could not be searched right now.",
+                    **_address_removed(unreachable),
                 },
             )
 
@@ -587,6 +603,7 @@ class MultiProviderShoppingToolExecutor:
             model_output["note"] += " " + provider_error_message(unreachable)
             ui_event["unreachable_stores"] = [entry["store"] for entry in unreachable]
             ui_event["notice"] = unreachable_ui_message(unreachable)
+            ui_event.update(_address_removed(unreachable))
         return ToolOutcome(model_output=model_output, ui_event=ui_event)
 
     async def _search_target(
@@ -610,6 +627,23 @@ class MultiProviderShoppingToolExecutor:
         except (SwiggyError, ZeptoError):
             return {**base, "status": "provider_error", "reason": "unavailable"}
         return {**base, "status": "ok", "products": result.products}
+
+
+def _address_problem(target: ProviderSearchTarget) -> str | None:
+    problem = getattr(target.searcher, "address_problem", None)
+    if not callable(problem):
+        return None
+    value = problem()
+    return value if isinstance(value, str) else None
+
+
+def _address_removed(unreachable: list[dict[str, Any]]) -> dict[str, str]:
+    """Tells the browser to open that store's address picker."""
+
+    store_id = next(
+        (entry["store_id"] for entry in unreachable if entry["reason"] == "address_invalid"), None
+    )
+    return {"address_removed": store_id} if store_id else {}
 
 
 def _provider_status(outcome: dict[str, Any]) -> dict[str, Any]:

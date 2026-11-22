@@ -15,7 +15,11 @@ export type AssistantEventHandlers<Product> = {
   onOrderConfirmation?: (confirmation: OrderConfirmation) => void;
   /** `support.open`: show the Order help popup. */
   onSupportOpen?: () => void;
+  /** The store's selected saved address was deleted there; open its address picker. */
+  onAddressRemoved?: (provider: ProviderName) => void;
 };
+
+export const ADDRESS_REMOVED_MESSAGE: string;
 
 export type AssistantEventOutcome = {
   kind: "results" | "not_connected" | "error" | "basket" | "bill" | "address_form" | "address" | "order_confirmation" | "support";

@@ -56,6 +56,7 @@ from app.voice.toolbox import VOICE_TOOL_DEFINITIONS, VoiceToolbox
 from app.voice.tools import ProductSearcher
 from app.voice.ui_ack import UiAck, apply_ack
 from app.commerce.swiggy.models import Address, AddressList, AddressResolution, Pagination
+from app.commerce.zepto.errors import ZeptoProviderError
 from app.commerce.zepto.models import ConnectionStatus as ZeptoConnectionStatus
 from app.tracking.models import StartTrackingRequest, TrackingProvider, TrackingSnapshot, TrackingStatus
 from app.tracking.service import OrderTrackingService
@@ -146,6 +147,13 @@ def _fixture_product(entry: dict[str, Any], prefix: str) -> Product:
         price=Price(mrp=entry["mrp"], offer_price=entry["offer_price"]),
         available=True,
     )
+
+
+class UnreachableZeptoSearcher:
+    """Harness-only: Zepto cannot be reached (stale session, outage)."""
+
+    async def search(self, query: str, address_id: str, offset: int) -> ProductSearchResult:
+        raise ZeptoProviderError("Zepto could not complete the request.")
 
 
 class FixtureOverlaySearcher:
@@ -321,6 +329,8 @@ def build_toolbox(
         zepto = FixtureOverlaySearcher(
             zepto, [_fixture_product(item, "zepto") for item in overlay["zepto"]]
         )
+    if scenario.get("zepto_unreachable"):
+        zepto = UnreachableZeptoSearcher()
     basket_repo = InMemoryBasketRepository()
     approval_repo = InMemoryApprovalRepository()
     quotes = {
@@ -337,7 +347,7 @@ def build_toolbox(
         swiggy,
         BasketService(basket_repo, approval_repo),
         approvals,
-        DEMO_ADDRESS_ID,
+        None if scenario.get("zepto_unreachable") else DEMO_ADDRESS_ID,
         zepto,
         DEMO_ADDRESS_ID,
         HOUSEHOLD_ID,

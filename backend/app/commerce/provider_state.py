@@ -11,6 +11,9 @@ from app.database.models import MemorySubject, ProviderAddressState, SubjectType
 
 SWIGGY_PROVIDER = "swiggy_instamart"
 DEMO_RESOLUTION_SOURCE = "demo_fixture"
+# Stores whose vanished selection is cleared for the user to pick again, instead
+# of falling back to the provider default (Zepto snapshots refresh automatically).
+ASK_AGAIN_PROVIDERS = frozenset({"zepto"})
 
 
 def is_demo_address_list(addresses: AddressList) -> bool:
@@ -51,7 +54,9 @@ class ProviderAddressRepository:
             raise ValueError("Demo addresses cannot be persisted as provider state.")
         state = await self.get(subject_id, provider)
         now = datetime.now(UTC)
-        snapshot = addresses.model_dump(mode="json", exclude={"cached", "needs_refresh", "refreshed_at"})
+        snapshot = addresses.model_dump(
+            mode="json", exclude={"cached", "needs_refresh", "refreshed_at", "selection_removed"}
+        )
         address_ids = {address.id for address in addresses.addresses}
         provider_default = addresses.resolution.default_address_id
         if state is None:
@@ -66,12 +71,22 @@ class ProviderAddressRepository:
             )
             self.session.add(state)
         else:
-            state.snapshot = snapshot
-            state.refreshed_at = now
-            if state.selected_address_id not in address_ids:
+            previous = state.selected_address_id
+            removed = bool(state.snapshot.get("selection_removed")) and previous is None
+            if (
+                provider in ASK_AGAIN_PROVIDERS
+                and previous is not None
+                and previous not in address_ids
+            ):
+                # Never switch to another address on the user's behalf.
+                state.selected_address_id = None
+                removed = True
+            elif previous not in address_ids and not removed:
                 state.selected_address_id = (
                     provider_default if provider_default in address_ids else None
                 )
+            state.snapshot = {**snapshot, "selection_removed": removed}
+            state.refreshed_at = now
         await self.session.commit()
         await self.session.refresh(state)
         return state
@@ -91,6 +106,8 @@ class ProviderAddressRepository:
         if address_id not in {address.id for address in addresses.addresses}:
             return None
         state.selected_address_id = address_id
+        if state.snapshot.get("selection_removed"):
+            state.snapshot = {**state.snapshot, "selection_removed": False}
         await self.session.commit()
         await self.session.refresh(state)
         return state
@@ -113,8 +130,14 @@ def cached_address_list(state: ProviderAddressState) -> AddressList:
     addresses.needs_refresh = False
     addresses.refreshed_at = state.refreshed_at
     if state.selected_address_id is not None:
+        addresses.selection_removed = False
         addresses.resolution.default_address_id = state.selected_address_id
         addresses.resolution.resolution_source = "saved_selection"
+    elif addresses.selection_removed:
+        # Even a single remaining address waits for the user's tap.
+        addresses.resolution.default_address_id = None
+        addresses.resolution.needs_user_clarification = True
+        addresses.resolution.resolution_source = "selection_removed"
     return addresses
 
 

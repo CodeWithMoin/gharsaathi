@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     zepto_mcp_url: str = "https://mcp.zepto.co.in/mcp"
     zepto_oauth_redirect_uri: str = "http://localhost/callback"
     zepto_oauth_scope: str = "tools:read"
+    # Zepto's saved-address snapshot auto-refreshes when older than this (minutes).
+    zepto_address_refresh_max_age_min: int = Field(default=30, ge=1, le=24 * 60)
     frontend_url: str = "http://localhost:3003"
     cors_origins: str = "http://localhost:3003,http://127.0.0.1:3003"
     app_encryption_key: str = ""

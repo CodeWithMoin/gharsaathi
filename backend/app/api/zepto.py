@@ -22,6 +22,7 @@ from app.commerce.swiggy.models import (
 )
 from app.commerce.zepto.cart import ZeptoCart
 from app.commerce.zepto.errors import (
+    ZeptoAddressInvalid,
     ZeptoAuthenticationRequired,
     ZeptoConfigurationError,
     ZeptoProviderError,
@@ -35,7 +36,12 @@ from app.commerce.zepto.models import (
     ToolDescription,
 )
 from app.core.config import get_settings
-from app.dependencies import BasketServiceDependency, ZeptoServiceDependency
+from app.commerce.zepto.address_refresh import PICKER_MAX_AGE_SECONDS
+from app.dependencies import (
+    BasketServiceDependency,
+    ZeptoAddressRefresherDependency,
+    ZeptoServiceDependency,
+)
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 from app.memory.errors import MemoryPermissionError
 from app.memory.purchase_graph import PurchaseGraphService
@@ -174,6 +180,11 @@ def _raise_http(exc: Exception) -> None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     if isinstance(exc, ZeptoRateLimited):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(exc)) from exc
+    if isinstance(exc, ZeptoAddressInvalid):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Your Zepto saved address changed. Choose a delivery address again.",
+        ) from exc
     if isinstance(exc, (ZeptoSchemaError, ZeptoProviderError)):
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     raise exc
@@ -340,9 +351,13 @@ async def order_detail(
 @router.get("/addresses", response_model=AddressList)
 async def addresses(
     service: ZeptoServiceDependency,
+    refresher: ZeptoAddressRefresherDependency,
     session: DbSessionDependency,
     actor: MemoryActorDependency,
+    user_id: UserIdDependency,
     refresh: Annotated[bool, Query()] = False,
+    # Bounded automatic refresh: "load" (app load, 30 min default) or "picker" (5 min).
+    auto: Annotated[Literal["load", "picker"] | None, Query()] = None,
 ) -> AddressList:
     try:
         if isinstance(service, DemoZeptoService):
@@ -352,19 +367,29 @@ async def addresses(
         if state is not None and is_demo_address_state(state):
             await repository.clear(actor.id, ZEPTO_PROVIDER)
             state = None
-        if state is not None and not refresh:
-            return cached_address_list(state)
-        if not refresh:
-            return AddressList(
-                addresses=[],
-                pagination=Pagination(),
-                resolution=AddressResolution(needs_user_clarification=True),
-                cached=True,
-                needs_refresh=True,
+        if refresh:
+            live = await service.addresses()
+            if refresher is not None:
+                return (await refresher.apply(user_id, live)).addresses
+            return cached_address_list(
+                await repository.save(actor.id, live, ZEPTO_PROVIDER)
             )
-        live = await service.addresses()
-        return cached_address_list(
-            await repository.save(actor.id, live, ZEPTO_PROVIDER)
+        if state is not None and auto is not None and refresher is not None:
+            outcome = await refresher.refresh_if_stale(
+                user_id,
+                max_age_seconds=PICKER_MAX_AGE_SECONDS if auto == "picker" else None,
+                reason=f"auto_{auto}",
+            )
+            if outcome is not None:
+                return outcome.addresses
+        if state is not None:
+            return cached_address_list(state)
+        return AddressList(
+            addresses=[],
+            pagination=Pagination(),
+            resolution=AddressResolution(needs_user_clarification=True),
+            cached=True,
+            needs_refresh=True,
         )
     except Exception as exc:
         _raise_http(exc)
@@ -376,6 +401,7 @@ async def select_address(
     body: SelectedAddressRequest,
     session: DbSessionDependency,
     actor: MemoryActorDependency,
+    service: ZeptoServiceDependency,
 ) -> AddressList:
     state = await ProviderAddressRepository(session).select(
         actor.id, body.address_id.strip(), ZEPTO_PROVIDER
@@ -385,6 +411,8 @@ async def select_address(
             status.HTTP_409_CONFLICT,
             "That Zepto address is not in the saved snapshot. Refresh and try again.",
         )
+    if not isinstance(service, DemoZeptoService):
+        service.address_selected()
     return cached_address_list(state)
 
 

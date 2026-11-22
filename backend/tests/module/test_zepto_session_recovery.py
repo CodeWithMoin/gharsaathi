@@ -1,16 +1,22 @@
+import asyncio
 import json
 import logging
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from app.commerce.swiggy.models import Price, Product, ProductSearchResult
+from app.commerce.zepto.client import _SessionState
 from app.commerce.zepto.errors import (
+    ZeptoAddressInvalid,
     ZeptoProviderError,
     ZeptoRateLimited,
 )
+from app.commerce.zepto.models import ToolDescription
 from app.commerce.zepto.service import RECOVERABLE_READ_TOOLS, ZeptoService
 from app.voice.tools import MultiProviderShoppingToolExecutor, ProviderSearchTarget
+from tests.test_zepto_sessions import FakeResources, FakeSession, PersistentSessionClient
 
 
 MILK = {
@@ -194,3 +200,104 @@ async def test_partial_failure_keeps_results_and_names_the_unreachable_store() -
     assert outcome.ui_event is not None
     assert outcome.ui_event["type"] == "tool.results"
     assert outcome.ui_event["notice"] == "Zepto isn't responding—try again."
+
+
+async def test_deleted_selected_address_becomes_address_invalid() -> None:
+    client = FlakyClient()
+    client.addresses = ["new-home"]
+    zepto = service(client)
+    notified: list[tuple[list[str], str]] = []
+
+    async def removed(live: Any, address_id: str) -> None:
+        notified.append(([item.id for item in live.addresses], address_id))
+
+    zepto.on_address_removed = removed
+
+    with pytest.raises(ZeptoAddressInvalid):
+        await zepto.search("lassi", "hackathon")
+    await asyncio.sleep(0)
+
+    assert client.calls == ["select_saved_address", "list_saved_addresses"]
+    assert client.resets == 0
+    assert notified == [(["new-home"], "hackathon")]
+    assert zepto.address_problem() == "address_invalid"
+
+    # Later searches with the removed id never reach Zepto.
+    with pytest.raises(ZeptoAddressInvalid):
+        await zepto.search("crackers", "hackathon")
+    assert client.calls == ["select_saved_address", "list_saved_addresses"]
+
+    # Searching with a valid address again clears the problem.
+    await zepto.search("lassi", "new-home")
+    assert zepto.address_problem() is None
+
+
+async def test_selection_failure_for_an_existing_address_is_unavailable_and_retried() -> None:
+    client = FlakyClient({"select_saved_address": [ZeptoProviderError("stale")]})
+    result = await service(client).search("lassi", "address-1")
+    assert result.products
+    assert client.resets == 1
+    assert client.calls == [
+        "select_saved_address",
+        "list_saved_addresses",
+        "select_saved_address",
+        "search_products",
+    ]
+
+
+class RemovedAddressSearcher(OkSearcher):
+    def address_problem(self) -> str | None:
+        return "address_invalid"
+
+
+async def test_a_removed_zepto_address_is_reported_not_skipped() -> None:
+    executor = MultiProviderShoppingToolExecutor(
+        [ProviderSearchTarget("zepto", "Zepto", RemovedAddressSearcher(), None)]
+    )
+    outcome = await executor.execute("search_products", json.dumps({"query": "lassi"}))
+
+    assert outcome.model_output["status"] == "provider_error"
+    assert outcome.model_output["unreachable_stores"][0]["reason"] == "address_invalid"
+    assert "pick a delivery address again" in outcome.model_output["message"]
+    assert outcome.ui_event is not None
+    assert outcome.ui_event["address_removed"] == "zepto"
+    assert "address changed" in outcome.ui_event["message"]
+
+
+class TextErrorSession(FakeSession):
+    def __init__(self, text: str) -> None:
+        super().__init__()
+        self.text = text
+
+    async def call_tool(self, name: str, arguments: dict[str, object]):
+        return SimpleNamespace(
+            isError=True, structuredContent=None, content=[SimpleNamespace(text=self.text)]
+        )
+
+
+@pytest.mark.parametrize(
+    ("text", "error", "reason"),
+    [
+        ("Internal error: upstream timed out", ZeptoProviderError, "unavailable"),
+        ("Session expired, please re-initialize", ZeptoProviderError, "session_expired"),
+        ("429 Too Many Requests", ZeptoRateLimited, "rate_limited"),
+    ],
+)
+async def test_non_json_error_text_is_classified_and_never_logged(
+    text: str, error: type[Exception], reason: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    client = PersistentSessionClient(["same-token"])
+    client._session = _SessionState(
+        "same-token",
+        TextErrorSession(text),
+        FakeResources(),
+        catalogue={"search": ToolDescription(name="search", input_schema={"type": "object"})},
+    )  # type: ignore[arg-type]
+
+    with caplog.at_level(logging.WARNING), pytest.raises(error) as raised:
+        await client.call_tool("search", {})
+
+    assert getattr(raised.value, "reason") == reason
+    assert getattr(raised.value, "tool") == "search"
+    assert f"category={reason} length={len(text)}" in caplog.text
+    assert text not in caplog.text
