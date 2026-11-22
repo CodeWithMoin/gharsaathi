@@ -407,6 +407,7 @@ class MultiProviderShoppingToolExecutor:
             assert isinstance(products, list)
             stores.append(target.store)
             decisions: dict[int, dict[str, Any]] = {}
+            remembered_sources: dict[int, str] = {}
             if rules:
                 kept: list[Product] = []
                 for product in products:
@@ -431,6 +432,7 @@ class MultiProviderShoppingToolExecutor:
                     remembered = remembered_for(product, target.provider, memory)
                     if remembered is not None:
                         entry["remembered"] = remembered
+                        remembered_sources[id(product)] = str(remembered["source"])
                         remembered_count += 1
                 if target.add_supported:
                     option_id = f"opt{len(self.options) + 1}"
@@ -447,6 +449,12 @@ class MultiProviderShoppingToolExecutor:
                         for key, value in decisions.get(id(product), {}).items()
                         if key in {"preferred", "avoided"}
                     },
+                    # The browser shows the remembered option first, with its badge.
+                    **(
+                        {"remembered": remembered_sources[id(product)]}
+                        if id(product) in remembered_sources
+                        else {}
+                    ),
                 }
                 for product in products[:per_store_limit]
             )

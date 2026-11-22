@@ -169,7 +169,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             "At most 2 searches per message. If the chat endpoint fails, 'Seedha search "
             "karein' runs the old direct search. " + TYPED_VIA_ASSISTANT,
         ),
-        ui=S(W, "ProductComparison cards grouped across stores."),
+        ui=S(W, "One options carousel per searched item, best pick first, backend ₹ strings."),
         backend=S(W),
         voice_tools=("search_products",),
         routes=(

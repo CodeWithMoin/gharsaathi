@@ -4,12 +4,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.shopping.models import DisplayedPrice
+
 # A long voice session produces many spoken turns, and a single turn can run long.
 MAX_CHAT_MESSAGES = 1_000
 MAX_CHAT_MESSAGE_CHARS = 20_000
 
 
-class PriceSnapshot(BaseModel):
+class PriceSnapshot(DisplayedPrice):
     mrp: float = Field(ge=0)
     offer_price: float = Field(ge=0)
 
@@ -29,6 +31,11 @@ class ProductSnapshot(BaseModel):
     available: bool
     image_url: str | None = Field(default=None, max_length=2048)
     rating_value: str | None = Field(default=None, max_length=40)
+    # Household annotations from a voice/typed search, kept so a reopened chat
+    # shows the same "best pick first" order and badge.
+    remembered: str | None = Field(default=None, max_length=40)
+    preferred: bool | None = None
+    avoided: bool | None = None
 
 
 class ChatMessageSnapshot(BaseModel):

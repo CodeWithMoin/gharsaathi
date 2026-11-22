@@ -121,3 +121,10 @@ test("malformed or unknown events are ignored", () => {
   }
   assert.deepEqual(calls, []);
 });
+
+test("household annotations and backend price strings reach the results handler untouched", () => {
+  let received;
+  const product = { product_id: "p1", sku_id: "s1", name: "Amul Taaza", available: true, remembered: "purchase_history", preferred: true, price: { mrp: 72, offer_price: 69, offer_display: "₹69", mrp_display: "₹72", saving_display: "₹3" } };
+  applyAssistantEvent({ type: "tool.results", query: "doodh", products: [product] }, { onResults: (_query, products) => { received = products; } });
+  assert.deepEqual(received, [product]);
+});

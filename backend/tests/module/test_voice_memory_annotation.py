@@ -123,6 +123,22 @@ async def test_search_marks_only_the_remembered_size_with_one_lookup() -> None:
 
 
 @pytest.mark.asyncio
+async def test_screen_products_carry_the_remembered_source_for_the_best_pick_badge() -> None:
+    box = toolbox(FakeMemory(remembered_coke()), [], COKE)
+    outcome = await box.execute("search_products", json.dumps({"query": "Diet Coke"}))
+    assert outcome.ui_event is not None
+    marks = {(p["name"], p["pack_size"]): p.get("remembered") for p in outcome.ui_event["products"]}
+    assert marks == {
+        ("Diet Coke Soft Drink Can", "330 ml"): "purchase_history",
+        ("Diet Coke Soft Drink Can", "6 x 330 ml"): None,
+        ("Coke Zero Soft Drink Can", "330 ml"): None,
+    }
+    # Money reaches the screen as backend ₹ strings, next to the rupee numbers.
+    price = outcome.ui_event["products"][0]["price"]
+    assert (price["offer_display"], price["mrp_display"], price["saving_display"]) == ("₹45", "₹50", "₹5")
+
+
+@pytest.mark.asyncio
 async def test_cross_store_match_is_labelled() -> None:
     output = await search(toolbox(FakeMemory(remembered_coke("zepto")), COKE[:1]))
     (result,) = output["results"]

@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.shopping.models import DisplayedPrice
+
 
 class PendingAuthorization(BaseModel):
     code_verifier: str = Field(repr=False)
@@ -62,9 +64,7 @@ class AddressList(BaseModel):
     refreshed_at: datetime | None = None
 
 
-class Price(BaseModel):
-    mrp: float
-    offer_price: float
+class Price(DisplayedPrice):
     unit_level_price: str | None = None
 
 
