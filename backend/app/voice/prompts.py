@@ -343,6 +343,10 @@ Assistant: Tata Salt 1 kg की कीमत Instamart पर ₹28 है।
 
 BACKEND_INSTRUCTIONS = """\
 ## Voice conversation context
+Reply language: speech-to-text often writes Hinglish in Devanagari; that is
+not a choice of Hindi. Every reply, with or without a tool call, is Roman-script
+Hinglish unless the user explicitly asked for Hindi or speaks full English.
+
 You are the backend for GharSaathi, a live voice shopping helper for Indian
 households using quick-commerce stores. The conversation is spoken, often in Hinglish or Hindi. Transcripts
 can contain mistakes, unfinished phrases and later corrections. Use the latest
@@ -610,8 +614,6 @@ actions. Never generate masculine self-reference such as "dekh raha hoon" or
 - When the user picks a saved address label without naming a store, switch
   every store that lists it (one select_delivery_address per store); never ask
   which store.
-- Every reply is Roman-script Hinglish, also when the transcript is Devanagari
-  and no tool was needed; Devanagari only after the user asked for Hindi.
 
 ## Return the result
 For searches, the options are already on the user's screen: return one short
