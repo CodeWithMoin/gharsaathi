@@ -3,6 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
+  Bell,
   Brain,
   CaretRight,
   Check,
@@ -23,6 +24,7 @@ import { ADDRESS_FORM_OPTIONS } from "./onboarding-flow.mjs";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useApiRequest } from "./authenticated-api";
 import { MemorySettings } from "./memory-settings";
+import { NotificationsDetail, notificationsSubtitle, type NotificationsController } from "./notification-settings";
 import { profileChanges, profileDraft, type ProfileUpdate, type ProfileValues } from "./input-flows.mjs";
 import { InputDialog } from "./ui/input-dialog";
 
@@ -71,9 +73,11 @@ export type AccountSettingsSheetProps = {
   onOpenSupport?: () => void;
   onSignOut: () => void;
   signOutPending?: boolean;
+  /** Browser notifications; the page owns the controller so the order prompt shares it. */
+  notifications?: NotificationsController;
 };
 
-type SettingsSection = "stores" | "preferences" | "memory" | "privacy" | "addresses" | null;
+type SettingsSection = "stores" | "preferences" | "memory" | "privacy" | "addresses" | "notifications" | null;
 
 /**
  * A controlled, mobile-first account panel. It intentionally has only an overview
@@ -99,6 +103,7 @@ export function AccountSettingsSheet({
   onOpenSupport,
   onSignOut,
   signOutPending = false,
+  notifications,
 }: AccountSettingsSheetProps) {
   const [section, setSection] = useState<SettingsSection>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -139,7 +144,9 @@ export function AccountSettingsSheet({
           ? "Privacy & memory"
           : section === "addresses"
             ? "Addresses"
-            : "Account";
+            : section === "notifications"
+              ? "Notifications"
+              : "Account";
 
   // A right-side push drawer: the page shell in page.tsx slides left by the same width with
   // the same spring and owns the backdrop, so tapping the pushed page closes this panel.
@@ -174,6 +181,7 @@ export function AccountSettingsSheet({
                   <SettingsRow icon={<Translate size={21} weight="duotone" />} title="Preferences" subtitle={languageLabel} onClick={() => setSection("preferences")} />
                   <SettingsRow icon={<Brain size={21} weight="duotone" />} title="Saved preferences" subtitle="Preferences, never, rules" onClick={() => setSection("memory")} />
                   <SettingsRow icon={<ShieldCheck size={21} weight="duotone" />} title="Privacy & memory" subtitle={privacySummary} onClick={() => setSection("privacy")} />
+                  {notifications && <SettingsRow icon={<Bell size={21} weight="duotone" />} title="Notifications" subtitle={notificationsSubtitle(notifications.view)} onClick={() => setSection("notifications")} />}
                   <SettingsRow icon={<MapPin size={21} weight="duotone" />} title="Addresses" subtitle={addressSummary} onClick={() => setSection("addresses")} last={!onOpenSupport} />
                   {onOpenSupport && <SettingsRow icon={<Lifebuoy size={21} weight="duotone" />} title="Help with an order" subtitle="Missing, damaged or late items" onClick={onOpenSupport} last />}
                 </nav>
@@ -187,6 +195,7 @@ export function AccountSettingsSheet({
                 {section === "preferences" && <PreferencesDetail languageLabel={languageLabel} onLanguageChange={onLanguageChange} onManagePreferences={onManagePreferences} />}
                 {section === "memory" && <MemorySettings />}
                 {section === "privacy" && <SimpleDetail icon={<Eye size={24} weight="duotone" />} title={privacySummary} description="You choose what GharSaathi remembers. Shopping history alone never becomes a stock prediction." action="Review privacy & memory" onAction={onManagePrivacy} />}
+                {section === "notifications" && notifications && <NotificationsDetail controller={notifications} />}
                 {section === "addresses" && <AddressesDetail addresses={addresses} stores={stores} onSelectAddress={onSelectAddress} onManageAddresses={onManageAddresses} onChooseStoreAddress={onChooseStoreAddress} />}
               </motion.div>}
           </AnimatePresence>

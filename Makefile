@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: start start-demo help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household check check-full test test-unit test-module test-integration test-failures clean-run live-smoke live-smoke-cart
+.PHONY: start start-demo help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household reconcile-unknown vapid-keys check check-full test test-unit test-module test-integration test-failures clean-run live-smoke live-smoke-cart
 
 start:
 	@./scripts/start.sh live
@@ -27,6 +27,8 @@ help:
 	@echo "  make zepto-preview Run a temporary-item, unconfirmed live preview (explicit opt-in)"
 	@echo "  make seed-sample-household   Demo only: load fictional sample orders + memories for your user"
 	@echo "  make unseed-sample-household Remove only that seeded sample data"
+	@echo "  make reconcile-unknown ARGS=--dry-run  Check unknown Zepto orders against order history (--apply settles single matches)"
+	@echo "  make vapid-keys    Generate browser-notification (Web Push) keys; prints them here only"
 	@echo "  make test          Run every test layer (backend + frontend)"
 	@echo "  make test-unit     Pure-logic tests (backend + frontend)"
 	@echo "  make test-module   Module tests with in-memory fakes (backend + frontend)"
@@ -77,10 +79,19 @@ zepto-preview:
 	@./scripts/zepto-preview.sh --seed-preview-cleanup
 
 seed-sample-household:
-	@cd backend && uv run --with-requirements requirements.txt python -m app.memory.sample_seed $(if $(USER_ID),--user-id $(USER_ID)) $(if $(HOUSEHOLD),--household $(HOUSEHOLD))
+	@./scripts/backend-cli.sh app.memory.sample_seed $(if $(USER_ID),--user-id $(USER_ID)) $(if $(HOUSEHOLD),--household $(HOUSEHOLD))
 
 unseed-sample-household:
-	@cd backend && uv run --with-requirements requirements.txt python -m app.memory.sample_seed --remove $(if $(USER_ID),--user-id $(USER_ID))
+	@./scripts/backend-cli.sh app.memory.sample_seed --remove $(if $(USER_ID),--user-id $(USER_ID))
+
+# The same database as `make start` (scripts/local-env.sh). ARGS is required: --dry-run or --apply.
+reconcile-unknown:
+	@test -n "$(ARGS)" || { echo "Usage: make reconcile-unknown ARGS=--dry-run  (or ARGS=--apply)" >&2; exit 2; }
+	@./scripts/backend-cli.sh app.shopping.reconcile_unknown $(ARGS)
+
+# Prints the private key to this terminal only; paste the lines into .env.
+vapid-keys:
+	@cd backend && PYTHONPATH=. uv run --with-requirements requirements.txt python -m app.notifications.vapid
 
 check:
 	@./scripts/verify.sh

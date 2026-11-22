@@ -562,8 +562,9 @@ CAPABILITIES: tuple[Capability, ...] = (
             "Read-only provider status polling at the provider's interval. POST /api/orders/confirm "
             "starts a monitor for a provider-confirmed Zepto order (idempotent per order). Zepto "
             "status comes from get_order_status when the live catalogue has it, else the read-only "
-            "get_order_detail (shipment status + Zepto's committed ETA). Updates are in-app only: "
-            "no push, SMS or calls.",
+            "get_order_detail (shipment status + Zepto's committed ETA). Updates show in-app, and "
+            "as browser notifications when the user turned them on (see browser_notifications); "
+            "no SMS or calls.",
         ),
         voice_tools=("get_order_status",),
         routes=(
@@ -577,6 +578,43 @@ CAPABILITIES: tuple[Capability, ...] = (
             "frontend/app/order-tracking.tsx",
             "frontend/app/order-status-card.tsx",
             "frontend/app/order-status.mjs",
+        ),
+    ),
+    Capability(
+        id="browser_notifications",
+        title="Browser notifications for order updates",
+        voice=S(U, "Turned on and off in Settings → Notifications only; the browser must ask the user."),
+        typed_chat=S(U, "Same as voice."),
+        ui=S(
+            W,
+            "Opt-in: Settings → Notifications (a toggle; the browser permission is asked only after "
+            "the tap), per-kind switches, Send a test, and a one-time 'Get delivery updates as "
+            "notifications?' after the first placed order. Denied, unsupported, insecure (plain-http "
+            "LAN IP) and iPhone-needs-Home-Screen states explain themselves. Hidden when the server "
+            "has no VAPID keys. The service worker skips the system notification while a "
+            "GharSaathi tab is visible and focused (the in-app toast shows instead).",
+        ),
+        backend=S(
+            W,
+            "Web Push (VAPID, pywebpush) to the user's own browsers: order placed (also via "
+            "reconciliation), out for delivery, delivered (Zepto's time), running late, cancelled, "
+            "order still unconfirmed after the checks, payment needs action/failed (online payments "
+            "only) and an untapped order card about to expire. Deduped per event, rate-limited per "
+            "user, subscriptions encrypted at rest and removed on 404/410. No replenishment or "
+            "low-stock reminders.",
+        ),
+        routes=(
+            "GET /api/notifications/vapid-public-key",
+            "GET /api/notifications/settings",
+            "PUT /api/notifications/settings",
+            "POST /api/notifications/subscriptions",
+            "DELETE /api/notifications/subscriptions",
+            "POST /api/notifications/test",
+        ),
+        ui_files=(
+            "frontend/app/notification-settings.tsx",
+            "frontend/app/push-notifications.mjs",
+            "frontend/public/sw.js",
         ),
     ),
     Capability(
@@ -931,9 +969,11 @@ API_CONTRACTS: dict[str, tuple[str, ...]] = {
         'Response 200: {"conversation_id": "<uuid>" | null, "reply": "Roman-script Hinglish text", '
         '"ui_events": [{"type": "tool.results" | "basket.updated" | "basket.approval_requested" | '
         '"order.confirmation_requested" | "photo.read" | "address_form.open" | "address_form.unavailable" | "address.selected" | "tool.not_connected" | "tool.error" | '
-        '"memory.changed", ...}]}',
+        '"memory.changed", ...}], "incomplete": false}',
         "ui_events use the voice sideband shapes. Caps per turn: 6 tool rounds, 2 searches. "
-        "Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS).",
+        "Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS). "
+        "A model failure or timeout after a tool saved a basket change is 200 with incomplete: true, the "
+        "saved change's ui_events and a short fixed reply in the profile language; tools are never re-run.",
     ),
     "POST /api/chat/attachments": (
         "Auth: Clerk bearer token and accepted current terms. multipart/form-data with one `file` field.",

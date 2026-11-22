@@ -13,3 +13,4 @@ export function resultsHeadline(optionCount: number, shownLimit: number): string
 export function groupBadge(label: string, optionCount: number): string;
 export function resultGroupsSnapshot<P>(groups: ResultGroup<P>[]): ResultGroupSnapshot<P>[];
 export function restoreResultGroups<P>(saved: { resultGroups?: unknown; products?: P[]; searched?: boolean; submittedQuery?: string; resultsAfterMessageId?: string | null; resultsSeq?: number }): ResultGroup<P>[];
+export function directSearchOutcome<P>(outcomes: PromiseSettledResult<P[]>[]): { status: "results"; products: P[]; failures: number } | { status: "empty" } | { status: "failed"; message: string };

@@ -98,7 +98,12 @@ class ConversationRepository:
         result = await self.session.execute(
             select(Conversation)
             .where(Conversation.subject_id == subject_id)
-            .order_by(Conversation.updated_at.desc(), Conversation.created_at.desc())
+            # The open chat first: reopening one archives the other with the same timestamp.
+            .order_by(
+                Conversation.archived_at.is_(None).desc(),
+                Conversation.updated_at.desc(),
+                Conversation.created_at.desc(),
+            )
             .limit(limit)
         )
         return list(result.scalars())

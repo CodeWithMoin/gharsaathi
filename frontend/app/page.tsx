@@ -10,7 +10,7 @@ import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, useSetBasketLineQu
 import { ProductOptions, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
 import { basketSummary, collapseBasketCard, dropResultGroup, emptyTimeline, finishResultGroup, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordOrderCard, recordResultGroup, restoreTimeline, summaryText, updateOrderCard, withResultGroups, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
-import { restoreResultGroups, resultGroupIdentity, type ResultGroup } from "./result-groups.mjs";
+import { directSearchOutcome, restoreResultGroups, resultGroupIdentity, type ResultGroup } from "./result-groups.mjs";
 import { conversationTitle, relativeChatDate, searchConversations, visibleConversations, type ConversationSummary } from "./chat-list.mjs";
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
@@ -20,6 +20,8 @@ import { VoicePanel, useVoicePrewarm, type VoiceAddressFormRequest, type VoiceTr
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
 import { FirstRunOnboarding } from "./first-run-onboarding";
 import { AccountSettingsSheet } from "./account-settings-sheet";
+import { OrderNotificationPrompt, useNotifications } from "./notification-settings";
+import { orderFromUrl } from "./push-notifications.mjs";
 import type { ZeptoAddressPrefillRequest, ZeptoPrefillResult } from "./zepto-address-form";
 import { AddressFormSheet } from "./address-form-sheet";
 import { AddressPickerDialog, StoreAddressRow, type AddressPickerStore } from "./address-picker-dialog";
@@ -30,7 +32,7 @@ import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
 import { ADDRESS_REMOVED_MESSAGE, applyAssistantEvent } from "./assistant-events.mjs";
 import { zeptoAddressSelection } from "./zepto-address-refresh.mjs";
 import { OrderConfirmationCard } from "./order-confirmation-card";
-import { cartBadgeCount, newOrderCard, orderCardKey, orderedSummary, supersedeOrderCard, supersededOrderText, withOrderResult, type LiveOrderCard } from "./card-lifecycle.mjs";
+import { cartBadgeCount, newOrderCard, orderCardKey, orderedSummary, supersedeOrderCard, supersededOrderText, withOrderResult, type BasketLike, type LiveOrderCard } from "./card-lifecycle.mjs";
 import { orderCardIndex, type OrderCardState, type OrderConfirmation } from "./order-confirmation.mjs";
 import { OrderStatusCard } from "./order-status-card";
 import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
@@ -44,7 +46,8 @@ type CommerceMode = "demo" | "live";
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string; photo_thumbnail?: string | null; photo_preview?: string | null };
 type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; timeline?: unknown; result_groups?: unknown; updated_at: string };
 type LegacyConversation = { submittedQuery?: string; products?: Product[]; searched?: boolean };
-type ChatTurnResponse = { conversation_id: string | null; reply: string; ui_events: unknown[] };
+// incomplete: the assistant failed after saving a basket change; reply is a short fixed line.
+type ChatTurnResponse = { conversation_id: string | null; reply: string; ui_events: unknown[]; incomplete?: boolean };
 let swiggyConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
 let zeptoConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
 
@@ -73,8 +76,13 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   // The one-tap order card prepared by voice or typed chat; it is not saved with the chat.
   // Once its order is placed it becomes a live status card in the (saved) timeline.
   const [orderCard, setOrderCard] = useState<LiveOrderCard | null>(null);
-  // In-app order updates only (out for delivery, delivered, delayed, cancelled); no push or calls.
+  // In-app order updates (out for delivery, delivered, delayed, cancelled). Browser
+  // notifications for the same updates are opt-in (Settings → Notifications).
   const [orderToast, setOrderToast] = useState<string | null>(null);
+  const notifications = useNotifications();
+  const offerNotificationsRef = useRef(false);
+  offerNotificationsRef.current = notifications.offerOrderPrompt;
+  const [notificationPrompt, setNotificationPrompt] = useState(false);
   const [chatSaveFailed, setChatSaveFailed] = useState(false);
   const [addingSku, setAddingSku] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(startWithSetupOpen);
@@ -150,8 +158,11 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     billStageRef.current = { ...billStageRef.current, [provider]: stage };
     setBasketProvider(provider);
   }, []);
-  const handleBasketTouched = useCallback((provider?: ProviderName) => {
+  const handleBasketTouched = useCallback((provider?: ProviderName, basket?: BasketLike) => {
     const store = provider ?? basketProviderRef.current;
+    // An assistant edit changes the revision: an open order card for the old one is out of date now,
+    // not only after the basket panel re-reads the basket.
+    if (basket) setOrderCard((current) => supersedeOrderCard(current, basket));
     window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
     const stage = pendingBillStageRef.current[store] ?? "updated";
     pendingBillStageRef.current = { ...pendingBillStageRef.current, [store]: undefined };
@@ -198,7 +209,30 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       tracking: state.tracking,
     });
     setOrderCard((current) => current?.confirmation.id === card.confirmation.id ? null : current);
+    // Asked once, after a placed order, and only by our own prompt (never on load).
+    if (offerNotificationsRef.current) setNotificationPrompt(true);
   }, [recordPlacedOrder]);
+  // A tapped notification opens "/?order=<id>" (or messages an open tab): show that order.
+  useEffect(() => {
+    if (!chatHydrated) return;
+    const reveal = (url: string) => {
+      const orderId = orderFromUrl(url);
+      if (!orderId) return;
+      window.setTimeout(() => document.getElementById(`order-status-${orderId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+    };
+    const current = new URL(window.location.href);
+    if (current.searchParams.has("order")) {
+      reveal(`${current.pathname}${current.search}`);
+      current.searchParams.delete("order");
+      window.history.replaceState(null, "", `${current.pathname}${current.search}${current.hash}`);
+    }
+    if (!("serviceWorker" in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === "gharsaathi:open" && typeof event.data.url === "string") reveal(event.data.url);
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [chatHydrated]);
   // On app load: one read-only check of any earlier order whose outcome is unknown.
   const pendingOrdersCheckedRef = useRef(false);
   useEffect(() => {
@@ -890,13 +924,18 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
           apiRequest<{ products: Product[] }>("/api/zepto/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: clean, address_id: zeptoAddressId, page_number: 0 }) })
             .then((data) => data.products.map((product) => ({ ...product, provider: "zepto" as const, provider_label: "Zepto" }))),
         );
-        const outcomes = await Promise.allSettled(searches);
-        const combined = outcomes.flatMap((outcome) => outcome.status === "fulfilled" ? outcome.value : []);
-        const failures = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
-        setTimeline((current) => finishResultGroup(current, identity.key, { products: combined, status: "done" }));
-        if (combined.length) setMessage(`${combined.length} ${commerceMode === "demo" ? "demo" : "live"} options found across ready stores.`);
-        else if (failures.length) setMessage(failures[0].reason instanceof Error ? failures[0].reason.message : "Store search failed.");
-        else setMessage("No matching products found at the selected addresses.");
+        const outcome = directSearchOutcome(await Promise.allSettled(searches));
+        if (outcome.status === "failed") {
+          // A store error is not "no results": show the error with its retry, not an empty group.
+          setTimeline((current) => dropResultGroup(current, identity.key));
+          setChatFailure({ query: clean, message: outcome.message });
+          setMessage(outcome.message);
+        } else {
+          const combined = outcome.status === "results" ? outcome.products : [];
+          setTimeline((current) => finishResultGroup(current, identity.key, { products: combined, status: "done" }));
+          if (combined.length) setMessage(`${combined.length} ${commerceMode === "demo" ? "demo" : "live"} options found across ready stores.`);
+          else setMessage("No matching products found at the selected addresses.");
+        }
       } catch (cause) {
         setTimeline((current) => dropResultGroup(current, identity.key));
         setMessage(cause instanceof Error ? cause.message : "Search failed.");
@@ -1146,6 +1185,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     </section>
 
     <AnimatePresence>{addressRemovedToast && !orderToast && addressPicker !== "zepto" && <motion.div key="address-removed-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} style={{ bottom: insets.bottom + 112 }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><button type="button" onClick={() => { setAddressRemovedToast(false); setAddressPicker("zepto"); }} className="pointer-events-auto max-w-sm rounded-full bg-inverse px-4 py-2.5 text-center text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">{ADDRESS_REMOVED_MESSAGE}</button></motion.div>}</AnimatePresence>
+    <AnimatePresence>{notificationPrompt && !orderToast && <motion.div key="notification-prompt" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} style={{ bottom: insets.bottom + 112 }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><OrderNotificationPrompt controller={notifications} onDone={() => setNotificationPrompt(false)} /></motion.div>}</AnimatePresence>
     <AnimatePresence>{orderToast && <motion.div key="order-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} style={{ bottom: insets.bottom + 112 }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><p role="status" aria-live="polite" className="pointer-events-auto max-w-sm rounded-full bg-inverse px-4 py-2.5 text-center text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">{orderToast}</p></motion.div>}</AnimatePresence>
 
     <div style={{ bottom: insets.bottom }} className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
@@ -1160,6 +1200,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     </motion.div>
 
     <AccountSettingsSheet
+      notifications={notifications}
       open={accountSettingsOpen}
       onOpenChange={setAccountSettingsOpen}
       identity={{ name: userName, email: user?.primaryEmailAddress?.emailAddress }}

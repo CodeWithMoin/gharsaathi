@@ -273,6 +273,33 @@ fetch:smart-turn-model`; without it the browser falls back to `tuned`. Findings,
 measurements and the evaluation command are in
 [`docs/voice-turn-taking.md`](docs/voice-turn-taking.md).
 
+## Browser notifications (optional)
+
+Order updates (placed, out for delivery, delivered, running late, cancelled, an order
+the store still hasn't confirmed, payment needing action, an untapped order card about
+to expire) can also arrive as browser notifications. They are opt-in per person in
+**Settings → Notifications**, and the browser asks for permission only after that tap
+(or after "Turn on" in the one-time prompt shown after the first placed order).
+
+Owner setup, once:
+
+```bash
+make vapid-keys          # prints three lines to this terminal only
+# paste WEB_PUSH_VAPID_PUBLIC_KEY, WEB_PUSH_VAPID_PRIVATE_KEY and WEB_PUSH_SUBJECT
+# (mailto: you) into the repository .env, then restart the backend
+```
+
+Without all three (or with a public key that doesn't match the private key) the
+feature is hidden and Settings shows a setup hint. Keep the keys stable: new keys
+invalidate every browser subscription, and each person turns notifications on again.
+
+Where it works: Chrome, Edge, Firefox and Safari on macOS, and Chrome/Firefox on
+Android, on `https://` or `http://localhost`. A plain-`http` LAN address
+(`http://192.168.x.x:3003`) is not a secure context, so browsers refuse push there.
+On iPhone and iPad (iOS/iPadOS 16.4+) web push works only after **Share → Add to
+Home Screen**; open GharSaathi from the Home Screen icon and turn notifications on
+there. Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#browser-notifications).
+
 ## Capability matrix
 
 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) lists every user-facing capability
@@ -315,6 +342,9 @@ wire up a feature:
   user-selected, consented usual against a provider-confirmed free-delivery threshold
 - `POST /api/zepto/checkout/cod` with an approved `approval_id`, its exact
   `fingerprint`, and an `Idempotency-Key` header — one-shot live COD submission
+- `GET /api/notifications/vapid-public-key`, `GET|PUT /api/notifications/settings`,
+  `POST|DELETE /api/notifications/subscriptions`, `POST /api/notifications/test` —
+  the signed-in user's own browser notifications (see above)
 
 ## Person-scoped memory
 
@@ -392,6 +422,16 @@ permissions if they are not already on. Seeded orders use `sample-` order ids an
 memories use the `sample-household-seed` source, so the unseed command removes only
 them; it leaves permissions for you to change in settings.
 
+### Settle unknown Zepto orders
+
+```bash
+make reconcile-unknown ARGS=--dry-run   # read-only; ARGS=--apply settles single matches
+```
+
+Checks every `outcome_unknown` Zepto checkout against Zepto's order history (read-only
+tools only). Like the seed commands it runs through `scripts/backend-cli.sh`, which uses
+the same `DATABASE_URL` as the app (`scripts/local-env.sh`).
+
 ## Voice transcript turns and event diagnostics
 
 GPT-Live transcript events (`session.input_transcript.delta`,
@@ -430,6 +470,14 @@ or id values.
   and returns the same numbers to the browser (`source: "server"`). An offline
   benchmark of the backend stages with fakes:
   `cd backend && PYTHONPATH=. uv run --with-requirements requirements.txt python scripts/bench_voice_start.py`.
+- Turn latency: with `VOICE_EVENT_LOG=true` the backend also logs, per shopping
+  turn, `event=voice_delegation_timing` (first function call, tool wait,
+  continuation to next backend event, first text, total, rounds),
+  `event=voice_tool_timing` / `event=chat_tool_timing` per tool (memory,
+  `swiggy_instamart_ms`, `zepto_ms`, `post_ms`) and `event=chat_turn_timing` for
+  typed turns. Benchmark (offline fakes by default; `--live` uses OpenAI with the
+  demo catalogues only):
+  `cd backend && PYTHONPATH=. uv run --with-requirements requirements.txt python -m evaluation.run_turn_latency [--live --runs 5 --effort low]`.
 
 ## Verification
 

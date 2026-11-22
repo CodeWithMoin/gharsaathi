@@ -34,7 +34,12 @@ from app.voice.memory_write_tools import (
     MemoryWriteToolExecutor,
 )
 from app.voice.memory_choices import MemoryChoiceHooks
-from app.voice.memory_tools import MEMORY_TOOL_DEFINITIONS, MEMORY_TOOL_NAMES, MemoryToolExecutor
+from app.voice.memory_tools import (
+    MEMORY_TOOL_DEFINITIONS,
+    MEMORY_TOOL_NAMES,
+    NO_MEMORY_NOTE,
+    MemoryToolExecutor,
+)
 from app.shopping.models import ProviderName
 from app.shopping.order_confirmation import OrderConfirmations
 from app.voice.order_tools import ORDER_TOOL_DEFINITIONS, ORDER_TOOL_NAMES, OrderToolExecutor
@@ -55,6 +60,19 @@ from app.voice.tools import (
     ToolOutcome,
 )
 
+
+SEARCH_TOOL_NAME = "search_products"
+NO_MEMORY_SEARCHED_NOTE = (
+    "Nothing remembered for this item, so it was already searched: 'search' holds the "
+    "search_products result and its options are on the user's screen. Do not search this "
+    "item again; reply from these results, and for several items ask one combined question, "
+    "for example 'Atta aur dahi ke options screen par hain; kaunsa lena hai?'. Do not ask "
+    "brand and size per item."
+)
+NO_MEMORY_SEARCH_FAILED_NOTE = (
+    "Nothing remembered for this item. The automatic search in 'search' found no usable "
+    "results; follow its status and message."
+)
 
 VOICE_TOOL_DEFINITIONS = [
     *SEARCH_TOOL_DEFINITIONS,
@@ -201,7 +219,7 @@ class VoiceToolbox:
         if name in ADDRESS_TOOL_NAMES:
             return await self.address_form.execute(name, raw_arguments)
         if name in MEMORY_TOOL_NAMES:
-            return await self.memory.execute(name, raw_arguments)
+            return await self._recall_then_search(name, raw_arguments)
         if name in ORDER_TOOL_NAMES:
             return await self.order.execute(name, raw_arguments)
         if name in ORDER_STATUS_TOOL_NAMES:
@@ -232,3 +250,32 @@ class VoiceToolbox:
             # A search for an item read from a product photo is compared with that photo.
             outcome = await self.photo.after_search(raw_arguments, outcome)
         return outcome
+
+    async def _recall_then_search(self, name: str, raw_arguments: str) -> ToolOutcome:
+        """Recall; when nothing is remembered, search the item in the same tool call.
+
+        The prompt searches right after a no_memory recall anyway, so doing it
+        here saves one backend model round. Remembered items still stop at the
+        recall, so the user is asked about their past choice before any search.
+        """
+
+        recalled = await self.memory.execute(name, raw_arguments)
+        item = recalled.model_output.get("item")
+        if recalled.model_output.get("status") != "no_memory" or not isinstance(item, str):
+            return recalled
+        query = json.dumps({"query": item})
+        self.choices.saw_search(query)
+        searched = await self.photo.after_search(
+            query, await self.search.execute(SEARCH_TOOL_NAME, query)
+        )
+        searched_ok = searched.model_output.get("status") == "ok"
+        note = recalled.model_output.get("note", "")
+        return ToolOutcome(
+            model_output={
+                **recalled.model_output,
+                "note": (NO_MEMORY_SEARCHED_NOTE if searched_ok else NO_MEMORY_SEARCH_FAILED_NOTE)
+                + note.removeprefix(NO_MEMORY_NOTE),
+                "search": searched.model_output,
+            },
+            ui_event=searched.ui_event,
+        )

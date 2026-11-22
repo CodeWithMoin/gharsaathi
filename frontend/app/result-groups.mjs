@@ -168,3 +168,24 @@ export function restoreResultGroups({ resultGroups, products = [], searched = fa
     seq: resultsSeq,
   }];
 }
+
+/**
+ * What the "Search directly" fallback shows once every store answered.
+ *
+ * A store that failed says nothing about whether the product exists, so when
+ * no store returned a product and at least one failed, the outcome is the
+ * store's error, never an empty result group.
+ *
+ * @template P
+ * @param {PromiseSettledResult<P[]>[]} outcomes one per searched store
+ * @returns {{ status: "results", products: P[], failures: number } | { status: "empty" } | { status: "failed", message: string }}
+ */
+export function directSearchOutcome(outcomes) {
+  const products = outcomes.flatMap((outcome) => outcome.status === "fulfilled" ? outcome.value : []);
+  const failures = outcomes.filter((outcome) => outcome.status === "rejected");
+  if (products.length) return { status: "results", products, failures: failures.length };
+  if (!failures.length) return { status: "empty" };
+  const reason = /** @type {PromiseRejectedResult} */ (failures[0]).reason;
+  const message = reason instanceof Error && reason.message ? reason.message : "Store search failed.";
+  return { status: "failed", message };
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import random
 from collections.abc import Callable
+from typing import Any
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -43,8 +44,11 @@ class OrderTrackingService:
         *,
         now: Callable[[], datetime] = utc_now,
         jitter: Callable[[float, float], float] = random.uniform,
+        push: Any = None,
     ) -> None:
         self.store = store
+        # Browser notifications for the same four in-app updates.
+        self.push = push
         self.providers = providers
         self.now = now
         self.jitter = jitter
@@ -192,6 +196,10 @@ class OrderTrackingService:
                         )
                     ]
                 )[-MAX_NOTIFICATIONS:]
+                if self.push is not None:
+                    self.push.tracking_update(
+                        watch, kind, snapshot, store=STORE_LABELS[watch.provider]
+                    )
             watch.snapshot = snapshot
             watch.status = _effective_status(snapshot)
             watch.checked_at = now

@@ -11,6 +11,7 @@ from app.commerce.relevance import refine_search_result
 from app.commerce.zepto.client import ZeptoMcpClient
 from app.commerce.zepto.adapter import parse_addresses, parse_products
 from app.commerce.zepto.cart import ZeptoCart, parse_view_cart
+from app.commerce.zepto.diagnostics import log_search_unrecognised
 from app.commerce.zepto.history import (
     ZeptoOrderDetail,
     ZeptoOrderHistory,
@@ -29,6 +30,7 @@ from app.commerce.zepto.errors import (
     ZeptoProviderError,
     ZeptoRateLimited,
     ZeptoSessionExpired,
+    ZeptoUnrecognisedResponse,
 )
 from app.commerce.zepto.oauth import ZeptoOAuthClient
 
@@ -273,7 +275,12 @@ class ZeptoService:
                 raw = await self.client.call_tool(
                     tool, {"query": queries[0], "pageNumber": page_number}
                 )
-            return refine_search_result(normalized, parse_products(raw))
+            try:
+                parsed = parse_products(raw)
+            except ZeptoUnrecognisedResponse:
+                log_search_unrecognised(correlation_id=uuid.uuid4().hex, tool=tool, payload=raw)
+                raise
+            return refine_search_result(normalized, parsed)
 
         async with self._search_lock:
             cached = self._search_cache.get(cache_key)
@@ -289,6 +296,21 @@ class ZeptoService:
         if self.reranker is not None:
             return await self.reranker.rerank(normalized, result)
         return result
+
+    async def prewarm(self, address_id: str) -> None:
+        """Open the MCP session and select the address before the first search needs them.
+
+        Read-only setup that voice session start runs in the background. No retry:
+        a failure here leaves recovery to the first search.
+        """
+
+        if address_id in self._removed_addresses:
+            return
+        async with self._search_lock:
+            generation = await self.client.prepare_session()
+            if self._selected_address != (generation, address_id):
+                await self._select_address(address_id)
+                self._selected_address = (self.client.session_generation, address_id)
 
 
 def _split_queries(query: str) -> list[str]:

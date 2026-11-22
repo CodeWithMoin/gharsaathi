@@ -1,0 +1,487 @@
+{
+  "generated": "2026-11-22",
+  "method": "median ms over N live runs (OpenAI gpt-6-luna Responses, demo catalogues + harness fixtures, no store network); before = main at 2cc851b, default (medium) effort; final = this branch after merging main (prompt 1.30.0), medium effort. JEV reranking is not included (demo/fake stores); in production it adds ~0.4 s inside each store's search stage.",
+  "offline_fakes_ms": {
+    "before": {
+      "search_both_healthy_ms (Swiggy 0.7 s, Zepto 1.1 s)": 1101.3,
+      "search_zepto_slow_ms (Swiggy 0.7 s, Zepto 9 s)": 9001.3,
+      "swiggy_cooldown_while_busy_ms (in-flight request 2 s)": 1950.1,
+      "typed_round_two_searches_ms (stores 0.7/1.1 s)": 2202.9
+    },
+    "after": {
+      "search_both_healthy_ms (Swiggy 0.7 s, Zepto 1.1 s)": 1101.3,
+      "search_zepto_slow_ms (Swiggy 0.7 s, Zepto 9 s)": 4001.3,
+      "swiggy_cooldown_while_busy_ms (in-flight request 2 s)": 0.0,
+      "typed_round_two_searches_ms (stores 0.7/1.1 s)": 1101.8
+    }
+  },
+  "live": {
+    "before_medium": {
+      "delegation:choc-recall:t1": {
+        "n": 5,
+        "total_ms_median": 9994.0,
+        "rounds_median": 3,
+        "model_ms_median": 9993.0,
+        "first_round_ms_median": 2328.0,
+        "final_round_ms_median": 3778.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 81,
+        "input_tokens_median": 31861,
+        "tool_patterns": [
+          "recall_household_preferences/search_products/reply"
+        ]
+      },
+      "delegation:choc-recall:t2": {
+        "n": 5,
+        "total_ms_median": 7335.0,
+        "rounds_median": 2,
+        "model_ms_median": 7334.0,
+        "first_round_ms_median": 3708.0,
+        "final_round_ms_median": 3494.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 16,
+        "input_tokens_median": 22644,
+        "tool_patterns": [
+          "add_to_basket/reply"
+        ]
+      },
+      "typed:choc-recall:t1": {
+        "n": 5,
+        "total_ms_median": 10522.0
+      },
+      "typed:choc-recall:t2": {
+        "n": 5,
+        "total_ms_median": 5832.0
+      },
+      "delegation:choc-specified:t1": {
+        "n": 5,
+        "total_ms_median": 9006.0,
+        "rounds_median": 3,
+        "model_ms_median": 9005.0,
+        "first_round_ms_median": 2344.0,
+        "final_round_ms_median": 3190.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 32467,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:choc-specified:t1": {
+        "n": 5,
+        "total_ms_median": 9326.0
+      },
+      "delegation:coke-memory:t1": {
+        "n": 5,
+        "total_ms_median": 5326.0,
+        "rounds_median": 2,
+        "model_ms_median": 5326.0,
+        "first_round_ms_median": 2036.0,
+        "final_round_ms_median": 3286.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 19,
+        "input_tokens_median": 21059,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:coke-memory:t2": {
+        "n": 5,
+        "total_ms_median": 10523.0,
+        "rounds_median": 3,
+        "model_ms_median": 10522.0,
+        "first_round_ms_median": 3270.0,
+        "final_round_ms_median": 3175.0,
+        "tool_ms_median": 1.0,
+        "reasoning_tokens_median": 57,
+        "input_tokens_median": 34236,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:coke-memory:t1": {
+        "n": 5,
+        "total_ms_median": 5666.0
+      },
+      "typed:coke-memory:t2": {
+        "n": 5,
+        "total_ms_median": 10394.0
+      }
+    },
+    "after_low": {
+      "delegation:choc-recall:t1": {
+        "n": 5,
+        "total_ms_median": 5914.0,
+        "rounds_median": 2,
+        "model_ms_median": 5913.0,
+        "first_round_ms_median": 2516.0,
+        "final_round_ms_median": 3397.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 21237,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:choc-recall:t2": {
+        "n": 5,
+        "total_ms_median": 7273.0,
+        "rounds_median": 2,
+        "model_ms_median": 7273.0,
+        "first_round_ms_median": 3380.0,
+        "final_round_ms_median": 3393.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 22140,
+        "tool_patterns": [
+          "add_to_basket/reply"
+        ]
+      },
+      "typed:choc-recall:t1": {
+        "n": 5,
+        "total_ms_median": 6144.0
+      },
+      "typed:choc-recall:t2": {
+        "n": 5,
+        "total_ms_median": 5834.0
+      },
+      "delegation:choc-specified:t1": {
+        "n": 5,
+        "total_ms_median": 9792.0,
+        "rounds_median": 3,
+        "model_ms_median": 9792.0,
+        "first_round_ms_median": 2559.0,
+        "final_round_ms_median": 3498.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 32163,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:choc-specified:t1": {
+        "n": 5,
+        "total_ms_median": 8915.0
+      },
+      "delegation:coke-memory:t1": {
+        "n": 5,
+        "total_ms_median": 5842.0,
+        "rounds_median": 2,
+        "model_ms_median": 5842.0,
+        "first_round_ms_median": 2078.0,
+        "final_round_ms_median": 3190.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 21059,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:coke-memory:t2": {
+        "n": 5,
+        "total_ms_median": 9931.0,
+        "rounds_median": 3,
+        "model_ms_median": 9930.0,
+        "first_round_ms_median": 3173.0,
+        "final_round_ms_median": 3312.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 33750,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:coke-memory:t1": {
+        "n": 5,
+        "total_ms_median": 5223.0
+      },
+      "typed:coke-memory:t2": {
+        "n": 5,
+        "total_ms_median": 8972.0
+      }
+    },
+    "after_none": {
+      "delegation:choc-recall:t1": {
+        "n": 5,
+        "total_ms_median": 6111.0,
+        "rounds_median": 2,
+        "model_ms_median": 6111.0,
+        "first_round_ms_median": 2504.0,
+        "final_round_ms_median": 3542.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 21237,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:choc-recall:t2": {
+        "n": 5,
+        "total_ms_median": 6691.0,
+        "rounds_median": 2,
+        "model_ms_median": 6691.0,
+        "first_round_ms_median": 3413.0,
+        "final_round_ms_median": 3277.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 22140,
+        "tool_patterns": [
+          "add_to_basket/reply"
+        ]
+      },
+      "typed:choc-recall:t1": {
+        "n": 5,
+        "total_ms_median": 5835.0
+      },
+      "typed:choc-recall:t2": {
+        "n": 5,
+        "total_ms_median": 6174.0
+      },
+      "delegation:choc-specified:t1": {
+        "n": 5,
+        "total_ms_median": 9442.0,
+        "rounds_median": 3,
+        "model_ms_median": 9442.0,
+        "first_round_ms_median": 2457.0,
+        "final_round_ms_median": 3430.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 32163,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:choc-specified:t1": {
+        "n": 5,
+        "total_ms_median": 9564.0
+      },
+      "delegation:coke-memory:t1": {
+        "n": 5,
+        "total_ms_median": 5537.0,
+        "rounds_median": 2,
+        "model_ms_median": 5536.0,
+        "first_round_ms_median": 2161.0,
+        "final_round_ms_median": 3387.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 21059,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:coke-memory:t2": {
+        "n": 5,
+        "total_ms_median": 9986.0,
+        "rounds_median": 3,
+        "model_ms_median": 9986.0,
+        "first_round_ms_median": 3379.0,
+        "final_round_ms_median": 3336.0,
+        "tool_ms_median": 1.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 33750,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:coke-memory:t1": {
+        "n": 5,
+        "total_ms_median": 5826.0
+      },
+      "typed:coke-memory:t2": {
+        "n": 5,
+        "total_ms_median": 8909.0
+      }
+    },
+    "after_merge_low": {
+      "delegation:choc-recall:t1": {
+        "n": 3,
+        "total_ms_median": 6417.0,
+        "rounds_median": 2,
+        "model_ms_median": 6417.0,
+        "first_round_ms_median": 2586.0,
+        "final_round_ms_median": 3864.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 23791,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:choc-recall:t2": {
+        "n": 3,
+        "total_ms_median": 7394.0,
+        "rounds_median": 2,
+        "model_ms_median": 7394.0,
+        "first_round_ms_median": 4129.0,
+        "final_round_ms_median": 3383.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 24758,
+        "tool_patterns": [
+          "add_to_basket/reply"
+        ]
+      },
+      "typed:choc-recall:t1": {
+        "n": 3,
+        "total_ms_median": 6726.0
+      },
+      "typed:choc-recall:t2": {
+        "n": 3,
+        "total_ms_median": 5887.0
+      },
+      "delegation:choc-specified:t1": {
+        "n": 3,
+        "total_ms_median": 9493.0,
+        "rounds_median": 3,
+        "model_ms_median": 9493.0,
+        "first_round_ms_median": 2246.0,
+        "final_round_ms_median": 3678.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 36010,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:choc-specified:t1": {
+        "n": 3,
+        "total_ms_median": 8908.0
+      },
+      "delegation:coke-memory:t1": {
+        "n": 3,
+        "total_ms_median": 5376.0,
+        "rounds_median": 2,
+        "model_ms_median": 5376.0,
+        "first_round_ms_median": 2157.0,
+        "final_round_ms_median": 3225.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 23613,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:coke-memory:t2": {
+        "n": 3,
+        "total_ms_median": 9544.0,
+        "rounds_median": 3,
+        "model_ms_median": 9543.0,
+        "first_round_ms_median": 3062.0,
+        "final_round_ms_median": 3245.0,
+        "tool_ms_median": 1.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 37581,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:coke-memory:t1": {
+        "n": 3,
+        "total_ms_median": 5882.0
+      },
+      "typed:coke-memory:t2": {
+        "n": 3,
+        "total_ms_median": 10548.0
+      }
+    },
+    "final_medium_after_merge_1_30": {
+      "delegation:choc-recall:t1": {
+        "n": 3,
+        "total_ms_median": 6942.0,
+        "rounds_median": 2,
+        "model_ms_median": 6941.0,
+        "first_round_ms_median": 2063.0,
+        "final_round_ms_median": 3950.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 61,
+        "input_tokens_median": 24809,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:choc-recall:t2": {
+        "n": 3,
+        "total_ms_median": 6394.0,
+        "rounds_median": 2,
+        "model_ms_median": 6394.0,
+        "first_round_ms_median": 3392.0,
+        "final_round_ms_median": 3297.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 25834,
+        "tool_patterns": [
+          "add_to_basket/reply"
+        ]
+      },
+      "typed:choc-recall:t1": {
+        "n": 3,
+        "total_ms_median": 6452.0
+      },
+      "typed:choc-recall:t2": {
+        "n": 3,
+        "total_ms_median": 5625.0
+      },
+      "delegation:choc-specified:t1": {
+        "n": 3,
+        "total_ms_median": 8739.0,
+        "rounds_median": 3,
+        "model_ms_median": 8739.0,
+        "first_round_ms_median": 2393.0,
+        "final_round_ms_median": 3109.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 29,
+        "input_tokens_median": 37583,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:choc-specified:t1": {
+        "n": 3,
+        "total_ms_median": 9018.0
+      },
+      "delegation:coke-memory:t1": {
+        "n": 3,
+        "total_ms_median": 5580.0,
+        "rounds_median": 2,
+        "model_ms_median": 5580.0,
+        "first_round_ms_median": 2258.0,
+        "final_round_ms_median": 3322.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 12,
+        "input_tokens_median": 24645,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:coke-memory:t2": {
+        "n": 3,
+        "total_ms_median": 11020.0,
+        "rounds_median": 3,
+        "model_ms_median": 11020.0,
+        "first_round_ms_median": 3370.0,
+        "final_round_ms_median": 3077.0,
+        "tool_ms_median": 1.0,
+        "reasoning_tokens_median": 105,
+        "input_tokens_median": 39287,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:coke-memory:t1": {
+        "n": 3,
+        "total_ms_median": 6399.0
+      },
+      "typed:coke-memory:t2": {
+        "n": 3,
+        "total_ms_median": 12347.0
+      }
+    }
+  },
+  "delegation_eval": {
+    "main_before_medium": "26/30 (fails s9, s10, s16, s19)",
+    "branch_low_pre_merge": "29/30 (s9)",
+    "branch_low_after_1_22": "32/33 (s4)",
+    "branch_low_after_1_30": "32/34 (s4, t3); s4 isolated low 4/11 fail vs medium 0/9 -> default kept at medium",
+    "branch_medium_final": "30/34 (s10, m2, s17, t3); m2/s17/t3 equally flaky on main (3x rerun)"
+  }
+}

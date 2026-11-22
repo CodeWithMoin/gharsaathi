@@ -145,3 +145,29 @@ def log_confirm_failure(
             separators=(",", ":"),
         ),
     )
+
+
+SEARCH_FAILURE_EVENT = "zepto_search_unrecognised"
+
+
+def log_search_unrecognised(*, correlation_id: str, tool: str, payload: object | None) -> None:
+    """Log one content-free record for a search answer the parser did not recognise.
+
+    Key paths and types only (product names and prices are never logged), so
+    one occurrence shows how the live shape differs from the parser.
+    """
+
+    text = payload.get("content_text") if isinstance(payload, dict) else None
+    facts = {"text_chars": len(text)} if isinstance(text, str) else {}
+    logger.warning(
+        "event=%s correlation_id=%s tool=%s facts=%s shape=%s",
+        SEARCH_FAILURE_EVENT,
+        correlation_id,
+        tool,
+        json.dumps(facts, sort_keys=True, separators=(",", ":")),
+        json.dumps(
+            payload_shape(payload) if payload is not None else {},
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    )

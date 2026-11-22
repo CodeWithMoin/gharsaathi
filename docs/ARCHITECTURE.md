@@ -190,9 +190,13 @@ Checks run after the tap (15 s, 45 s, 60 s), on the card's **Check with Zepto**
 (`POST /api/orders/check`; the card also checks 3 times over ~2 min), on app load
 (`POST /api/orders/reconcile-pending`), and from `get_order_status`, which returns
 `not_confirmed` until a check confirms it. Checks within 15 s reuse the last
-answer. `python -m app.shopping.reconcile_unknown --dry-run|--apply` runs the same
+answer. `make reconcile-unknown ARGS=--dry-run` (or `ARGS=--apply`) runs the same
 check for existing unknown attempts and prints only an attempt prefix, match yes/no
-and the order code.
+and the order code. It goes through `scripts/backend-cli.sh`, which sets
+`DATABASE_URL` exactly as `scripts/dev.sh` does for the app (`scripts/local-env.sh`:
+the shell's `DATABASE_URL`, else `postgresql+asyncpg://$USER@127.0.0.1:5432/equal_ai`).
+A bare `python -m app.shopping.reconcile_unknown` reads only `.env`, which has no
+`DATABASE_URL`, and falls back to the `postgres` user.
 
 ### Stale cards
 
@@ -255,8 +259,9 @@ sequenceDiagram
   tracking stops.
 - **Updates.** `app/tracking/notifications.py` keeps only four changes: out for
   delivery, delivered, delayed (ETA moved later by ≥10 min) and cancelled. They are
-  stored on the monitor; the card shows each one once as an in-app toast. No push,
-  SMS or calls.
+  stored on the monitor; the card shows each one once as an in-app toast, and they
+  are sent as browser notifications to people who turned them on (below). No SMS or
+  calls.
 - **Voice/typed.** `get_order_status` (household-scoped monitor, else the newest
   Zepto history entry marked `order_history`) and `list_recent_orders` (≤5, Zepto
   history) are read-only. A non-final status older than 5 min is `stale` with
@@ -308,6 +313,75 @@ stateDiagram-v2
   every 15 s (20 times at most).
 - Unrecognised responses are logged as key paths and types only
   (`zepto_payment_response_unrecognised`) and never become money claims.
+
+## Browser notifications
+
+Opt-in Web Push for meaningful order updates, so they arrive while GharSaathi is in
+the background or closed. **live** when the server has VAPID keys (`make vapid-keys`).
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant P as Page
+  participant SW as Service worker (/sw.js)
+  participant B as Backend
+  participant PS as Browser push service
+  U->>P: Settings → Notifications switch (or "Turn on" after the first order)
+  P->>P: Notification.requestPermission() (only now, from the tap)
+  P->>SW: register /sw.js, pushManager.subscribe(VAPID public key)
+  P->>B: POST /api/notifications/subscriptions (endpoint + keys)
+  B->>B: encrypt (Fernet, APP_ENCRYPTION_KEY), store by SHA-256(endpoint)
+  Note over B: later: order placed / tracking change / payment / card expiring
+  B->>B: setting on? dedupe key new? under the rate limit?
+  B->>PS: encrypted payload (pywebpush, VAPID-signed)
+  PS->>SW: push
+  SW->>SW: app tab visible and focused? then show nothing
+  SW-->>U: system notification
+  U->>SW: tap
+  SW->>P: focus + "show order" (or open /?order=<id>)
+```
+
+- **What is sent** (`app/notifications/service.py` `PushEvents`, text in
+  `messages.py`): order placed (from the tap, the Basket Approve + COD path or a
+  prepaid status check; "confirmed your earlier order" when a reconciliation settles
+  it), out for delivery, delivered (Zepto's delivered time), running late, cancelled,
+  an unconfirmed order still unknown after the bounded checks, payment needs
+  action/unclear/failed (only with `ZEPTO_ONLINE_PAYMENTS_ENABLED`), and one reminder a
+  minute before an untapped order card expires. Hooks: `CheckoutService.push`,
+  `CheckoutReconciler.push`, `OrderTrackingService.push`, `OrderConfirmations.push`.
+  Nothing for packing, small ETA drift, a first reading, an unknown outcome at the tap
+  (the card is on screen), or anything about stock, replenishment or "usual" buys.
+- **Generic entry point.** `PushNotifier.notify(user_id, kind, title, body, url, *,
+  dedupe_key=None)` (`get_push_notifier()` in `app/dependencies.py`). `kind` must be one
+  of `PUSH_KINDS` so it has a user switch; `url` must be a same-origin path.
+- **Payload.** `{kind, title ≤48, body ≤160, url, tag, suppress_when_visible}`: no
+  address, no amount but the order total, at most two product names, `tag =
+  order:<id>` so later updates replace earlier ones. TTL 1 hour.
+- **Dedupe and limits.** `web_push_events` has one row per (user, dedupe key), e.g.
+  `order_placed:zepto:<order id>`, `track:<monitor>:delivered`,
+  `track:<monitor>:delayed:<eta>`, `payment:<attempt>:<status>`,
+  `checkout_expiring:<basket>:<revision>`. At most 8 order notifications per user per
+  10 minutes; test notifications 3 per minute. Rows older than 30 days are pruned.
+  Sends for one user run in order in the background, so "delivered" never arrives
+  before "out for delivery" and a slow push service never delays an order.
+- **Subscriptions.** `web_push_subscriptions`: endpoint and keys Fernet-encrypted with
+  the app encryption key; looked up by SHA-256 of the endpoint. Only endpoints on the
+  browser vendors' push services are accepted (FCM, Mozilla, Apple, Windows), so the
+  backend never POSTs to an arbitrary host. A new user subscribing the same browser
+  takes it over; 404/410 from the push service deletes it. On load the page re-posts
+  an existing subscription so the server copy stays in sync.
+- **No double notifications.** Chosen: the service worker skips the system
+  notification while a GharSaathi tab is visible and focused (`clients.matchAll`); that
+  tab shows the in-app toast/card. The Settings test always shows. (The backend doesn't
+  track tab visibility.) A visible but unfocused desktop window still gets both.
+- **Settings.** `web_push_preferences` stores switched-off kinds per user (all on by
+  default once notifications are on) and whether the one-time order prompt was answered.
+- **Logs.** `event=web_push result=<outcome> kind=<kind> delivered=<n> removed=<n>`;
+  never titles, bodies, endpoints, keys or user ids. The private VAPID key is only read
+  from `.env`; `make vapid-keys` prints a new pair to the terminal only.
+- **Service worker** (`frontend/public/sw.js`): `push` and `notificationclick` only; no
+  fetch handler and no cache. A web app manifest (`/manifest.webmanifest`) makes the
+  app installable; iOS/iPadOS deliver web push only to the installed Home Screen app.
 
 ## Delivery addresses (switch, add)
 
@@ -373,6 +447,38 @@ sequenceDiagram
   onboarding all open the same popup.
 - Contact number and coordinates are never prefilled; the model says the user must
   type the number.
+
+## Turn latency
+
+A shopping turn's time is almost all backend model rounds: with ~10k cached
+input tokens, each gpt-6-luna round took 2.2–3.5 s even for ~25 output tokens,
+while the demo-store tools took ~0 ms. Fewer rounds is the main lever.
+
+- **Recall + search in one call.** When `recall_household_preferences` finds
+  nothing for the item, `VoiceToolbox` runs the search in the same tool call
+  and returns it under `search` (UI event included), so "dark chocolate
+  chahiye" is recall → reply (2 rounds) instead of recall → search → reply. A
+  remembered item still stops at the recall so the user is asked first.
+- **Reasoning effort** is a setting, `LIVE_BACKEND_REASONING_EFFORT` (default
+  `medium`, the model default). At medium the backend used only ~0–80
+  reasoning tokens per turn; `low`/`none` were not faster per round and dropped
+  the add in "Instamart se Amul Taaza doodh 1 litre add karo" in 4 of 11 runs
+  (medium: 0 of 9). `LIVE_BACKEND_SERVICE_TIER=priority` is optional (~0.2 s per
+  round, higher price).
+- **Stores.** Searched concurrently; once one store answered, a slower one gets
+  4 s (`PROVIDER_SEARCH_TIMEOUT_SECONDS`) and is then reported unreachable with
+  reason `timeout` (its search keeps running and fills the 60 s cache). A known
+  Swiggy cooldown is answered before waiting for the provider lock. Voice start
+  prewarms the Zepto MCP session and `select_saved_address` in the background.
+- **Typed chat** runs a round's searches concurrently (other tools keep order).
+- **Payload.** Search results omit `add_supported` when true, `mrp_paise` /
+  `saving_paise`, `total_variants`, and `provider_statuses` when every store
+  answered (−22% tokens per search result).
+
+Diagnostics: `VOICE_EVENT_LOG=true` logs content-free
+`event=voice_delegation_timing`, `voice_tool_timing`, `chat_tool_timing` and
+`chat_turn_timing` lines. Benchmark: `python -m evaluation.run_turn_latency`
+(offline fakes; `--live` for OpenAI with demo catalogues).
 
 ## Context size per turn (prompt 1.8.0, o200k tokens)
 

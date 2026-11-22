@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from functools import lru_cache
 from typing import Annotated
 
@@ -67,6 +68,12 @@ from app.user_profile import DatabaseProfileReader
 from app.chat.service import ChatTurnService
 from app.voice.service import LiveSessionService
 from app.voice.sideband import SidebandHub
+from app.notifications.sender import VapidConfig, WebPushSender
+from app.notifications.service import PushEvents, PushNotifier
+from app.notifications.store import PushStore
+from app.notifications.vapid import public_key_for
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache
@@ -126,6 +133,8 @@ async def close_cached_services() -> None:
         await get_live_zepto_service().client.aclose()
     if get_voice_service.cache_info().currsize:
         await get_voice_service().aclose()
+    if get_push_events.cache_info().currsize:
+        await get_push_events().aclose()
 
 
 SwiggyServiceDependency = Annotated[
@@ -387,6 +396,7 @@ def get_order_confirmations() -> OrderConfirmations:
         get_approval_service(),
         payments=get_zepto_payment_gateway(),
         reconciler=get_checkout_reconciler(),
+        push=get_push_events(),
     )
 
 
@@ -399,6 +409,7 @@ def get_checkout_reconciler() -> CheckoutReconciler:
         get_basket_repository(),
         get_zepto_service(),
         tracking=get_order_tracking_service(),
+        push=get_push_events(),
     )
 
 
@@ -433,6 +444,7 @@ def get_zepto_checkout_service() -> CheckoutService:
             attempts,
             disabled,
             disabled,
+            push=get_push_events(),
         )
 
     # Imported lazily so the non-consequential shopping API remains available
@@ -456,6 +468,7 @@ def get_zepto_checkout_service() -> CheckoutService:
         gateway,
         checkout_lock=checkout_lock,
         payments=get_zepto_payment_gateway(),
+        push=get_push_events(),
     )
 
 
@@ -489,4 +502,47 @@ def get_order_tracking_service() -> OrderTrackingService:
                 get_live_zepto_service().client
             ),
         }
-    return OrderTrackingService(OrderTrackingStore(settings.tracking_data_path), providers)
+    return OrderTrackingService(
+        OrderTrackingStore(settings.tracking_data_path), providers, push=get_push_events()
+    )
+
+
+def vapid_config() -> VapidConfig | None:
+    """VAPID settings when all three are set and the key pair matches, else None."""
+
+    settings = get_settings()
+    public = settings.web_push_vapid_public_key.strip()
+    private = settings.web_push_vapid_private_key.get_secret_value().strip()
+    subject = settings.web_push_subject.strip()
+    if not public or not private or not subject.startswith(("mailto:", "https://")):
+        return None
+    if public_key_for(private) != public.rstrip("="):
+        logger.warning("event=web_push_disabled reason=vapid_key_mismatch")
+        return None
+    return VapidConfig(public_key=public, private_key=private, subject=subject)
+
+
+@lru_cache
+def get_push_notifier() -> PushNotifier:
+    """Browser notifications; disabled (feature hidden) without valid VAPID keys."""
+
+    config = vapid_config()
+    if config is None:
+        return PushNotifier(None, None)
+    return PushNotifier(
+        PushStore(get_session_factory(), get_provider_encryption_key()),
+        WebPushSender(config),
+        public_key=config.public_key,
+    )
+
+
+@lru_cache
+def get_push_events() -> PushEvents:
+    return PushEvents(
+        get_push_notifier(),
+        baskets=get_basket_repository(),
+        online_payments_enabled=get_settings().zepto_online_payments_enabled,
+    )
+
+
+PushNotifierDependency = Annotated[PushNotifier, Depends(get_push_notifier)]

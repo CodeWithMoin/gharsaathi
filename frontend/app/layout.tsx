@@ -5,6 +5,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "GharSaathi · Your AI household shopping agent",
   description: "Speak naturally to search products across connected quick-commerce stores in English, Hindi, or Hinglish.",
+  // The manifest lets the app be added to the Home Screen; iOS delivers web push only there.
+  manifest: "/manifest.webmanifest",
+  icons: { apple: "/icons/gharsaathi-180.png" },
+  appleWebApp: { capable: true, title: "GharSaathi", statusBarStyle: "default" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

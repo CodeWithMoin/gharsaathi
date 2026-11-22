@@ -10,6 +10,7 @@ import { countdownLabel, orderCardResultText, orderCardStateFromResponse, orderC
 import { applyTrackingRead, orderCardFromPlaced } from "../../app/order-status.mjs";
 import { uploadErrorMessage, validatePhotoFile } from "../../app/photo-attachment.mjs";
 import { zeptoAddressSelection } from "../../app/zepto-address-refresh.mjs";
+import { MESSAGES as PUSH_MESSAGES, detectSupport, notificationState, turnOn } from "../../app/push-notifications.mjs";
 
 /**
  * A strict expected failure: passes while `fn` fails, and fails (asking for
@@ -56,6 +57,18 @@ test("FM-P10 a malformed results event is ignored, not drawn as an empty card", 
   assert.equal(applyAssistantEvent({ type: "tool.results", query: "milk" }, handlers), null);
   assert.equal(applyAssistantEvent("not an event", handlers), null);
   assert.deepEqual(calls, []);
+});
+
+test("FM-V06 the direct-search fallback shows the store error, never an empty group, when every store fails", async () => {
+  const { directSearchOutcome } = await import("../../app/result-groups.mjs");
+  const down = new Error("Zepto isn't responding—try again.");
+  assert.deepEqual(directSearchOutcome([{ status: "rejected", reason: down }, { status: "rejected", reason: new Error("Swiggy failed") }]), { status: "failed", message: "Zepto isn't responding—try again." });
+  assert.deepEqual(directSearchOutcome([{ status: "rejected", reason: "not an error" }]), { status: "failed", message: "Store search failed." });
+  // One store failed, the other found nothing: still an error, not "no results".
+  assert.equal(directSearchOutcome([{ status: "fulfilled", value: [] }, { status: "rejected", reason: down }]).status, "failed");
+  // A real empty answer from every store stays "no results"; any product is shown.
+  assert.deepEqual(directSearchOutcome([{ status: "fulfilled", value: [] }]), { status: "empty" });
+  assert.deepEqual(directSearchOutcome([{ status: "fulfilled", value: [{ name: "Milk" }] }, { status: "rejected", reason: down }]), { status: "results", products: [{ name: "Milk" }], failures: 1 });
 });
 
 test("FM-P02 partial results keep the other store's cards and show the unreachable-store notice", () => {
@@ -166,4 +179,39 @@ test("FM-V07 browser-extension attributes on <html>/<body> do not break hydratio
   const layout = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
   assert.match(layout, /<html[^>]*suppressHydrationWarning/);
   assert.match(layout, /<body[^>]*suppressHydrationWarning/);
+});
+
+test("FM-N03 notification permission denied: explained, the switch is disabled, nothing registers", async () => {
+  const calls = [];
+  const result = await turnOn({
+    publicKey: "BAQID",
+    requestPermission: async () => "denied",
+    register: async () => { calls.push("register"); },
+    subscribe: async () => { calls.push("subscribe"); },
+    save: async () => { calls.push("save"); },
+  });
+  assert.equal(result.state, "denied");
+  assert.deepEqual(calls, []);
+  const view = notificationState({ available: true, support: "supported", permission: "denied", subscribed: false });
+  assert.equal(view.disabled, true);
+  assert.match(view.message, /Allow them in your browser's site settings/);
+});
+
+test("FM-N04 server has no VAPID keys: the feature is hidden with a setup hint", () => {
+  const view = notificationState({ available: false, support: "supported", permission: "default", subscribed: false });
+  assert.equal(view.state, "hidden");
+  assert.equal(view.disabled, true);
+  assert.match(view.hint, /make vapid-keys/);
+});
+
+test("FM-N05 unsupported browser, plain-http LAN address or iPhone without Home Screen: explained, never prompts", () => {
+  const states = [
+    detectSupport({ isSecureContext: true, hasServiceWorker: false, hasPushManager: false, hasNotification: false, userAgent: "Mozilla/5.0" }),
+    detectSupport({ isSecureContext: false, hasServiceWorker: true, hasPushManager: true, hasNotification: true, userAgent: "Mozilla/5.0" }),
+    detectSupport({ isSecureContext: true, hasServiceWorker: true, hasPushManager: false, hasNotification: false, userAgent: "Mozilla/5.0 (iPhone)" }),
+  ];
+  assert.deepEqual(states, ["unsupported", "insecure", "ios-install"]);
+  const messages = states.map((support) => notificationState({ available: true, support, permission: "default", subscribed: false }));
+  assert.deepEqual(messages.map((view) => view.message), [PUSH_MESSAGES.unsupported, PUSH_MESSAGES.insecure, PUSH_MESSAGES.iosInstall]);
+  assert.ok(messages.every((view) => view.disabled));
 });

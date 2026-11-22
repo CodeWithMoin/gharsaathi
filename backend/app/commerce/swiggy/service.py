@@ -5,7 +5,7 @@ from typing import Protocol
 from app.commerce.query_guard import non_search_reason
 from app.commerce.relevance import refine_search_result
 from app.commerce.swiggy.adapter import SwiggyInstamartAdapter
-from app.commerce.swiggy.client import SwiggyMcpClient
+from app.commerce.swiggy.client import SwiggyMcpClient, _rate_limit_error
 from app.commerce.swiggy.models import (
     AddressList,
     ConnectionStatus,
@@ -71,6 +71,14 @@ class SwiggyService:
         if non_search_reason(normalized) is not None:
             raise ValueError("A conversational message cannot be sent to product search.")
         cache_key = (address_id, normalized.casefold(), offset)
+        cached = self._search_cache.get(cache_key)
+        if cached is None or time.monotonic() - cached[0] >= 60:
+            # A known cooldown answers at once instead of queueing behind
+            # another Swiggy request for the provider lock.
+            cooldown = getattr(self.client, "cooldown_remaining", None)
+            remaining = await cooldown() if cooldown is not None else 0
+            if remaining > 0:
+                raise _rate_limit_error(remaining)
         async with self._search_lock:
             cached = self._search_cache.get(cache_key)
             if cached is not None and time.monotonic() - cached[0] < 60:

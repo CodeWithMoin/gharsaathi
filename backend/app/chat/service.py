@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from app.conversations.context import RecentConversationContext
 from app.core.config import Settings
 from app.voice.service import LiveSessionService, build_session_config
+from app.voice.timing import collect, log_timing, ms_since
 from app.voice.toolbox import ToolExecutor
 from app.voice.ui_ack import UiAck, screen_report_block
 
@@ -52,6 +53,14 @@ TOOL_FAILED_EVENT = {
     "message": "Search mein kuch gadbad ho gayi. Ek baar phir likhiye.",
 }
 EMPTY_REPLY = "Maaf kijiye, abhi jawab nahi bana paayi. Ek baar phir likhiye."
+# UI events of changes the server has already saved. When the model fails after
+# one of these, the turn still returns them (tools are never re-run).
+SAVED_CHANGE_EVENTS = frozenset({"basket.updated", "basket.approval_requested", "order.confirmation_requested"})
+INCOMPLETE_REPLY = {
+    "english": "Something went wrong finishing that reply — your basket changes are saved.",
+    "hinglish": "Jawab poora karte waqt kuch gadbad ho gayi — basket ke badlav save ho gaye hain.",
+    "hindi": "जवाब पूरा करते समय कुछ गड़बड़ हो गई — बास्केट के बदलाव सेव हो गए हैं।",
+}
 # Appended to the voice backend instructions for this channel only. Voice gets
 # nothing, so live sessions keep the speech formatting rules unchanged.
 CHANNEL_CONTEXT = {
@@ -117,6 +126,8 @@ class ResponsesClient(Protocol):
 class ChatTurnResult(BaseModel):
     reply: str
     ui_events: list[dict[str, Any]]
+    # The model failed after tools had already saved changes; ``reply`` is a fixed line.
+    incomplete: bool = False
 
 
 @dataclass
@@ -198,6 +209,16 @@ async def _none() -> None:
     return None
 
 
+def _incomplete_result(ui_events: list[dict[str, Any]], stats: dict[str, Any]) -> ChatTurnResult | None:
+    """The saved changes of a turn whose model call failed after its tools ran."""
+
+    if not any(event.get("type") in SAVED_CHANGE_EVENTS for event in ui_events):
+        return None
+    stats["outcome"] = f"{stats['outcome']}_after_changes"
+    reply = INCOMPLETE_REPLY.get(stats.get("language", "hinglish"), INCOMPLETE_REPLY["hinglish"])
+    return ChatTurnResult(reply=reply, ui_events=list(ui_events), incomplete=True)
+
+
 class ChatTurnService:
     def __init__(
         self,
@@ -260,7 +281,8 @@ class ChatTurnService:
         session = self._session(user_id, conversation_id, swiggy_address_id, zepto_address_id)
         async with session.lock:
             started = time.monotonic()
-            stats: dict[str, Any] = {"rounds": 0, "tools": [], "outcome": "ok"}
+            stats: dict[str, Any] = {"rounds": 0, "tools": [], "outcome": "ok", "language": "hinglish"}
+            ui_events: list[dict[str, Any]] = []
             try:
                 async with asyncio.timeout(self.settings.chat_turn_timeout_seconds):
                     result = await self._loop(
@@ -272,10 +294,20 @@ class ChatTurnService:
                         stats,
                         ui_acks or [],
                         attachment_id,
+                        ui_events,
                     )
             except TimeoutError as exc:
                 stats["outcome"] = "timeout"
+                partial = _incomplete_result(ui_events, stats)
+                if partial is not None:
+                    return partial
                 raise ChatTimeout("Jawab mein bahut der ho gayi. Ek baar phir likhiye.") from exc
+            except ChatProviderError:
+                stats["outcome"] = "provider_error"
+                partial = _incomplete_result(ui_events, stats)
+                if partial is not None:
+                    return partial
+                raise
             except ChatError:
                 stats["outcome"] = "provider_error"
                 raise
@@ -300,14 +332,16 @@ class ChatTurnService:
         stats: dict[str, Any],
         ui_acks: list[UiAck] | None = None,
         attachment_id: str | None = None,
+        ui_events: list[dict[str, Any]] | None = None,
     ) -> ChatTurnResult:
         message = message or (PHOTO_ONLY_MESSAGE if attachment_id else "")
         words = getattr(session.toolbox, "user_words", None)
         if words is not None and message != PHOTO_ONLY_MESSAGE:
             words.add(message)
-        ui_events: list[dict[str, Any]] = []
+        if ui_events is None:
+            ui_events = []
         photo_block = await self._read_photo(session, attachment_id, ui_events, stats)
-        delegation = await self._delegation(user_id, "typed", message, current_chat)
+        delegation = await self._delegation(user_id, "typed", message, current_chat, stats)
         allowed = {tool["name"] for tool in delegation["tools"]}
         request_input: list[dict[str, Any]] = []
         if session.search_contexts:
@@ -335,10 +369,15 @@ class ChatTurnService:
 
         previous_response_id: str | None = None
         searches = 0
+        timing = self.settings.voice_event_log
+        turn_started = time.perf_counter()
+        model_ms: list[float] = []
+        tool_ms: list[float] = []
         search_cap = MAX_PHOTO_SEARCHES_PER_TURN if session.photo_context else MAX_SEARCHES_PER_TURN
         for round_index in range(MAX_TOOL_ROUNDS + 1):
             # After the last allowed tool round the model must answer in text.
             final = round_index == MAX_TOOL_ROUNDS
+            mark = time.perf_counter()
             response = await self._create(
                 client,
                 model=delegation["model"],
@@ -348,33 +387,78 @@ class ChatTurnService:
                 parallel_tool_calls=delegation["parallel_tool_calls"],
                 input=request_input,
                 previous_response_id=previous_response_id,
+                **{key: delegation[key] for key in ("reasoning", "service_tier") if key in delegation},
             )
+            model_ms.append(ms_since(mark))
             previous_response_id = response.id
             calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
             if not calls or final:
                 reply = (getattr(response, "output_text", "") or "").strip()
+                if timing:
+                    log_timing(
+                        "chat_turn_timing",
+                        {
+                            "rounds": len(model_ms),
+                            "model_ms": round(sum(model_ms), 1),
+                            "first_model_ms": model_ms[0],
+                            "final_model_ms": model_ms[-1],
+                            "tools_ms": round(sum(tool_ms), 1),
+                            "total_ms": ms_since(turn_started),
+                        },
+                    )
                 return ChatTurnResult(reply=reply or EMPTY_REPLY, ui_events=ui_events)
             stats["rounds"] += 1
-            request_input = []
+            jobs: list[Any] = []
             for call in calls:
                 name = call.name if isinstance(call.name, str) else ""
                 stats["tools"].append(name if name in allowed else "unknown")
                 if name not in allowed:
-                    output: dict[str, Any] = {"status": "error", "message": f"Unknown tool {name[:64]}."}
+                    jobs.append({"status": "error", "message": f"Unknown tool {name[:64]}."})
                 elif name == SEARCH_TOOL and searches >= search_cap:
-                    output = SEARCH_LIMIT_OUTPUT
+                    jobs.append(SEARCH_LIMIT_OUTPUT)
                 else:
                     if name == SEARCH_TOOL:
                         searches += 1
-                    output = await self._execute(session, name, call.arguments, ui_events)
-                request_input.append(
-                    {
-                        "type": "function_call_output",
-                        "call_id": call.call_id,
-                        "output": json.dumps(output, ensure_ascii=False),
-                    }
-                )
+                    jobs.append((name, call.arguments))
+            mark = time.perf_counter()
+            outputs = await self._execute_round(session, jobs, ui_events)
+            tool_ms.append(ms_since(mark))
+            request_input = [
+                {
+                    "type": "function_call_output",
+                    "call_id": call.call_id,
+                    "output": json.dumps(output, ensure_ascii=False),
+                }
+                for call, output in zip(calls, outputs)
+            ]
         raise AssertionError("unreachable: the final round always returns")
+
+    async def _execute_round(
+        self, session: ChatSession, jobs: list[Any], ui_events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Run one round's tool calls: searches together, everything else in call order.
+
+        Searches are read-only and independent, so they overlap (voice runs every
+        call of a round concurrently too). Basket, memory and order tools keep
+        their order. UI events keep call order either way.
+        """
+
+        outputs: list[dict[str, Any] | None] = [job if isinstance(job, dict) else None for job in jobs]
+        events: list[list[dict[str, Any]]] = [[] for _ in jobs]
+        searches = [index for index, job in enumerate(jobs) if isinstance(job, tuple) and job[0] == SEARCH_TOOL]
+
+        async def run(index: int) -> None:
+            name, arguments = jobs[index]
+            outputs[index] = await self._execute(session, name, arguments, events[index])
+
+        if len(searches) > 1:
+            await asyncio.gather(*(run(index) for index in searches))
+        for index, job in enumerate(jobs):
+            if isinstance(job, tuple) and outputs[index] is None:
+                await run(index)
+        for batch in events:
+            ui_events.extend(batch)
+        return [output if output is not None else {"status": "error"} for output in outputs]
 
     async def _read_photo(
         self,
@@ -415,6 +499,7 @@ class ChatTurnService:
         channel: Literal["typed", "voice"],
         message: str = "",
         current_chat: bool = True,
+        stats: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """The voice backend config with the same profile, memory and chat context blocks."""
 
@@ -423,6 +508,8 @@ class ChatTurnService:
             self.voice.household_memory(user_id) if self.voice.basket_enabled else _none(),
             self.voice.conversation_context(user_id),
         )
+        if stats is not None and profile is not None:
+            stats["language"] = profile.language
         delegation = dict(
             build_session_config(
                 self.settings,
@@ -448,7 +535,11 @@ class ChatTurnService:
         self, session: ChatSession, name: str, arguments: Any, ui_events: list[dict[str, Any]]
     ) -> dict[str, Any]:
         try:
-            outcome = await session.toolbox.execute(name, arguments if isinstance(arguments, str) else "")
+            with collect(self.settings.voice_event_log) as stages:
+                started = time.perf_counter()
+                outcome = await session.toolbox.execute(name, arguments if isinstance(arguments, str) else "")
+            if self.settings.voice_event_log:
+                log_timing("chat_tool_timing", {"name": name[:64], "total_ms": ms_since(started), **stages})
         except Exception:
             logger.exception("Chat tool %s failed", name)
             ui_events.append(dict(TOOL_FAILED_EVENT))
@@ -461,8 +552,10 @@ class ChatTurnService:
         if callable(current):
             # A voice-style address switch keeps this session (and its options).
             session.addresses = current()
-        if name == SEARCH_TOOL and outcome.model_output.get("status") == "ok":
+        searched = outcome.model_output if name == SEARCH_TOOL else outcome.model_output.get("search")
+        if isinstance(searched, dict) and searched.get("status") == "ok":
+            # A no_memory recall carries its own search; its options stay addable too.
             session.search_contexts = (
-                session.search_contexts + [json.dumps(outcome.model_output, ensure_ascii=False)]
+                session.search_contexts + [json.dumps(searched, ensure_ascii=False)]
             )[-MAX_SEARCH_CONTEXTS:]
         return outcome.model_output

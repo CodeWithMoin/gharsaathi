@@ -56,6 +56,16 @@ class Settings(BaseSettings):
     live_model: str = "gpt-live-1.1"
     live_voice: str = "nira"
     live_backend_model: str = "gpt-6-luna"
+    # Reasoning effort for the delegated backend model (voice and typed chat).
+    # gpt-6-luna supports none|low|medium|high|xhigh|max and defaults to medium:
+    # https://developers.openai.com/api/docs/models/gpt-6-luna
+    # Empty omits the setting. low/none measured no faster per round than medium
+    # (reasoning was already ~0-80 tokens) and dropped search-then-add turns in
+    # the delegation eval, so the default stays medium.
+    live_backend_reasoning_effort: Literal["", "none", "low", "medium", "high"] = "medium"
+    # Responses service tier for the backend model: "" omits it (project default);
+    # "priority" measured ~0.2 s faster per model round at a higher price.
+    live_backend_service_tier: Literal["", "auto", "default", "flex", "priority"] = ""
     # Typed chat runs the same backend model and tools as voice, one bounded turn per request.
     chat_turn_timeout_seconds: float = Field(default=60.0, ge=5.0, le=180.0)
     # Shop from a photo: vision model for reading attached photos (Responses API, image input).
@@ -86,6 +96,11 @@ class Settings(BaseSettings):
     support_data_path: Path = Field(default=Path("backend/.data/support"))
     tracking_data_path: Path = Field(default=Path("backend/.data/tracking"))
     tracking_polling_enabled: bool = True
+    # Browser (Web Push) notifications. All three must be set, else the feature
+    # is hidden. Generate a pair with `make vapid-keys`.
+    web_push_vapid_public_key: str = ""
+    web_push_vapid_private_key: SecretStr = SecretStr("")
+    web_push_subject: str = ""
 
     @field_validator(
         "swiggy_token_store_path",

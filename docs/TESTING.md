@@ -60,6 +60,9 @@ routers.
 
 ## Rules
 
+- **Per-test timeout.** `pytest.ini` sets `timeout = 60` (`pytest-timeout`, signal method): a hung test fails with "Timeout (>60.0s)" and the run continues instead of stalling `make check`. Override one run with `--timeout=N`.
+- **No configured database or OpenAI from tests.** Never pop an autouse override such as `get_conversation_summaries` (install `DisabledConversationSummaries` instead), and never call `get_session_factory()` from a request path: background work uses the request session's engine, so tests stay on their own SQLite/PostgreSQL database.
+
 - **No live providers.** No Swiggy/Zepto OAuth, MCP, cart, checkout or order calls, and no OpenAI calls. Use the demo services, or a fake installed with `override`. The Zepto COD gateway in integration tests is a recording fake. Tests assert on its call list.
 - **No real orders, ever.** A test that needs the order step uses `RecordingZeptoGateway` (see `test_shopping_checkout.py`).
 - Integration tests must not touch ports 3003/8000/80 or the `equal_ai` database.
