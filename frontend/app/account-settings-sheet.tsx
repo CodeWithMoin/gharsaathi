@@ -208,8 +208,11 @@ export function AccountSettingsSheet({
 
 /** A 44px+ account trigger whose fallback label is the requested M-style initial. */
 export function AccountMenuButton({ name, onClick, imageUrl, active = false }: { name: string; onClick: () => void; imageUrl?: string; active?: boolean }) {
-  return <button type="button" onClick={onClick} aria-label="Open account settings" aria-expanded={active} className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-accent text-sm font-bold text-on-accent shadow-[0_12px_26px_-20px_rgb(var(--accent-shadow)/.8)] transition-[background-color,transform] duration-150 ease-out hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[.96] motion-reduce:active:scale-100">
-    {imageUrl ? <Image src={imageUrl} alt="" width={44} height={44} className="size-full object-cover" /> : initials(name)}
+  // 44 px tap target; a 38 px avatar inside it, so it lines up with the 22 px header icons.
+  return <button type="button" onClick={onClick} aria-label="Open account settings" aria-expanded={active} className="grid size-11 shrink-0 place-items-center rounded-full outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-focus/50 active:scale-[.96] motion-reduce:active:scale-100">
+    <span className="grid size-[38px] place-items-center overflow-hidden rounded-full bg-accent text-[13px] font-bold text-on-accent ring-1 ring-border-strong">
+      {imageUrl ? <Image src={imageUrl} alt="" width={76} height={76} className="size-full object-cover" /> : initials(name)}
+    </span>
   </button>;
 }
 
