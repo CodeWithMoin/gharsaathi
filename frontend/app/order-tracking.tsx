@@ -87,6 +87,8 @@ export type OrderTrackingProps = {
   initialProvider?: Provider;
   initialOrderId?: string;
   initialAddressId?: string;
+  /** Open an existing monitor (e.g. the one started for a placed order) instead of the newest watch. */
+  initialMonitorId?: string;
   onClose?: () => void;
 };
 
@@ -146,7 +148,7 @@ function StatusIcon({ status, active }: { status?: TrackingStatus; active: boole
   return active ? <CheckCircle size={17} weight="fill" className={className} /> : <Circle size={13} className={className} />;
 }
 
-export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId = "", initialAddressId, onClose }: OrderTrackingProps) {
+export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId = "", initialAddressId, initialMonitorId, onClose }: OrderTrackingProps) {
   const authenticatedFetch = useAuthenticatedFetch();
   const [provider, setProvider] = useState<Provider>(initialProvider);
   const [orderId, setOrderId] = useState(initialOrderId);
@@ -189,7 +191,26 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
   }, [authenticatedFetch, monitorId]);
 
   useEffect(() => {
-    if (initialOrderId) return;
+    if (!initialMonitorId) return;
+    let active = true;
+    void authenticatedFetch(`${API_BASE_URL}/api/tracking/monitors/${encodeURIComponent(initialMonitorId)}`, { cache: "no-store" }).then(async (response) => {
+      if (!response.ok || !active) return;
+      const next = normaliseResponse(await response.json() as TrackingResponse);
+      if (!active) return;
+      setMonitorId(initialMonitorId);
+      setProvider(next.order.provider ?? initialProvider);
+      setOrderId(next.order.order_id ?? initialOrderId);
+      seenEventCount.current = next.order.events?.length ?? 0;
+      setData(next);
+      setTracking(next.live_tracking_supported !== false && next.order.active !== false);
+    }).catch(() => {
+      // The order ID stays filled in, so tracking can still be started by hand.
+    });
+    return () => { active = false; };
+  }, [authenticatedFetch, initialMonitorId, initialOrderId, initialProvider]);
+
+  useEffect(() => {
+    if (initialOrderId || initialMonitorId) return;
     let active = true;
     void authenticatedFetch(`${API_BASE_URL}/api/tracking/monitors?active_only=true`, {
       cache: "no-store",
@@ -208,7 +229,7 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
       // Starting a new monitor remains available if no saved watch can be restored.
     });
     return () => { active = false; };
-  }, [authenticatedFetch, initialOrderId]);
+  }, [authenticatedFetch, initialMonitorId, initialOrderId]);
 
   useEffect(() => {
     if (!tracking || !monitorId) return;

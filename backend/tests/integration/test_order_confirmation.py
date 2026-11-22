@@ -90,6 +90,25 @@ def test_tap_places_one_order_and_locks_the_basket(api: TestClient, gateway: Rec
     assert api.get("/api/basket", headers=alice, params=ZEPTO).json()["lines"] == []
 
 
+def test_confirmed_tap_starts_one_user_scoped_tracking_monitor(api: TestClient, gateway: RecordingZeptoGateway) -> None:
+    alice, bob = as_user("alice"), as_user("bob")
+    _ready_basket(api, alice, oil=1)
+    confirmation_id = _prepare("alice")["confirmation"]["id"]
+
+    placed = _confirm(api, alice, confirmation_id).json()
+    tracking = placed["tracking"]
+    assert tracking is not None and tracking["order"]["order_id"] == "ZEP-1"
+    assert tracking["order"]["status"] == "out_for_delivery"  # demo read-only adapter
+    monitor_id = tracking["monitor_id"]
+
+    # A replayed tap is refused and starts nothing; only alice sees the monitor.
+    assert _confirm(api, alice, confirmation_id).status_code == 409
+    assert [watch["id"] for watch in api.get("/api/tracking/monitors", headers=alice).json()] == [monitor_id]
+    assert api.get("/api/tracking/monitors", headers=bob).json() == []
+    assert api.get(f"/api/tracking/monitors/{monitor_id}", headers=bob).status_code == 404
+    assert len(gateway.calls) == 1
+
+
 def test_cancel_then_tap_places_nothing(api: TestClient, gateway: RecordingZeptoGateway) -> None:
     alice = as_user("alice")
     _ready_basket(api, alice)
