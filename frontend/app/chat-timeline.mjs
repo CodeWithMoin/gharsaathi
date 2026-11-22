@@ -9,6 +9,8 @@
  * the card it leaves behind becomes a one-line, non-interactive summary.
  */
 
+import { removeResultGroup, updateResultGroup, upsertResultGroup } from "./result-groups.mjs";
+
 export const STORES = /** @type {const} */ (["swiggy_instamart", "zepto"]);
 export const SUMMARY_STAGES = /** @type {const} */ (["updated", "bill_ready", "bill_approved", "ordered"]);
 export const MAX_SUMMARIES = 50;
@@ -18,11 +20,18 @@ export const MAX_SUMMARIES = 50;
 /** @typedef {{ provider: Store, afterMessageId: string | null, seq: number }} BasketCard */
 /** @typedef {{ stage: SummaryStage, itemCount: number | null, itemTotalPaise: number | null }} BasketSummary */
 /** @typedef {BasketCard & BasketSummary} SummaryCard */
-/** @typedef {{ seq: number, resultsSeq: number, live: BasketCard[], summaries: SummaryCard[] }} ChatTimeline */
+/** @typedef {import("./result-groups.mjs").ResultGroup<unknown>} ResultGroup */
+/**
+ * `groups` holds the product results per searched item. They live here so a
+ * group and the basket cards share one sequence and update atomically; they
+ * are saved separately (see conversation-snapshot.mjs).
+ *
+ * @typedef {{ seq: number, resultsSeq: number, live: BasketCard[], summaries: SummaryCard[], groups: ResultGroup[] }} ChatTimeline
+ */
 
 /** @returns {ChatTimeline} */
 export function emptyTimeline() {
-  return { seq: 0, resultsSeq: 0, live: [], summaries: [] };
+  return { seq: 0, resultsSeq: 0, live: [], summaries: [], groups: [] };
 }
 
 /**
@@ -42,6 +51,50 @@ export function latestMessageId(messages) {
 export function recordResults(timeline) {
   const seq = timeline.seq + 1;
   return { ...timeline, seq, resultsSeq: seq };
+}
+
+/**
+ * Results for one searched item arrived after `afterMessageId`. A group for
+ * the same item is replaced and moves to now.
+ *
+ * @param {ChatTimeline} timeline
+ * @param {Omit<ResultGroup, "seq">} group
+ * @returns {ChatTimeline}
+ */
+export function recordResultGroup(timeline, group) {
+  const seq = timeline.seq + 1;
+  return { ...timeline, seq, resultsSeq: seq, groups: upsertResultGroup(timeline.groups ?? [], { ...group, seq }) };
+}
+
+/**
+ * @param {ChatTimeline} timeline
+ * @param {string} key
+ * @param {Partial<Pick<ResultGroup, "products" | "status">>} patch
+ * @returns {ChatTimeline}
+ */
+export function finishResultGroup(timeline, key, patch) {
+  return { ...timeline, groups: updateResultGroup(timeline.groups ?? [], key, patch) };
+}
+
+/**
+ * @param {ChatTimeline} timeline
+ * @param {string} key
+ * @returns {ChatTimeline}
+ */
+export function dropResultGroup(timeline, key) {
+  return { ...timeline, groups: removeResultGroup(timeline.groups ?? [], key) };
+}
+
+/**
+ * Puts restored result groups on a restored timeline, keeping the sequence
+ * ahead of every restored item.
+ *
+ * @param {ChatTimeline} timeline
+ * @param {ResultGroup[]} groups
+ * @returns {ChatTimeline}
+ */
+export function withResultGroups(timeline, groups) {
+  return { ...timeline, seq: Math.max(timeline.seq, ...groups.map((group) => group.seq)), groups };
 }
 
 /**
@@ -103,23 +156,25 @@ export function collapseBasketCard(timeline, provider, summary) {
 
 /**
  * @template {{ id: string }} M
- * @typedef {{ kind: "message", message: M } | { kind: "results" } | { kind: "basket", card: BasketCard } | { kind: "basket-summary", card: SummaryCard }} TimelineItem
+ * @typedef {{ kind: "message", message: M } | { kind: "results", group?: ResultGroup } | { kind: "basket", card: BasketCard } | { kind: "basket-summary", card: SummaryCard }} TimelineItem
  */
 
 /**
  * Lays the chat out in order. Items whose anchor is missing (none yet, or
  * trimmed from the saved chat) come before the first message; within one
- * anchor, items follow their sequence numbers.
+ * anchor, items follow their sequence numbers. Each result group is its own
+ * item; `showResults` places a single ungrouped results item.
  *
  * @template {{ id: string }} M
- * @param {{ messages: M[], resultsAfterMessageId: string | null, timeline: ChatTimeline, showResults: boolean }} state
+ * @param {{ messages: M[], resultsAfterMessageId?: string | null, timeline: ChatTimeline, showResults?: boolean }} state
  * @returns {TimelineItem<M>[]}
  */
-export function placeTimelineItems({ messages, resultsAfterMessageId, timeline, showResults }) {
+export function placeTimelineItems({ messages, resultsAfterMessageId = null, timeline, showResults = false }) {
   const ids = new Set(messages.map((message) => message.id));
   /** @type {{ anchor: string | null, seq: number, order: number, item: TimelineItem<M> }[]} */
   const inserted = [
     ...(showResults ? [{ anchor: resultsAfterMessageId, seq: timeline.resultsSeq, order: 0, item: /** @type {TimelineItem<M>} */ ({ kind: "results" }) }] : []),
+    ...(timeline.groups ?? []).map((group) => ({ anchor: group.afterMessageId, seq: group.seq, order: 0, item: /** @type {TimelineItem<M>} */ ({ kind: "results", group }) })),
     ...timeline.summaries.map((card, index) => ({ anchor: card.afterMessageId, seq: card.seq, order: 1 + index, item: /** @type {TimelineItem<M>} */ ({ kind: "basket-summary", card }) })),
     ...timeline.live.map((card) => ({ anchor: card.afterMessageId, seq: card.seq, order: 1 + MAX_SUMMARIES, item: /** @type {TimelineItem<M>} */ ({ kind: "basket", card }) })),
   ];
@@ -228,7 +283,7 @@ export function restoreTimeline(raw) {
     if (card && stage) summaries.push({ ...card, stage, itemCount: count(fields.item_count), itemTotalPaise: count(fields.item_total_paise) });
   }
   const seqs = [count(value.seq) ?? 0, count(value.results_seq) ?? 0, ...live.map((card) => card.seq), ...summaries.map((card) => card.seq)];
-  return { seq: Math.max(...seqs), resultsSeq: count(value.results_seq) ?? 0, live, summaries: summaries.slice(-MAX_SUMMARIES) };
+  return { seq: Math.max(...seqs), resultsSeq: count(value.results_seq) ?? 0, live, summaries: summaries.slice(-MAX_SUMMARIES), groups: [] };
 }
 
 export const NEAR_BOTTOM_PX = 160;
