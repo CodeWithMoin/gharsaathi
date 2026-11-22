@@ -9,6 +9,7 @@ from app.voice.address_book_tools import SelectArguments as AddressSelectArgumen
 from app.voice.address_tools import OpenAddressFormArguments
 from app.voice.basket_tools import AddArguments, QuantityArguments, StoreArguments
 from app.voice.memory_tools import RecallArguments
+from app.voice.photo_tools import PhotoArguments
 from app.voice.memory_write_tools import (
     DecisionArguments,
     ForgetArguments,
@@ -427,6 +428,7 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "prepare_order": StoreArguments,
         "list_delivery_addresses": AddressListArguments,
         "select_delivery_address": AddressSelectArguments,
+        "read_attached_photo": PhotoArguments,
     }
     assert set(validators) == set(definitions)
 
@@ -449,7 +451,7 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
             issued_options.update(
                 item["option_id"] for item in result.get("results", []) if "option_id" in item
             )
-    assert {"search_products", "add_to_basket", "request_approval", "open_address_form", "prepare_order", "list_delivery_addresses", "select_delivery_address"} <= used
+    assert {"search_products", "add_to_basket", "request_approval", "open_address_form", "prepare_order", "list_delivery_addresses", "select_delivery_address", "read_attached_photo"} <= used
     lines_text = _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n")
     for index, line in enumerate(lines_text):
         if line.startswith("Assistant:") and "Place order" in line:

@@ -123,6 +123,7 @@ async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
         "open_address_form", "recall_household_preferences", "remember_preference",
         "update_preference", "forget_preference", "list_preferences", "confirm_memory",
         "prepare_order", "list_delivery_addresses", "select_delivery_address",
+        "read_attached_photo",
     }
     # prepare_order only shows the order card; no tool can approve, check out or order.
     assert all("checkout" not in name and "approve" not in name for name in names)
