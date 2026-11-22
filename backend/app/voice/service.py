@@ -143,7 +143,11 @@ class LiveSessionService:
     def basket_enabled(self) -> bool:
         return self.baskets is not None and self.approvals is not None
 
-    def _tool_executor(
+    @property
+    def tool_definitions(self) -> list[dict[str, Any]]:
+        return VOICE_TOOL_DEFINITIONS if self.basket_enabled else TOOL_DEFINITIONS
+
+    def tool_executor(
         self, address_id: str | None, zepto_address_id: str | None, household_id: str
     ) -> ToolExecutor:
         if self.basket_enabled:
@@ -171,7 +175,7 @@ class LiveSessionService:
             )
         return ShoppingToolExecutor(self.searcher, address_id)
 
-    async def _profile(self, household_id: str) -> UserProfile | None:
+    async def profile(self, household_id: str) -> UserProfile | None:
         if self.profile_reader is None or not household_id:
             return None
         try:
@@ -180,7 +184,7 @@ class LiveSessionService:
             logger.warning("Voice profile read failed: %s", type(exc).__name__)
             return None
 
-    async def _household_memory(self, household_id: str) -> HouseholdMemory | None:
+    async def household_memory(self, household_id: str) -> HouseholdMemory | None:
         reader = getattr(self.preference_recall, "household_memory", None)
         if not callable(reader) or not household_id:
             return None
@@ -190,7 +194,7 @@ class LiveSessionService:
             logger.warning("Voice memory summary failed: %s", type(exc).__name__)
             return None
 
-    async def _context(self, household_id: str) -> RecentConversationContext | None:
+    async def conversation_context(self, household_id: str) -> RecentConversationContext | None:
         if self.context_reader is None or not household_id:
             return None
         try:
@@ -218,9 +222,9 @@ class LiveSessionService:
         if not api_key:
             raise VoiceConfigurationError("Set OPENAI_API_KEY in .env to enable voice.")
         profile, household_memory, context = await asyncio.gather(
-            self._profile(household_id),
-            self._household_memory(household_id),
-            self._context(household_id),
+            self.profile(household_id),
+            self.household_memory(household_id),
+            self.conversation_context(household_id),
         )
         try:
             response = await self._post(
@@ -228,7 +232,7 @@ class LiveSessionService:
                 json={
                     "session": build_session_config(
                         self.settings,
-                        VOICE_TOOL_DEFINITIONS if self.basket_enabled else TOOL_DEFINITIONS,
+                        self.tool_definitions,
                         profile,
                         household_memory if self.basket_enabled else None,
                         context=context,
@@ -255,7 +259,7 @@ class LiveSessionService:
         events_token = secrets.token_urlsafe(32)
         self.hub.start(
             session_id,
-            self._tool_executor(swiggy_address_id, zepto_address_id, household_id),
+            self.tool_executor(swiggy_address_id, zepto_address_id, household_id),
             owner_id=household_id,
             events_token=events_token,
         )

@@ -97,7 +97,7 @@ flowchart TD
 | D2 | Is the request clear? Ask for more context? | Backend model (instructions) | No — rules: at most one question, never re-ask what was said |
 | D3 | Check memory first | Backend model calls `recall_household_preferences` | **Today: no** (model may skip it — the Diet Coke miss). **In progress:** memory summary at session start + memory-annotated search results, so remembered items are always in front of the model |
 | D4 | Add vs ask which variant/store | Backend model (instructions + few-shot examples) | Partly — store ambiguity on bills returns `needs_store` from code |
-| D5 | Call another tool or answer | Backend model | Hard cap: 6 rounds / 4 searches per turn (code, `sideband.py`) |
+| D5 | Call another tool or answer | Backend model | Hard cap in code: voice 6 rounds / 4 searches per turn (`sideband.py`); typed chat 6 rounds / 2 searches per turn (`app/chat/service.py`) |
 
 ### Deterministic checks (code, every call)
 
@@ -167,12 +167,60 @@ they stated, and open items; prices are stripped. Chats without messages are
 never summarised. When there is no summary yet, the deterministic description is
 used.
 
-## Typed chat (today)
+## Typed chat
 
-Typed text does **not** go through either model: `frontend/app/page.tsx` sends it
-straight to `/api/swiggy/search/personalized` and `/api/zepto/search`. So D1–D5,
-memory and clarifying questions only apply to voice. Routing typed chat through the
-same backend model is the top queued item.
+Typed text goes through the same backend model as voice (branch
+`codex/typed-chat-assistant`):
+
+```mermaid
+flowchart LR
+  T(["User types"]) --> L{"Local intent?<br/>(conversation-intent.mjs:<br/>greeting, connection status)"}
+  L -- yes --> R1["Local reply"]
+  L -- no --> C["POST /api/chat/turn<br/>{conversation_id, message,<br/>selected address per store}"]
+  C --> B["Backend model, same delegation config as voice:<br/>BACKEND_INSTRUCTIONS + session profile<br/>+ household memory summary + typed channel note,<br/>same tools, same VoiceToolbox"]
+  B --> D5{"Tool loop<br/>cap 6 rounds · 2 searches · timeout"}
+  D5 --> OUT["{reply, ui_events[]}"]
+  OUT --> UI["Assistant bubble in the chat timeline + the event handler voice uses<br/>(assistant-events.mjs): per-item result groups, basket card,<br/>bill shown at once, address form"]
+  C -. "error" .-> FB["Error bubble +<br/>'Seedha search karein' = one direct search,<br/>shown as its own result group"]
+```
+
+- **Same decisions.** D2–D5 above apply unchanged: the request uses
+  `build_session_config(...)["delegation"]["responses"]` with the same profile and
+  household memory summary a voice session gets, so model, instructions, tool
+  definitions and `tool_choice` are the voice ones. There is no typed-only prompt.
+  D1 does not exist for typed text (there is no front model).
+- **Reply language.** The profile block states the saved `language` (`hinglish`
+  default, `english`, `hindi`) as an explicit rule for voice and typed chat alike.
+  Typed replies are shown as the model wrote them; the caption romaniser runs only on
+  voice transcripts and stays off for `hindi` (`assistant_transcript_script`).
+- **Channel note.** `app/chat/service.py` appends a short "Channel: typed" block to
+  the instructions: prices may be written as "₹172" and lists may be short bullet
+  lines. Voice sessions get no such block, so spoken replies keep prices in words.
+- **Context per turn.** The same `ConversationContextLoader` block a voice session
+  gets (see "Chat context at session start"): current chat summary, last 6 turns,
+  on-screen state and previous chats, in the instructions. The message being answered
+  is the only `user` input; if the browser already saved it, the trailing copy is
+  dropped from the quoted turns. For a chat that is not the user's current one, only
+  baskets/bills and previous chats are kept. The last 2 search results of this chat
+  are added as a developer message, so "Dark" or "haan wahi" can add an `option_id`
+  the user already saw.
+- **Per-conversation state.** `backend/app/chat/service.py` keeps one `VoiceToolbox`
+  per (verified user, conversation) in memory (200 sessions, 1 h idle), with turns
+  serialised by a lock. A different selected address rebuilds it. After a backend
+  restart the earlier `option_id`s are gone and the model searches again.
+- **Hard caps (code).** 6 tool rounds, then one forced text answer
+  (`tool_choice: "none"`); a third `search_products` in one turn is refused without
+  running; a tool name outside the definitions is refused; per-turn timeout
+  `CHAT_TURN_TIMEOUT_SECONDS` (default 60 s).
+- **Checks.** Clerk identity and accepted current terms on the route (like
+  `POST /api/voice/session`). Every deterministic check in the table above runs,
+  because the tools are the same. Logs carry the outcome, rounds, tool names and
+  latency only, never message text.
+- **Persistence.** The browser appends the typed message and the reply to the open
+  conversation and saves it with `PUT /api/conversations/current`, exactly like
+  voice transcripts. Saves are debounced 250 ms; the page flushes a pending save
+  before `POST /api/chat/turn` and before `POST /api/voice/session`, so the
+  server-side context includes the latest turn.
 
 ## Where to look
 

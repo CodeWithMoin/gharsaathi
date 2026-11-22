@@ -1,0 +1,130 @@
+{
+  "generated_at": "2026-11-22T00:12:29.681105+00:00",
+  "model": "gpt-6-luna",
+  "prompt_version": "1.8.0",
+  "blocked_lookups": [],
+  "runs": [
+    {
+      "id": "diet_coke_with_memory",
+      "user": "Diet Coke chahiye",
+      "passed": false,
+      "reply": "Diet Coke ka kaunsa size chahiye?",
+      "tool_calls": [
+        {
+          "name": "recall_household_preferences",
+          "arguments": {
+            "item": "Diet Coke"
+          },
+          "status": "no_memory"
+        }
+      ],
+      "ui_event_types": [],
+      "failures": [
+        "No search_products query containing 'coke' (['recall_household_preferences'])."
+      ],
+      "seconds": 6.1,
+      "run": 1,
+      "finished_at": "2026-11-22T00:11:39.899251+00:00"
+    },
+    {
+      "id": "deo_asks_one_question",
+      "user": "deo chahiye",
+      "passed": true,
+      "reply": "Pichli baar aapne AXE Dark Temptation 150 ml liya tha, wahi chahiye?",
+      "tool_calls": [
+        {
+          "name": "recall_household_preferences",
+          "arguments": {
+            "item": "deodorant"
+          },
+          "status": "ok"
+        }
+      ],
+      "ui_event_types": [],
+      "failures": [],
+      "seconds": 5.7,
+      "run": 1,
+      "finished_at": "2026-11-22T00:11:45.682762+00:00"
+    },
+    {
+      "id": "axe_dark_smallest_adds",
+      "user": "AXE Dark sabse chhota add karo",
+      "passed": true,
+      "reply": "AXE Dark Temptation 150 ml, ek sau ninyanve rupaye mein, Instamart basket mein add ho gaya.",
+      "tool_calls": [
+        {
+          "name": "search_products",
+          "arguments": {
+            "query": "AXE Dark Temptation deodorant"
+          },
+          "status": "ok"
+        },
+        {
+          "name": "view_basket",
+          "arguments": {
+            "store": null
+          },
+          "status": "ok"
+        },
+        {
+          "name": "add_to_basket",
+          "arguments": {
+            "option_id": "opt1",
+            "quantity": 1
+          },
+          "status": "added"
+        }
+      ],
+      "ui_event_types": [
+        "tool.results",
+        "basket.updated"
+      ],
+      "failures": [],
+      "seconds": 18.7,
+      "run": 1,
+      "finished_at": "2026-11-22T00:12:04.375581+00:00"
+    },
+    {
+      "id": "bill_two_stores_asks_store",
+      "user": "bill bana do",
+      "passed": true,
+      "reply": "Kis store ka bill banaun, Instamart ya Zepto?",
+      "tool_calls": [
+        {
+          "name": "request_approval",
+          "arguments": {
+            "store": null
+          },
+          "status": "needs_store"
+        }
+      ],
+      "ui_event_types": [],
+      "failures": [],
+      "seconds": 5.5,
+      "run": 1,
+      "finished_at": "2026-11-22T00:12:09.936920+00:00"
+    },
+    {
+      "id": "diet_coke_with_memory",
+      "user": "Diet Coke chahiye",
+      "passed": true,
+      "reply": "Diet Coke can 300 ml, chalis rupaye, aur bottle 750 ml, pachpan rupaye; dono sizes Instamart aur Zepto par available hain. Delivery time nahi dikhaya gaya. Kaunsa size chahiye?",
+      "tool_calls": [
+        {
+          "name": "search_products",
+          "arguments": {
+            "query": "Diet Coke"
+          },
+          "status": "ok"
+        }
+      ],
+      "ui_event_types": [
+        "tool.results"
+      ],
+      "failures": [],
+      "seconds": 7.2,
+      "run": 2,
+      "finished_at": "2026-11-22T00:12:29.680456+00:00"
+    }
+  ]
+}

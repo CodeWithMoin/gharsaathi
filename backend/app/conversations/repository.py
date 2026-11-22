@@ -103,14 +103,17 @@ class ConversationRepository:
         )
         return list(result.scalars())
 
-    async def open(self, subject_id: UUID, conversation_id: UUID) -> Conversation | None:
+    async def get(self, subject_id: UUID, conversation_id: UUID) -> Conversation | None:
         result = await self.session.execute(
             select(Conversation).where(
                 Conversation.id == conversation_id,
                 Conversation.subject_id == subject_id,
             )
         )
-        conversation = result.scalar_one_or_none()
+        return result.scalar_one_or_none()
+
+    async def open(self, subject_id: UUID, conversation_id: UUID) -> Conversation | None:
+        conversation = await self.get(subject_id, conversation_id)
         if conversation is None:
             return None
 

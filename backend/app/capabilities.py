@@ -79,10 +79,12 @@ W, P, IP, M, U = (
     Status.UNSUPPORTED,
 )
 
-TYPED_NO_ASSISTANT = (
-    "Typed text never reaches the assistant: page.tsx runSearch only answers a few "
-    "local intents (conversation-intent.mjs) or calls the search endpoints."
+TYPED_VIA_ASSISTANT = (
+    "POST /api/chat/turn runs the voice backend model with the same instructions, tools "
+    "and VoiceToolbox checks; page.tsx applies its ui_events through assistant-events.mjs. "
+    "Not yet verified in a real browser session."
 )
+TYPED_NO_TOOL = "No assistant tool (same as voice); typed chat can only answer in text."
 
 CAPABILITIES: tuple[Capability, ...] = (
     Capability(
@@ -114,7 +116,11 @@ CAPABILITIES: tuple[Capability, ...] = (
             "Voice uses whichever address is selected on screen when the session starts; "
             "basket tools report it (label + short line from the saved snapshot). No selection tool.",
         ),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(
+            M,
+            "Typed turns use the addresses selected on screen (sent with each turn); "
+            "there is no selection tool.",
+        ),
         ui=S(W, "Radio list per store in the setup sheet."),
         backend=S(W),
         routes=(
@@ -135,7 +141,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             "(swiggy_unsupported). Known gap: a second voice prefill remounts the form "
             "(new key in page.tsx) and overwrites fields the user is editing.",
         ),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(W, "Same open_address_form tool and limits as voice. " + TYPED_VIA_ASSISTANT),
         ui=S(P, "Zepto only, live mode only (ZeptoAddressForm)."),
         backend=S(P, "Zepto only; Swiggy add-address is unsupported (no route)."),
         voice_tools=("open_address_form",),
@@ -150,9 +156,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         title="Search and compare products across connected stores",
         voice=S(W, "Searches every store with a selected address (Swiggy Instamart + Zepto)."),
         typed_chat=S(
-            P,
-            "Searches both stores directly via the search endpoints, bypassing the "
-            "assistant (no clarification, no Hinglish rewriting beyond local intents).",
+            W,
+            "At most 2 searches per message. If the chat endpoint fails, 'Seedha search "
+            "karein' runs the old direct search. " + TYPED_VIA_ASSISTANT,
         ),
         ui=S(W, "ProductComparison cards grouped across stores."),
         backend=S(W),
@@ -168,7 +174,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="multi_item_request",
         title="Ask for several items in one message ('atta, dal aur doodh')",
         voice=S(W, "Backend prompt tells the model to search each item separately."),
-        typed_chat=S(M, "The whole typed string is sent as a single search query."),
+        typed_chat=S(
+            P,
+            "The model searches each item separately, but at most 2 searches per message; "
+            "further items are asked about in the reply.",
+        ),
         ui=S(M, "One search box, one query."),
         backend=S(W, "Via the voice model's parallel search_products calls."),
         voice_tools=("search_products",),
@@ -177,7 +187,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="add_to_basket",
         title="Add a product to the basket",
         voice=S(W, "Swiggy and Zepto: each option_id adds to its own store's basket."),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
         ui=S(W, "Add button on Swiggy and Zepto result cards."),
         backend=S(W, "Provider-aware local basket."),
         voice_tools=("add_to_basket",),
@@ -188,7 +198,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="edit_basket",
         title="Change quantity or remove a basket item",
         voice=S(W, "Swiggy and Zepto (store parameter; asks when ambiguous)."),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
         ui=S(W),
         backend=S(W),
         voice_tools=("set_basket_quantity",),
@@ -202,7 +212,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="view_basket",
         title="Hear or see the basket and item total",
         voice=S(W, "One basket per store; store null lists every store."),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
         ui=S(W),
         backend=S(W),
         voice_tools=("view_basket",),
@@ -213,7 +223,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="request_bill",
         title="Request the exact provider bill for review",
         voice=S(W, "Swiggy or Zepto (store parameter); see voice_bill_handoff for the screen gap."),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
         ui=S(W),
         backend=S(W, "Deterministic fee/charge arithmetic from the provider quote."),
         voice_tools=("request_approval",),
@@ -224,7 +234,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="voice_bill_handoff",
         title="See on screen the bill that voice requested",
         voice=S(W, "request_approval emits basket.approval_requested with the approval and quote."),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(
+            W,
+            "A typed 'bill bana do' returns basket.approval_requested; page.tsx hands its request "
+            "to BasketPanel like voice. " + TYPED_VIA_ASSISTANT,
+        ),
         ui=S(
             M,
             "Known gap: voice-panel.tsx passes only the provider to onBasketTouched, and "
@@ -275,7 +289,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             "on the current bill; no promo-code entry and no threshold suggestions by voice.",
         ),
         voice_tools=("request_approval", "view_basket"),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(P, "Same as voice: store-confirmed offers on the bill only, read-only."),
         ui=S(P, "Zepto basket only (BasketPanel), using consented usual items."),
         backend=S(P, "Zepto only."),
         routes=("POST /api/zepto/offer-suggestions",),
@@ -292,7 +306,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             "suggestions by voice.",
         ),
         voice_tools=("recall_household_preferences",),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(P, "Same as voice: recall tool, remembered annotations and consented summary; read-only."),
         ui=S(P, "Listed inside Zepto offer suggestions; dismiss/review routes have no frontend caller."),
         backend=S(W),
         routes=(
@@ -306,7 +320,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="purchase_history_personalization",
         title="Import purchase history and personalise search (consented)",
         voice=S(M, "Permissions and import are on-screen only."),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(M, TYPED_NO_TOOL),
         ui=S(W, "PersonalizationOnboarding in the setup sheet."),
         backend=S(W),
         routes=(
@@ -327,7 +341,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             "supported.",
         ),
         voice_tools=("recall_household_preferences",),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(P, "Same as voice: recall tool, remembered annotations and consented summary; read-only."),
         ui=S(M, "No frontend file calls these memory routes."),
         backend=S(W, "Extract/propose, confirm/correct/reject, retrieve, delete."),
         routes=(
@@ -345,7 +359,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="order_history",
         title="See past orders",
         voice=S(M, "No voice tool."),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(M, TYPED_NO_TOOL),
         ui=S(M, "No frontend caller."),
         backend=S(
             P,
@@ -358,7 +372,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="order_tracking",
         title="Track a delivery",
         voice=S(M, "No voice tool."),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(M, TYPED_NO_TOOL),
         ui=S(W, "LiveOrderTracking panel (also reachable from support)."),
         backend=S(W, "Read-only provider status polling."),
         routes=(
@@ -378,7 +392,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             "Support agent tools exist (app/support/agent_tools.py, /api/support/agent/*) "
             "but are not wired into the voice session.",
         ),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(M, TYPED_NO_TOOL),
         ui=S(W, "SupportPanel: create, attach evidence, prepare, approve."),
         backend=S(W),
         routes=(
@@ -435,7 +449,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             "Read at voice-session start and added to the session instructions; it can only "
             "be changed on screen, never by voice or inference.",
         ),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(P, "Read on every typed turn and added to the same backend instructions; changed on screen only."),
         ui=S(
             P,
             "Account settings > Preferences (address form, first name; language is mirrored). "
@@ -493,7 +507,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="provider_cart_view",
         title="Read the Zepto provider-side cart",
         voice=S(M, "No voice tool."),
-        typed_chat=S(M, TYPED_NO_ASSISTANT),
+        typed_chat=S(M, TYPED_NO_TOOL),
         ui=S(M, "No frontend caller."),
         backend=S(W, "Read-only."),
         routes=("GET /api/zepto/cart",),
@@ -504,6 +518,7 @@ CAPABILITIES: tuple[Capability, ...] = (
 INFRASTRUCTURE_ROUTES: dict[str, str] = {
     "GET /health": "Liveness check.",
     "POST /api/voice/session": "Starts a Realtime voice session (carries every voice capability).",
+    "POST /api/chat/turn": "Runs one typed chat turn through the voice backend model and tools (carries every typed-chat capability).",
     "GET /api/voice/sessions/{session_id}/events": "Server-sent voice tool events for the browser UI.",
     "GET /api/swiggy/tools": "Diagnostic: live Swiggy MCP tool catalogue.",
     "GET /api/zepto/tools": "Diagnostic: live Zepto MCP tool catalogue.",
@@ -558,6 +573,18 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
 
 
 API_CONTRACTS: dict[str, tuple[str, ...]] = {
+    "POST /api/chat/turn": (
+        "Auth: Clerk bearer token and accepted current terms (403 legal_consent_required otherwise).",
+        'Request: {"conversation_id": "<uuid>" | null, "message": "AXE Dark sabse chhota add karo", '
+        '"swiggy_address_id": "<id>" | null, "zepto_address_id": "<id>" | null}',
+        "conversation_id null means the current conversation; another user's id is 404. "
+        "message: 1-2000 characters; unknown keys are 422.",
+        'Response 200: {"conversation_id": "<uuid>" | null, "reply": "Roman-script Hinglish text", '
+        '"ui_events": [{"type": "tool.results" | "basket.updated" | "basket.approval_requested" | '
+        '"address_form.open" | "address_form.unavailable" | "tool.not_connected" | "tool.error", ...}]}',
+        "ui_events use the voice sideband shapes. Caps per turn: 6 tool rounds, 2 searches. "
+        "Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS).",
+    ),
     "GET /api/profile": (
         "Auth: Clerk bearer token; the record belongs to the verified user only.",
         "Response 200 (defaults when nothing was saved):",

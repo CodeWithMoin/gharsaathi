@@ -56,6 +56,7 @@ from app.conversations.summarizer import (
 )
 from app.memory.recall import DatabasePreferenceRecaller
 from app.user_profile import DatabaseProfileReader
+from app.chat.service import ChatTurnService
 from app.voice.service import LiveSessionService
 from app.voice.sideband import SidebandHub
 
@@ -242,6 +243,14 @@ def get_voice_service() -> LiveSessionService:
 
 VoiceServiceDependency = Annotated[LiveSessionService, Depends(get_voice_service)]
 SidebandHubDependency = Annotated[SidebandHub, Depends(get_sideband_hub)]
+
+
+@lru_cache
+def get_chat_service() -> ChatTurnService:
+    return ChatTurnService(get_settings(), get_voice_service())
+
+
+ChatServiceDependency = Annotated[ChatTurnService, Depends(get_chat_service)]
 
 
 @lru_cache
