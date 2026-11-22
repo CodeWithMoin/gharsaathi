@@ -407,6 +407,60 @@ sequenceDiagram
   fetch handler and no cache. A web app manifest (`/manifest.webmanifest`) makes the
   app installable; iOS/iPadOS deliver web push only to the installed Home Screen app.
 
+## Inbound delivery line: call outcomes
+
+A delivery partner calls the Sarvam inbound agent (`SARVAM_INBOUND_AGENT_ID`, deployment
+`SARVAM_INBOUND_DEPLOYMENT_ID`); afterwards the app shows what happened. Spec:
+[specs/inbound-delivery-assist.md](../specs/inbound-delivery-assist.md).
+
+```mermaid
+sequenceDiagram
+  participant M as RiderCallMonitor (backend loop)
+  participant S as Sarvam Analytics API
+  participant DB as PostgreSQL
+  participant P as Page
+  M->>DB: anyone waiting? (context prepared < 2 h, or an active tracked order)
+  alt nobody waiting
+    M->>M: sleep 30 s (no request)
+  else someone waiting
+    M->>S: GET /analytics/v1/{org}/{ws}/{agent}/interactions (read-only, X-API-Key)
+    S-->>M: items (inbound, this deployment, agent_variables.call_outcome …)
+    M->>M: parse, attribute to one user, redact summary
+    M->>DB: insert once per interaction_id
+    M->>M: rider_called push once (dedupe rider_called:inbound:<id>)
+  end
+  P->>DB: GET /api/inbound-delivery/calls every 30 s while visible
+  P->>P: card after the order status card; "Rider has your directions"
+```
+
+- **Endpoint** (documented, read-only): `GET https://apps.sarvam.ai/api/analytics/v1/{org_id}/{workspace_id}/{app_id}/interactions`
+  ([List interactions](https://docs.sarvam.ai/voice-agents/api/analytics/interactions),
+  [Analytics overview](https://docs.sarvam.ai/voice-agents/api/analytics/overview)). Same
+  `X-API-Key` and org/workspace ids as the cohort stream. Query: the waiting window
+  (`start_datetime` … `end_datetime`), `filter_conditions` `channel_direction = inbound`,
+  `sort_by=start_datetime desc`, `limit=100`; never `include_transcript`.
+- **Gating and rate.** `app/inbound_calls.py` `RiderCallMonitor.tick`: no request unless a
+  user shared with the delivery line in the last 2 h (`inbound_delivery_contexts`, written
+  by `InboundDeliveryService` on a share and cleared on a revoke) or has a tracked
+  order that is not delivered/cancelled (placed < 6 h ago). One request per tick, at most
+  one per 30 s per deployment (the app has one monitor). Errors back off 60 s → 15 min;
+  429 honours `Retry-After`; 401/403 wait 15 min. `SARVAM_CALL_MONITOR_ENABLED=false`
+  turns it off (tests always do).
+- **Which calls.** `channel_direction=inbound`, `deployment_id` = ours, not a dashboard
+  debug call, started after the user's window began. Attributed by the user's cohort or
+  Sarvam `user_identifier`; a call with neither (unknown caller) only when exactly one
+  user is waiting. A missing `call_outcome` waits 10 min for post-call analysis, then
+  counts as `no_decision`.
+- **What is kept** (`inbound_rider_calls`, unique `interaction_id`): time, store, outcome,
+  summary ≤140 chars (OTP-like and 4–8 digit codes hidden, 6+ digit runs removed, dropped
+  entirely if it reads like an address), caller `•••• 2590` from `user_contact_masked`.
+  Never audio, transcript, `user_contact` or the address. Deleted by
+  `DELETE /api/inbound-delivery/calls[/{id}]` and by "forget everything".
+- **Notification.** Kind `rider_called` (same user switch as rider assist): title
+  "Zepto rider called", body "2:14 pm — Route confirmed." Code-authored copy only.
+- **Logs.** `event=rider_call_monitor result=<ok|auth_failed|rate_limited|…> status=<n>
+  items=<n> saved=<n>`; never ids, numbers, summaries or the key.
+
 ## Purchase-history import (consented, read-only)
 
 Imports run only with `purchase_history/proactive_reorder` consent and only when the

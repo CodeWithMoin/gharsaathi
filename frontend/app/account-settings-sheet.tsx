@@ -24,7 +24,7 @@ import { NotificationSwitch, type NotificationsController } from "./notification
 import { profileChanges, profileDraft, type ProfileUpdate, type ProfileValues } from "./input-flows.mjs";
 import { InputDialog } from "./ui/input-dialog";
 import { RiderAssistSettings } from "./rider-assist-settings";
-import { deliveryLineView, type DeliveryLineConfig } from "./delivery-line.mjs";
+import { deliveryLineSettingsView, type DeliveryLineConfig } from "./delivery-line-settings.mjs";
 import { MEMORY_TERM, SETTINGS_DRAWER_CLASS, sectionHeading, settingsRows, type SettingsRowId, type SettingsSection } from "./settings-map.mjs";
 
 export type { SettingsSection } from "./settings-map.mjs";
@@ -103,7 +103,9 @@ export function AccountSettingsSheet({
   initialSection = null,
 }: AccountSettingsSheetProps) {
   const [section, setSection] = useState<SettingsSection>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  // Focus moves into the drawer itself on open (not the close button), so no focus ring shows
+  // after a tap; keyboard users Tab to Back/Close and still get their focus-visible ring.
+  const panelRef = useRef<HTMLElement>(null);
   const titleId = useId();
   const reducedMotion = useReducedMotion() ?? false;
   const connectedStoreCount = stores.filter((store) => store.connected).length;
@@ -119,7 +121,7 @@ export function AccountSettingsSheet({
     }
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+    const focusTimer = window.setTimeout(() => panelRef.current?.focus({ preventScroll: true }), 0);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onOpenChange(false);
     };
@@ -135,7 +137,7 @@ export function AccountSettingsSheet({
   const heading = sectionHeading(section);
   const storeConnected = (id: string) => stores.some((store) => store.id === id && store.connected);
   const rows = settingsRows({ riderAssist: riderAssistAvailable });
-  const line = deliveryLineView(deliveryLine);
+  const line = deliveryLineSettingsView(deliveryLine);
   const rowDetails: Record<SettingsRowId, { icon: ReactNode; subtitle: string }> = {
     stores: { icon: <Storefront size={21} weight="duotone" />, subtitle: connectedStoreCount ? `${connectedStoreCount} store${connectedStoreCount === 1 ? "" : "s"} connected` : "Connect a shopping store" },
     memory: { icon: <Brain size={21} weight="duotone" />, subtitle: `${MEMORY_TERM}, order history, privacy` },
@@ -147,10 +149,12 @@ export function AccountSettingsSheet({
   // the same spring and owns the backdrop, so tapping the pushed page closes this panel.
   return <AnimatePresence>
     {open && <motion.section
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${SETTINGS_DRAWER_CLASS} flex-col overflow-hidden bg-surface-muted text-ink`}
+        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${SETTINGS_DRAWER_CLASS} flex-col overflow-hidden bg-surface-muted text-ink outline-none`}
         initial={reducedMotion ? { opacity: 0 } : { x: "100%" }}
         animate={{ x: 0, opacity: 1 }}
         exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}
@@ -159,7 +163,7 @@ export function AccountSettingsSheet({
         <header className="flex items-center justify-between px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
           {section ? <button type="button" onClick={() => setSection(null)} className="grid size-11 place-items-center rounded-full text-ink-secondary transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Back to account settings"><ArrowLeft size={20} weight="bold" /></button> : <span className="size-11" />}
           <h2 id={titleId} className="font-display text-lg font-semibold tracking-[-.04em]">{heading}</h2>
-          <button ref={closeButtonRef} type="button" onClick={close} className="grid size-11 place-items-center rounded-full text-ink-secondary transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Close account settings"><X size={20} weight="bold" /></button>
+          <button type="button" onClick={close} className="grid size-11 place-items-center rounded-full text-ink-secondary transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Close account settings"><X size={20} weight="bold" /></button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
@@ -398,7 +402,7 @@ function EditProfileDialog({ open, initial, languageEditable, onClose, onSave }:
  * when the AI transfers the rider back.
  */
 function DeliveryLineDetail({ config, onOpenDirections }: { config: DeliveryLineConfig | null | undefined; onOpenDirections?: () => void }) {
-  const line = deliveryLineView(config);
+  const line = deliveryLineSettingsView(config);
   const code = "rounded-md bg-surface-muted px-1.5 py-0.5 font-mono text-[12px] font-semibold text-ink";
   return <div className="space-y-4">
     <div className="rounded-2xl border border-border bg-surface p-4">
@@ -418,9 +422,8 @@ function DeliveryLineDetail({ config, onOpenDirections }: { config: DeliveryLine
       <p className="mt-1.5 text-[11px] leading-4 text-muted">Don’t forward unanswered or unreachable calls; the AI would loop when it hands the rider back to you.</p>
     </section>
 
-    {/* TODO(delivery-line-v2): open the per-address directions editor from codex/delivery-line-v2 here once it is on main. Until then this opens Track order → Prepare delivery line. */}
     <button type="button" onClick={onOpenDirections} disabled={!onOpenDirections} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-inverse px-4 text-sm font-semibold text-on-inverse transition-transform active:scale-[.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 motion-reduce:active:scale-100"><MapPin size={16} weight="bold" />Directions for this address</button>
-    <p className="-mt-2 px-1 text-[11px] leading-4 text-muted">Opens Track order, where you prepare the delivery line with your landmark.</p>
+    <p className="-mt-2 px-1 text-[11px] leading-4 text-muted">Landmark, step-by-step route, gate note and handover for your selected address.</p>
   </div>;
 }
 

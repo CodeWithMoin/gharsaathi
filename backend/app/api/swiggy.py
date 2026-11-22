@@ -34,6 +34,7 @@ from app.commerce.swiggy.models import (
     ToolDescription,
 )
 from app.core.config import get_settings
+from app.inbound_delivery import InboundDeliveryServiceDependency
 from app.dependencies import SwiggyServiceDependency
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 from app.memory.personalization import excludes_product, personalize_search_query
@@ -241,6 +242,8 @@ async def select_address(
     body: SelectedAddressRequest,
     session: DbSessionDependency,
     actor: MemoryActorDependency,
+    user_id: UserIdDependency,
+    delivery_line: InboundDeliveryServiceDependency,
 ) -> AddressList:
     state = await ProviderAddressRepository(session).select(actor.id, body.address_id)
     if state is None:
@@ -248,6 +251,8 @@ async def select_address(
             status.HTTP_409_CONFLICT,
             "That address is not in the saved snapshot. Refresh addresses and try again.",
         )
+    # Details shared for the previous address are cleared from the delivery line.
+    await delivery_line.address_selection_changed(user_id, "swiggy", state.selected_address_id or "")
     return cached_address_list(state)
 
 

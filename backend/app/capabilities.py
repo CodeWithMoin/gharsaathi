@@ -793,18 +793,58 @@ CAPABILITIES: tuple[Capability, ...] = (
             "Not part of the browser voice session. A separately deployed Sarvam inbound "
             "agent handles recognized Zepto/Swiggy callers.",
         ),
-        typed_chat=S(U, "Preparation requires explicit review and confirmation in the UI."),
-        ui=S(W, "LiveOrderTracking includes recipient, address and landmark review."),
+        typed_chat=S(U, "Sharing requires the explicit approval tick and tap in the UI."),
+        ui=S(
+            W,
+            "LiveOrderTracking shows the selected store address read-only (Change address opens "
+            "the picker), the profile name, saved per-address directions and handover "
+            "instructions (edited in a popup), Share with delivery line, an opt-in auto-share "
+            "switch, and Clear delivery line.",
+        ),
         backend=S(
             W,
-            "Streams one server-configured caller context to Sarvam; never initiates a call.",
+            "Reads the selected address, profile name and saved directions server-side and "
+            "streams one record for the server-configured caller to Sarvam; clears it (a "
+            "caller_authorized=no record) on address change, delivered or cancelled. Owner "
+            "only (SARVAM_INBOUND_OWNER_USER_ID or ALLOWED_USER_IDS). Never initiates a call.",
         ),
         routes=(
             "GET /api/inbound-delivery/config",
+            "GET /api/inbound-delivery/directions",
+            "PUT /api/inbound-delivery/directions",
+            "DELETE /api/inbound-delivery/directions",
+            "GET /api/inbound-delivery/line",
+            "PUT /api/inbound-delivery/line/settings",
+            "DELETE /api/inbound-delivery/line",
             "POST /api/inbound-delivery/contexts",
             "GET /api/inbound-delivery/contexts/{cohort_id}",
         ),
-        ui_files=("frontend/app/order-tracking.tsx",),
+        ui_files=("frontend/app/order-tracking.tsx", "frontend/app/delivery-line-panel.tsx"),
+    ),
+    Capability(
+        id="inbound_rider_call_summary",
+        title="Show what happened on a call to the inbound delivery line",
+        voice=S(U, "Not a voice feature; calls appear as cards in the chat."),
+        typed_chat=S(U, "Not a chat feature; calls appear as cards in the chat."),
+        ui=S(
+            P,
+            "Chat card near the order (who called, time, outcome, one-line summary), "
+            "'Rider has your directions' on the order status card, a 'rider_called' "
+            "browser notification (user-toggleable). Not yet verified with a real call.",
+        ),
+        backend=S(
+            P,
+            "RiderCallMonitor reads Sarvam's documented List interactions endpoint, read-only, "
+            "at most every 30 s and only while a user has an active order or a context "
+            "prepared in the last 2 h; stores a redacted outcome summary; deletable. Tested "
+            "with mocked Sarvam responses only.",
+        ),
+        routes=(
+            "GET /api/inbound-delivery/calls",
+            "DELETE /api/inbound-delivery/calls",
+            "DELETE /api/inbound-delivery/calls/{call_id}",
+        ),
+        ui_files=("frontend/app/inbound-calls-ui.tsx", "frontend/app/order-status-card.tsx"),
     ),
     Capability(
         id="support_complaint",

@@ -12,7 +12,7 @@ from datetime import datetime
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from app.notifications.models import PushPayload
+from app.notifications.models import TITLE_MAX, PushPayload
 from app.shopping.money import format_rupees
 
 INDIA = ZoneInfo("Asia/Kolkata")
@@ -202,8 +202,37 @@ def rider_called(
     )
 
 
+def delivery_line(title: str, body: str) -> PushPayload:
+    """The delivery line was shared or cleared automatically. Code-authored text
+    only: never the address, directions or a phone number."""
+
+    return PushPayload(
+        kind="delivery_line",
+        title=title[:48],
+        body=body[:160],
+        url="/",
+        tag="delivery-line",
+        suppress_when_visible=True,
+    )
+
+
 def quote_url(value: str) -> str:
     return quote(value, safe="")
+
+
+def inbound_rider_called(started_at: datetime, headline: str, outcome_text: str, *, call_id: str) -> PushPayload:
+    """Sarvam inbound line: who called, when, and the outcome. Code-authored copy only:
+    never the agent's summary, the delivery address or the caller's number."""
+
+    return PushPayload(
+        kind="rider_called",
+        title=headline[:TITLE_MAX],
+        body=f"{clock_time(started_at)} — {outcome_text}."[:160],
+        url="/?inbound_call=" + quote_url(call_id),
+        tag=f"inbound:{call_id}"[:80],
+        suppress_when_visible=True,
+    )
+
 
 
 def test_message() -> PushPayload:

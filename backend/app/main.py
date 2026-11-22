@@ -26,12 +26,14 @@ from app.api.rider import router as rider_router
 from app.api.inbound_delivery import router as inbound_delivery_router
 from app.api.voice import router as voice_router
 from app.auth import PrivateDeploymentForbidden
+from app.inbound_delivery import InboundDeliveryError
 from app.core.config import get_settings
 from app.core.logging import install_sensitive_log_filters
 from app.legal_consent import LegalConsentRequired
 from app.dependencies import (
     close_cached_services,
     get_order_tracking_service,
+    get_rider_call_monitor,
 )
 from app.tracking.service import OrderTrackingPoller
 
@@ -48,11 +50,18 @@ async def lifespan(application: FastAPI):
     application.state.order_tracking_service = tracking_service
     if settings.tracking_polling_enabled:
         tracking_poller.start()
+    # Read-only Sarvam interactions poll; idle (no request) unless someone has an
+    # active order or a delivery context prepared in the last 2 h.
+    call_monitor = get_rider_call_monitor() if settings.sarvam_call_monitor_enabled else None
+    if call_monitor is not None and call_monitor.configured:
+        call_monitor.start()
     try:
         yield
     finally:
         if settings.tracking_polling_enabled:
             await tracking_poller.aclose()
+        if call_monitor is not None:
+            await call_monitor.aclose()
         await close_cached_services()
 
 
@@ -93,6 +102,14 @@ async def private_deployment_forbidden(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_403_FORBIDDEN,
+        content={"detail": exc.message, "code": exc.code},
+    )
+
+
+@app.exception_handler(InboundDeliveryError)
+async def inbound_delivery_error(_: Request, exc: InboundDeliveryError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
         content={"detail": exc.message, "code": exc.code},
     )
 

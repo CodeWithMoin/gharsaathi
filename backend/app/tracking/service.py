@@ -45,8 +45,12 @@ class OrderTrackingService:
         now: Callable[[], datetime] = utc_now,
         jitter: Callable[[float, float], float] = random.uniform,
         push: Any = None,
+        delivery_line: Any = None,
     ) -> None:
         self.store = store
+        # Inbound delivery line: shares on start (if the user opted in) and
+        # clears when the order is delivered or cancelled. Never blocks tracking.
+        self.delivery_line = delivery_line
         # Browser notifications for the same four in-app updates.
         self.push = push
         self.providers = providers
@@ -87,7 +91,9 @@ class OrderTrackingService:
             )
         self.store.save(watch)
         # An immediate read is safe: this boundary exposes read-only operations only.
-        return await self.refresh(user_id, watch.id)
+        read = await self.refresh(user_id, watch.id)
+        self._line_started(read.order)
+        return read
 
     async def ensure(self, user_id: str, request: StartTrackingRequest) -> TrackingRead:
         """Start tracking an order once; a second call returns the existing watch.
@@ -119,7 +125,9 @@ class OrderTrackingService:
             else:
                 created = False
         if created:
-            return await self.refresh(user_id, watch.id)
+            read = await self.refresh(user_id, watch.id)
+            self._line_started(read.order)
+            return read
         return TrackingRead(
             order=watch, checked_at=watch.checked_at, next_check_at=watch.next_check_at
         )
@@ -217,7 +225,9 @@ class OrderTrackingService:
             if snapshot.disabled:
                 return self._stop(watch, now, "provider_tracking_disabled", changed)
             if snapshot.terminal:
-                return self._stop(watch, now, f"terminal_{watch.status.value}", changed)
+                read = self._stop(watch, now, f"terminal_{watch.status.value}", changed)
+                self._line_updated(read.order)
+                return read
 
             watch.next_check_at = now + timedelta(
                 seconds=_poll_interval_seconds(snapshot.poll_interval_seconds)
@@ -229,6 +239,20 @@ class OrderTrackingService:
                 checked_at=watch.checked_at,
                 next_check_at=watch.next_check_at,
             )
+
+    def _line_started(self, watch: OrderWatch) -> None:
+        if self.delivery_line is not None and watch.active:
+            try:
+                self.delivery_line.tracking_started(watch)
+            except Exception:  # noqa: BLE001 - the delivery line never breaks tracking
+                pass
+
+    def _line_updated(self, watch: OrderWatch) -> None:
+        if self.delivery_line is not None:
+            try:
+                self.delivery_line.tracking_updated(watch)
+            except Exception:  # noqa: BLE001 - the delivery line never breaks tracking
+                pass
 
     def stop(self, user_id: str, monitor_id: str) -> TrackingRead:
         watch = self.store.get_by_id(user_id, monitor_id)

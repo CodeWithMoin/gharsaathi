@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CheckCircle, Circle, Clock, DeviceMobile, Lifebuoy, MapPin, NavigationArrow, Package, PhoneIncoming, Truck, XCircle } from "@phosphor-icons/react";
+import { CheckCircle, Circle, Clock, DeviceMobile, Lifebuoy, MapPin, NavigationArrow, Package, Phone, PhoneIncoming, Truck, XCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApiRequest } from "./authenticated-api";
 import { LiveOrderTracking } from "./order-tracking";
@@ -14,12 +14,16 @@ import { InputDialog } from "./ui/input-dialog";
  * tracking monitor. It asks the backend only while the tab is visible and the
  * order is still moving, at the provider's allowed interval.
  */
-export function OrderStatusCard({ card, onChange, onUpdate, deliveryLineReady = false, onOpenDeliveryLine, onOpenSupport }: {
+export function OrderStatusCard({ card, onChange, onUpdate, riderLine = null, deliveryLineReady = false, onOpenDeliveryLine, onOpenDirections, onOpenSupport }: {
   card: Card;
+  /** From a call to the inbound delivery line, e.g. "Rider has your directions". */
+  riderLine?: string | null;
   /** The Sarvam delivery line is on for this server. */
   deliveryLineReady?: boolean;
   /** Opens Settings → Delivery line. */
   onOpenDeliveryLine?: () => void;
+  /** Opens the directions editor for the selected address. */
+  onOpenDirections?: () => void;
   /** Opens the existing Order help flow. */
   onOpenSupport?: () => void;
   /** Something worth saving with the chat changed (status, ETA, tracking stopped, a seen update). */
@@ -104,7 +108,7 @@ export function OrderStatusCard({ card, onChange, onUpdate, deliveryLineReady = 
   const openLink = (link: OrderCardLink) => {
     if (link.id === "help") onOpenSupport?.();
     else if (link.id === "delivery-line") onOpenDeliveryLine?.();
-    // TODO(delivery-line-v2): open the per-address directions editor once it is on main; until then Track order → Prepare delivery line.
+    else if (onOpenDirections) onOpenDirections();
     else setTrackOpen(true);
   };
   if (finished && !expanded) {
@@ -129,6 +133,7 @@ export function OrderStatusCard({ card, onChange, onUpdate, deliveryLineReady = 
         <span>{orderHeadline(live)}</span>
       </p>
       {eta && <p className={`mt-1 flex items-center gap-1.5 text-sm ${late ? "font-semibold text-ink" : "text-ink-secondary"}`}><MapPin size={15} weight="fill" className="shrink-0 text-accent-ink" />{eta}</p>}
+      {riderLine && !isFinal(live) && <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-secondary"><Phone size={15} weight="fill" className="shrink-0 text-accent-ink" />{riderLine}</p>}
       {delivered && deliveredLine && <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-secondary"><Clock size={15} className="shrink-0 text-success" />{deliveredLine}</p>}
       {placed && !cancelled && <p className="mt-1 flex items-center gap-1.5 text-xs text-muted"><Clock size={13} className="shrink-0" />{placed}</p>}
       <ol className="mt-4 grid grid-cols-4 gap-1.5" aria-label="Order steps">
@@ -146,9 +151,9 @@ export function OrderStatusCard({ card, onChange, onUpdate, deliveryLineReady = 
         <button type="button" onClick={() => setTrackOpen(true)} className="rounded-full bg-inverse px-5 py-2.5 text-sm font-semibold text-on-inverse transition hover:bg-inverse-hover active:scale-[.98]">Track order</button>
         <p className="flex items-center gap-1.5 text-xs leading-5 text-muted"><DeviceMobile size={15} className="shrink-0" />Open the {live.store} app to see the rider{isFinal(live) ? "" : " or to cancel"}.</p>
       </div>
-      {links.length > 0 && <nav aria-label="Order actions" className="-mx-1 mt-3 flex flex-wrap gap-x-1 gap-y-0.5 border-t border-border pt-2">
-        {links.map((link) => <button key={link.id} type="button" onClick={() => openLink(link)} className={`flex min-h-11 items-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${link.id === "delivery-line" && deliveryLineReady ? "text-success-strong" : "text-accent-ink"}`}>
-          {link.id === "delivery-line" ? <PhoneIncoming size={15} weight={deliveryLineReady ? "fill" : "bold"} className="shrink-0" /> : link.id === "directions" ? <NavigationArrow size={15} weight="bold" className="shrink-0" /> : <Lifebuoy size={15} weight="bold" className="shrink-0" />}{link.label}
+      {links.length > 0 && <nav aria-label="Order actions" className={`-mx-1 mt-3 grid gap-1 border-t border-border pt-2 ${links.length === 3 ? "grid-cols-3" : links.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+        {links.map((link) => <button key={link.id} type="button" onClick={() => openLink(link)} className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[11px] font-semibold leading-tight transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${links.length === 1 ? "flex-row justify-start gap-1.5 px-2 text-xs" : ""} ${link.id === "delivery-line" && deliveryLineReady ? "text-success-strong" : "text-accent-ink"}`}>
+          {link.id === "delivery-line" ? <PhoneIncoming size={17} weight={deliveryLineReady ? "fill" : "bold"} className="shrink-0" aria-hidden="true" /> : link.id === "directions" ? <NavigationArrow size={17} weight="bold" className="shrink-0" aria-hidden="true" /> : <Lifebuoy size={17} weight="bold" className="shrink-0" aria-hidden="true" />}<span className="max-w-full">{link.label}</span>
         </button>)}
       </nav>}
     </section>

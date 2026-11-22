@@ -160,3 +160,40 @@ def test_opaque_monitor_api_never_puts_order_ids_in_a_route(tmp_path: Path) -> N
         assert fetched.status_code == 200
         assert "private-order-42" not in fetched.request.url.path
         assert all("{order_id}" not in path for path in app.openapi()["paths"])
+
+
+class RecordingDeliveryLine:
+    def __init__(self) -> None:
+        self.started: list[str] = []
+        self.updated: list[str] = []
+
+    def tracking_started(self, watch) -> None:
+        self.started.append(watch.status.value)
+
+    def tracking_updated(self, watch) -> None:
+        self.updated.append(watch.status.value)
+
+
+def test_delivery_line_hears_tracking_start_and_the_delivered_end(tmp_path: Path) -> None:
+    async def scenario() -> RecordingDeliveryLine:
+        clock = FakeClock()
+        provider = FakeProvider([
+            TrackingSnapshot(status=TrackingStatus.CONFIRMED, poll_interval_seconds=10),
+            TrackingSnapshot(status=TrackingStatus.DELIVERED, delivered=True),
+        ])
+        line = RecordingDeliveryLine()
+        service = OrderTrackingService(
+            OrderTrackingStore(tmp_path / "tracking"),
+            {TrackingProvider.SWIGGY: provider},
+            now=clock.now,
+            jitter=lambda low, high: high,
+            delivery_line=line,
+        )
+        started = await service.start("home", request())
+        clock.advance(11)
+        await service.refresh("home", started.order.id)
+        return line
+
+    line = asyncio.run(scenario())
+    assert line.started == ["confirmed"]
+    assert line.updated == ["delivered"]

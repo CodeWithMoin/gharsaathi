@@ -19,6 +19,7 @@ PushKind = Literal[
     "payment",
     "checkout_expiring",
     "rider_called",
+    "delivery_line",
 ]
 PUSH_KINDS: tuple[PushKind, ...] = (
     "order_placed",
@@ -30,6 +31,7 @@ PUSH_KINDS: tuple[PushKind, ...] = (
     "payment",
     "checkout_expiring",
     "rider_called",
+    "delivery_line",
 )
 # "test" is the Settings button; it is never user-toggleable and never deduped.
 SendKind = PushKind | Literal["test"]
@@ -45,6 +47,8 @@ KIND_LABELS: dict[PushKind, str] = {
     "checkout_expiring": "Order card about to expire",
     # Rider assist (beta): the AI answered a delivery partner's forwarded call.
     "rider_called": "A delivery partner called",
+    # The inbound delivery line was shared or cleared automatically.
+    "delivery_line": "Delivery line shared or cleared",
 }
 
 TITLE_MAX = 48

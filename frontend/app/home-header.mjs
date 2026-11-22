@@ -56,11 +56,6 @@ export function addressGate(stores) {
   return { store, storeName: STORE_NAMES[store], addresses: stores[store].addresses, canAdd: store === "zepto" };
 }
 
-/** "Delivering to Home" under the greeting once an address is chosen. */
-export function deliveringLine(header) {
-  return header?.state === "selected" ? `Delivering to ${header.label}` : null;
-}
-
 /**
  * Links under a placed order's status card. The delivery line and directions matter
  * only while the order is moving; help stays (missing or damaged items show up later).

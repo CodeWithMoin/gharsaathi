@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useApiRequest } from "./authenticated-api";
-import { DELIVERY_LINE_CONFIG_PATH, type DeliveryLineConfig } from "./delivery-line.mjs";
+import { DELIVERY_LINE_CONFIG_PATH, type DeliveryLineConfig } from "./delivery-line-settings.mjs";
 
 /** The Sarvam delivery line's server config: `undefined` while loading, `null` if it could not be read. */
 export function useDeliveryLineConfig() {

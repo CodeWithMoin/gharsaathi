@@ -2,7 +2,7 @@
 
 import { useClerk, useUser } from "@clerk/nextjs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, Basket, ChatCircleDots, MagnifyingGlass, MapPin, Microphone, NotePencil, PaperPlaneRight, ShieldCheck, ShoppingCartSimple, X } from "@phosphor-icons/react";
+import { ArrowRight, Basket, ChatCircleDots, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, ShieldCheck, ShoppingCartSimple, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
 import { DRAWER_PANEL_TRANSITION, DRAWER_SPRING, pushOffset, restoreScrollTarget, viewportInsets, type DrawerName } from "./drawer-push.mjs";
@@ -14,6 +14,8 @@ import { directSearchOutcome, restoreResultGroups, resultGroupIdentity, type Res
 import { conversationTitle, relativeChatDate, searchConversations, visibleConversations, type ConversationSummary } from "./chat-list.mjs";
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
+import { DeliveryLinePanel } from "./delivery-line-panel";
+import { InputDialog } from "./ui/input-dialog";
 import { PersonalizationOnboarding } from "./personalization-onboarding";
 import { useWeeklyHistoryAutoSync } from "./purchase-history-import";
 import { SupportDialog } from "./support-panel";
@@ -24,8 +26,10 @@ import { DeliverFirst } from "./deliver-first";
 import { AccountSettingsSheet, type SettingsSection } from "./account-settings-sheet";
 import { HomeHeader } from "./home-header-bar";
 import { useDeliveryLineConfig } from "./delivery-line-config";
-import { addressGate, addressLabel, deliveringLine, headerAddress } from "./home-header.mjs";
+import { addressGate, addressLabel, headerAddress } from "./home-header.mjs";
 import { RiderCallCard, useRiderCalls } from "./rider-calls";
+import { InboundCallCard, useInboundCalls } from "./inbound-calls-ui";
+import { placeInboundCalls, riderDirectionsLine } from "./inbound-calls.mjs";
 import { placeRiderCalls } from "./rider-assist.mjs";
 import { OrderNotificationPrompt, useNotifications } from "./notification-settings";
 import { orderFromUrl } from "./push-notifications.mjs";
@@ -98,6 +102,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   const [setupOpen, setSetupOpen] = useState(startWithSetupOpen);
   const [supportOpen, setSupportOpen] = useState(false);
   const [trackingOpen, setTrackingOpen] = useState(false);
+  // "Directions" (Settings → Delivery line, and the order card) opens main's directions editor for that store's selected address.
+  const [directionsStore, setDirectionsStore] = useState<"swiggy" | "zepto" | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [commerceMode, setCommerceMode] = useState<CommerceMode>("demo");
   const [zeptoConnected, setZeptoConnected] = useState<boolean | null>(null);
@@ -148,6 +154,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   latestMessageIdRef.current = latestMessageId(chatMessages);
   const riderCalls = useRiderCalls({ latestMessageIdRef, onToast: setOrderToast });
   const deliveryLine = useDeliveryLineConfig();
+  // Calls to the Sarvam inbound delivery line: a card next to the order, and a status line.
+  const inboundCalls = useInboundCalls({ onToast: setOrderToast });
   const conversationIdRef = useRef<string | null>(null);
   // Set when the saved chat could not be loaded, so the first save starts a new chat instead of overwriting it.
   const startFreshConversationRef = useRef(false);
@@ -162,6 +170,11 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   useEffect(() => { basketProviderRef.current = basketProvider; }, [basketProvider]);
   const followScrollRef = useRef(true);
   const scrollAnimatingRef = useRef(false);
+  // The fixed composer dock (chips + photo chip + composer) changes height; the chat keeps
+  // that much space at the bottom so the newest card is never hidden underneath it.
+  const dockRef = useRef<HTMLDivElement | null>(null);
+  const chatSectionRef = useRef<HTMLElement | null>(null);
+  const [dockHeight, setDockHeight] = useState(0);
   // What each store's card shows, read when a card collapses into its summary.
   const basketsRef = useRef<Partial<Record<ProviderName, ShoppingBasket>>>({});
   const billStageRef = useRef<Partial<Record<ProviderName, SummaryStage>>>({});
@@ -697,6 +710,11 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     setSettingsSection(section);
     setAccountSettingsOpen(true);
   }, []);
+  const openDirections = useCallback((store: "swiggy" | "zepto") => {
+    setChatDrawerOpen(false);
+    setAccountSettingsOpen(false);
+    setDirectionsStore(store);
+  }, []);
   const openSupport = useCallback(() => {
     setChatDrawerOpen(false);
     setAccountSettingsOpen(false);
@@ -744,6 +762,27 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     restoreScrollRef.current = null;
     window.scrollTo(0, restoreScrollTarget({ savedScrollY, follow: followScrollRef.current, scrollHeight: document.documentElement.scrollHeight, viewportHeight: window.innerHeight }));
   }, [push]);
+
+  useEffect(() => {
+    const dock = dockRef.current;
+    const section = chatSectionRef.current;
+    if (!dock || !section || typeof ResizeObserver === "undefined") return;
+    let lastSectionHeight = section.offsetHeight;
+    const observer = new ResizeObserver(() => {
+      setDockHeight(dock.offsetHeight);
+      const height = section.offsetHeight;
+      // Content that grows after it was added (a card finishing its layout, images loading)
+      // keeps the reader at the bottom while they are following the conversation.
+      if (height > lastSectionHeight && followScrollRef.current && !scrollAnimatingRef.current && !pushRef.current) {
+        window.scrollTo({ top: Math.max(0, document.documentElement.scrollHeight - window.innerHeight), behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      }
+      lastSectionHeight = height;
+    });
+    observer.observe(dock);
+    observer.observe(section);
+    setDockHeight(dock.offsetHeight);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const updateFollow = () => {
@@ -1135,7 +1174,6 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   };
   const headerAddressView = headerAddress(storeAddresses);
   const deliverGate = hasChat ? null : addressGate(storeAddresses);
-  const delivering = deliveringLine(headerAddressView);
   const openHeaderAddress = () => {
     if (headerAddressView.store) setAddressPicker(headerAddressView.store);
     else if (headerAddressView.state === "connect") openSettingsSection("stores");
@@ -1223,7 +1261,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       onOpenOrder={(orderId) => document.getElementById(`order-status-${orderId}`)?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" })}
     />
 
-    <section style={push ? { transform: `translateY(${-push.scrollY}px)` } : undefined} className={`mx-auto flex min-h-[100dvh] max-w-4xl flex-col overflow-x-clip px-4 ${orderChip ? "pt-[calc(148px+env(safe-area-inset-top))]" : "pt-[calc(96px+env(safe-area-inset-top))]"} sm:px-6 ${hasChat && chips.length && !voiceOpen ? "pb-52 sm:pb-56" : "pb-40 sm:pb-44"}`}>
+    <section ref={chatSectionRef} style={{ ...(push ? { transform: `translateY(${-push.scrollY}px)` } : {}), ...(dockHeight ? { paddingBottom: dockHeight + 24 } : {}) }} className={`mx-auto flex min-h-[100dvh] max-w-4xl flex-col overflow-x-clip px-4 ${orderChip ? "pt-[calc(148px+env(safe-area-inset-top))]" : "pt-[calc(96px+env(safe-area-inset-top))]"} sm:px-6 ${hasChat && chips.length && !voiceOpen ? "pb-52 sm:pb-56" : "pb-40 sm:pb-44"}`}>
       <div className="flex-1">
         <div className="mb-5 sm:mb-8"><span className="text-[10px] font-semibold uppercase tracking-[.18em] text-subtle">Today</span></div>
         {deliverGate ? <motion.div key="deliver-first" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} data-testid="deliver-first">
@@ -1239,21 +1277,22 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
           <div className="min-w-0 max-w-[620px]">
             <div className="w-fit max-w-full rounded-[7px_20px_20px_20px] border border-border bg-surface px-4 py-3.5 sm:px-5 sm:py-4">{replyLanguage === "english"
               ? <><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hi {userName}, <strong className="font-semibold">what do you need for home today?</strong></p><p className="mt-1 text-[13px] leading-5 text-muted sm:mt-1.5 sm:text-sm sm:leading-6">Just say it—I&apos;ll check all your ready stores together.</p></>
-              : <><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hello, {userName}. <strong className="font-semibold">Aaj ghar ke liye kya mangwana hai?</strong></p><p className="mt-1 text-[13px] leading-5 text-muted sm:mt-1.5 sm:text-sm sm:leading-6">Bas bol dijiye—main ready stores par saath mein check karungi.</p></>}{delivering && <p data-testid="delivering-line" className="mt-2 flex min-w-0 items-center gap-1 text-xs font-medium text-ink-secondary"><MapPin size={13} weight="fill" className="shrink-0 text-accent" aria-hidden="true" /><span className="truncate">{delivering}</span></p>}</div>
-            {!hasChat && chips.length > 0 && <QuickChips chips={chips} busyKey={quick.busyKey} disabled={chipsLocked} onChip={(chip) => void quick.run(chip)} className="-mx-1 mt-3" />}
+              : <><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hello, {userName}. <strong className="font-semibold">Aaj ghar ke liye kya mangwana hai?</strong></p><p className="mt-1 text-[13px] leading-5 text-muted sm:mt-1.5 sm:text-sm sm:leading-6">Bas bol dijiye—main ready stores par saath mein check karungi.</p></>}</div>
+            {!hasChat && chips.length > 0 && <QuickChips chips={chips} busyKey={quick.busyKey} disabled={chipsLocked} onChip={(chip) => { followScrollRef.current = true; void quick.run(chip); }} className="-mx-1 mt-3" />}
             {!hasChat && <div className="mt-3 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">{suggestions.map((suggestion) => <button key={suggestion.query} onClick={() => void runSearch(suggestion.query)} disabled={loading === "search" || loading === "assistant"} className="min-h-10 rounded-2xl bg-surface-strong/80 px-2 py-2 text-[11px] font-medium leading-4 text-ink-secondary transition hover:bg-border-strong active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-0 sm:rounded-full sm:px-3.5 sm:text-xs">{suggestion.label}</button>)}</div>}
           </div>
         </motion.div>}
 
         <AnimatePresence initial={false}>
-          {placeRiderCalls(withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard), riderCalls.cards).map((item) => {
+          {placeInboundCalls(placeRiderCalls(withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard), riderCalls.cards), inboundCalls.cards).map((item) => {
+            if (item.kind === "inbound-call") return <InboundCallCard key={`inbound-call-${item.card.id}`} call={item.card} onDismiss={inboundCalls.dismiss} />;
             if (item.kind === "rider-call") return <RiderCallCard key={`rider-call-${item.card.id}`} call={item.card} onDismiss={riderCalls.dismiss} />;
             if (item.kind === "order-card") {
               const { card } = item;
               if (card.superseded) return <motion.div key={orderCardKey(card)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12"><p role="status" className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted"><ShoppingCartSimple size={13} className="shrink-0 text-subtle" /><span className="truncate">{supersededOrderText(card)}</span></p></motion.div>;
               return <OrderConfirmationCard key={orderCardKey(card)} confirmation={card.confirmation} onResult={(state) => handleOrderCardResult(card, state)} />;
             }
-            if (item.kind === "order-status") return <OrderStatusCard key={`order-status-${item.card.orderId}`} card={item.card} onChange={handleOrderStatusChange} onUpdate={setOrderToast} deliveryLineReady={deliveryLine?.enabled === true} onOpenDeliveryLine={() => openSettingsSection("delivery")} onOpenSupport={openSupport} />;
+            if (item.kind === "order-status") return <OrderStatusCard key={`order-status-${item.card.orderId}`} card={item.card} onChange={handleOrderStatusChange} onUpdate={setOrderToast} riderLine={riderDirectionsLine(inboundCalls.calls, item.card)} deliveryLineReady={deliveryLine?.enabled === true} onOpenDeliveryLine={() => openSettingsSection("delivery")} onOpenDirections={() => openDirections("zepto")} onOpenSupport={openSupport} />;
             if (item.kind === "results") return item.group ? <div key={`results-${item.group.key}`} className="contents">{renderResultGroup(item.group as ResultGroup<Product>)}</div> : null;
             if (item.kind === "basket-summary") {
               const { card } = item;
@@ -1288,7 +1327,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         {chatFailure && loading !== "assistant" && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div role="alert" className="max-w-md rounded-[8px_22px_22px_22px] border border-border bg-surface px-5 py-4"><p className="text-sm leading-6 text-danger-hover">{chatFailure.message}</p>{chatFailure.query && <button type="button" onClick={() => { const failedQuery = chatFailure.query; setChatFailure(null); void runDirectSearch(failedQuery); }} className="mt-3 flex items-center gap-1.5 rounded-full bg-inverse px-4 py-2 text-xs font-semibold text-on-inverse transition active:scale-[.97]"><MagnifyingGlass size={14} /> Search directly</button>}</div></motion.div>}
         {chatSaveFailed && <p role="status" className="mt-6 text-center text-[11px] leading-4 text-danger-hover">This chat hasn&apos;t been saved yet. GharSaathi will try again with your next message.</p>}
 
-        <AnimatePresence>{trackingOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><LiveOrderTracking initialAddressId={addressId || undefined} recipientName={userName} deliveryAddresses={{ swiggy: selectedAddress?.address_line, zepto: selectedZeptoAddress?.address_line }} onClose={() => setTrackingOpen(false)} /></motion.div>}</AnimatePresence>
+        <AnimatePresence>{trackingOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><LiveOrderTracking initialAddressId={addressId || undefined} recipientName={userName} deliveryAddresses={{ swiggy: selectedAddress ? { id: selectedAddress.id, label: selectedAddress.tag || selectedAddress.category, text: selectedAddress.address_line } : undefined, zepto: selectedZeptoAddress ? { id: selectedZeptoAddress.id, label: selectedZeptoAddress.tag || selectedZeptoAddress.category, text: selectedZeptoAddress.address_line } : undefined }} onChangeAddress={setAddressPicker} onClose={() => setTrackingOpen(false)} /></motion.div>}</AnimatePresence>
       </div>
     </section>
 
@@ -1297,16 +1336,16 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     <AnimatePresence>{quick.toast && !orderToast && <motion.div key={`quick-toast-${quick.toast.id}`} initial={{ opacity: 0, y: reducedMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reducedMotion ? 0 : 6 }} transition={{ duration: .18, ease: [0.23, 1, 0.32, 1] }} style={{ bottom: insets.bottom + (hasChat && chips.length && !voiceOpen ? 156 : 112) }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><QuickToastView toast={quick.toast} onDismiss={quick.dismissToast} /></motion.div>}</AnimatePresence>
     <AnimatePresence>{orderToast && <motion.div key="order-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} style={{ bottom: insets.bottom + 112 }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><p role="status" aria-live="polite" className="pointer-events-auto max-w-sm rounded-full bg-inverse px-4 py-2.5 text-center text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">{orderToast}</p></motion.div>}</AnimatePresence>
 
-    {!(deliverGate && !voiceOpen) && <div style={{ bottom: insets.bottom }} className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+    <div ref={dockRef} style={{ bottom: insets.bottom }} className={`fixed inset-x-0 bottom-0 z-20 ${deliverGate && !voiceOpen ? "hidden" : ""} bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]`}>
       <AnimatePresence mode="wait">
-        {voiceOpen ? <motion.div key="voice-composer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }} className="mx-auto max-w-3xl"><PhotoChip state={photo.state} onRemove={photo.remove} voice /><div className="flex items-end justify-center gap-2"><PhotoAttachButton compact onFile={(file) => void photo.attach(file)} disabled={photo.state.status === "uploading"} /><VoicePanel addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onAddressRemoved={handleAddressRemoved} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} onPhotoRead={handlePhotoRead} onMemorySummary={openMemorySummary} beforeSessionStart={flushConversationSave} /></div></motion.div> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
-          {hasChat && chips.length > 0 && <QuickChips chips={chips} busyKey={quick.busyKey} disabled={chipsLocked} onChip={(chip) => void quick.run(chip)} className="-mx-1 mb-2" />}
+        {voiceOpen ? <motion.div key="voice-composer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }} className="mx-auto max-w-3xl"><PhotoChip state={photo.state} onRemove={photo.remove} voice /><div className="flex items-end justify-center gap-2"><PhotoAttachButton compact onFile={(file) => void photo.attach(file)} disabled={photo.state.status === "uploading"} /><VoicePanel addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onAddressRemoved={handleAddressRemoved} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} onPhotoRead={handlePhotoRead} onMemorySummary={openMemorySummary} beforeSessionStart={flushConversationSave} /><span aria-hidden="true" className="size-11 shrink-0" /></div></motion.div> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
+          {hasChat && chips.length > 0 && <QuickChips chips={chips} busyKey={quick.busyKey} disabled={chipsLocked} onChip={(chip) => { followScrollRef.current = true; void quick.run(chip); }} className="-mx-1 mb-2" />}
           <PhotoChip state={photo.state} onRemove={photo.remove} />
           <div className="flex items-center gap-1 rounded-[26px] border border-border-strong bg-surface p-2 pl-2 shadow-[0_24px_60px_-28px_rgb(var(--shadow)/.55),inset_0_1px_0_rgba(255,255,255,.9)]"><PhotoAttachButton onFile={(file) => void photo.attach(file)} disabled={loading === "search" || loading === "assistant" || photo.state.status === "uploading"} /><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search" || loading === "assistant"} className="min-w-0 flex-1 bg-transparent py-2 pl-1 text-[15px] outline-none placeholder:text-subtle disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() || photo.state.status !== "idle" ? <button type="submit" aria-label={attachmentIdFor(photo.state) ? "Send photo" : "Send request"} disabled={loading === "search" || loading === "assistant" || !canSend(photo.state, query)} className="grid size-12 shrink-0 place-items-center rounded-full bg-inverse text-on-inverse transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} onPointerEnter={prewarmVoice} onPointerDown={prewarmVoice} onFocus={prewarmVoice} disabled={loading === "search" || loading === "assistant"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[0_12px_30px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-accent" /><Microphone size={23} /></button>}</div>
           <p className="mt-2.5 text-center text-[10px] text-muted">Hindi · English · Hinglish &nbsp;·&nbsp; You approve every purchase</p>
         </motion.form>}
       </AnimatePresence>
-    </div>}
+    </div>
     </motion.div>
 
     <AccountSettingsSheet
@@ -1332,8 +1371,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         void user.update({ unsafeMetadata: { ...user.unsafeMetadata, gharsaathiProfile: { ...currentProfile, language } } });
       }}
       deliveryLine={deliveryLine}
-      // TODO(delivery-line-v2): open the per-address directions editor once it lands on main.
-      onOpenDeliveryDirections={() => { setAccountSettingsOpen(false); setTrackingOpen(true); }}
+      onOpenDeliveryDirections={() => openDirections(headerAddressView.store ?? "zepto")}
       riderAssistAvailable={riderCalls.available}
       onSignOut={() => void signOut({ redirectUrl: "/" })}
     />
@@ -1376,6 +1414,14 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         void (disconnectConfirm.store === "zepto" ? disconnectZepto() : disconnect()).then((done) => { if (done) setDisconnectConfirm((current) => ({ ...current, open: false })); });
       }}
     />
+    <InputDialog open={directionsStore !== null} title="Directions for this address" description="What the delivery line tells the rider. Saved for this address only." closeLabel="Close directions" onClose={() => setDirectionsStore(null)}>
+      {directionsStore && <DeliveryLinePanel
+        provider={directionsStore}
+        address={(() => { const selected = directionsStore === "zepto" ? selectedZeptoAddress : selectedAddress; return selected ? { id: selected.id, label: selected.tag || selected.category, text: selected.address_line } : null; })()}
+        recipientName={userName}
+        onChangeAddress={() => setAddressPicker(directionsStore)}
+      />}
+    </InputDialog>
     <SavedListsDialog open={quick.lists.open} mode={quick.lists.mode} basketStores={basketStores} addingListId={quick.addingListId} onClose={quick.closeLists} onAddList={(list) => void quick.addList(list)} onChanged={() => void quick.reload()} />
     <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} onTrackOrder={() => { setSupportOpen(false); setTrackingOpen(true); }} />
     <AddressFormSheet open={addressPopupOpen} prefillRequest={addressPrefillRequest} onAdded={applyAddedZeptoAddress} onClose={closeAddressPopup} onPrefillApplied={handleAddressPrefillApplied} />

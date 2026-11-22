@@ -34,10 +34,10 @@ valid selection (never chosen, or the chosen one is gone), the home screen shows
 we deliver?** instead of the greeting and composer: saved addresses as large rows (one tap
 saves it and the chat continues), **Add address** (Zepto, live) and **Refresh from …**. It
 is inline like the onboarding pages, not a popup: it is the first step of the home screen,
-not an interruption. With an address chosen nothing blocks; the greeting ends with
-"📍 Delivering to Home". Changing the address keeps the existing behaviour (bill and order
-cards are invalidated by the basket/address rules; the delivery line is revoked once
-`codex/delivery-line-v2` lands).
+not an interruption. With an address chosen nothing blocks and the header is the only place
+the address shows (the greeting does not repeat it). Changing the address keeps the existing
+behaviour: bill and order cards are invalidated by the basket/address rules and the shared
+delivery line is revoked (`delivery-line-panel.tsx`).
 
 **Right drawer** (`account-settings-sheet.tsx`, map in `settings-map.mjs`): one width on the
 overview and every subpage, `w-[85vw] max-w-[400px]` (`SETTINGS_DRAWER_CLASS`; the page is
@@ -49,7 +49,7 @@ Edit/Delete. Every subpage uses the same header (back · title · close) and spa
 | Profile header row (avatar, name, email) | **Profile**: name, how to address you, reply language (Edit profile popup), reply style (Quick/Detailed), **Notifications** switch |
 | Stores | Shopping mode, Connect (the store's own login, callback checked first) / **Disconnect** (confirm popup), **Change … address** per connected store |
 | What GharSaathi knows | Memory switch, saved items, History, Privacy (above) |
-| Delivery line (Beta) | What it does, the AI number (+91 80 6426 4240, display only), status from `/api/inbound-delivery/config`, how to use (decline the call, or press the side button twice), forwarding **when busy only**: `**67*+918064264240#`, off with `##002#` (never unanswered/unreachable: the AI's transfer back would loop), **Directions for this address** (opens Track order → Prepare delivery line until the `codex/delivery-line-v2` editor is on main) |
+| Delivery line (Beta) | What it does, the AI number (+91 80 6426 4240, display only), status from `/api/inbound-delivery/config`, how to use (decline the call, or press the side button twice), forwarding **when busy only**: `**67*+918064264240#`, off with `##002#` (never unanswered/unreachable: the AI's transfer back would loop), **Directions for this address** (the directions editor popup below) |
 | Rider assist (Beta) | The parked Vobiz page; the row exists only when `/api/rider/settings` reports `feature_enabled` and `owner_configured` (`riderAssistAvailable`) |
 | **Sign out** | A small text link under the rows |
 
@@ -60,8 +60,17 @@ kept only for the OAuth return, "not connected" voice/chat events and the direct
 
 **Order card links** (`orderCardLinks`, `order-status-card.tsx`): under a moving order,
 **Delivery line ready** / **Set up delivery line** (→ Settings → Delivery line), **Directions**
-(→ Track order → Prepare delivery line) and **Need help?** (→ Order help, always shown, also on
-a delivered order once expanded). Each is at least 44 px tall.
+(→ the directions editor) and **Need help?** (→ Order help, always shown, also on a delivered
+order once expanded). One row of equal cells (icon above a short label, 56 px tall; a lone
+Need help? is a single left-aligned row). The header chip and the card's "Arriving by…" both
+read the order's `etaAt`.
+
+**Directions for this address** (`InputDialog` in `page.tsx` wrapping `DeliveryLinePanel`):
+landmark, route steps, gate note and handover for the selected address of that store, and
+sharing it with the delivery line. Opened from Settings → Delivery line and the order card.
+
+The drawer moves focus to the panel itself on open, not to the close button, so no focus ring
+appears after a tap; keyboard users Tab to Back/Close and get the normal focus-visible ring.
 
 ## Input popups (`frontend/app/ui/input-dialog.tsx`)
 
@@ -252,3 +261,20 @@ in hue; the pill also names the speaker in text.
   order's status card. It truncates on a 390 px header.
 - Reduced motion: chips and the toast keep only colour/opacity changes (no press scale or
   slide); spinners stop. Every chip and action has a visible focus ring.
+
+## Delivery line panel (`frontend/app/delivery-line-panel.tsx`)
+
+- Lives in **Track an order**. The address is the store address selected in the app,
+  shown **read-only**; **Change address** opens the same address picker. The panel never
+  offers a free-text address, so what the line says always matches the selected address.
+- **Recipient** comes from the profile name; **Edit** saves it to the profile once.
+- **Directions for this address** (landmark, up to 8 short steps, optional gate note,
+  optional handover with quick-pick chips) are edited in an `InputDialog` and reused for
+  that address next time; the bin in the popup deletes them (confirm popup).
+- **Share with delivery line** appears only when an address, a name and a landmark exist,
+  and stays disabled until the approval box is ticked. States shown: Sharing… /
+  Ready (with the inbound number and “Sir, Zepto”) / rejected / not known / Clearing… /
+  “Delivery line cleared” with the reason / clear failed. Ready is the server's decision.
+- **Share automatically when an order is on its way** is a switch, off by default; turning
+  it on asks for confirmation in a popup.
+- **Clear delivery line** is shown whenever something may still be shared.
