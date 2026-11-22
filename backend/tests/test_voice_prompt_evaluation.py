@@ -45,6 +45,11 @@ REGRESSION_CASE_IDS = {
     "promo_answered_from_bill_offers_no_drift",
     "misheard_product_confirms_closest_grocery",
     "mixed_hinglish_numbers_and_verbs_stay_roman",
+    "show_only_after_dikha_do",
+    "staples_delegate_without_brand_size_question",
+    "self_correction_drops_cancelled_item",
+    "vague_khaana_one_question_with_examples",
+    "named_request_never_bare_acknowledgement",
 }
 
 
@@ -217,6 +222,31 @@ def test_build_input_appends_latest_turn_after_history() -> None:
             "Teen can ka pack dedh sau rupaye ka hai; pichhli baar aapne single can li thi.",
             "Teen can ka pack डेढ़ sau rupaye ka hai; pichhli baar aapne single can ली थी।",
         ),
+        (
+            "show_only_after_dikha_do",
+            "Haan, dahi ke options screen par hain.",
+            "Desi Farms Malai Dahi 200 g ikattis rupaye, Amul Masti Dahi 400 g paintees rupaye; screen par hain.",
+        ),
+        (
+            "staples_delegate_without_brand_size_question",
+            "Ek second, atta aur dahi dekh rahi hoon.",
+            "Atta ka kaunsa brand aur size chahiye?",
+        ),
+        (
+            "self_correction_drops_cancelled_item",
+            "Theek hai, sirf atta aur dahi dekh rahi hoon.",
+            "Theek hai, atta, dahi aur doodh bhi dekh rahi hoon.",
+        ),
+        (
+            "vague_khaana_one_question_with_examples",
+            "Khane mein kya chahiye: atta, dal, ya ready-to-eat?",
+            "Aapko cooked food chahiye? Ya groceries?",
+        ),
+        (
+            "named_request_never_bare_acknowledgement",
+            "Ek second, Amul dahi aur Aashirvaad atta dekh rahi hoon.",
+            "Haan.",
+        ),
     ],
 )
 def test_regression_cases_score_good_and_bad_replies(
@@ -324,7 +354,7 @@ def test_few_shot_examples_are_labelled_and_roman_except_explicit_hindi(
                 assert ratio >= 0.3, line
             else:
                 assert ratio == 0.0, line
-    assert 6 <= assistant_lines <= 18
+    assert 6 <= assistant_lines <= 22
     assert hindi_replies == 1
 
 

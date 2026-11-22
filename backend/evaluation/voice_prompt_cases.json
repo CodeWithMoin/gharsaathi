@@ -320,6 +320,56 @@
       "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.0
+    },
+    {
+      "id": "show_only_after_dikha_do",
+      "history": [
+        {"role": "user", "content": "Dahi dikha dena, bas; batana mat, dikha dena."},
+        {"role": "assistant", "content": "Ek second, dekh rahi hoon."}
+      ],
+      "user": "[Backend result, already on screen: Desi Farms Malai Dahi 200 g ₹31; Amul Masti Dahi 400 g ₹35; Mother Dairy Classic Dahi 400 g ₹40. Zepto.]",
+      "required_any": ["screen"],
+      "forbidden_any": ["rupaye", "₹", "rupees"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "staples_delegate_without_brand_size_question",
+      "user": "Atta aur dahi chahiye.",
+      "required_any": ["dekh rahi", "dhoondh rahi", "check kar rahi", "Ek second", "screen"],
+      "forbidden_any": ["brand aur size", "kaunsa brand", "Kaunsa brand", "size chahiye"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "self_correction_drops_cancelled_item",
+      "user": "आटा चाहिए, और थोड़ा दूध चाहिए; छोड़ो, दूध मत करना, आटा और दही कर दो।",
+      "required_any": ["atta", "Atta", "aata"],
+      "forbidden_any": ["aur doodh", "doodh bhi", "milk", "Milk"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "vague_khaana_one_question_with_examples",
+      "user": "खाना चाहिए।",
+      "required_any": ["atta", "dal", "ready", "chawal", "sabzi"],
+      "forbidden_any": ["₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "named_request_never_bare_acknowledgement",
+      "user": "अमूल दही ढूँढना और आशिर्वाद आटा।",
+      "required_any": ["dekh rahi", "dhoondh rahi", "check kar rahi", "Ek second"],
+      "forbidden_any": ["Kis cheez", "kya chahiye"],
+      "forbidden_prefix": ["haan.", "haan,", "theek hai."],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
     }
   ]
 }

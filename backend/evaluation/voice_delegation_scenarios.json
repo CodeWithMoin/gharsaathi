@@ -629,6 +629,67 @@
           }
         }
       ]
+    },
+    {
+      "id": "s12-staples-show-only-one-question",
+      "title": "Staples without brand or size and no memory: search both, show only, one combined question.",
+      "catalogue": "demo",
+      "turns": [
+        {
+          "user": "atta aur dahi chahiye, bas dikha do, batana mat",
+          "expect": {
+            "min_searches": 2,
+            "add_count": 0,
+            "max_questions": 1,
+            "reply_forbids_any": [
+              "rupaye",
+              "brand aur size",
+              "kaunsa brand"
+            ],
+            "roman_only": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "s13-self-correction-drops-milk",
+      "title": "Self-correction: 'chhodo, doodh mat karna' drops milk; only atta and dahi are searched.",
+      "catalogue": "demo",
+      "turns": [
+        {
+          "user": "आटा चाहिए, और थोड़ा दूध चाहिए; छोड़ो, दूध मत करना, आटा और दही कर दो",
+          "expect": {
+            "min_searches": 2,
+            "search_queries_forbid": [
+              "milk",
+              "doodh"
+            ],
+            "add_count": 0,
+            "max_questions": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "s14-named-request-is-searched",
+      "title": "Brand + product request is searched in the same turn, never a bare acknowledgement.",
+      "catalogue": "demo",
+      "turns": [
+        {
+          "user": "अमूल दही ढूँढना और आशिर्वाद आटा",
+          "expect": {
+            "min_searches": 2,
+            "add_count": 0,
+            "max_questions": 1,
+            "reply_mentions_any": [
+              "Amul",
+              "Aashirvaad",
+              "atta",
+              "dahi"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

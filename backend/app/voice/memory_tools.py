@@ -64,8 +64,9 @@ class RecallArguments(BaseModel):
 
 
 NO_MEMORY_NOTE = (
-    "Nothing remembered for this item. Ask one short question for brand and size, for "
-    "example 'Kaunsa brand aur size chahiye?', unless the user already said them."
+    "Nothing remembered for this item. Search it now and let the user pick from the "
+    "screen; for several items ask one combined question, for example 'Atta aur dahi ke "
+    "options screen par hain; kaunsa lena hai?'. Do not ask brand and size per item."
 )
 HISTORY_OFF_NOTE = (
     " Purchase history is off. At most once per conversation you may add, as a statement "

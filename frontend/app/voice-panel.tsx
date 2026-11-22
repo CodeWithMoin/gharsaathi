@@ -5,7 +5,6 @@ import { ArrowRight, Microphone, ShieldCheck, Stop, X } from "@phosphor-icons/re
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mapRealtimeBoundaryEvent, mapRealtimeTranscriptEvent } from "./voice-transcript.mjs";
 import { createTranscriptTurnTracker } from "./voice-transcript-turns.mjs";
-import { romanizeAssistantCaption } from "./hinglish-romanize.mjs";
 import { createVoiceEventRecorder, voiceEventLogEnabled } from "./voice-event-recorder.mjs";
 import type { ApprovalRequest } from "./basket/BasketPanel";
 import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
@@ -18,7 +17,7 @@ type VoiceStatus = "connecting" | "live" | "closing" | "error";
 type VoiceStore = "swiggy_instamart" | "zepto";
 type VoiceProduct = { provider?: VoiceStore; provider_label?: string; product_id: string; sku_id: string; spin_id?: string; name: string; brand?: string; pack_size?: string; price: { mrp: number; offer_price: number }; available: boolean; image_url?: string; rating_value?: string };
 type LiveEvent = { type: string; error?: { message?: string; client_event_id?: string }; [key: string]: unknown };
-export type VoiceTranscriptTurn = { id: string; role: "user" | "assistant"; content: string };
+export type VoiceTranscriptTurn = { id: string; role: "user" | "assistant"; content: string; captionScript?: "roman" | "native" };
 type ToolEvent =
   | { type: "tool.started"; name: string }
   | { type: "tool.results"; query: string; store: string; products: VoiceProduct[] }
@@ -118,11 +117,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     const transcript = mapRealtimeTranscriptEvent(event);
     if (!transcript) return false;
     const turn = transcriptTurnsRef.current.apply(transcript);
-    if (turn) {
-      onTranscriptTurn(turn.role === "assistant"
-        ? { ...turn, content: romanizeAssistantCaption(turn.content, { script: assistantScriptRef.current }) }
-        : turn);
-    }
+    if (turn) onTranscriptTurn({ ...turn, captionScript: assistantScriptRef.current });
     return true;
   }, [onTranscriptTurn]);
 

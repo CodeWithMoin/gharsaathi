@@ -502,6 +502,12 @@ def check_turn(
             "recall_household_preferences"
         ):
             failures.append("search_products ran before recall_household_preferences.")
+    queries = [str(call["arguments"].get("query", "")).lower() for call in calls if call["name"] == "search_products" and isinstance(call["arguments"], dict)]
+    if "min_searches" in expect and len(queries) < expect["min_searches"]:
+        failures.append(f"Expected at least {expect['min_searches']} searches, got {queries}.")
+    cancelled = [word for word in expect.get("search_queries_forbid", []) if any(word in query for query in queries)]
+    if cancelled:
+        failures.append(f"Searched a cancelled item {cancelled} (queries: {queries}).")
     for name in expect.get("tools_forbidden", []):
         if name in names:
             failures.append(f"Tool {name} must not be called this turn (called: {names}).")
