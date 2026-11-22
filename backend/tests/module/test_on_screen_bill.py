@@ -40,7 +40,7 @@ async def test_view_basket_reads_a_bill_opened_on_screen_without_requoting() -> 
     bill = output["current_bill"]
     assert bill["payable"] == "₹184"
     assert bill["item_total"] == "₹154"
-    assert bill["charges"] == [{"label": "Delivery fee", "amount": "₹30"}]
+    assert bill["charges"] == [{"label": "Delivery fee", "amount_paise": 3000, "amount": "₹30"}]
     assert bill["approval_status"] == "pending"
     assert bill["expires_at"] == result.approval.expires_at.isoformat()
     assert bill["promo_code_entry"] == "not_available"

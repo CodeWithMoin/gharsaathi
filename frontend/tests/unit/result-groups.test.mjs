@@ -62,9 +62,9 @@ test("a typed search shows as searching, then fills in place", () => {
 });
 
 test("header counts are per group", () => {
-  assert.equal(resultsHeadline(6, 3), "6 options mile—top 3 yahan hain.");
-  assert.equal(resultsHeadline(3, 3), "3 relevant options mile.");
-  assert.equal(resultsHeadline(1, 3), "1 relevant option mila.");
+  assert.equal(resultsHeadline(6, 3), "6 options found—showing the top 3.");
+  assert.equal(resultsHeadline(3, 3), "3 relevant options found.");
+  assert.equal(resultsHeadline(1, 3), "1 relevant option found.");
   assert.equal(groupBadge("Atta", 3), "Atta · 3 options");
   assert.equal(groupBadge("Dahi", 1), "Dahi · 1 option");
 });

@@ -3,8 +3,16 @@ from datetime import datetime
 from typing import Any, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
+from app.memory import household
 from app.database.models import (
     MemorySensitivity,
     MemorySourceType,
@@ -119,6 +127,58 @@ class MemoryResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def kind(self) -> str | None:
+        """prefer_brand, prefer_pack_size, prefer_store, avoid_store, avoid_product,
+        avoid_brand, rule; null for older free-form memory types."""
+        raw = self.value.get("kind")
+        if isinstance(raw, str) and raw in household.KIND_TO_TYPE:
+            return raw
+        return household.TYPE_TO_KIND.get(self.memory_type)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def group(self) -> str | None:
+        """pasand (likes), kabhi_nahi (never), niyam (rules)."""
+        kind = self.kind
+        if kind is not None:
+            return household.GROUP_BY_KIND[kind]
+        return household.LEGACY_GROUPS.get(self.memory_type)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def origin(self) -> str:
+        """explicit (asked to remember), stated (learned in passing), inferred (from repeats)."""
+        if self.source_type in {MemorySourceType.OBSERVED, MemorySourceType.INFERRED}:
+            return "inferred"
+        return "stated" if self.value.get("origin") == "stated" else "explicit"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def learned_at(self) -> datetime:
+        return self.confirmed_at or self.created_at
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def item(self) -> str | None:
+        raw = self.value.get("product_category")
+        return raw if isinstance(raw, str) and raw.strip() else None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def display_value(self) -> str | None:
+        """The one editable value: brand, pack size, store id, product or rule id."""
+        key = household.VALUE_KEY_BY_KIND.get(self.kind or "")
+        raw = self.value.get(key) if key else None
+        return raw if isinstance(raw, str) and raw.strip() else None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def user_words(self) -> str | None:
+        raw = self.value.get("user_words")
+        return raw if isinstance(raw, str) and raw.strip() else None
+
 
 class MemoryRetrieveRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -188,3 +248,13 @@ class MemoryExtractionResponse(BaseModel):
     extractor: Literal["openai", "local_rules"]
     prompt_version: str
     proposals: list[MemoryResponse]
+
+
+class ForgetAllConfirmationResponse(BaseModel):
+    confirm_token: str
+    count: int
+    expires_at: datetime
+
+
+class ForgetAllRequest(BaseModel):
+    confirm_token: str = Field(min_length=8, max_length=200)

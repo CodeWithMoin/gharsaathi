@@ -15,6 +15,8 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.database.models import MemoryItem, MemorySubject
+from app.memory.household import HOUSEHOLD_PREFERENCE_TYPES, kind_of, summary_for
+from app.memory.household import STORE_LABELS as STORE_LABELS_BY_ID
 from app.memory.purchase_graph import PurchaseGraphService
 from app.memory.repository import MemoryRepository
 from app.memory.schemas import MemoryRetrieveRequest
@@ -97,6 +99,12 @@ class RememberedItem(BaseModel):
     provider_item_id: str | None = None
     last_bought: str | None = None
     times: int | None = None
+    # Structured household preference fields (app.memory.household); None for
+    # purchases and older free-form memories.
+    kind: str | None = None
+    item: str | None = None
+    product: str | None = None
+    rule: str | None = None
 
 
 class HouseholdMemory(BaseModel):
@@ -258,16 +266,24 @@ async def household_memory_for_person(
         memories = await MemoryService(session).retrieve(
             actor,
             MemoryRetrieveRequest(
-                purpose=PREFERENCE_PURPOSE, memory_types=list(PREFERENCE_TYPES), limit=100
+                purpose=PREFERENCE_PURPOSE,
+                memory_types=list(dict.fromkeys([*PREFERENCE_TYPES, *HOUSEHOLD_PREFERENCE_TYPES])),
+                limit=100,
             ),
         )
         for memory in memories:
             candidate = _preference_candidate(memory)
-            name = " ".join(
-                part
-                for part in (candidate.brand, candidate.product or candidate.product_category)
-                if part
-            ) or (candidate.summary or "")
+            kind = kind_of(memory)
+            store = memory.value.get("store")
+            rule = memory.value.get("rule")
+            if kind in {"prefer_store", "avoid_store", "rule"}:
+                name = summary_for(kind, candidate.product_category, str(store or rule or ""))
+            else:
+                name = " ".join(
+                    part
+                    for part in (candidate.brand, candidate.product or candidate.product_category)
+                    if part
+                ) or (candidate.summary or "")
             if name.strip():
                 items.append(
                     RememberedItem(
@@ -276,6 +292,11 @@ async def household_memory_for_person(
                         preference=candidate.preference,
                         brand=candidate.brand,
                         pack_size=candidate.pack_size,
+                        store_id=store if store in STORE_LABELS_BY_ID else None,
+                        kind=kind,
+                        item=candidate.product_category,
+                        product=candidate.product,
+                        rule=rule if isinstance(rule, str) else None,
                     )
                 )
     graph = PurchaseGraphService(session)

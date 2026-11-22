@@ -88,9 +88,9 @@ export function removeResultGroup(groups, key) {
  * @param {number} shownLimit options shown before "show more"
  */
 export function resultsHeadline(optionCount, shownLimit) {
-  if (optionCount === 1) return "1 relevant option mila.";
-  if (optionCount > shownLimit) return `${optionCount} options mile—top ${shownLimit} yahan hain.`;
-  return `${optionCount} relevant options mile.`;
+  if (optionCount === 1) return "1 relevant option found.";
+  if (optionCount > shownLimit) return `${optionCount} options found—showing the top ${shownLimit}.`;
+  return `${optionCount} relevant options found.`;
 }
 
 /**

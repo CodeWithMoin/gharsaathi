@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 
 from app.conversations.repository import ConversationRepository
 from app.conversations.summary import (
@@ -17,6 +17,8 @@ from app.conversations.schemas import (
 )
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 from app.database.models import Conversation
+from app.database.session import get_session_factory
+from app.memory.choice_signals import run_choice_check
 
 
 router = APIRouter()
@@ -90,12 +92,15 @@ async def save_current_conversation(
     session: DbSessionDependency,
     actor: MemoryActorDependency,
     summaries: ConversationSummariesDependency,
+    background: BackgroundTasks,
 ) -> ConversationStateResponse:
     conversation = await ConversationRepository(session).upsert(
         actor.id,
         body.model_dump(mode="json"),
     )
     summaries.after_save(actor.id, conversation.id, conversation.state, conversation.summary)
+    # Repeated basket choices may become a pending memory suggestion (never active).
+    background.add_task(run_choice_check, get_session_factory(), actor.id)
     return ConversationStateResponse(
         id=conversation.id,
         updated_at=conversation.updated_at,
@@ -108,12 +113,14 @@ async def start_new_conversation(
     session: DbSessionDependency,
     actor: MemoryActorDependency,
     summaries: ConversationSummariesDependency,
+    background: BackgroundTasks,
 ) -> None:
     repository = ConversationRepository(session)
     current = await repository.current(actor.id)
     await repository.archive_current(actor.id)
     if current is not None:
         summaries.after_archive(actor.id, [current.id])
+    background.add_task(run_choice_check, get_session_factory(), actor.id)
 
 
 @router.post("/{conversation_id}/open", response_model=ConversationStateResponse)

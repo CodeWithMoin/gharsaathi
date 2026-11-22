@@ -333,24 +333,54 @@ CAPABILITIES: tuple[Capability, ...] = (
     ),
     Capability(
         id="preference_memory",
-        title="Remember explicit household preferences (brand, size, corrections)",
+        title="Remember, update and forget household preferences and rules (brand, size, store, avoid)",
         voice=S(
-            P,
-            "Recall only: recall_household_preferences and 'remembered' search annotations "
-            "read confirmed preferences. Saving or correcting a preference by voice is not "
-            "supported.",
+            IP,
+            "Tier 1: a habit stated in passing ('hum hamesha Amul lete hain') is saved at once "
+            "with an acknowledgement and undo; 'yaad rakhna' reads back, saves on a clear yes. "
+            "remember_preference / update_preference / forget_preference (forget-all needs a "
+            "confirm token) / list_preferences / confirm_memory. Tier 2: repeated choices "
+            "become a pending proposal offered at most once per session. Active avoid/prefer "
+            "memories filter or annotate search_products results in code.",
+            "codex/memory-write-manage",
         ),
-        voice_tools=("recall_household_preferences",),
-        typed_chat=S(P, "Same as voice: recall tool, remembered annotations and consented summary; read-only."),
-        ui=S(M, "No frontend file calls these memory routes."),
-        backend=S(W, "Extract/propose, confirm/correct/reject, retrieve, delete."),
+        voice_tools=(
+            "recall_household_preferences",
+            "remember_preference",
+            "update_preference",
+            "forget_preference",
+            "list_preferences",
+            "confirm_memory",
+        ),
+        typed_chat=S(
+            W,
+            "Same tools and rules through /api/chat/turn, which shares the voice toolbox.",
+        ),
+        ui=S(
+            W,
+            "Settings 'Yaad rakhi baatein': grouped list, inline edit (correct), delete, undo "
+            "for 'abhi seekha', pending suggestions confirm/reject, forget-all, permission toggle.",
+        ),
+        ui_files=(
+            "frontend/app/memory-settings.tsx",
+            "frontend/app/memory-api.ts",
+            "frontend/app/account-settings-sheet.tsx",
+        ),
+        backend=S(
+            W,
+            "Structured kinds, sensitive-data policy in code, consent switch, supersede on "
+            "update, undo, forget-all with a confirm token, repeated-choice proposals.",
+        ),
         routes=(
             "GET /api/memory",
             "POST /api/memory/extract",
             "POST /api/memory/proposals",
             "POST /api/memory/retrieve",
+            "POST /api/memory/forget-all/token",
+            "POST /api/memory/forget-all",
             "POST /api/memory/{memory_id}/confirm",
             "POST /api/memory/{memory_id}/correct",
+            "POST /api/memory/{memory_id}/undo",
             "POST /api/memory/{memory_id}/reject",
             "DELETE /api/memory/{memory_id}",
         ),
@@ -543,6 +573,19 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "no_memory",
         "purchase_history",
         "confirmed_preference",
+        # Memory write tool fields and statuses (codex/memory-write-manage).
+        "already_saved",
+        "blocked_by_household_rule",
+        "confirm_token",
+        "memory_off",
+        "memory_ref",
+        "memory_suggestion",
+        "needs_confirmation",
+        "not_allowed",
+        "not_saved_no_habit",
+        "not_saved_one_off",
+        "skipped_stores",
+        "user_words",
         # Fields, statuses and enum values shown in the backend few-shot examples.
         "swiggy_instamart",
         "price_paise",
@@ -577,6 +620,45 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
 
 
 API_CONTRACTS: dict[str, tuple[str, ...]] = {
+    "GET /api/memory": (
+        "Auth: Clerk bearer token; only the verified person's memories. Query: status=proposed|confirmed|superseded|rejected (optional), include_deleted=false.",
+        "Response 200: MemoryResponse[] newest first. Settings shows status confirmed (active) and proposed (pending suggestions).",
+        "MemoryResponse adds derived read-only fields: origin (explicit|stated|inferred), learned_at (ISO; confirmed_at or created_at), "
+        "kind (prefer_brand|prefer_pack_size|prefer_store|avoid_store|avoid_product|avoid_brand|rule|null), group (pasand|kabhi_nahi|niyam|null), item, display_value, user_words.",
+        '{"id": "uuid", "memory_type": "brand_preference", "value": {"kind": "prefer_brand", "product_category": "milk", "brand": "Amul Taaza", "origin": "stated", "user_words": "hum hamesha Amul Taaza lete hain"}, '
+        '"text": "milk: hamesha Amul Taaza", "source_type": "explicit_statement", "status": "confirmed", "origin": "stated", "learned_at": "2026-11-22T10:00:00Z", "supersedes_memory_id": null, "...": "other fields"}',
+        "origin stated = learned in passing without a read-back (undo-able for 24 h); inferred = a repeated-choice suggestion (status proposed until confirmed); explicit = everything else.",
+        "Store values are store ids (swiggy_instamart|zepto); rule values are prefer_cheapest, prefer_fastest_delivery, prefer_larger_packs, prefer_smaller_packs, ask_before_substitute.",
+    ),
+    "POST /api/memory/{memory_id}/confirm": (
+        "Auth: Clerk bearer token. Pending (proposed) -> confirmed. If the proposal has supersedes_memory_id, that confirmed memory becomes superseded.",
+        "Response 200: MemoryResponse. 404 not this person's; 409 not proposed.",
+    ),
+    "POST /api/memory/{memory_id}/reject": (
+        'Auth: Clerk bearer token. Request: {"reason": null | "text <= 500"}. Pending -> rejected; a rejected suggestion is never re-proposed from repeated choices.',
+        "Response 200: MemoryResponse. 409 not proposed.",
+    ),
+    "POST /api/memory/{memory_id}/correct": (
+        "Auth: Clerk bearer token. Settings inline edit. Request: MemoryProposal fields + reason, normally source_type correction with the full edited value object.",
+        "Creates the replacement (confirmed; supersedes_memory_id = old id; value.origin stated becomes explicit); the old one becomes superseded and is kept for audit.",
+        "Response 201: MemoryResponse. 409 the memory is not confirmed; 422 the text or a value falls under the sensitive-data policy.",
+    ),
+    "POST /api/memory/{memory_id}/undo": (
+        "Auth: Clerk bearer token. Reverts a memory learned in passing (origin stated, status confirmed, learned_at within 24 h): it is deleted, and the memory it superseded, if any, is restored to confirmed.",
+        "Response 200: the restored MemoryResponse, or null. 404 memory not found for this person; 409 outside the undo window or not undo-able.",
+    ),
+    "DELETE /api/memory/{memory_id}": (
+        "Auth: Clerk bearer token. Forget one memory (status deleted; excluded from every list and from search). Response 204; idempotent.",
+    ),
+    "POST /api/memory/forget-all/token": (
+        "Auth: Clerk bearer token. Step 1 of 'Sab bhool jao': issues a 5-minute, single-use token bound to this person. Nothing is deleted.",
+        '{"confirm_token": "1764000000.abc...", "count": 4, "expires_at": "2026-11-22T10:05:00Z"}',
+    ),
+    "POST /api/memory/forget-all": (
+        'Auth: Clerk bearer token. Step 2, after the user confirms. Request: {"confirm_token": "..."}. Deletes every memory and pending suggestion of this person; permissions are kept. '
+        "Purchase history has its own DELETE /api/memory/purchase-history.",
+        "Response 204. 400 invalid, expired, already used, or another person's token.",
+    ),
     "POST /api/chat/turn": (
         "Auth: Clerk bearer token and accepted current terms (403 legal_consent_required otherwise).",
         'Request: {"conversation_id": "<uuid>" | null, "message": "AXE Dark sabse chhota add karo", '
@@ -585,7 +667,8 @@ API_CONTRACTS: dict[str, tuple[str, ...]] = {
         "message: 1-2000 characters; unknown keys are 422.",
         'Response 200: {"conversation_id": "<uuid>" | null, "reply": "Roman-script Hinglish text", '
         '"ui_events": [{"type": "tool.results" | "basket.updated" | "basket.approval_requested" | '
-        '"address_form.open" | "address_form.unavailable" | "tool.not_connected" | "tool.error", ...}]}',
+        '"address_form.open" | "address_form.unavailable" | "tool.not_connected" | "tool.error" | '
+        '"memory.changed", ...}]}',
         "ui_events use the voice sideband shapes. Caps per turn: 6 tool rounds, 2 searches. "
         "Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS).",
     ),

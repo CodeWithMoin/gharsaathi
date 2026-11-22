@@ -8,9 +8,9 @@ import { correctionPayload, editableFields, groupMemories, preferencePermissionS
 
 const ring = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d]";
 const BADGE_STYLES: Record<string, string> = {
-  "abhi seekha": "bg-[#e3f0e7] text-[#2f6a48]",
-  "aapne bataya": "bg-[#f7e8de] text-[#93471f]",
-  suggestion: "bg-[#eee6f6] text-[#5d4386]",
+  "Just learned": "bg-[#e3f0e7] text-[#2f6a48]",
+  "You told us": "bg-[#f7e8de] text-[#93471f]",
+  Suggested: "bg-[#eee6f6] text-[#5d4386]",
 };
 
 function errorText(cause: unknown, fallback: string) {
@@ -18,7 +18,7 @@ function errorText(cause: unknown, fallback: string) {
   return fallback;
 }
 
-/** Settings → "Yaad rakhi baatein": view, edit, undo and forget explicit memories. */
+/** Settings → "Saved preferences": view, edit, undo and forget explicit memories. */
 export function MemorySettings() {
   const api = useMemoryApi();
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -45,7 +45,7 @@ export function MemorySettings() {
       setNow(Date.now());
     } catch (cause) {
       setMemories((current) => current ?? []);
-      setLoadError(errorText(cause, "Yaadein load nahi ho paayi. Thodi der baad phir try kijiye."));
+      setLoadError(errorText(cause, "Could not load saved preferences. Please try again in a little while."));
     }
   }, [api]);
 
@@ -55,7 +55,7 @@ export function MemorySettings() {
       setPermissions(await api.permissions());
     } catch (cause) {
       setPermissions([]);
-      setPermissionError(errorText(cause, "Permission load nahi ho paayi."));
+      setPermissionError(errorText(cause, "Could not load this setting."));
     }
   }, [api]);
 
@@ -95,9 +95,9 @@ export function MemorySettings() {
     setPermissionError("");
     try {
       await Promise.all(PREFERENCE_CATEGORIES.map((category) => api.setPreferencePermission(category, allowed)));
-      setNotice({ tone: "ok", text: allowed ? "Ab aapki pasand shopping mein use hogi." : "Band ho gaya. Yaadein mitti nahi, bas use nahi hongi." });
+      setNotice({ tone: "ok", text: allowed ? "Your preferences will now be used while shopping." : "Turned off. Saved preferences are kept but not used." });
     } catch (cause) {
-      setPermissionError(errorText(cause, "Setting save nahi ho paayi."));
+      setPermissionError(errorText(cause, "Could not save this setting."));
     } finally {
       await loadPermissions();
       setPermissionBusy(false);
@@ -105,7 +105,7 @@ export function MemorySettings() {
   }
 
   async function remove(row: MemoryRow) {
-    const removed = await act(row.id, () => api.remove(row.id), `Bhool gaye: “${row.sentence}”`, "Delete nahi ho paaya.");
+    const removed = await act(row.id, () => api.remove(row.id), `Forgotten: “${row.sentence}”`, "Could not delete.");
     if (removed) headingRef.current?.focus();
   }
 
@@ -114,14 +114,14 @@ export function MemorySettings() {
     setNotice(null);
     try {
       await api.undo(row.id);
-      setNotice({ tone: "ok", text: `Undo ho gaya: “${row.sentence}”` });
+      setNotice({ tone: "ok", text: `Undone: “${row.sentence}”` });
       await loadMemories();
       headingRef.current?.focus();
     } catch (cause) {
       if (cause instanceof RouteUnavailableError) {
         setUndoAvailable(false);
-        setNotice({ tone: "error", text: "Undo abhi available nahi. Delete se hata sakte hain." });
-      } else setNotice({ tone: "error", text: errorText(cause, "Undo nahi ho paaya.") });
+        setNotice({ tone: "error", text: "Undo isn't available right now. You can delete it instead." });
+      } else setNotice({ tone: "error", text: errorText(cause, "Could not undo.") });
     } finally {
       setBusyId(null);
     }
@@ -137,9 +137,9 @@ export function MemorySettings() {
     } catch (cause) {
       if (cause instanceof RouteUnavailableError) {
         setForgetAllAvailable(false);
-        setNotice({ tone: "error", text: "Sab ek saath bhoolna abhi available nahi. Har yaad alag se delete kar sakte hain." });
+        setNotice({ tone: "error", text: "Forgetting everything at once isn't available right now. You can delete each item separately." });
         headingRef.current?.focus();
-      } else setNotice({ tone: "error", text: errorText(cause, "Abhi nahi ho paaya. Phir try kijiye.") });
+      } else setNotice({ tone: "error", text: errorText(cause, "That didn't work. Please try again.") });
     } finally {
       setForgetAllBusy(false);
     }
@@ -151,13 +151,13 @@ export function MemorySettings() {
     try {
       await api.forgetAll(forgetAll.token);
       setForgetAll(null);
-      setNotice({ tone: "ok", text: "Sab bhool gaye. Ab koi yaad nahi rakhi hai." });
+      setNotice({ tone: "ok", text: "Everything forgotten. Nothing is saved now." });
       await loadMemories();
       headingRef.current?.focus();
     } catch (cause) {
       setForgetAll(null);
       if (cause instanceof RouteUnavailableError) setForgetAllAvailable(false);
-      setNotice({ tone: "error", text: errorText(cause, "Sab bhoolna nahi ho paaya. Kuch bhi delete nahi hua ho sakta hai—list dekh lijiye.") });
+      setNotice({ tone: "error", text: errorText(cause, "Could not forget everything. Some items may not have been deleted—please check the list.") });
       await loadMemories();
     } finally {
       setForgetAllBusy(false);
@@ -171,8 +171,8 @@ export function MemorySettings() {
 
   return <div className="space-y-4">
     <div>
-      <h3 ref={headingRef} tabIndex={-1} className="sr-only focus:outline-none">Yaad rakhi baatein</h3>
-      <p className="text-xs leading-5 text-[#806f65]">Sirf wahi jo aapne bataya ya haan kiya. Kabhi bhi badal ya hata sakte hain.</p>
+      <h3 ref={headingRef} tabIndex={-1} className="sr-only focus:outline-none">Saved preferences</h3>
+      <p className="text-xs leading-5 text-[#806f65]">Only what you told GharSaathi or approved. Change or remove anything at any time.</p>
     </div>
 
     <PermissionCard state={permissionState} busy={permissionBusy} error={permissionError} onToggle={() => void togglePermission()} />
@@ -180,26 +180,26 @@ export function MemorySettings() {
     <p aria-live="polite" role="status" className={`text-xs leading-5 ${notice ? "" : "sr-only"} ${notice?.tone === "error" ? "text-[#a33d2c]" : "text-[#3f7a55]"}`}>{notice?.text ?? ""}</p>
 
     {memories === undefined
-      ? <div className="space-y-2" aria-label="Yaadein load ho rahi hain" role="status"><div className="h-16 animate-pulse rounded-2xl bg-[#f3e6dc]" /><div className="h-16 animate-pulse rounded-2xl bg-[#f3e6dc]" /></div>
+      ? <div className="space-y-2" aria-label="Loading memories" role="status"><div className="h-16 animate-pulse rounded-2xl bg-[#f3e6dc]" /><div className="h-16 animate-pulse rounded-2xl bg-[#f3e6dc]" /></div>
       : <>
         {loadError && <div role="alert" className="flex items-start gap-2 rounded-2xl border border-[#efc9bd] bg-[#fff4ef] p-3 text-xs leading-5 text-[#8f3a2a]"><Warning size={16} className="mt-0.5 shrink-0" /><span className="min-w-0 flex-1">{loadError}</span><button type="button" onClick={() => void loadMemories()} className={`min-h-9 shrink-0 rounded-lg border border-[#e4b9aa] px-2.5 font-semibold ${ring}`}>Retry</button></div>}
 
         {view.suggestions.length > 0 && <section aria-labelledby="memory-suggestions" className="rounded-2xl border border-[#e2d6ee] bg-[#fbf8fe] p-3">
           <h4 id="memory-suggestions" className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.13em] text-[#6b5193]"><Sparkle size={14} weight="fill" />Suggestions</h4>
-          <p className="mt-1 text-[11px] leading-4 text-[#7b6c8c]">Haan kahenge tabhi yaad rahega.</p>
+          <p className="mt-1 text-[11px] leading-4 text-[#7b6c8c]">Saved only if you choose Remember.</p>
           <ul className="mt-2 space-y-2">
             {view.suggestions.map((row) => <li key={row.id} className="rounded-xl bg-white p-3">
               <p className="break-words text-sm font-semibold">{row.sentence}</p>
               {row.date && <p className="mt-0.5 text-[11px] text-[#8d766a]">{row.date}</p>}
               <div className="mt-2 flex flex-wrap gap-2">
-                <button type="button" disabled={busyId !== null} onClick={() => void act(row.id, () => api.confirm(row.id), `Yaad rakh liya: “${row.sentence}”`, "Save nahi ho paaya.")} aria-label={`Haan, yaad rakho: ${row.sentence}`} className={`flex min-h-10 items-center gap-1 rounded-xl bg-[#c6531d] px-3 text-xs font-semibold text-white disabled:opacity-50 ${ring}`}>{busyId === row.id ? <CircleNotch size={14} className="animate-spin" /> : <Check size={14} weight="bold" />}Haan, yaad rakho</button>
-                <button type="button" disabled={busyId !== null} onClick={() => void act(row.id, () => api.reject(row.id), "Theek hai, yaad nahi rakhenge.", "Abhi nahi ho paaya.")} aria-label={`Nahi: ${row.sentence}`} className={`min-h-10 rounded-xl border border-[#e4cabc] px-3 text-xs font-semibold text-[#68493c] disabled:opacity-50 ${ring}`}>Nahi</button>
+                <button type="button" disabled={busyId !== null} onClick={() => void act(row.id, () => api.confirm(row.id), `Remembered: “${row.sentence}”`, "Could not save.")} aria-label={`Remember: ${row.sentence}`} className={`flex min-h-10 items-center gap-1 rounded-xl bg-[#c6531d] px-3 text-xs font-semibold text-white disabled:opacity-50 ${ring}`}>{busyId === row.id ? <CircleNotch size={14} className="animate-spin" /> : <Check size={14} weight="bold" />}Remember</button>
+                <button type="button" disabled={busyId !== null} onClick={() => void act(row.id, () => api.reject(row.id), "Okay, this won't be saved.", "That didn't work.")} aria-label={`Dismiss: ${row.sentence}`} className={`min-h-10 rounded-xl border border-[#e4cabc] px-3 text-xs font-semibold text-[#68493c] disabled:opacity-50 ${ring}`}>Dismiss</button>
               </div>
             </li>)}
           </ul>
         </section>}
 
-        {view.total === 0 && !loadError && <div className="rounded-2xl border border-dashed border-[#e2cdbf] bg-[#fffdf9] px-4 py-5 text-sm leading-6 text-[#806f65]">Abhi kuch yaad nahi—bolkar bataiye, jaise ‘doodh hamesha Amul lena’.</div>}
+        {view.total === 0 && !loadError && <div className="rounded-2xl border border-dashed border-[#e2cdbf] bg-[#fffdf9] px-4 py-5 text-sm leading-6 text-[#806f65]">Nothing saved yet. Just tell GharSaathi, for example ‘always get Amul milk’.</div>}
 
         {view.groups.map((group) => <section key={group.id} aria-labelledby={`memory-group-${group.id}`}>
           <h4 id={`memory-group-${group.id}`} className="px-1 text-[11px] font-bold uppercase tracking-[.13em] text-[#9a7562]">{group.title} <span className="font-semibold text-[#b49a8c]">· {group.rows.length}</span></h4>
@@ -217,7 +217,7 @@ export function MemorySettings() {
               onSave={async (edits) => {
                 const payload = correctionPayload(row.memory, edits);
                 if (!payload) { setEditingId(null); return; }
-                const saved = await act(row.id, () => api.correct(row.id, payload), "Badal diya.", "Badlav save nahi ho paaya.");
+                const saved = await act(row.id, () => api.correct(row.id, payload), "Updated.", "Could not save your change.");
                 if (saved) setEditingId(null);
               }}
               onDelete={() => void remove(row)}
@@ -226,7 +226,7 @@ export function MemorySettings() {
           </ul>
         </section>)}
 
-        {forgetAllAvailable && view.total + view.suggestions.length > 0 && <button ref={forgetAllButtonRef} type="button" onClick={() => void startForgetAll()} disabled={forgetAllBusy || busyId !== null} className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#e6cfc2] bg-[#fffdf9] px-4 text-sm font-semibold text-[#9f3f2c] hover:bg-[#fff5ef] disabled:opacity-55 ${ring}`}>{forgetAllBusy && !forgetAll ? <CircleNotch size={16} className="animate-spin" /> : <Trash size={16} weight="bold" />}Sab bhool jao</button>}
+        {forgetAllAvailable && view.total + view.suggestions.length > 0 && <button ref={forgetAllButtonRef} type="button" onClick={() => void startForgetAll()} disabled={forgetAllBusy || busyId !== null} className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#e6cfc2] bg-[#fffdf9] px-4 text-sm font-semibold text-[#9f3f2c] hover:bg-[#fff5ef] disabled:opacity-55 ${ring}`}>{forgetAllBusy && !forgetAll ? <CircleNotch size={16} className="animate-spin" /> : <Trash size={16} weight="bold" />}Forget everything</button>}
       </>}
 
     {forgetAll && <ConfirmDialog count={forgetAll.count ?? view.total + view.suggestions.length} busy={forgetAllBusy} onCancel={cancelForgetAll} onConfirm={() => void confirmForgetAll()} />}
@@ -238,15 +238,15 @@ function PermissionCard({ state, busy, error, onToggle }: { state: "on" | "off" 
   const descriptionId = useId();
   const on = state === "on";
   const description = state === undefined
-    ? "Load ho raha hai…"
+    ? "Loading…"
     : on
-      ? "Aapki pasand search aur basket mein use hoti hai."
+      ? "Your preferences are used in search and baskets."
       : state === "partial"
-        ? "Kuch pasand hi use ho rahi hain. On karke sab chalu kijiye."
-        : "Band hai. Yaadein dikhengi, par shopping mein use nahi hongi.";
+        ? "Only some preferences are in use. Turn this on to use all of them."
+        : "Off. Saved preferences stay visible but are not used while shopping.";
   return <div className="rounded-2xl border border-[#ead9cd] bg-[#fffdf9] p-3.5">
     <div className="flex items-center gap-3">
-      <div className="min-w-0 flex-1"><p id={labelId} className="text-sm font-semibold">Pasand yaad rakhna</p><p id={descriptionId} className="mt-0.5 text-xs leading-5 text-[#806f65]">{description}</p></div>
+      <div className="min-w-0 flex-1"><p id={labelId} className="text-sm font-semibold">Use saved preferences</p><p id={descriptionId} className="mt-0.5 text-xs leading-5 text-[#806f65]">{description}</p></div>
       <button type="button" role="switch" aria-checked={on} aria-labelledby={labelId} aria-describedby={descriptionId} disabled={state === undefined || busy} onClick={onToggle} className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-55 ${on ? "bg-[#c6531d]" : "bg-[#dccbbf]"} ${ring} focus-visible:ring-offset-2`}>
         <span className={`absolute top-0.5 grid size-6 place-items-center rounded-full bg-white shadow transition-[left] ${on ? "left-[22px]" : "left-0.5"}`}>{busy && <CircleNotch size={12} className="animate-spin text-[#c6531d]" />}</span>
       </button>
@@ -282,7 +282,7 @@ function MemoryItemRow({ row, first, busy, disabled, editing, showUndo, onEdit, 
       : <>
         <p className="break-words text-sm font-semibold leading-5">{row.sentence}</p>
         <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-[#8d766a]">
-          <span className={`rounded-full px-2 py-0.5 font-semibold ${BADGE_STYLES[row.badge] ?? BADGE_STYLES["aapne bataya"]}`}>{row.badge}</span>
+          <span className={`rounded-full px-2 py-0.5 font-semibold ${BADGE_STYLES[row.badge] ?? BADGE_STYLES["You told us"]}`}>{row.badge}</span>
           {row.date && <span>{row.date}</span>}
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -340,11 +340,11 @@ function ConfirmDialog({ count, busy, onCancel, onConfirm }: { count: number; bu
 
   return <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#3a271e]/40 p-3 sm:items-center" onKeyDown={onKeyDown}>
     <div role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} className="w-full max-w-sm rounded-[26px] border border-[#ead7ca] bg-[#fffaf5] p-5 text-[#35241c] shadow-[0_24px_60px_-30px_rgba(62,34,22,.6)]">
-      <h3 id={titleId} className="font-display text-lg font-semibold tracking-[-.03em]">Sab bhool jaayein?</h3>
-      <p id={descriptionId} className="mt-2 text-sm leading-6 text-[#806f65]">{count} {count === 1 ? "yaad" : "yaadein"} hamesha ke liye hat jaayengi—pasand, kabhi-nahi, niyam aur suggestions. Yeh wapas nahi aayengi.</p>
+      <h3 id={titleId} className="font-display text-lg font-semibold tracking-[-.03em]">Forget everything?</h3>
+      <p id={descriptionId} className="mt-2 text-sm leading-6 text-[#806f65]">{count} saved {count === 1 ? "item" : "items"} will be permanently deleted—preferences, nevers, rules and suggestions. This can&apos;t be undone.</p>
       <div className="mt-5 grid grid-cols-2 gap-2">
-        <button ref={cancelRef} type="button" disabled={busy} onClick={onCancel} className={`min-h-11 rounded-xl border border-[#e4cabc] px-3 text-sm font-semibold text-[#68493c] disabled:opacity-50 ${ring}`}>Rehne do</button>
-        <button ref={confirmRef} type="button" disabled={busy} onClick={onConfirm} className={`flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#a33d2c] px-3 text-sm font-semibold text-white disabled:opacity-60 ${ring}`}>{busy && <CircleNotch size={15} className="animate-spin" />}Haan, sab bhoolo</button>
+        <button ref={cancelRef} type="button" disabled={busy} onClick={onCancel} className={`min-h-11 rounded-xl border border-[#e4cabc] px-3 text-sm font-semibold text-[#68493c] disabled:opacity-50 ${ring}`}>Cancel</button>
+        <button ref={confirmRef} type="button" disabled={busy} onClick={onConfirm} className={`flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#a33d2c] px-3 text-sm font-semibold text-white disabled:opacity-60 ${ring}`}>{busy && <CircleNotch size={15} className="animate-spin" />}Forget everything</button>
       </div>
     </div>
   </div>;

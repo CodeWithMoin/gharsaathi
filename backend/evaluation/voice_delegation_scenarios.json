@@ -150,6 +150,45 @@
           "offer_price": 40
         }
       ]
+    },
+    "milk_fixture": {
+      "description": "Harness-only milk fixture (Amul Taaza and Mother Dairy, both stores) for memory scenarios. No delivery ETA on purpose.",
+      "swiggy_instamart": [
+        {
+          "product_id": "fx-amul-taaza-1l",
+          "name": "Amul Taaza Toned Milk",
+          "brand": "Amul",
+          "pack_size": "1 L",
+          "mrp": 72,
+          "offer_price": 69
+        },
+        {
+          "product_id": "fx-md-toned-1l",
+          "name": "Mother Dairy Toned Milk",
+          "brand": "Mother Dairy",
+          "pack_size": "1 L",
+          "mrp": 70,
+          "offer_price": 68
+        }
+      ],
+      "zepto": [
+        {
+          "product_id": "fx-amul-taaza-1l",
+          "name": "Amul Taaza Toned Milk",
+          "brand": "Amul",
+          "pack_size": "1 L",
+          "mrp": 72,
+          "offer_price": 70
+        },
+        {
+          "product_id": "fx-md-toned-1l",
+          "name": "Mother Dairy Toned Milk",
+          "brand": "Mother Dairy",
+          "pack_size": "1 L",
+          "mrp": 70,
+          "offer_price": 69
+        }
+      ]
     }
   },
   "scenarios": [
@@ -687,6 +726,263 @@
               "atta",
               "dahi"
             ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "m1-explicit-remember-read-back",
+      "title": "'Yaad rakhna' reads back and saves only on yes.",
+      "catalogue": "milk_fixture",
+      "memory_db": {},
+      "turns": [
+        {
+          "user": "yaad rakhna, doodh hamesha Amul Taaza lena",
+          "expect": {
+            "tools_required": [
+              "remember_preference"
+            ],
+            "memory_status_any_of": [
+              "needs_confirmation"
+            ],
+            "active_memory_count": 0,
+            "asks_question": true,
+            "add_count": 0
+          }
+        },
+        {
+          "user": "haan",
+          "expect": {
+            "tools_required": [
+              "confirm_memory"
+            ],
+            "memory_status_any_of": [
+              "confirmed"
+            ],
+            "active_memory_contains": [
+              "Amul Taaza"
+            ],
+            "add_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "m2-stated-in-passing-saved-with-ack",
+      "title": "A habit said in passing is saved at once and acknowledged.",
+      "catalogue": "milk_fixture",
+      "memory_db": {},
+      "turns": [
+        {
+          "user": "hum hamesha Amul Taaza lete hain, ek packet doodh dikha do",
+          "expect": {
+            "tools_required": [
+              "remember_preference",
+              "search_products"
+            ],
+            "memory_status_any_of": [
+              "saved"
+            ],
+            "active_memory_contains": [
+              "Amul Taaza"
+            ],
+            "reply_mentions_any": [
+              "yaad",
+              "remember",
+              "bhool"
+            ],
+            "add_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "m3-one-off-not-saved",
+      "title": "'Is baar Amul' is a one-time choice and never becomes a preference.",
+      "catalogue": "milk_fixture",
+      "memory_db": {},
+      "turns": [
+        {
+          "user": "is baar Amul doodh de do",
+          "expect": {
+            "no_memory_write": true,
+            "active_memory_count": 0,
+            "reply_forbids_any": [
+              "yaad rakh"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "m4-update-supersedes",
+      "title": "'Ab Amul nahi, Mother Dairy' updates the remembered milk brand.",
+      "catalogue": "milk_fixture",
+      "memory_db": {
+        "seed": [
+          {
+            "kind": "prefer_brand",
+            "item": "milk",
+            "value": "Amul Taaza",
+            "user_words": "hum hamesha Amul Taaza lete hain"
+          }
+        ]
+      },
+      "turns": [
+        {
+          "user": "ab Amul nahi, Mother Dairy lena hamesha",
+          "expect": {
+            "tools_required": [
+              "update_preference"
+            ],
+            "memory_status_any_of": [
+              "saved",
+              "needs_confirmation"
+            ],
+            "active_memory_contains": [
+              "Mother Dairy"
+            ],
+            "active_memory_excludes": [
+              "Amul"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "m5-avoid-store-filters-search",
+      "title": "'Zepto se kabhi order mat karna', then atta: only Instamart is searched.",
+      "catalogue": "demo",
+      "memory_db": {},
+      "turns": [
+        {
+          "user": "Zepto se kabhi order mat karna",
+          "expect": {
+            "tools_required": [
+              "remember_preference"
+            ],
+            "memory_status_any_of": [
+              "saved",
+              "needs_confirmation"
+            ],
+            "add_count": 0
+          }
+        },
+        {
+          "user": "haan. aur atta chahiye",
+          "expect": {
+            "tools_required": [
+              "search_products"
+            ],
+            "search_stores_only": [
+              "swiggy_instamart"
+            ],
+            "active_memory_contains": [
+              "Never order from Zepto"
+            ],
+            "add_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "m6-forget-one",
+      "title": "'Woh doodh wali baat bhool jao' forgets the milk preference.",
+      "catalogue": "milk_fixture",
+      "memory_db": {
+        "seed": [
+          {
+            "kind": "prefer_brand",
+            "item": "milk",
+            "value": "Amul Taaza",
+            "user_words": "hum hamesha Amul Taaza lete hain"
+          }
+        ]
+      },
+      "turns": [
+        {
+          "user": "woh doodh wali baat bhool jao",
+          "expect": {
+            "tools_required": [
+              "forget_preference"
+            ],
+            "memory_status_any_of": [
+              "forgotten"
+            ],
+            "active_memory_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "m7-undo-after-stated-milk",
+      "title": "A just-learned habit can be undone with 'bhool jao'.",
+      "catalogue": "milk_fixture",
+      "memory_db": {},
+      "turns": [
+        {
+          "user": "doodh mein hum toh hamesha Mother Dairy hi lete hain",
+          "expect": {
+            "tools_required": [
+              "remember_preference"
+            ],
+            "memory_status_any_of": [
+              "saved"
+            ],
+            "active_memory_contains": [
+              "Mother Dairy"
+            ]
+          }
+        },
+        {
+          "user": "nahi galat ho gaya, yeh bhool jao",
+          "expect": {
+            "tools_required": [
+              "forget_preference"
+            ],
+            "active_memory_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "m8-repeated-choice-offered-once",
+      "title": "Repeated Amul Taaza choices: the suggestion is offered after the add and saved on yes.",
+      "catalogue": "milk_fixture",
+      "memory_db": {
+        "choices": [
+          {
+            "provider": "swiggy_instamart",
+            "item": "milk",
+            "product_name": "Amul Taaza Toned Milk",
+            "brand": "Amul Taaza",
+            "pack_size": "1 L",
+            "occasions": 3
+          }
+        ]
+      },
+      "turns": [
+        {
+          "user": "Amul Taaza toned milk 1 litre Instamart basket mein add kar do",
+          "expect": {
+            "tools_required": [
+              "add_to_basket"
+            ],
+            "add_count": 1,
+            "suggestion_offered": true,
+            "active_memory_count": 0
+          }
+        },
+        {
+          "user": "haan yaad rakh lo",
+          "expect": {
+            "tools_required": [
+              "confirm_memory"
+            ],
+            "active_memory_contains": [
+              "Amul Taaza"
+            ],
+            "add_count": 0
           }
         }
       ]

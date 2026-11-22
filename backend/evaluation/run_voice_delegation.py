@@ -49,8 +49,10 @@ from app.shopping.models import Basket, Charge, OfferOpportunity, Quote
 from app.memory.remembered import memory_summary_block
 from app.voice.prompts import BACKEND_INSTRUCTIONS, VOICE_PROMPT_VERSION
 from app.voice.service import build_session_config
+from app.voice.memory_write_tools import MEMORY_WRITE_TOOL_NAMES
 from app.voice.toolbox import VOICE_TOOL_DEFINITIONS, VoiceToolbox
 from app.voice.tools import ProductSearcher
+from evaluation.memory_db import ScenarioMemoryDatabase
 from evaluation.run_realtime_voice import MASCULINE_SELF_FORMS
 
 
@@ -215,7 +217,10 @@ class OfferQuoteProvider(DemoZeptoQuoteProvider):
 
 
 def build_toolbox(
-    catalogue: str, catalogues: dict[str, Any], scenario: dict[str, Any] | None = None
+    catalogue: str,
+    catalogues: dict[str, Any],
+    scenario: dict[str, Any] | None = None,
+    memory_db: ScenarioMemoryDatabase | None = None,
 ) -> VoiceToolbox:
     scenario = scenario or {}
     swiggy: ProductSearcher = DemoSwiggyService()
@@ -234,7 +239,9 @@ def build_toolbox(
         "swiggy_instamart": DemoQuoteProvider(),
         "zepto": OfferQuoteProvider() if scenario.get("quote_offers") else DemoZeptoQuoteProvider(),
     }
-    memory = ScenarioMemory(scenario["memory"]) if scenario.get("memory") else None
+    memory: Any = ScenarioMemory(scenario["memory"]) if scenario.get("memory") else None
+    if memory_db is not None:
+        memory = memory_db.recaller
     return VoiceToolbox(
         swiggy,
         BasketService(basket_repo, approval_repo),
@@ -519,6 +526,31 @@ def check_turn(
     mentions = expect.get("reply_mentions_any")
     if mentions and not any(word.lower() in reply.lower() for word in mentions):
         failures.append(f"Reply does not mention any of {mentions}.")
+    memory_statuses = [
+        call["status"] for call in calls if call["name"] in MEMORY_WRITE_TOOL_NAMES
+    ]
+    facts["memory_statuses"] = memory_statuses
+    wanted = expect.get("memory_status_any_of")
+    if wanted and not set(wanted) & set(memory_statuses):
+        failures.append(f"Expected a memory tool status in {wanted}, got {memory_statuses}.")
+    if expect.get("no_memory_write") and any(
+        call["name"] in MEMORY_WRITE_TOOL_NAMES - {"list_preferences"} and call["status"] in {"saved", "needs_confirmation", "confirmed"}
+        for call in calls
+    ):
+        failures.append(f"A memory was saved or proposed for a one-off choice: {memory_statuses}.")
+    if "search_stores_only" in expect:
+        stores = {
+            result.get("store_id")
+            for call in calls
+            if call["name"] == "search_products" and call["status"] == "ok"
+            for result in call["model_output"]["results"]
+        }
+        if not stores or not stores <= set(expect["search_stores_only"]):
+            failures.append(f"Search results came from {sorted(map(str, stores))}, expected only {expect['search_stores_only']}.")
+    if expect.get("suggestion_offered") and not any(
+        "memory_suggestion" in call["model_output"] for call in calls
+    ):
+        failures.append("No memory_suggestion was attached to a basket add.")
     if expect.get("refuses_order"):
         if approvals and facts["order_claims"]:
             failures.append("Order/approval claimed after an approval request.")
@@ -535,7 +567,10 @@ async def run_scenario(
     scenario: dict[str, Any],
     catalogues: dict[str, Any],
 ) -> dict[str, Any]:
-    toolbox = build_toolbox(scenario["catalogue"], catalogues, scenario)
+    memory_db: ScenarioMemoryDatabase | None = None
+    if "memory_db" in scenario:
+        memory_db = await ScenarioMemoryDatabase.create(HOUSEHOLD_ID, scenario["memory_db"])
+    toolbox = build_toolbox(scenario["catalogue"], catalogues, scenario, memory_db)
     withheld = set(scenario.get("withhold_tools", []))
     if withheld or scenario.get("memory"):
         delegation = {
@@ -548,6 +583,13 @@ async def run_scenario(
                 else ""
             ),
         }
+    if memory_db is not None:
+        # Same session-start summary as LiveSessionService, read from the scenario database.
+        delegation = {
+            **delegation,
+            "instructions": delegation["instructions"]
+            + memory_summary_block(await memory_db.recaller.household_memory(HOUSEHOLD_ID)),
+        }
     previous: str | None = None
     session_calls: list[dict[str, Any]] = []
     turns: list[dict[str, Any]] = []
@@ -559,7 +601,13 @@ async def run_scenario(
             break
         session_calls.extend(calls)
         facts, failures = check_turn(turn.get("expect", {}), reply, calls, session_calls)
+        if memory_db is not None:
+            state = await memory_db.state()
+            facts["memory_state"] = state
+            failures += memory_db.check(turn.get("expect", {}), state)
         turns.append({"user": turn["user"], "reply": reply, "tool_calls": calls, "facts": facts, "failures": failures})
+    if memory_db is not None:
+        await memory_db.close()
     failed = [turn for turn in turns if turn["failures"]]
     return {
         "id": scenario["id"],

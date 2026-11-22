@@ -25,7 +25,6 @@ import { FormEvent, ReactNode, useEffect, useId, useRef, useState } from "react"
 import {
   ADDRESS_FORM_OPTIONS,
   addressFormExample,
-  byAddressForm,
   FIRST_NAME_MAX_LENGTH,
   validateProfileDraft,
   type AddressForm,
@@ -45,12 +44,12 @@ const secondaryButton = `flex min-h-[52px] w-full items-center justify-center ga
 const textButton = `inline-flex min-h-11 items-center gap-1.5 rounded-full px-2 text-[13px] font-semibold text-[#9d421a] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-45 ${focusRing}`;
 
 export const STEP_TITLES: Record<OnboardingStep, string> = {
-  profile: "Aapka naam",
-  consent: "Terms aur privacy",
-  stores: "Stores jodiye",
+  profile: "Your name",
+  consent: "Terms and privacy",
+  stores: "Connect stores",
   address: "Delivery address",
-  personalize: "Aapki usual cheezein",
-  done: "Sab set",
+  personalize: "Your usual items",
+  done: "All set",
 };
 
 /* ------------------------------------------------------------------ shell */
@@ -64,7 +63,7 @@ export function OnboardingHeader({ position, onBack, onSkip, onClose, stepLabel 
 }) {
   return <header className="flex h-12 items-center gap-3">
     {onBack
-      ? <button type="button" onClick={onBack} aria-label="Pichhla step" className={`grid size-10 shrink-0 place-items-center rounded-full border border-[#e1d0c4] bg-[#fffdf9] text-[#70584b] transition-transform duration-150 ease-out active:scale-[.96] ${focusRing}`}><ArrowLeft size={18} weight="bold" /></button>
+      ? <button type="button" onClick={onBack} aria-label="Previous step" className={`grid size-10 shrink-0 place-items-center rounded-full border border-[#e1d0c4] bg-[#fffdf9] text-[#70584b] transition-transform duration-150 ease-out active:scale-[.96] ${focusRing}`}><ArrowLeft size={18} weight="bold" /></button>
       : <span className="size-10 shrink-0" aria-hidden="true" />}
     <div className="min-w-0 flex-1">
       <div className="grid grid-cols-5 gap-1" aria-hidden="true">
@@ -73,12 +72,12 @@ export function OnboardingHeader({ position, onBack, onSkip, onClose, stepLabel 
           return <span key={index} className="h-1 overflow-hidden rounded-full bg-[#e6d6ca]"><span className="block h-full origin-left rounded-full bg-[#c6531d] transition-transform duration-300 ease-out" style={{ transform: `scaleX(${filled ? 1 : 0})` }} /></span>;
         })}
       </div>
-      <p className="mt-1.5 text-[11px] font-semibold text-[#8e796d]" aria-live="polite">{position.complete ? "Setup poora" : `Step ${position.current} / ${position.total}`}<span className="sr-only">: {stepLabel}</span></p>
+      <p className="mt-1.5 text-[11px] font-semibold text-[#8e796d]" aria-live="polite">{position.complete ? "Setup complete" : `Step ${position.current} / ${position.total}`}<span className="sr-only">: {stepLabel}</span></p>
     </div>
     {onClose
-      ? <button type="button" onClick={onClose} aria-label="Setup band karein" className={`grid size-10 shrink-0 place-items-center rounded-full text-[#70584b] transition-transform duration-150 ease-out hover:bg-[#f1e6dd] active:scale-[.96] ${focusRing}`}><X size={18} weight="bold" /></button>
+      ? <button type="button" onClick={onClose} aria-label="Close setup" className={`grid size-10 shrink-0 place-items-center rounded-full text-[#70584b] transition-transform duration-150 ease-out hover:bg-[#f1e6dd] active:scale-[.96] ${focusRing}`}><X size={18} weight="bold" /></button>
       : onSkip
-        ? <button type="button" onClick={onSkip} className={`min-h-10 shrink-0 rounded-full px-3 text-[13px] font-semibold text-[#806f65] transition-colors hover:bg-[#f1e6dd] ${focusRing}`}>Baad mein</button>
+        ? <button type="button" onClick={onSkip} className={`min-h-10 shrink-0 rounded-full px-3 text-[13px] font-semibold text-[#806f65] transition-colors hover:bg-[#f1e6dd] ${focusRing}`}>Skip for now</button>
         : <span className="size-10 shrink-0" aria-hidden="true" />}
   </header>;
 }
@@ -184,7 +183,7 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
     try {
       await onSave(validation.value);
     } catch (cause) {
-      setSaveError(cause instanceof Error ? cause.message : "Profile save nahi hua. Ek baar phir try kijiye.");
+      setSaveError(cause instanceof Error ? cause.message : "Could not save your profile. Please try again.");
       setSaving(false);
     }
   }
@@ -193,14 +192,14 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
     as="form"
     onSubmit={submit}
     focusHeading={focusHeading}
-    title="Aapko kya bulaun?"
-    intro="Main isi naam se baat karungi. Yeh sab baad mein settings mein badla ja sakta hai."
+    title="What should GharSaathi call you?"
+    intro="GharSaathi will use this name when talking to you. You can change all of this later in settings."
     footer={<>
       {saveError && <InlineAlert>{saveError}</InlineAlert>}
-      <button type="submit" disabled={saving} className={`${primaryButton} ${saveError ? "mt-3" : ""}`}>{saving ? <><Spinner /> Save ho raha hai…</> : <>Aage badhein <ArrowRight size={17} weight="bold" /></>}</button>
+      <button type="submit" disabled={saving} className={`${primaryButton} ${saveError ? "mt-3" : ""}`}>{saving ? <><Spinner /> Saving…</> : <>Continue <ArrowRight size={17} weight="bold" /></>}</button>
     </>}
   >
-    <label htmlFor={ids.name} className="text-[13px] font-semibold text-[#5f4a3f]">Pehla naam</label>
+    <label htmlFor={ids.name} className="text-[13px] font-semibold text-[#5f4a3f]">First name</label>
     <input
       ref={nameInputRef}
       id={ids.name}
@@ -213,13 +212,13 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
       maxLength={FIRST_NAME_MAX_LENGTH + 10}
       aria-invalid={Boolean(nameError)}
       aria-describedby={nameError ? ids.nameError : undefined}
-      placeholder="Jaise: Anita"
+      placeholder="e.g. Anita"
       className={`mt-2 w-full rounded-2xl border bg-[#fffdf9] px-4 py-3.5 text-base text-[#35241c] outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-[#9a877c] focus:ring-2 ${nameError ? "border-[#b4493a] focus:ring-[#b4493a]/20" : "border-[#ddc8ba] focus:border-[#c6531d] focus:ring-[#c6531d]/15"}`}
     />
     <p id={ids.nameError} className="mt-2 min-h-5 text-[13px] leading-5 text-[#a33f31]" aria-live="polite">{nameError ?? ""}</p>
 
     <fieldset className="mt-3">
-      <legend className="text-[13px] font-semibold text-[#5f4a3f]">Aapko kaise address karun?</legend>
+      <legend className="text-[13px] font-semibold text-[#5f4a3f]">How should GharSaathi address you?</legend>
       <div className="mt-2 overflow-hidden rounded-[20px] border border-[#e1d0c4] bg-[#fffdf9]">
         {ADDRESS_FORM_OPTIONS.map((option, index) => {
           const selected = addressForm === option.value;
@@ -233,7 +232,7 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
     </fieldset>
 
     <div className="mt-4" aria-live="polite" id={ids.preview}>
-      <p className="text-[11px] font-semibold text-[#9b8172]">Main aise bolungi</p>
+      <p className="text-[11px] font-semibold text-[#9b8172]">How GharSaathi will reply</p>
       <div className="mt-1.5 min-h-[76px] rounded-[7px_20px_20px_20px] bg-[#fffdf9] px-4 py-3.5 shadow-[0_16px_40px_-34px_rgba(74,43,27,.7)]">
         <AnimatePresence mode="wait" initial={false}>
           <motion.p
@@ -246,11 +245,11 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
           >{example.text}</motion.p>
         </AnimatePresence>
       </div>
-      {!example.gendered && addressForm !== "neutral" && language === "english" && <p className="mt-1.5 text-[12px] leading-5 text-[#8e796d]">English mein yeh farq kam dikhta hai, par Hinglish replies mein yaad rahega.</p>}
+      {!example.gendered && addressForm !== "neutral" && language === "english" && <p className="mt-1.5 text-[12px] leading-5 text-[#8e796d]">English replies rarely show this, but it will be used in Hinglish and Hindi replies.</p>}
     </div>
 
     <fieldset className="mt-6">
-      <legend className="text-[13px] font-semibold text-[#5f4a3f]">Reply kis language mein?</legend>
+      <legend className="text-[13px] font-semibold text-[#5f4a3f]">Reply language</legend>
       <div className="mt-2 grid grid-cols-3 gap-2">
         {LANGUAGE_OPTIONS.map((option) => {
           const selected = language === option.value;
@@ -281,7 +280,7 @@ export function ConsentStep({ updatedTerms, focusHeading, onAccept }: {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!legalAccepted) {
-      setError("Terms aur Privacy Policy accept karna zaroori hai.");
+      setError("Please accept the Terms and Privacy Policy to continue.");
       return;
     }
     setSaving(true);
@@ -289,7 +288,7 @@ export function ConsentStep({ updatedTerms, focusHeading, onAccept }: {
     try {
       await onAccept(personalizationAllowed);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Consent save nahi hua. Ek baar phir try kijiye.");
+      setError(cause instanceof Error ? cause.message : "Could not save your consent. Please try again.");
       setSaving(false);
     }
   }
@@ -298,18 +297,18 @@ export function ConsentStep({ updatedTerms, focusHeading, onAccept }: {
     as="form"
     onSubmit={submit}
     focusHeading={focusHeading}
-    title={updatedTerms ? "Terms update hue hain" : "Ek zaroori baat"}
-    intro={updatedTerms ? "Aage badhne ke liye naye Terms aur Privacy Policy dekh lijiye." : "Shuru karne se pehle, yeh teen vaade aur hamare Terms."}
+    title={updatedTerms ? "Our Terms have been updated" : "Before you start"}
+    intro={updatedTerms ? "Please review the new Terms and Privacy Policy to continue." : "Three promises, and our Terms."}
     footer={<>
       {error && <InlineAlert>{error}</InlineAlert>}
-      <button type="submit" disabled={saving || !legalAccepted} className={`${primaryButton} ${error ? "mt-3" : ""}`}>{saving ? <><Spinner /> Save ho raha hai…</> : <>Accept karke aage badhein <ArrowRight size={17} weight="bold" /></>}</button>
+      <button type="submit" disabled={saving || !legalAccepted} className={`${primaryButton} ${error ? "mt-3" : ""}`}>{saving ? <><Spinner /> Saving…</> : <>Accept and continue <ArrowRight size={17} weight="bold" /></>}</button>
     </>}
   >
     {!updatedTerms && <ul className="divide-y divide-[#eaded5] border-y border-[#eaded5]">
       {[
-        { icon: <ShieldCheck size={20} weight="duotone" />, text: "Aapki approval ke bina koi order nahi hoga." },
-        { icon: <LockKey size={20} weight="duotone" />, text: "Password ya OTP main kabhi nahi maangungi." },
-        { icon: <Trash size={20} weight="duotone" />, text: "Jo yaad rakhun, woh kabhi bhi delete kiya ja sakta hai." },
+        { icon: <ShieldCheck size={20} weight="duotone" />, text: "No order is placed without your approval." },
+        { icon: <LockKey size={20} weight="duotone" />, text: "GharSaathi never asks for your password or OTP." },
+        { icon: <Trash size={20} weight="duotone" />, text: "Anything GharSaathi remembers can be deleted at any time." },
       ].map((item) => <li key={item.text} className="flex items-start gap-3 py-3.5 text-[14px] leading-5 text-[#5f4a3f]"><span className="mt-0.5 shrink-0 text-[#c6531d]">{item.icon}</span>{item.text}</li>)}
     </ul>}
 
@@ -327,7 +326,7 @@ export function ConsentStep({ updatedTerms, focusHeading, onAccept }: {
 
 /* ----------------------------------------------------------------- stores */
 
-const STORE_ACCESS = ["Products, prices aur delivery time", "Aapke saved delivery addresses", "Basket aur orders, sirf aapki approval par"];
+const STORE_ACCESS = ["Products, prices and delivery time", "Your saved delivery addresses", "Baskets and orders, only with your approval"];
 
 export function StoresStep({ stores, commerceMode, focusHeading, oauthReturned, onConnect, onRetryStatus, onContinue, onSkip }: {
   stores: Record<StoreProvider, StoreState>;
@@ -344,24 +343,24 @@ export function StoresStep({ stores, commerceMode, focusHeading, oauthReturned, 
   const checking = STORE_PROVIDERS.some((provider) => stores[provider].connection === "checking");
   return <StepFrame
     focusHeading={focusHeading}
-    title="Apne stores jodiye"
-    intro={demo ? "Demo mode mein dono stores sample data ke saath ready hain." : "Jo store judega, main wahan dhoondhungi aur prices compare karungi. Ek store bhi kaafi hai."}
+    title="Connect your stores"
+    intro={demo ? "In demo mode, both stores are ready with sample data." : "GharSaathi searches and compares prices at every store you connect. One store is enough."}
     footer={anyConnected
-      ? <button type="button" onClick={onContinue} className={primaryButton}>Aage badhein <ArrowRight size={17} weight="bold" /></button>
-      : <button type="button" onClick={onSkip} disabled={checking} className={secondaryButton}>Abhi nahi, baad mein jodungi</button>}
+      ? <button type="button" onClick={onContinue} className={primaryButton}>Continue <ArrowRight size={17} weight="bold" /></button>
+      : <button type="button" onClick={onSkip} disabled={checking} className={secondaryButton}>Not now</button>}
   >
-    {oauthReturned && stores[oauthReturned].connection === "connected" && <div role="status" className="mb-4 flex items-center gap-2 rounded-2xl bg-[#eef6ef] px-3.5 py-3 text-[13px] font-semibold text-[#2f6339]"><CheckCircle size={18} weight="fill" /> {storeName(oauthReturned)} jud gaya.</div>}
+    {oauthReturned && stores[oauthReturned].connection === "connected" && <div role="status" className="mb-4 flex items-center gap-2 rounded-2xl bg-[#eef6ef] px-3.5 py-3 text-[13px] font-semibold text-[#2f6339]"><CheckCircle size={18} weight="fill" /> {storeName(oauthReturned)} connected.</div>}
     <div className="space-y-3">
       {STORE_PROVIDERS.map((provider) => <StoreCard key={provider} provider={provider} state={stores[provider]} demo={demo} onConnect={() => onConnect(provider)} onRetryStatus={() => onRetryStatus(provider)} />)}
     </div>
-    {!demo && <div className="mt-4"><Note icon={<LockKey size={17} weight="duotone" />}>Login store ke apne page par hota hai. Wahan sign in hote hi aapko yahin wapas laaya jayega. GharSaathi aapka password ya OTP kabhi nahi dekhti, na maangti hai.</Note></div>}
+    {!demo && <div className="mt-4"><Note icon={<LockKey size={17} weight="duotone" />}>You sign in on the store&apos;s own page and come straight back here. GharSaathi never sees or asks for your password or OTP.</Note></div>}
   </StepFrame>;
 }
 
 function StoreCard({ provider, state, demo, onConnect, onRetryStatus }: { provider: StoreProvider; state: StoreState; demo: boolean; onConnect: () => void; onRetryStatus: () => void }) {
   const name = storeName(provider);
   const connected = state.connection === "connected";
-  const status = state.connection === "checking" ? "Check kar rahi hoon…" : demo ? "Demo ready" : connected ? "Juda hua" : state.connection === "error" ? "Status nahi mila" : "Nahi juda";
+  const status = state.connection === "checking" ? "Checking…" : demo ? "Demo ready" : connected ? "Connected" : state.connection === "error" ? "Status unavailable" : "Not connected";
   return <section aria-label={name} className={`rounded-[22px] border p-4 transition-colors duration-200 ${connected ? "border-[#cfe2d2] bg-[#f6fbf6]" : "border-[#e7d8cd] bg-[#fffdf9]"}`}>
     <div className="flex items-center gap-3">
       <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${connected ? "bg-[#dcefe0] text-[#397144]" : "bg-[#f7e8de] text-[#bd5525]"}`}>{connected ? <Check size={20} weight="bold" /> : <Storefront size={21} weight="duotone" />}</span>
@@ -371,12 +370,12 @@ function StoreCard({ provider, state, demo, onConnect, onRetryStatus }: { provid
       </div>
     </div>
     {!connected && state.connection !== "checking" && <>
-      <ul className="mt-3 space-y-1.5 text-[13px] leading-5 text-[#70584b]" aria-label={`${name} se kya dikhega`}>
+      <ul className="mt-3 space-y-1.5 text-[13px] leading-5 text-[#70584b]" aria-label={`What ${name} shares`}>
         {STORE_ACCESS.map((item) => <li key={item} className="flex items-start gap-2"><Eye size={15} className="mt-0.5 shrink-0 text-[#a3887a]" aria-hidden="true" />{item}</li>)}
       </ul>
       {state.connection === "error"
-        ? <InlineAlert action={<button type="button" onClick={onRetryStatus} className={`${textButton} -ml-2 mt-1`}><ArrowClockwise size={14} weight="bold" /> Phir check karein</button>}>{state.connectionError}</InlineAlert>
-        : <button type="button" onClick={onConnect} disabled={state.connecting} className={`${provider === "zepto" ? primaryButton : secondaryButton} mt-4`}>{state.connecting ? <><Spinner /> Login page khol rahi hoon…</> : <>{name} se login karein <ArrowRight size={17} weight="bold" /></>}</button>}
+        ? <InlineAlert action={<button type="button" onClick={onRetryStatus} className={`${textButton} -ml-2 mt-1`}><ArrowClockwise size={14} weight="bold" /> Check again</button>}>{state.connectionError}</InlineAlert>
+        : <button type="button" onClick={onConnect} disabled={state.connecting} className={`${provider === "zepto" ? primaryButton : secondaryButton} mt-4`}>{state.connecting ? <><Spinner /> Opening login page…</> : <>Sign in with {name} <ArrowRight size={17} weight="bold" /></>}</button>}
       {state.connectError && <InlineAlert>{state.connectError}</InlineAlert>}
     </>}
   </section>;
@@ -405,13 +404,13 @@ export function AddressStep({ stores, commerceMode, focusHeading, onLoad, onSele
 
   return <StepFrame
     focusHeading={focusHeading}
-    title="Delivery kahan karni hai?"
-    intro={commerceMode === "demo" ? "Demo mein ek sample address hai. Asli address live mode mein dikhenge." : "Har store ke liye ek saved address chuniye. Isi address par prices aur delivery time check honge."}
+    title="Where should we deliver?"
+    intro={commerceMode === "demo" ? "Demo mode uses a sample address. Your real addresses appear in live mode." : "Choose a saved address for each store. Prices and delivery times are checked for this address."}
     footer={<>
-      {ready && missing.length > 0 && <p className="mb-3 text-center text-[12px] leading-5 text-[#806f65]">{missing.map(storeName).join(" aur ")} ka address baad mein bhi chuna ja sakta hai.</p>}
+      {ready && missing.length > 0 && <p className="mb-3 text-center text-[12px] leading-5 text-[#806f65]">You can choose a {missing.map(storeName).join(" and ")} address later.</p>}
       {ready
-        ? <button type="button" onClick={onContinue} disabled={busy} className={primaryButton}>{busy ? <><Spinner /> Save ho raha hai…</> : <>Yahi address rakhein <ArrowRight size={17} weight="bold" /></>}</button>
-        : <button type="button" onClick={onSkip} className={secondaryButton}>Abhi skip karein</button>}
+        ? <button type="button" onClick={onContinue} disabled={busy} className={primaryButton}>{busy ? <><Spinner /> Saving…</> : <>Use this address <ArrowRight size={17} weight="bold" /></>}</button>
+        : <button type="button" onClick={onSkip} className={secondaryButton}>Skip for now</button>}
     </>}
   >
     <div className="space-y-6">
@@ -437,14 +436,14 @@ function StoreAddresses({ provider, state, demo, onLoad, onSelect, onAdded }: {
       {state.addressState === "ready" && state.addresses.length > 0 && !demo && <button type="button" onClick={() => onLoad(true)} className={`${textButton} ml-auto`}><ArrowClockwise size={14} weight="bold" /> Refresh</button>}
     </div>
 
-    {loading && <div className="mt-2 space-y-2" aria-label={`${name} addresses load ho rahe hain`}>{[0, 1].map((item) => <div key={item} className="h-[68px] animate-pulse rounded-[20px] bg-[#eee2d8]" />)}</div>}
+    {loading && <div className="mt-2 space-y-2" aria-label={`Loading ${name} addresses`}>{[0, 1].map((item) => <div key={item} className="h-[68px] animate-pulse rounded-[20px] bg-[#eee2d8]" />)}</div>}
 
     {state.addressState === "needs_refresh" && <div className="mt-2 rounded-[20px] border border-[#e7d8cd] bg-[#fffdf9] p-4">
-      <p className="text-[14px] leading-5 text-[#5f4a3f]">{name} ke saved addresses abhi yahan nahi hain. Ek baar laa leti hoon, phir yahin save rahenge.</p>
-      <button type="button" onClick={() => onLoad(true)} className={`${secondaryButton} mt-3`}><MapPin size={17} weight="bold" /> {name} se addresses laayein</button>
+      <p className="text-[14px] leading-5 text-[#5f4a3f]">Your {name} saved addresses aren&apos;t here yet. Fetch them once and they&apos;ll stay saved here.</p>
+      <button type="button" onClick={() => onLoad(true)} className={`${secondaryButton} mt-3`}><MapPin size={17} weight="bold" /> Fetch addresses from {name}</button>
     </div>}
 
-    {state.addressState === "error" && <InlineAlert action={<button type="button" onClick={() => onLoad(false)} className={`${textButton} -ml-2 mt-1`}><ArrowClockwise size={14} weight="bold" /> Phir try karein</button>}>{state.addressError}</InlineAlert>}
+    {state.addressState === "error" && <InlineAlert action={<button type="button" onClick={() => onLoad(false)} className={`${textButton} -ml-2 mt-1`}><ArrowClockwise size={14} weight="bold" /> Try again</button>}>{state.addressError}</InlineAlert>}
 
     {state.addressState === "ready" && state.addresses.length > 0 && <div className="mt-2 overflow-hidden rounded-[20px] border border-[#e1d0c4] bg-[#fffdf9]">
       {state.addresses.map((address, index) => {
@@ -460,13 +459,13 @@ function StoreAddresses({ provider, state, demo, onLoad, onSelect, onAdded }: {
     {state.addressState === "ready" && state.addresses.length > 0 && state.addressError && <InlineAlert>{state.addressError}</InlineAlert>}
 
     {state.addressState === "ready" && state.addresses.length === 0 && <div className="mt-2 rounded-[20px] border border-[#e7d8cd] bg-[#fffdf9] p-4">
-      <p className="text-[14px] leading-5 text-[#5f4a3f]">{provider === "zepto" ? "Zepto par koi saved address nahi mila." : "Swiggy par koi saved address nahi mila. Swiggy app mein address jodkar yahan Refresh dabaiye."}</p>
+      <p className="text-[14px] leading-5 text-[#5f4a3f]">{provider === "zepto" ? "No saved Zepto address found." : "No saved Swiggy address found. Add one in the Swiggy app, then tap Refresh here."}</p>
       {provider === "swiggy" && <button type="button" onClick={() => onLoad(true)} className={`${textButton} -ml-2 mt-2`}><ArrowClockwise size={14} weight="bold" /> Refresh</button>}
     </div>}
 
     {provider === "zepto" && !demo && state.addressState === "ready" && (formOpen
       ? <ZeptoAddressForm onAdded={(data) => { onAdded(data); setFormOpen(false); }} onCancel={() => setFormOpen(false)} />
-      : <button type="button" onClick={() => setFormOpen(true)} className={`${textButton} -ml-2 mt-2`}><Plus size={14} weight="bold" /> Naya Zepto address jodiye</button>)}
+      : <button type="button" onClick={() => setFormOpen(true)} className={`${textButton} -ml-2 mt-2`}><Plus size={14} weight="bold" /> Add a new Zepto address</button>)}
   </fieldset>;
 }
 
@@ -495,38 +494,38 @@ export function PersonalizeStep({ swiggyConnected, zeptoConnected, commerceMode,
   }
 
   let footer: ReactNode;
-  if (history.permission === undefined) footer = <button type="button" disabled className={primaryButton}><Spinner /> Load ho raha hai…</button>;
-  else if (demo) footer = <button type="button" onClick={() => onContinue("skipped")} className={primaryButton}>Aage badhein <ArrowRight size={17} weight="bold" /></button>;
-  else if (importing) footer = <button type="button" disabled className={primaryButton}><Spinner /> Past orders padh rahi hoon…</button>;
-  else if (finished || alreadyOn) footer = <button type="button" onClick={() => onContinue(anySucceeded || alreadyOn ? "done" : "skipped")} className={primaryButton}>Aage badhein <ArrowRight size={17} weight="bold" /></button>;
+  if (history.permission === undefined) footer = <button type="button" disabled className={primaryButton}><Spinner /> Loading…</button>;
+  else if (demo) footer = <button type="button" onClick={() => onContinue("skipped")} className={primaryButton}>Continue <ArrowRight size={17} weight="bold" /></button>;
+  else if (importing) footer = <button type="button" disabled className={primaryButton}><Spinner /> Reading past orders…</button>;
+  else if (finished || alreadyOn) footer = <button type="button" onClick={() => onContinue(anySucceeded || alreadyOn ? "done" : "skipped")} className={primaryButton}>Continue <ArrowRight size={17} weight="bold" /></button>;
   else footer = <div className="grid gap-2.5">
-    <button type="button" onClick={() => void history.enable()} disabled={history.busy !== null} className={primaryButton}>Haan, past orders import karein</button>
-    <button type="button" onClick={() => void skip()} disabled={history.busy !== null} className={secondaryButton}>{history.busy === "skip" ? <><Spinner /> Save ho raha hai…</> : "Abhi nahi"}</button>
+    <button type="button" onClick={() => void history.enable()} disabled={history.busy !== null} className={primaryButton}>Import past orders</button>
+    <button type="button" onClick={() => void skip()} disabled={history.busy !== null} className={secondaryButton}>{history.busy === "skip" ? <><Spinner /> Saving…</> : "Not now"}</button>
   </div>;
 
   return <StepFrame
     focusHeading={focusHeading}
-    title={<>Kya main aapki <span className="whitespace-nowrap">&lsquo;usual&rsquo; cheezein</span> yaad rakhun?</>}
-    intro="Pichhle orders dekhkar main pooch sakti hoon: “Wahi wala Amul doodh?”"
+    title={<>Should GharSaathi remember your <span className="whitespace-nowrap">&lsquo;usual&rsquo; items?</span></>}
+    intro="From your past orders, GharSaathi can ask: “The same Amul milk as last time?”"
     footer={footer}
   >
     {history.permission === undefined
-      ? <div className="space-y-3" aria-label="Load ho raha hai">{[0, 1, 2].map((item) => <div key={item} className="h-14 animate-pulse rounded-2xl bg-[#eee2d8]" />)}</div>
+      ? <div className="space-y-3" aria-label="Loading">{[0, 1, 2].map((item) => <div key={item} className="h-14 animate-pulse rounded-2xl bg-[#eee2d8]" />)}</div>
       : <>
         <ul className="divide-y divide-[#eaded5] border-y border-[#eaded5]">
           {[
-            { icon: <Eye size={20} weight="duotone" />, title: "Sirf padhungi", text: "Connected stores ke recent orders, read-only. Isse kuch add ya order nahi hota." },
-            { icon: <Sparkle size={20} weight="duotone" />, title: "“Wahi wala?” suggestions", text: "Repeat items pehchaan kar suggest karungi. Ghar mein kya khatam hua, iska andaaza nahi lagaungi." },
-            { icon: <Trash size={20} weight="duotone" />, title: "Kabhi bhi delete", text: "Settings se band karte hi imported data hata diya jayega." },
+            { icon: <Eye size={20} weight="duotone" />, title: "Read-only", text: "Recent orders from connected stores, read-only. Nothing is added or ordered." },
+            { icon: <Sparkle size={20} weight="duotone" />, title: "“The usual?” suggestions", text: "Repeat items are spotted and suggested. GharSaathi never guesses what has run out at home." },
+            { icon: <Trash size={20} weight="duotone" />, title: "Delete any time", text: "Turning this off in settings removes the imported data." },
           ].map((item) => <li key={item.title} className="flex items-start gap-3 py-3.5"><span className="mt-0.5 shrink-0 text-[#c6531d]">{item.icon}</span><span><span className="block text-[14px] font-semibold text-[#3d2b23]">{item.title}</span><span className="mt-0.5 block text-[13px] leading-5 text-[#806f65]">{item.text}</span></span></li>)}
         </ul>
 
-        {demo && <div className="mt-5"><Note icon={<ShieldCheck size={17} weight="duotone" />}>Demo mode mein import band hai. Koi asli order history nahi padhi jaati.</Note></div>}
+        {demo && <div className="mt-5"><Note icon={<ShieldCheck size={17} weight="duotone" />}>Import is off in demo mode. No real order history is read.</Note></div>}
 
-        {!demo && alreadyOn && <div role="status" className="mt-5 flex items-start gap-2.5 rounded-2xl bg-[#eef6ef] px-3.5 py-3 text-[13px] leading-5 text-[#2f6339]"><CheckCircle size={18} weight="fill" className="mt-0.5 shrink-0" /> Usuals pehle se on hain. Settings se kabhi bhi band kiya ja sakta hai.</div>}
+        {!demo && alreadyOn && <div role="status" className="mt-5 flex items-start gap-2.5 rounded-2xl bg-[#eef6ef] px-3.5 py-3 text-[13px] leading-5 text-[#2f6339]"><CheckCircle size={18} weight="fill" className="mt-0.5 shrink-0" /> Usuals are already on. You can turn them off in settings at any time.</div>}
 
         {!demo && !alreadyOn && !progressEntries.length && <fieldset className="mt-5" aria-describedby={ids.retention}>
-          <legend className="text-[13px] font-semibold text-[#5f4a3f]">Kitne din tak yaad rakhun?</legend>
+          <legend className="text-[13px] font-semibold text-[#5f4a3f]">Keep order history for</legend>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {RETENTION_CHOICES.map((choice) => {
               const selected = history.retentionDays === choice.days;
@@ -535,7 +534,7 @@ export function PersonalizeStep({ swiggyConnected, zeptoConnected, commerceMode,
               </label>;
             })}
           </div>
-          <p id={ids.retention} className="mt-2 text-[12px] leading-5 text-[#8e796d]">Iske baad imported pattern data apne aap delete ho jayega.</p>
+          <p id={ids.retention} className="mt-2 text-[12px] leading-5 text-[#8e796d]">After this, imported pattern data is deleted automatically.</p>
         </fieldset>}
 
         {progressEntries.length > 0 && <ul className="mt-5 overflow-hidden rounded-[20px] border border-[#e1d0c4] bg-[#fffdf9]" aria-label="Import progress" aria-live="polite">
@@ -545,12 +544,12 @@ export function PersonalizeStep({ swiggyConnected, zeptoConnected, commerceMode,
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-[14px] font-semibold text-[#3d2b23]">{providerLabel(provider)}</span>
-              <span className="block text-[12px] leading-5 text-[#806f65]">{item.state === "waiting" ? "Line mein hai" : item.state === "running" ? "Padh rahi hoon…" : item.state === "failed" ? item.message : item.result.cached ? "Haal hi mein check kiya tha, dobara call nahi kiya" : `${item.result.imported_orders} orders · ${item.result.imported_occurrences} items`}</span>
+              <span className="block text-[12px] leading-5 text-[#806f65]">{item.state === "waiting" ? "Waiting" : item.state === "running" ? "Reading…" : item.state === "failed" ? item.message : item.result.cached ? "Checked recently, not fetched again" : `${item.result.imported_orders} orders · ${item.result.imported_occurrences} items`}</span>
             </span>
           </li>)}
         </ul>}
-        {finished && !anySucceeded && <p className="mt-3 text-[13px] leading-5 text-[#806f65]">Abhi import nahi ho paaya. Setup ke baad settings se dobara try kiya ja sakta hai.</p>}
-        {history.error && !progressEntries.length && <InlineAlert action={history.loadError ? <button type="button" onClick={history.reload} className={`${textButton} -ml-2 mt-1`}><ArrowClockwise size={14} weight="bold" /> Phir try karein</button> : undefined}>{history.error}</InlineAlert>}
+        {finished && !anySucceeded && <p className="mt-3 text-[13px] leading-5 text-[#806f65]">Import didn&apos;t work this time. You can try again from settings after setup.</p>}
+        {history.error && !progressEntries.length && <InlineAlert action={history.loadError ? <button type="button" onClick={history.reload} className={`${textButton} -ml-2 mt-1`}><ArrowClockwise size={14} weight="bold" /> Try again</button> : undefined}>{history.error}</InlineAlert>}
       </>}
   </StepFrame>;
 }
@@ -571,7 +570,6 @@ export function DoneStep({ profile, connectedStores, commerceMode, focusHeading,
   const [error, setError] = useState("");
   const reduceMotion = useReducedMotion();
   const name = profile?.first_name;
-  const headline = byAddressForm(profile?.address_form, { masculine: "Aap ready ho gaye", feminine: "Aap ready ho gayi", neutral: "Sab ready hai" });
 
   async function finish() {
     setSaving(true);
@@ -579,18 +577,18 @@ export function DoneStep({ profile, connectedStores, commerceMode, focusHeading,
     try {
       await onFinish();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Setup save nahi hua. Ek baar phir try kijiye.");
+      setError(cause instanceof Error ? cause.message : "Could not save setup. Please try again.");
       setSaving(false);
     }
   }
 
   return <StepFrame
     focusHeading={focusHeading}
-    title={<>{headline}{name ? `, ${name}` : ""}.</>}
-    intro={connectedStores.length ? "Ab bas boliye. Baaki main dekh loongi, aur order se pehle aapse poochungi." : "Store jodte hi main shopping shuru kar sakti hoon. Tab tak chat try kijiye."}
+    title={<>You&apos;re all set{name ? `, ${name}` : ""}.</>}
+    intro={connectedStores.length ? "Just ask. GharSaathi handles the rest and checks with you before any order." : "Shopping starts once you connect a store. Until then, try the chat."}
     footer={<>
       {error && <InlineAlert>{error}</InlineAlert>}
-      <button type="button" onClick={() => void finish()} disabled={saving} className={`${primaryButton} ${error ? "mt-3" : ""}`}>{saving ? <><Spinner /> Ek second…</> : <>{revisit ? "Wapas shopping par" : "Shopping shuru karein"} <ArrowRight size={17} weight="bold" /></>}</button>
+      <button type="button" onClick={() => void finish()} disabled={saving} className={`${primaryButton} ${error ? "mt-3" : ""}`}>{saving ? <><Spinner /> One moment…</> : <>{revisit ? "Back to shopping" : "Start shopping"} <ArrowRight size={17} weight="bold" /></>}</button>
     </>}
   >
     <div className="rounded-[24px] bg-[#3b2a22] p-5 text-[#fff9f4] shadow-[0_24px_50px_-30px_rgba(53,36,28,.9)]">
@@ -602,15 +600,15 @@ export function DoneStep({ profile, connectedStores, commerceMode, focusHeading,
           className="relative grid size-14 shrink-0 place-items-center rounded-full bg-[#c6531d] text-white shadow-[0_12px_30px_-14px_rgba(198,83,29,.9)]"
           aria-hidden="true"
         ><Microphone size={24} weight="fill" /></motion.span>
-        <p className="text-[14px] leading-5 text-[#ead8cb]">Mic dabaiye aur boliye:</p>
+        <p className="text-[14px] leading-5 text-[#ead8cb]">Tap the mic and say:</p>
       </div>
-      <p className="font-display mt-4 text-[24px] font-semibold leading-tight tracking-[-.03em]">&ldquo;Doodh aur atta chahiye&rdquo;</p>
+      <p className="font-display mt-4 text-[24px] font-semibold leading-tight tracking-[-.03em]">&ldquo;{profile?.language === "english" ? "I need milk and atta" : "Doodh aur atta chahiye"}&rdquo;</p>
     </div>
 
     <dl className="mt-5 divide-y divide-[#eaded5] border-y border-[#eaded5] text-[14px]">
-      <div className="flex items-center justify-between gap-3 py-3"><dt className="text-[#806f65]">Stores</dt><dd className="text-right font-semibold text-[#3d2b23]">{commerceMode === "demo" ? "Demo (Zepto + Swiggy)" : connectedStores.length ? connectedStores.map(storeName).join(", ") : "Abhi koi nahi"}</dd></div>
+      <div className="flex items-center justify-between gap-3 py-3"><dt className="text-[#806f65]">Stores</dt><dd className="text-right font-semibold text-[#3d2b23]">{commerceMode === "demo" ? "Demo (Zepto + Swiggy)" : connectedStores.length ? connectedStores.map(storeName).join(", ") : "None yet"}</dd></div>
       {profile && <div className="flex items-center justify-between gap-3 py-3"><dt className="text-[#806f65]">Reply language</dt><dd className="font-semibold text-[#3d2b23]">{LANGUAGE_NAMES[profile.language]}</dd></div>}
-      <div className="flex items-center justify-between gap-3 py-3"><dt className="text-[#806f65]">Order</dt><dd className="font-semibold text-[#3d2b23]">Sirf aapki approval se</dd></div>
+      <div className="flex items-center justify-between gap-3 py-3"><dt className="text-[#806f65]">Order</dt><dd className="font-semibold text-[#3d2b23]">Only with your approval</dd></div>
     </dl>
   </StepFrame>;
 }

@@ -30,7 +30,7 @@ export function useProfileApi() {
       });
       return normalizeProfile(saved) ?? profile;
     } catch (cause) {
-      if (cause instanceof ApiError && cause.status === 422) throw new Error("Naam save nahi hua. Sirf letters, space, ' . - rakhiye.");
+      if (cause instanceof ApiError && cause.status === 422) throw new Error("Could not save your name. Use only letters, spaces, apostrophes, full stops and hyphens.");
       throw cause;
     }
   }, [request]);
