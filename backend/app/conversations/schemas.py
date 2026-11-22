@@ -139,6 +139,10 @@ class TimelineOrderSnapshot(BaseModel):
     item_names: list[Annotated[str, Field(max_length=120)]] = Field(default_factory=list, max_length=5)
     # When the store reported delivered or cancelled.
     finished_at: datetime | None = None
+    # Store-reported placed time and minutes (placed → delivered, and its promise).
+    placed_at: datetime | None = None
+    took_minutes: int | None = Field(default=None, ge=0)
+    estimate_minutes: int | None = Field(default=None, ge=0)
 
 
 class ChatTimelineSnapshot(BaseModel):

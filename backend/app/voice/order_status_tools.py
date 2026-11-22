@@ -19,7 +19,7 @@ import json
 import logging
 import math
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -30,7 +30,7 @@ from app.shopping.reconciliation import CheckoutReconciler, ReconcileOutcome
 from app.tracking.adapters import normalise_status
 from app.tracking.cancellation import order_cancel_tool
 from app.tracking.errors import TrackingError
-from app.tracking.models import OrderWatch, TrackingProvider, TrackingStatus
+from app.tracking.models import OrderWatch, TrackingProvider, TrackingSnapshot, TrackingStatus
 from app.tracking.service import OrderTrackingService
 from app.voice.tools import ToolOutcome
 
@@ -60,7 +60,11 @@ CANCEL_NOTE = (
 )
 STATUS_NOTE = (
     "Answer in one line from these fields only: order_status_label (or provider_status) and, "
-    "when eta_minutes is present, that the store estimates about that many minutes. Never "
+    "when eta_minutes is present, that the store estimates about that many minutes "
+    "(eta_time_india is the clock time). If eta_passed is true, say it is running late against "
+    "the store's estimate of eta_time_india. When delivered, say when (delivered_time_india) "
+    "and, if took_minutes is present, how long it took against estimate_minutes. "
+    "placed_time_india is when it was placed. Say clock times exactly as given. Never "
     "guess a status or a time. If stale is true, say when it was last updated "
     "(last_updated_minutes_ago). " + CANCEL_NOTE
 )
@@ -75,9 +79,11 @@ ORDER_STATUS_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": GET_ORDER_STATUS,
         "description": (
             "Read the latest store-reported status of one of this household's orders: where it "
-            "is, the store's delivery estimate and when it was last updated. Use for 'mera order "
-            "kahan hai', 'kitna time aur', 'order aaya?', and before answering a cancel request. "
-            "Read-only: it never cancels, changes or places an order."
+            "is, when it was placed, the store's delivery estimate (minutes left and clock "
+            "time), when it was delivered and how long it took, and when it was last updated. "
+            "Use for 'mera order kahan hai', 'kitna time aur', 'order aaya?', 'kab aaya?', and "
+            "before answering a cancel request. Read-only: it never cancels, changes or places "
+            "an order."
         ),
         "parameters": {
             "type": "object",
@@ -146,6 +152,36 @@ class RecentArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     limit: int = Field(ge=1)
+
+
+# Zepto delivers only in India, which has one zone (+05:30, no daylight saving).
+INDIA = timezone(timedelta(hours=5, minutes=30))
+
+
+def _india_clock(value: datetime) -> str:
+    """"8:26 am" in India time, for the assistant to say as is."""
+
+    local = _utc(value).astimezone(INDIA)
+    return f"{local.hour % 12 or 12}:{local.minute:02d} {'am' if local.hour < 12 else 'pm'}"
+
+
+def _store_times(snapshot: TrackingSnapshot, status: TrackingStatus, now: datetime) -> dict[str, Any]:
+    """Placed and delivered times exactly as the store reported them; none is guessed."""
+
+    output: dict[str, Any] = {}
+    if snapshot.placed_at is not None:
+        output["placed_at"] = _utc(snapshot.placed_at).isoformat()
+        output["placed_time_india"] = _india_clock(snapshot.placed_at)
+    if snapshot.committed_eta_minutes is not None:
+        output["estimate_minutes"] = snapshot.committed_eta_minutes
+    if status == TrackingStatus.DELIVERED and snapshot.delivered_at is not None:
+        delivered = _utc(snapshot.delivered_at)
+        output["delivered_at"] = delivered.isoformat()
+        output["delivered_time_india"] = _india_clock(delivered)
+        output["delivered_minutes_ago"] = max(0, int((now - delivered).total_seconds() // 60))
+        if snapshot.took_minutes is not None:
+            output["took_minutes"] = snapshot.took_minutes
+    return output
 
 
 def _utc(value: datetime) -> datetime:
@@ -268,10 +304,13 @@ class OrderStatusToolExecutor:
                 output["provider_message"] = snapshot.message
             if snapshot.eta_at is not None and status not in FINAL:
                 seconds = (_utc(snapshot.eta_at) - now).total_seconds()
+                output["eta_at"] = _utc(snapshot.eta_at).isoformat()
+                output["eta_time_india"] = _india_clock(snapshot.eta_at)
                 if seconds > 0:
                     output["eta_minutes"] = max(1, math.ceil(seconds / 60))
                 else:
                     output["eta_passed"] = True
+            output.update(_store_times(snapshot, status, now))
         reported_at = watch.status_at or (watch.checked_at if watch.last_error is None else None)
         if reported_at is not None:
             checked = _utc(reported_at)

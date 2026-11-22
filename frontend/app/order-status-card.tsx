@@ -1,11 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CheckCircle, Circle, DeviceMobile, MapPin, Package, Truck, XCircle } from "@phosphor-icons/react";
+import { CheckCircle, Circle, Clock, DeviceMobile, MapPin, Package, Truck, XCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApiRequest } from "./authenticated-api";
 import { LiveOrderTracking } from "./order-tracking";
-import { applyTrackingRead, etaText, finishedOrderSummary, isFinal, orderHeadline, orderSteps, pollDelayMs, updatedText, type OrderStatusCard as Card } from "./order-status.mjs";
+import { applyTrackingRead, deliveredText, etaText, finishedOrderSummary, isFinal, orderHeadline, orderSteps, placedText, pollDelayMs, updatedText, type OrderStatusCard as Card } from "./order-status.mjs";
 import { InputDialog } from "./ui/input-dialog";
 
 /**
@@ -82,10 +82,14 @@ export function OrderStatusCard({ card, onChange, onUpdate }: {
 
   const steps = orderSteps(live.status);
   const eta = etaText(live, now);
+  const placed = placedText(live);
+  const deliveredLine = deliveredText(live);
+  const late = Boolean(eta?.startsWith("Running late"));
   const updated = updatedText(live.checkedAt, now);
   const cancelled = live.status === "cancelled";
   const delivered = live.status === "delivered";
   const stopped = !live.active && !isFinal(live);
+  const itemLine = live.itemNames?.length ? live.itemNames.join(", ") : null;
   const summary = [live.itemCount !== null ? `${live.itemCount} ${live.itemCount === 1 ? "item" : "items"}` : null, live.payable, "Cash on delivery"].filter(Boolean).join(" · ");
 
   const finished = finishedOrderSummary(live);
@@ -105,11 +109,14 @@ export function OrderStatusCard({ card, onChange, onUpdate }: {
         {finished ? <button type="button" onClick={() => setExpanded(false)} className="shrink-0 text-[11px] font-semibold text-muted hover:text-ink">Collapse</button> : updated && <span className="shrink-0 text-[11px] font-medium text-muted">{updated}</span>}
       </div>
       {summary && <p className="mt-1 text-xs text-muted">{summary}</p>}
+      {itemLine && finished && <p className="mt-0.5 truncate text-xs text-muted">{itemLine}</p>}
       <p role="status" aria-live="polite" className={`mt-3 flex items-center gap-2 text-base font-semibold ${cancelled ? "text-danger-hover" : delivered ? "text-success-strong" : "text-ink"}`}>
         {cancelled ? <XCircle size={19} weight="fill" /> : delivered ? <CheckCircle size={19} weight="fill" /> : live.status === "out_for_delivery" ? <Truck size={19} weight="fill" className="text-accent-ink" /> : <Package size={19} weight="fill" className="text-accent-ink" />}
         <span>{orderHeadline(live)}</span>
       </p>
-      {eta && <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-secondary"><MapPin size={15} weight="fill" className="shrink-0 text-accent-ink" />{eta}</p>}
+      {eta && <p className={`mt-1 flex items-center gap-1.5 text-sm ${late ? "font-semibold text-ink" : "text-ink-secondary"}`}><MapPin size={15} weight="fill" className="shrink-0 text-accent-ink" />{eta}</p>}
+      {delivered && deliveredLine && <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-secondary"><Clock size={15} className="shrink-0 text-success" />{deliveredLine}</p>}
+      {placed && !cancelled && <p className="mt-1 flex items-center gap-1.5 text-xs text-muted"><Clock size={13} className="shrink-0" />{placed}</p>}
       <ol className="mt-4 grid grid-cols-4 gap-1.5" aria-label="Order steps">
         {steps.map((step) => <li key={step.id} className="min-w-0">
           <span aria-hidden className={`block h-1.5 rounded-full ${step.state === "cancelled" ? "bg-danger" : step.state === "done" ? "bg-success" : step.state === "current" ? "bg-accent" : "bg-surface-strong"}`} />

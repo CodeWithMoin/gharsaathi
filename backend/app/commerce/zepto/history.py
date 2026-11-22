@@ -75,11 +75,11 @@ class ZeptoOrderShipment(BaseModel):
     status: str
     formatted_status: str = Field(alias="formattedStatus")
     placed_time: str = Field(alias="placedTime")
-    delivery_time: str | None = Field(alias="deliveryTime")
-    arrived_time: str | None = Field(alias="arrivedTime")
+    delivery_time: str | None = Field(default=None, alias="deliveryTime")
+    arrived_time: str | None = Field(default=None, alias="arrivedTime")
     committed_eta_minutes: int = Field(alias="committedEtaInMins", ge=0)
     total_arrival_time_minutes: int | None = Field(
-        alias="totalArrivalTimeInMinutes", ge=0
+        default=None, alias="totalArrivalTimeInMinutes", ge=0
     )
     shipment_weight_grams: int = Field(alias="shipmentWeightInGms", ge=0)
     products: list[ZeptoOrderProduct]

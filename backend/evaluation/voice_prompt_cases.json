@@ -1,5 +1,5 @@
 {
-  "version": "1.24.0",
+  "version": "1.27.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -634,6 +634,32 @@
       "required_any": ["14 min", "14 minute"],
       "forbidden_any": ["5 min", "10 min", "~"],
       "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "order_status_delivered_says_when_and_how_long",
+      "history": [
+        {"role": "user", "content": "Order kab aaya?"},
+        {"role": "assistant", "content": "Ek second."}
+      ],
+      "user": "[Backend result: get_order_status: Zepto, order_status_label Delivered, delivered_time_india 8:26 am, took_minutes 9, estimate_minutes 8.]",
+      "required_any": ["8:26"],
+      "forbidden_any": ["8:58", "out for delivery", "raste mein"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "order_status_late_names_store_estimate",
+      "history": [
+        {"role": "user", "content": "Kitna time aur?"},
+        {"role": "assistant", "content": "Ek second."}
+      ],
+      "user": "[Backend result: get_order_status: Zepto, order_status_label Out for delivery, eta_passed true, eta_time_india 8:26 am, stale false.]",
+      "required_any": ["8:26"],
+      "forbidden_any": ["5 min", "10 min", "deliver ho gaya", "pahunch gaya"],
+      "max_questions": 0,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05
     },
