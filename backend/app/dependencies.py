@@ -19,6 +19,7 @@ from app.commerce.swiggy.oauth import SwiggyOAuthClient
 from app.commerce.swiggy.quote_provider import SwiggyQuoteProvider
 from app.commerce.swiggy.service import SwiggyService
 from app.commerce.swiggy.store import EncryptedConnectionStore
+from app.commerce.zepto.address_refresh import ZeptoAddressRefresher
 from app.commerce.zepto.client import ZeptoMcpClient
 from app.commerce.zepto.oauth import ZeptoOAuthClient
 from app.commerce.zepto.service import ZeptoService
@@ -162,6 +163,29 @@ def get_live_zepto_service() -> ZeptoService:
     oauth = ZeptoOAuthClient(settings, store)
     client = ZeptoMcpClient(settings, oauth)
     return ZeptoService(oauth, client, get_product_reranker())
+
+
+@lru_cache
+def get_zepto_address_refresher() -> ZeptoAddressRefresher | None:
+    """Bounded automatic Zepto address refresh; None in demo mode (no provider calls)."""
+
+    settings = get_settings()
+    if settings.commerce_mode == "demo":
+        return None
+    service = get_live_zepto_service()
+    refresher = ZeptoAddressRefresher(
+        service,
+        get_session_factory(),
+        get_basket_service(),
+        max_age_seconds=settings.zepto_address_refresh_max_age_min * 60,
+    )
+    service.on_address_removed = refresher.address_missing
+    return refresher
+
+
+ZeptoAddressRefresherDependency = Annotated[
+    ZeptoAddressRefresher | None, Depends(get_zepto_address_refresher)
+]
 
 
 @lru_cache

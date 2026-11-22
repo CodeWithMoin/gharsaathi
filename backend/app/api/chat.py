@@ -12,7 +12,11 @@ from app.chat.service import (
 )
 from app.conversations.repository import ConversationRepository
 from app.database.session import get_session_factory
-from app.dependencies import ChatServiceDependency, PhotoStoreDependency
+from app.dependencies import (
+    ChatServiceDependency,
+    PhotoStoreDependency,
+    ZeptoAddressRefresherDependency,
+)
 from app.legal_consent import ConsentedUserIdDependency
 from app.memory.service import MemoryService
 from app.photos.images import MAX_UPLOAD_BYTES, PhotoRejected, make_thumbnail, sanitize_photo
@@ -92,17 +96,30 @@ async def _resolve_conversation(user_id: str, conversation_id: UUID | None) -> t
 async def chat_turn(
     body: ChatTurnRequest,
     service: ChatServiceDependency,
+    refresher: ZeptoAddressRefresherDependency,
     # A typed turn can edit baskets and request bills, exactly like a voice session.
     user_id: ConsentedUserIdDependency,
 ) -> ChatTurnResponse:
     conversation_id, current_chat = await _resolve_conversation(user_id, body.conversation_id)
+    # Bounded (<= ~1.5 s): a stale Zepto snapshot is refreshed before the turn.
+    refreshed = (
+        await refresher.refresh_if_stale(user_id, reason="chat_turn")
+        if refresher is not None
+        else None
+    )
+    removed_events: list[dict[str, Any]] = (
+        [{"type": "address.selection_removed", "provider": "zepto"}]
+        if refreshed is not None and refreshed.selection_removed
+        else []
+    )
+    zepto_address_id = None if removed_events else body.zepto_address_id
     try:
         result = await service.run_turn(
             user_id,
             conversation_id,
             body.message,
             body.swiggy_address_id,
-            body.zepto_address_id,
+            zepto_address_id,
             current_chat=current_chat,
             ui_acks=body.ui_acks,
             attachment_id=body.attachment_id,
@@ -114,7 +131,9 @@ async def chat_turn(
     except ChatProviderError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     return ChatTurnResponse(
-        conversation_id=conversation_id, reply=result.reply, ui_events=result.ui_events
+        conversation_id=conversation_id,
+        reply=result.reply,
+        ui_events=removed_events + result.ui_events,
     )
 
 

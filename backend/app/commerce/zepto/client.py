@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
@@ -15,6 +16,7 @@ from app.commerce.zepto.errors import (
     ZeptoProviderError,
     ZeptoRateLimited,
     ZeptoSchemaError,
+    ZeptoSessionExpired,
 )
 from app.commerce.zepto.models import ToolDescription
 from app.commerce.zepto.oauth import ZeptoOAuthClient
@@ -22,6 +24,7 @@ from app.core.config import Settings
 
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
 RATE_LIMIT_COOLDOWN_SECONDS = 300
 RATE_LIMIT_MESSAGE = (
     "Zepto is temporarily rate-limiting this connection. Requests are paused "
@@ -118,7 +121,7 @@ class ZeptoMcpClient:
             if _is_rate_limited(retry_exc):
                 await self._record_rate_limit()
                 raise ZeptoRateLimited(RATE_LIMIT_MESSAGE) from retry_exc
-            raise ZeptoProviderError(
+            raise ZeptoSessionExpired(
                 "Zepto rejected the refreshed session. Connect again."
             ) from retry_exc
 
@@ -222,6 +225,11 @@ class ZeptoMcpClient:
         async with self._operation_lock:
             await self._invalidate_session()
 
+    async def reset_session(self) -> None:
+        """Drop the persistent MCP session; the next call opens a fresh one."""
+
+        await self.aclose()
+
     async def _record_rate_limit(self) -> None:
         self._rate_limited_until = max(
             self._rate_limited_until,
@@ -289,11 +297,19 @@ class ZeptoMcpClient:
                         structured = json.loads(text)
                     except json.JSONDecodeError:
                         if is_error:
-                            if _value_is_rate_limited(text):
-                                raise ZeptoRateLimited(RATE_LIMIT_MESSAGE)
-                            raise ZeptoProviderError(
-                                "Zepto could not complete the request."
+                            category = _text_error_category(text)
+                            # Length and category only: provider text is never logged.
+                            logger.warning(
+                                "event=zepto_tool_error_text tool=%s category=%s length=%d",
+                                name,
+                                category,
+                                len(text),
                             )
+                            if category == "rate_limited":
+                                raise ZeptoRateLimited(RATE_LIMIT_MESSAGE)
+                            error = ZeptoProviderError("Zepto could not complete the request.")
+                            error.reason = category
+                            raise error
                         # Some Zepto read tools currently return successful MCP
                         # text content without structuredContent. Preserve it in
                         # a typed envelope instead of treating success as a
@@ -313,7 +329,12 @@ class ZeptoMcpClient:
                 raise ZeptoProviderError(_safe_error_message(structured))
             return structured
 
-        return await self._with_session(run, retry_on_auth=retry_on_auth)
+        try:
+            return await self._with_session(run, retry_on_auth=retry_on_auth)
+        except ZeptoError as exc:
+            # The tool name only; recovery logs never carry provider text.
+            exc.tool = name  # type: ignore[attr-defined]
+            raise
 
 
 def _safe_error_message(payload: object) -> str:
@@ -324,6 +345,28 @@ def _safe_error_message(payload: object) -> str:
         if isinstance(payload.get("message"), str):
             return payload["message"]
     return "Zepto could not complete the request."
+
+
+_SESSION_MARKERS = (
+    "unauthorized",
+    "unauthenticated",
+    "session expired",
+    "session not found",
+    "invalid session",
+    "token expired",
+    "expired token",
+)
+
+
+def _text_error_category(text: str) -> str:
+    """A content-free category for a non-JSON MCP error text."""
+
+    if _value_is_rate_limited(text):
+        return "rate_limited"
+    folded = text.casefold()
+    if any(marker in folded for marker in _SESSION_MARKERS):
+        return "session_expired"
+    return "unavailable"
 
 
 def _value_is_rate_limited(value: object) -> bool:

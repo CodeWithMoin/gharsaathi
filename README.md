@@ -29,11 +29,24 @@ flows. It returns a local sample address and catalogue and calculates sample fee
 deterministic backend code. Both provider cards remain visible, but no provider OAuth,
 search, cart, or catalogue-discovery request is made.
 
-In live mode, ordinary reloads do not fetch either provider's addresses again. The
-backend returns each provider's database snapshot and saved selection. Only the
-explicit **Refresh from Swiggy** or **Refresh from Zepto** action invokes a provider
-address tool. Searches and final-bill requests are live actions and are clearly
-labelled in the UI.
+In live mode, ordinary reloads do not fetch Swiggy addresses again: the backend
+returns the database snapshot and saved selection, and only **Refresh from Swiggy**
+calls a Swiggy address tool (its rate limits are strict).
+
+Zepto is the one exception. Its read-only `list_saved_addresses` refreshes the
+snapshot automatically, within bounds: when the app loads or a voice session or
+typed chat turn starts and the snapshot is older than
+`ZEPTO_ADDRESS_REFRESH_MAX_AGE_MIN` (default 30) minutes; when the Zepto address
+picker opens and the snapshot is older than 5 minutes; and when selecting the saved
+address fails because it is no longer in the account. At most one refresh runs per
+user and at most one starts every 2 minutes; a request waits at most ~1.5 s, then
+continues with the cached snapshot while the refresh lands. A first snapshot is
+still the user's explicit **Refresh from Zepto** tap. If the selected address was
+deleted in Zepto, the selection is cleared (never replaced, even when only one
+address is left), the Zepto basket keeps its items but its open bill and order card
+are invalidated, and the screen shows "Your Zepto address changed — choose a
+delivery address", which opens the picker. Searches and final-bill requests are live
+actions and are clearly labelled in the UI.
 
 ## Verified Swiggy contract
 
@@ -185,8 +198,8 @@ Then use `GET /api/zepto/oauth/start` (the UI's **Connect Zepto** action) and
 complete the phone/OTP flow only on Zepto's site. The callback bridge forwards the
 result to the backend, which validates OAuth state and keeps the token encrypted
 locally. After connecting, use **Refresh from Zepto** once to fetch and save the
-account's delivery addresses. Later reloads use that database snapshot without an MCP
-call. Swiggy and Zepto can stay connected together; a shopping request searches every
+account's delivery addresses. Later reloads use that database snapshot; it is
+refreshed automatically only within the bounds described above. Swiggy and Zepto can stay connected together; a shopping request searches every
 provider whose saved address is ready.
 
 The authenticated Zepto catalogue was inspected before enabling actions. This build
@@ -290,7 +303,9 @@ wire up a feature:
 - `GET /api/zepto/oauth/callback`
 - `POST /api/zepto/disconnect`
 - `GET /api/zepto/addresses?refresh=false` — database snapshot by default; provider
-  access only when `refresh=true`
+  access when `refresh=true`, or with `auto=load` / `auto=picker` when the snapshot
+  is older than 30 / 5 minutes (bounded, debounced, ~1.5 s wait); the response's
+  `selection_removed` is true while a deleted selection awaits the user's choice
 - `POST /api/zepto/addresses` — explicitly add a user-entered address and delivery
   contact to the connected Zepto account, then refresh the local snapshot
 - `PUT /api/zepto/addresses/selected`
