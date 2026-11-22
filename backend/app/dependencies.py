@@ -33,6 +33,7 @@ from app.shopping.checkout import (
     ZeptoCodGateway,
 )
 from app.database.session import get_session_factory
+from app.shopping.order_confirmation import OrderConfirmations
 from app.shopping.errors import ProviderUnavailable
 from app.shopping.models import Basket, ProviderName, Quote
 from app.shopping.ports import QuoteProvider
@@ -238,6 +239,7 @@ def get_voice_service() -> LiveSessionService:
         profile_reader=DatabaseProfileReader(get_session_factory()),
         addresses=SavedAddressDirectory(get_session_factory()),
         context_reader=get_conversation_context_loader(),
+        order_confirmations=get_order_confirmations(),
     )
 
 
@@ -278,6 +280,14 @@ def get_approval_service() -> ApprovalService:
     )
 
 
+@lru_cache
+def get_order_confirmations() -> OrderConfirmations:
+    """One registry per process, shared by voice, typed chat and the tap endpoint."""
+
+    return OrderConfirmations(get_basket_repository(), get_approval_service())
+
+
+OrderConfirmationsDependency = Annotated[OrderConfirmations, Depends(get_order_confirmations)]
 BasketServiceDependency = Annotated[BasketService, Depends(get_basket_service)]
 ApprovalServiceDependency = Annotated[ApprovalService, Depends(get_approval_service)]
 

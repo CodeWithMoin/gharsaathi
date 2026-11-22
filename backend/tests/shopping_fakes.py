@@ -4,7 +4,19 @@ from datetime import UTC, datetime, timedelta
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService, item_total_paise
 from app.shopping.memory import InMemoryApprovalRepository, InMemoryBasketRepository
-from app.shopping.models import Basket, BasketLine, Charge, ProductRef, ProviderName, Quote
+from app.shopping.errors import ApprovalRefused
+from app.shopping.models import (
+    ApprovalStatus,
+    Basket,
+    BasketLine,
+    BasketStatus,
+    Charge,
+    CheckoutAttempt,
+    CheckoutStatus,
+    ProductRef,
+    ProviderName,
+    Quote,
+)
 
 
 HOUSEHOLD = "h1"
@@ -83,3 +95,60 @@ def line(
     }
     values.update(overrides)
     return BasketLine.model_validate(values)
+
+
+class InMemoryCheckoutAttempts:
+    """CheckoutAttemptRepository over the in-memory baskets/approvals: one claim per approval."""
+
+    def __init__(self, baskets: InMemoryBasketRepository, approvals: InMemoryApprovalRepository) -> None:
+        self.baskets = baskets
+        self.approvals = approvals
+        self.by_approval: dict[str, CheckoutAttempt] = {}
+
+    async def for_approval(self, approval_id: str) -> CheckoutAttempt | None:
+        value = self.by_approval.get(approval_id)
+        return value.model_copy(deep=True) if value else None
+
+    async def claim(self, attempt: CheckoutAttempt, *, basket_revision: int) -> tuple[CheckoutAttempt, bool]:
+        existing = self.by_approval.get(attempt.approval_id)
+        if existing is not None:
+            return existing.model_copy(deep=True), False
+        approval = await self.approvals.get(attempt.approval_id)
+        basket = await self.baskets.get(attempt.basket_id)
+        if (
+            approval is None
+            or basket is None
+            or approval.status != ApprovalStatus.APPROVED
+            or basket.status != BasketStatus.APPROVED
+            or basket.revision != basket_revision
+        ):
+            raise ApprovalRefused("The approved basket changed before checkout.")
+        approval.status = ApprovalStatus.CONSUMING
+        basket.status = BasketStatus.CHECKOUT_PENDING
+        await self.approvals.save(approval)
+        await self.baskets.save(basket)
+        self.by_approval[attempt.approval_id] = attempt.model_copy(deep=True)
+        return attempt.model_copy(deep=True), True
+
+    async def mark_unknown(self, attempt_id: str, completed_at: datetime) -> CheckoutAttempt:
+        attempt = next(item for item in self.by_approval.values() if item.id == attempt_id)
+        attempt.status = CheckoutStatus.OUTCOME_UNKNOWN
+        attempt.completed_at = completed_at
+        return attempt.model_copy(deep=True)
+
+    async def confirm(
+        self, attempt_id: str, *, provider_order_id: str, provider_status: str, completed_at: datetime
+    ) -> CheckoutAttempt:
+        attempt = next(item for item in self.by_approval.values() if item.id == attempt_id)
+        attempt.status = CheckoutStatus.CONFIRMED
+        attempt.provider_order_id = provider_order_id
+        attempt.provider_status = provider_status
+        attempt.completed_at = completed_at
+        approval = await self.approvals.get(attempt.approval_id)
+        basket = await self.baskets.get(attempt.basket_id)
+        assert approval is not None and basket is not None
+        approval.status = ApprovalStatus.CONSUMED
+        basket.status = BasketStatus.ORDERED
+        await self.approvals.save(approval)
+        await self.baskets.save(basket)
+        return attempt.model_copy(deep=True)

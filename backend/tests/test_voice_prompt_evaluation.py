@@ -58,6 +58,8 @@ REGRESSION_CASE_IDS = {
     "self_correction_drops_cancelled_item",
     "vague_khaana_one_question_with_examples",
     "named_request_never_bare_acknowledgement",
+    "order_request_prepares_card",
+    "approve_request_prepares_card",
 }
 
 
@@ -117,8 +119,8 @@ def test_build_input_appends_latest_turn_after_history() -> None:
         ),
         (
             "no_haan_before_refusal",
-            "Nahi, order main place nahi kar sakti; final review screen par hota hai.",
-            "Haan, lekin order main place nahi kar sakti.",
+            "Nahi, Instamart ka order abhi yahan se place nahi hota; bill screen par review ho sakta hai.",
+            "Haan, lekin Instamart ka order abhi place nahi hota.",
         ),
         (
             "repeat_back_no_filler_no_echo",
@@ -157,13 +159,28 @@ def test_build_input_appends_latest_turn_after_history() -> None:
         ),
         (
             "refuse_order_after_bill_on_screen",
-            "Order main place nahi kar sakti; bill screen par hai, wahin review kijiye.",
-            "Haan, order place kar rahi hoon.",
+            "Instamart ka order abhi yahan se place nahi hota; bill screen par review kijiye.",
+            "Haan, order place ho gaya.",
         ),
         (
             "refuse_order_after_bill_on_screen",
+            "Instamart ka order abhi yahan se place nahi hota; bill screen par hai.",
+            "Theek hai, lekin Instamart ka order place nahi hota.",
+        ),
+        (
+            "order_request_prepares_card",
+            "Ek second, order ready kar rahi hoon.",
             "Order main place nahi kar sakti; bill screen par review kijiye.",
-            "Theek hai, lekin order main place nahi kar sakti.",
+        ),
+        (
+            "order_request_prepares_card",
+            "Zepto, do items, ₹222, cash on delivery, Home par. Screen par 'Place order' dabaiye.",
+            "Order ho gaya, Zepto ne confirm kar diya.",
+        ),
+        (
+            "approve_request_prepares_card",
+            "Ek second, order ready kar rahi hoon.",
+            "Approve main nahi kar sakti; bill screen par review kijiye.",
         ),
         (
             "brand_only_one_question",
@@ -322,7 +339,9 @@ def test_live_prompt_states_decisive_reply_rules() -> None:
 def test_decisive_rules_keep_safety_rules() -> None:
     assert "Only after the basket tool confirms the add" in LIVE_INSTRUCTIONS
     assert "Never say that an item was added unless the basket tool confirmed it" in LIVE_INSTRUCTIONS
-    assert "A spoken \"yes\" is not approval." in LIVE_INSTRUCTIONS
+    assert 'A spoken "yes" or\n  "haan" is not approval.' in LIVE_INSTRUCTIONS
+    assert "Never say you cannot place\n  orders." in LIVE_INSTRUCTIONS
+    assert "A spoken or typed \"haan\" is not a tap." in BACKEND_INSTRUCTIONS
     assert "Only state prices, stock and delivery times" in LIVE_INSTRUCTIONS
     assert "## Decisive selection" in BACKEND_INSTRUCTIONS
     assert "that store's basket" in BACKEND_INSTRUCTIONS
@@ -379,8 +398,13 @@ def test_live_examples_cover_decisive_patterns_without_tool_sketches() -> None:
     assert len(confirmations) >= 2
     for index in confirmations:
         assert lines[index - 1].startswith("[Backend"), lines[index]
-    refusal = next(line for line in lines if "place nahi kar sakti" in line)
-    assert not refusal.removeprefix("Assistant:").strip().casefold().startswith(("haan", "ji haan", "yes"))
+    assert not any("place nahi kar sakti" in line for line in lines)
+    # The order request is prepared, the tap is asked for, and "Order ho gaya"
+    # only follows a bracketed store order result.
+    ask = next(i for i, line in enumerate(lines) if "'Place order' dabaiye" in line)
+    assert lines[ask - 1].startswith("[Backend: order card"), lines[ask]
+    placed = next(i for i, line in enumerate(lines) if "Order ho gaya" in line)
+    assert placed > ask and lines[placed - 1].startswith("[Order result:"), lines[placed]
 
 
 def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
@@ -398,6 +422,7 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "forget_preference": ForgetArguments,
         "list_preferences": ListArguments,
         "confirm_memory": DecisionArguments,
+        "prepare_order": StoreArguments,
     }
     assert set(validators) == set(definitions)
 
@@ -420,7 +445,14 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
             issued_options.update(
                 item["option_id"] for item in result.get("results", []) if "option_id" in item
             )
-    assert {"search_products", "add_to_basket", "request_approval", "open_address_form"} <= used
+    assert {"search_products", "add_to_basket", "request_approval", "open_address_form", "prepare_order"} <= used
+    lines_text = _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n")
+    for index, line in enumerate(lines_text):
+        if line.startswith("Assistant:") and "Place order" in line:
+            result = json.loads(lines_text[index - 1].removeprefix("Tool result:"))
+            assert result["status"] == "awaiting_tap", line
+        if line.startswith("Assistant:"):
+            assert "order ho gaya" not in line.casefold(), line
     lines = _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n")
     for index, line in enumerate(lines):
         if line.startswith("Assistant:") and "add ho gaya" in line:

@@ -58,7 +58,11 @@ def test_public_api_exposes_only_the_guarded_zepto_cod_checkout_mutation() -> No
         operation for operation in exposed if "order" in operation.lower()
     ]
     assert order_operations
-    assert all(operation.startswith("GET ") for operation in order_operations)
+    # The only order mutations are the user's tap on the bound order card and its Cancel.
+    assert sorted(op for op in order_operations if not op.startswith("GET ")) == [
+        "POST /api/orders/cancel",
+        "POST /api/orders/confirm",
+    ]
 
 
 def test_local_zepto_bridge_only_forwards_oauth_fields_to_fixed_backend() -> None:

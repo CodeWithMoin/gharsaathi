@@ -22,6 +22,8 @@ import { AccountSettingsSheet } from "./account-settings-sheet";
 import { ZeptoAddressForm, type ZeptoAddressPrefill } from "./zepto-address-form";
 import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
 import { applyAssistantEvent } from "./assistant-events.mjs";
+import { OrderConfirmationCard } from "./order-confirmation-card";
+import { orderCardIndex, type OrderConfirmation } from "./order-confirmation.mjs";
 
 const LEGACY_CHAT_STORAGE_KEY = "gharsaathi:conversation:v1";
 
@@ -55,6 +57,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [baskets, setBaskets] = useState<Partial<Record<ProviderName, ShoppingBasket>>>({});
   const [basketProvider, setBasketProvider] = useState<ProviderName>("swiggy_instamart");
   const [voiceApproval, setVoiceApproval] = useState<{ provider: ProviderName; request: ApprovalRequest } | null>(null);
+  // The one-tap order card prepared by voice or typed chat; it is not saved with the chat.
+  const [orderCard, setOrderCard] = useState<{ confirmation: OrderConfirmation; afterMessageId: string | null } | null>(null);
   const [chatSaveFailed, setChatSaveFailed] = useState(false);
   const [addingSku, setAddingSku] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(startWithSetupOpen);
@@ -129,6 +133,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const handleVoiceApproval = useCallback((provider: ProviderName, request: ApprovalRequest) => {
     pendingBillStageRef.current = { ...pendingBillStageRef.current, [provider]: "bill_ready" };
     setVoiceApproval({ provider, request });
+  }, []);
+  const handleOrderConfirmation = useCallback((confirmation: OrderConfirmation) => {
+    followScrollRef.current = true;
+    setOrderCard({ confirmation, afterMessageId: latestMessageId(chatMessagesRef.current) });
   }, []);
   const handleApprovalChange = useCallback((approval: Approval | null) => {
     if (!approval) setVoiceApproval(null);
@@ -217,6 +225,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     billStageRef.current = {};
     pendingBillStageRef.current = {};
     setVoiceApproval(null);
+    setOrderCard(null);
     followScrollRef.current = true;
   }, []);
 
@@ -528,6 +537,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     billStageRef.current = {};
     pendingBillStageRef.current = {};
     setVoiceApproval(null);
+    setOrderCard(null);
     followScrollRef.current = true;
     setQuery("");
     try {
@@ -647,7 +657,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       chatMessagesRef.current = withReply;
       setChatMessages(withReply);
       for (const event of turn.ui_events) {
-        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm });
+        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onOrderConfirmation: handleOrderConfirmation });
         if (outcome?.kind === "not_connected") setSetupOpen(true);
         if (outcome) setMessage(outcome.message);
       }
@@ -898,7 +908,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         </motion.div>
 
         <AnimatePresence initial={false}>
-          {placeTimelineItems({ messages: chatMessages, timeline }).map((item) => {
+          {withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard).map((item) => {
+            if (item.kind === "order-card") return <OrderConfirmationCard key={`order-card-${item.confirmation.id}`} confirmation={item.confirmation} />;
             if (item.kind === "results") return item.group ? <div key={`results-${item.group.key}`} className="contents">{renderResultGroup(item.group as ResultGroup<Product>)}</div> : null;
             if (item.kind === "basket-summary") {
               const { card } = item;
@@ -931,7 +942,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
     <div className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-[#f8f2ea] via-[#f8f2ea] to-transparent px-4 pb-4 pt-10 sm:pb-6">
       <AnimatePresence mode="wait">
-        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} beforeSessionStart={flushConversationSave} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
+        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onOrderConfirmation={handleOrderConfirmation} beforeSessionStart={flushConversationSave} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
           <div className="flex items-center gap-2 rounded-[26px] border border-[#deccbf] bg-[#fffdf9] p-2 pl-5 shadow-[0_24px_60px_-28px_rgba(70,40,24,.55),inset_0_1px_0_rgba(255,255,255,.9)]"><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search" || loading === "assistant"} className="min-w-0 flex-1 bg-transparent py-2 text-[15px] outline-none placeholder:text-[#a28e82] disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() ? <button type="submit" aria-label="Send request" disabled={loading === "search" || loading === "assistant"} className="grid size-12 shrink-0 place-items-center rounded-full bg-[#3b2a22] text-white transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} disabled={loading === "search" || loading === "assistant"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-[#c6531d] text-white shadow-[0_12px_30px_-14px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-[#c6531d]" /><Microphone size={23} /></button>}</div>
           <p className="mt-2.5 text-center text-[10px] text-[#8d7a6f]">Hindi · English · Hinglish &nbsp;·&nbsp; You approve every purchase</p>
         </motion.form>}
@@ -1003,4 +1014,12 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     </AnimatePresence>
     </motion.div>
   </main>;
+}
+
+type OrderCardItem = { kind: "order-card"; confirmation: OrderConfirmation };
+
+function withOrderCard<T extends { kind: string; message?: { id: string } }>(items: T[], card: { confirmation: OrderConfirmation; afterMessageId: string | null } | null): (T | OrderCardItem)[] {
+  if (!card) return items;
+  const index = orderCardIndex(items, card.afterMessageId);
+  return [...items.slice(0, index), { kind: "order-card", confirmation: card.confirmation }, ...items.slice(index)];
 }
