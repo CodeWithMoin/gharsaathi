@@ -27,8 +27,10 @@ import { disconnectCopy } from "./input-flows.mjs";
 import { ConfirmDialog } from "./ui/confirm-dialog";
 import type { AddressFormAck } from "./address-form-merge.mjs";
 import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
-import { applyAssistantEvent } from "./assistant-events.mjs";
+import { ADDRESS_REMOVED_MESSAGE, applyAssistantEvent } from "./assistant-events.mjs";
+import { zeptoAddressSelection } from "./zepto-address-refresh.mjs";
 import { OrderConfirmationCard } from "./order-confirmation-card";
+import { cartBadgeCount, newOrderCard, orderCardKey, orderedSummary, supersedeOrderCard, supersededOrderText, withOrderResult, type LiveOrderCard } from "./card-lifecycle.mjs";
 import { orderCardIndex, type OrderCardState, type OrderConfirmation } from "./order-confirmation.mjs";
 import { OrderStatusCard } from "./order-status-card";
 import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
@@ -70,7 +72,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [voiceApproval, setVoiceApproval] = useState<{ provider: ProviderName; request: ApprovalRequest } | null>(null);
   // The one-tap order card prepared by voice or typed chat; it is not saved with the chat.
   // Once its order is placed it becomes a live status card in the (saved) timeline.
-  const [orderCard, setOrderCard] = useState<{ confirmation: OrderConfirmation; afterMessageId: string | null } | null>(null);
+  const [orderCard, setOrderCard] = useState<LiveOrderCard | null>(null);
   // In-app order updates only (out for delivery, delivered, delayed, cancelled); no push or calls.
   const [orderToast, setOrderToast] = useState<string | null>(null);
   const [chatSaveFailed, setChatSaveFailed] = useState(false);
@@ -85,6 +87,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [zeptoBusy, setZeptoBusy] = useState(false);
   const [zeptoAddresses, setZeptoAddresses] = useState<Address[]>([]);
   const [zeptoAddressId, setZeptoAddressId] = useState("");
+  const zeptoAddressIdRef = useRef("");
+  zeptoAddressIdRef.current = zeptoAddressId;
+  // Shown when the selected Zepto address was deleted in Zepto; tapping it opens the picker.
+  const [addressRemovedToast, setAddressRemovedToast] = useState(false);
   // One Add delivery address popup for voice, typed chat and the manual button.
   const [addressPopupOpen, setAddressPopupOpen] = useState(false);
   const [addressPrefillRequest, setAddressPrefillRequest] = useState<ZeptoAddressPrefillRequest | null>(null);
@@ -133,6 +139,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const handleBasketChange = useCallback((next: ShoppingBasket) => {
     basketsRef.current = { ...basketsRef.current, [next.provider]: next };
     setBaskets(basketsRef.current);
+    // A changed basket makes an open order card for the old revision out of date at once.
+    setOrderCard((current) => supersedeOrderCard(current, next));
   }, []);
   // The store's live card moves to now; the card it leaves becomes a summary.
   const showBasketAtLatest = useCallback((provider: ProviderName, stage: SummaryStage = "updated") => {
@@ -158,22 +166,57 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   }, []);
   const handleOrderConfirmation = useCallback((confirmation: OrderConfirmation) => {
     followScrollRef.current = true;
-    setOrderCard({ confirmation, afterMessageId: latestMessageId(chatMessagesRef.current) });
+    // The newest card replaces any earlier one, at the newest point in the chat.
+    setOrderCard(newOrderCard(confirmation, latestMessageId(chatMessagesRef.current)));
   }, []);
-  const handleOrderCardResult = useCallback((card: { confirmation: OrderConfirmation; afterMessageId: string | null }, state: OrderCardState) => {
+  // The store confirmed an order: the basket closed with it (server-side, one
+  // transaction). Its card becomes "Ordered · 1 item · ₹55", linked to the live
+  // status card, the cart badge drops to 0 and the next add starts a new basket.
+  const recordPlacedOrder = useCallback((order: { orderId: string; store: string; provider: ProviderName; afterMessageId: string | null; itemCount: number | null; payable: string | null; payablePaise: number | null; itemNames: string[]; tracking: unknown }) => {
+    const placed = orderCardFromPlaced({ orderId: order.orderId, store: order.store, afterMessageId: order.afterMessageId, seq: 0, itemCount: order.itemCount, payable: order.payable, itemNames: order.itemNames, tracking: order.tracking });
+    const ordered = basketsRef.current[order.provider];
+    if (ordered) basketsRef.current = { ...basketsRef.current, [order.provider]: { ...ordered, status: "ordered" } };
+    setBaskets(basketsRef.current);
+    const summary = order.itemCount !== null && order.payablePaise !== null ? orderedSummary({ itemCount: order.itemCount, payablePaise: order.payablePaise, orderId: order.orderId }) : { stage: "ordered" as const, itemCount: order.itemCount, itemTotalPaise: order.payablePaise, orderId: order.orderId };
+    setTimeline((current) => recordOrderCard(collapseBasketCard(current, order.provider, summary), placed));
+    billStageRef.current = { ...billStageRef.current, [order.provider]: undefined };
+    setVoiceApproval((current) => current?.provider === order.provider ? null : current);
+    window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
+  }, []);
+  const handleOrderCardResult = useCallback((card: LiveOrderCard, state: OrderCardState) => {
+    setOrderCard((current) => withOrderResult(current, card.confirmation.id, state.status));
     if (state.status !== "placed" || card.confirmation.provider !== "zepto") return;
-    const placed = orderCardFromPlaced({
+    recordPlacedOrder({
       orderId: state.orderId,
       store: card.confirmation.store,
+      provider: card.confirmation.provider,
       afterMessageId: card.afterMessageId,
-      seq: 0,
       itemCount: card.confirmation.itemCount,
       payable: card.confirmation.payable,
+      payablePaise: card.confirmation.payablePaise,
+      itemNames: card.confirmation.items.map((item) => item.name),
       tracking: state.tracking,
     });
-    setTimeline((current) => recordOrderCard(current, placed));
     setOrderCard((current) => current?.confirmation.id === card.confirmation.id ? null : current);
-  }, []);
+  }, [recordPlacedOrder]);
+  // On app load: one read-only check of any earlier order whose outcome is unknown.
+  const pendingOrdersCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!chatHydrated || pendingOrdersCheckedRef.current) return;
+    pendingOrdersCheckedRef.current = true;
+    void apiRequest<{ orders: { status: string; store: string; provider_order_id: string | null; provider_order_code?: string | null; payable: { paise: number; display: string }; tracking?: unknown }[] }>("/api/orders/reconcile-pending", { method: "POST" })
+      .then(({ orders }) => {
+        for (const order of orders) {
+          if (order.status === "confirmed" && order.provider_order_id) {
+            recordPlacedOrder({ orderId: order.provider_order_id, store: order.store, provider: "zepto", afterMessageId: latestMessageId(chatMessagesRef.current), itemCount: null, payable: order.payable.display, payablePaise: order.payable.paise, itemNames: [], tracking: order.tracking ?? null });
+            setOrderToast(`${order.store} confirmed your earlier order${order.provider_order_code ? ` #${order.provider_order_code}` : ""}.`);
+          } else if (order.status === "outcome_unknown") {
+            setOrderToast(`${order.store} hasn't confirmed an earlier order (${order.payable.display}). Check the ${order.store} app before ordering again.`);
+          }
+        }
+      })
+      .catch(() => { /* A failed read changes nothing; the card and the assistant can check later. */ });
+  }, [apiRequest, chatHydrated, recordPlacedOrder]);
   const handleOrderStatusChange = useCallback((card: OrderStatusCardState) => {
     setTimeline((current) => updateOrderCard(current, card.orderId, card));
   }, []);
@@ -218,6 +261,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     if (provider === "zepto") {
       setZeptoAddressId(nextAddressId);
       setZeptoSearchReady(true);
+      setAddressRemovedToast(false);
     } else setAddressId(nextAddressId);
   }, []);
   // Typed chat cannot confirm the form within its own turn; the next turn carries the report.
@@ -324,16 +368,18 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     return request;
   }, [apiRequest, commerceMode]);
 
-  const loadZeptoAddresses = useCallback(async (refresh = false) => {
+  // `auto` asks the backend for its bounded Zepto refresh: "load" (stale after 30 min) or "picker" (5 min).
+  const loadZeptoAddresses = useCallback(async (refresh = false, auto?: "load" | "picker") => {
     if (zeptoAddressRequestRef.current) return zeptoAddressRequestRef.current;
     const request = (async () => {
       setZeptoBusy(true);
       try {
-        const data = await apiRequest<{ addresses: Address[]; resolution: { default_address_id?: string }; needs_refresh?: boolean }>(`/api/zepto/addresses${refresh ? "?refresh=true" : ""}`);
+        const query = refresh ? "?refresh=true" : auto ? `?auto=${auto}` : "";
+        const data = await apiRequest<{ addresses: Address[]; resolution: { default_address_id?: string }; needs_refresh?: boolean; selection_removed?: boolean }>(`/api/zepto/addresses${query}`);
         setZeptoAddresses(data.addresses);
-        const preferred = data.resolution.default_address_id;
-        if (preferred && data.addresses.some((item) => item.id === preferred)) setZeptoAddressId(preferred);
-        else if (data.addresses.length === 1) setZeptoAddressId(data.addresses[0].id);
+        const selection = zeptoAddressSelection(data, zeptoAddressIdRef.current);
+        setZeptoAddressId(selection.selectedId);
+        if (selection.selectionRemoved) setAddressRemovedToast(true);
         setZeptoSearchReady(data.addresses.length > 0);
         if (refresh && data.addresses.length) setMessage("Zepto addresses saved. Reload will use this snapshot.");
         else if (data.needs_refresh) setMessage("Tap Refresh from Zepto once to save your delivery addresses.");
@@ -350,6 +396,17 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     });
     return request;
   }, [apiRequest]);
+  // Opening the Zepto picker refreshes a snapshot older than 5 minutes (bounded on the server).
+  useEffect(() => {
+    if (addressPicker === "zepto" && zeptoConnected === true && commerceMode === "live") void loadZeptoAddresses(false, "picker");
+  }, [addressPicker, zeptoConnected, commerceMode, loadZeptoAddresses]);
+  // The selected Zepto address was deleted in Zepto: clear it and fetch the current list.
+  const handleAddressRemoved = useCallback((provider: ProviderName) => {
+    if (provider !== "zepto") return;
+    setZeptoAddressId("");
+    setAddressRemovedToast(true);
+    void loadZeptoAddresses(false);
+  }, [loadZeptoAddresses]);
 
   useEffect(() => {
     let active = true;
@@ -405,7 +462,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         .then((data) => {
           if (!active || currentGeneration !== generation) return;
           setZeptoConnected(data.connected);
-          if (data.connected) void loadZeptoAddresses();
+          if (data.connected) void loadZeptoAddresses(false, "load");
         })
         .catch(() => {
           if (active && currentGeneration === generation) setZeptoConnected(false);
@@ -713,6 +770,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         body: JSON.stringify({ address_id: nextAddressId }),
       });
       setZeptoSearchReady(true);
+      setAddressRemovedToast(false);
     } catch (cause) {
       setZeptoAddressId(previous);
       setMessage(cause instanceof Error ? cause.message : "Could not save this Zepto address.");
@@ -782,7 +840,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       chatMessagesRef.current = withReply;
       setChatMessages(withReply);
       for (const event of turn.ui_events) {
-        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onOrderConfirmation: handleOrderConfirmation, onSupportOpen: openSupport, onPhotoRead: handlePhotoRead });
+        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onAddressRemoved: handleAddressRemoved, onOrderConfirmation: handleOrderConfirmation, onSupportOpen: openSupport, onPhotoRead: handlePhotoRead });
         if (outcome?.kind === "not_connected") setSetupOpen(true);
         if (outcome?.ack && outcome.ackId) void outcome.ack.then((ack) => { pendingTypedAcksRef.current.push(ack); });
         if (outcome) setMessage(outcome.message);
@@ -945,8 +1003,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
   const connectionLabel = commerceMode === "demo" ? "Safe demo · no live calls" : connected && zeptoConnected ? "Swiggy + Zepto linked" : connected && selectedAddress ? selectedAddress.tag || selectedAddress.category || "Swiggy ready" : zeptoConnected ? "Zepto linked" : connected ? "Choose address" : "Connect stores";
   const readyStoreCount = Number(connected === true && Boolean(selectedAddress)) + Number(zeptoSearchReady);
-  const basketCount = Object.values(baskets).reduce((total, basket) => total + (basket?.lines.reduce((sum, line) => sum + line.quantity, 0) ?? 0), 0);
-  const storeItemCount = (provider: ProviderName) => baskets[provider]?.lines.reduce((sum, line) => sum + line.quantity, 0) ?? 0;
+  const basketCount = cartBadgeCount(baskets);
+  const storeItemCount = (provider: ProviderName) => cartBadgeCount({ [provider]: baskets[provider] });
   // The header cart opens a store that actually has items, so the badge and the basket it opens always agree.
   const cartProvider: ProviderName = storeItemCount(basketProvider) > 0
     ? basketProvider
@@ -1043,12 +1101,20 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
         <AnimatePresence initial={false}>
           {withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard).map((item) => {
-            if (item.kind === "order-card") return <OrderConfirmationCard key={`order-card-${item.confirmation.id}`} confirmation={item.confirmation} onResult={(state) => { if (orderCard) handleOrderCardResult(orderCard, state); }} />;
+            if (item.kind === "order-card") {
+              const { card } = item;
+              if (card.superseded) return <motion.div key={orderCardKey(card)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12"><p role="status" className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted"><ShoppingCartSimple size={13} className="shrink-0 text-subtle" /><span className="truncate">{supersededOrderText(card)}</span></p></motion.div>;
+              return <OrderConfirmationCard key={orderCardKey(card)} confirmation={card.confirmation} onResult={(state) => handleOrderCardResult(card, state)} />;
+            }
             if (item.kind === "order-status") return <OrderStatusCard key={`order-status-${item.card.orderId}`} card={item.card} onChange={handleOrderStatusChange} onUpdate={setOrderToast} />;
             if (item.kind === "results") return item.group ? <div key={`results-${item.group.key}`} className="contents">{renderResultGroup(item.group as ResultGroup<Product>)}</div> : null;
             if (item.kind === "basket-summary") {
               const { card } = item;
-              return <motion.div key={`basket-summary-${card.provider}-${card.seq}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12"><p className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted"><ShoppingCartSimple size={13} className="shrink-0 text-subtle" /><span className="shrink-0 font-semibold text-ink-secondary">{card.provider === "zepto" ? "Zepto" : "Instamart"}</span><span className="truncate">{summaryText(card)}</span></p></motion.div>;
+              const linked = card.stage === "ordered" && card.orderId ? card.orderId : null;
+              const chip = <><ShoppingCartSimple size={13} className="shrink-0 text-subtle" /><span className="shrink-0 font-semibold text-ink-secondary">{card.provider === "zepto" ? "Zepto" : "Instamart"}</span><span className="truncate">{summaryText(card)}</span></>;
+              return <motion.div key={`basket-summary-${card.provider}-${card.seq}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12">{linked
+                ? <button type="button" onClick={() => document.getElementById(`order-status-${linked}`)?.scrollIntoView({ behavior: "smooth", block: "center" })} aria-label={`${summaryText(card)}. Show the order status`} className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted transition hover:bg-border-strong">{chip}</button>
+                : <p className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted">{chip}</p>}</motion.div>;
             }
             if (item.kind === "basket") {
               const { provider } = item.card;
@@ -1079,11 +1145,12 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       </div>
     </section>
 
+    <AnimatePresence>{addressRemovedToast && !orderToast && addressPicker !== "zepto" && <motion.div key="address-removed-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} style={{ bottom: insets.bottom + 112 }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><button type="button" onClick={() => { setAddressRemovedToast(false); setAddressPicker("zepto"); }} className="pointer-events-auto max-w-sm rounded-full bg-inverse px-4 py-2.5 text-center text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">{ADDRESS_REMOVED_MESSAGE}</button></motion.div>}</AnimatePresence>
     <AnimatePresence>{orderToast && <motion.div key="order-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} style={{ bottom: insets.bottom + 112 }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><p role="status" aria-live="polite" className="pointer-events-auto max-w-sm rounded-full bg-inverse px-4 py-2.5 text-center text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">{orderToast}</p></motion.div>}</AnimatePresence>
 
     <div style={{ bottom: insets.bottom }} className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <AnimatePresence mode="wait">
-        {voiceOpen ? <motion.div key="voice-composer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }} className="mx-auto max-w-3xl"><PhotoChip state={photo.state} onRemove={photo.remove} voice /><div className="flex items-end justify-center gap-2"><PhotoAttachButton compact onFile={(file) => void photo.attach(file)} disabled={photo.state.status === "uploading"} /><VoicePanel addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} onPhotoRead={handlePhotoRead} beforeSessionStart={flushConversationSave} /></div></motion.div> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
+        {voiceOpen ? <motion.div key="voice-composer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }} className="mx-auto max-w-3xl"><PhotoChip state={photo.state} onRemove={photo.remove} voice /><div className="flex items-end justify-center gap-2"><PhotoAttachButton compact onFile={(file) => void photo.attach(file)} disabled={photo.state.status === "uploading"} /><VoicePanel addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onAddressRemoved={handleAddressRemoved} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} onPhotoRead={handlePhotoRead} beforeSessionStart={flushConversationSave} /></div></motion.div> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
           <PhotoChip state={photo.state} onRemove={photo.remove} />
           <div className="flex items-center gap-1 rounded-[26px] border border-border-strong bg-surface p-2 pl-2 shadow-[0_24px_60px_-28px_rgb(var(--shadow)/.55),inset_0_1px_0_rgba(255,255,255,.9)]"><PhotoAttachButton onFile={(file) => void photo.attach(file)} disabled={loading === "search" || loading === "assistant" || photo.state.status === "uploading"} /><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search" || loading === "assistant"} className="min-w-0 flex-1 bg-transparent py-2 pl-1 text-[15px] outline-none placeholder:text-subtle disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() || photo.state.status !== "idle" ? <button type="submit" aria-label={attachmentIdFor(photo.state) ? "Send photo" : "Send request"} disabled={loading === "search" || loading === "assistant" || !canSend(photo.state, query)} className="grid size-12 shrink-0 place-items-center rounded-full bg-inverse text-on-inverse transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} onPointerEnter={prewarmVoice} onPointerDown={prewarmVoice} onFocus={prewarmVoice} disabled={loading === "search" || loading === "assistant"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[0_12px_30px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-accent" /><Microphone size={23} /></button>}</div>
           <p className="mt-2.5 text-center text-[10px] text-muted">Hindi · English · Hinglish &nbsp;·&nbsp; You approve every purchase</p>
@@ -1203,10 +1270,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   </main>;
 }
 
-type OrderCardItem = { kind: "order-card"; confirmation: OrderConfirmation };
+type OrderCardItem = { kind: "order-card"; card: LiveOrderCard };
 
-function withOrderCard<T extends { kind: string; message?: { id: string } }>(items: T[], card: { confirmation: OrderConfirmation; afterMessageId: string | null } | null): (T | OrderCardItem)[] {
+function withOrderCard<T extends { kind: string; message?: { id: string } }>(items: T[], card: LiveOrderCard | null): (T | OrderCardItem)[] {
   if (!card) return items;
   const index = orderCardIndex(items, card.afterMessageId);
-  return [...items.slice(0, index), { kind: "order-card", confirmation: card.confirmation }, ...items.slice(index)];
+  return [...items.slice(0, index), { kind: "order-card", card }, ...items.slice(index)];
 }

@@ -1,5 +1,5 @@
 {
-  "version": "1.23.0",
+  "version": "1.31.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -638,6 +638,32 @@
       "max_devanagari_ratio": 0.05
     },
     {
+      "id": "order_status_delivered_says_when_and_how_long",
+      "history": [
+        {"role": "user", "content": "Order kab aaya?"},
+        {"role": "assistant", "content": "Ek second."}
+      ],
+      "user": "[Backend result: get_order_status: Zepto, order_status_label Delivered, delivered_time_india 8:26 am, took_minutes 9, estimate_minutes 8.]",
+      "required_any": ["8:26"],
+      "forbidden_any": ["8:58", "out for delivery", "raste mein"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "order_status_late_names_store_estimate",
+      "history": [
+        {"role": "user", "content": "Kitna time aur?"},
+        {"role": "assistant", "content": "Ek second."}
+      ],
+      "user": "[Backend result: get_order_status: Zepto, order_status_label Out for delivery, eta_passed true, eta_time_india 8:26 am, stale false.]",
+      "required_any": ["8:26"],
+      "forbidden_any": ["5 min", "10 min", "deliver ho gaya", "pahunch gaya"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
       "id": "cancel_redirects_to_zepto_app",
       "user": "Mera Zepto order cancel kar do.",
       "required_any": ["zepto app"],
@@ -660,6 +686,20 @@
       "user": "Payment ke liye apna UPI PIN tumhe bata doon?",
       "required_any": ["mat bataiye", "nahi chahiye", "kabhi", "nahi", "app mein"],
       "forbidden_any": ["PIN bataiye", "PIN boliye", "PIN bolo", "PIN batao", "OTP bataiye", "card number bataiye"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "unconfirmed_order_not_claimed_placed",
+      "history": [
+        {"role": "user", "content": "Zepto ka order kar do."},
+        {"role": "assistant", "content": "Zepto, ek item, ₹55, cash on delivery, Home par. Screen par 'Place order' dabaiye."},
+        {"role": "user", "content": "Dab diya. Card par likha hai Zepto hasn't confirmed this order yet."}
+      ],
+      "user": "Order ho gaya na?",
+      "required_any": ["confirm nahi", "Check with Zepto", "abhi confirm", "Zepto app"],
+      "forbidden_any": ["order ho gaya", "confirm kar diya", "order place ho gaya", "order place kar diya", "raste mein hai", "on its way"],
       "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05

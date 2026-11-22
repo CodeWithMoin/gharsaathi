@@ -3,6 +3,8 @@
 import { ArrowsClockwise, Camera, CameraSlash, CircleNotch } from "@phosphor-icons/react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { CAPTURE_FILE_NAME, CAPTURE_JPEG_QUALITY, cameraConstraints, cameraErrorKind, cameraPath, cameraReducer, cameraStatusText, captureSize, idleCamera, mirrorPreview, nextCamera, videoInputs, type CameraOption, type CameraPath, type CameraState } from "./camera-capture.mjs";
+import { PHOTO_BETA_NOTE } from "./photo-attachment.mjs";
+import { BetaTag } from "./ui/beta-tag";
 import { InputDialog } from "./ui/input-dialog";
 
 /** "webcam" where the file input's `capture` attribute would only open the file picker. */
@@ -220,7 +222,7 @@ export function CameraDialog({ open, onClose, onPhoto, onChooseFiles }: { open: 
     <InputDialog
       open={open}
       title="Take a photo"
-      description="Hold the product, list or screen up to your camera. GharSaathi reads it once, then deletes it."
+      description={<><span className="mb-1 flex items-center gap-2"><BetaTag /><span>{PHOTO_BETA_NOTE}</span></span>Hold the product, list or screen up to your camera. GharSaathi reads it once, then deletes it.</>}
       onClose={onClose}
       initialFocusRef={captureRef}
       onShown={(dialog) => { panelRef.current = dialog; }}

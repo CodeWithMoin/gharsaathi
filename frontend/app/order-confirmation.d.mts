@@ -15,13 +15,18 @@ export type OrderConfirmation = {
   address: string | null;
   paymentMethod: PaymentMethod;
   paymentMethods: PaymentOption[];
+  basketId: string | null;
+  basketRevision: number | null;
 };
+
+export type OrderCheck = "matched" | "not_found" | "ambiguous" | "unavailable" | "not_unknown";
 
 export type OrderCardState =
   | { status: "open" }
   | { status: "placing" }
-  | { status: "placed"; orderId: string; tracking?: unknown }
-  | { status: "unknown" }
+  | { status: "placed"; orderId: string; orderCode?: string | null; tracking?: unknown }
+  | { status: "unknown"; checkoutId?: string | null; check?: OrderCheck | null; candidates?: string[] }
+  | { status: "checking_order"; checkoutId: string }
   | { status: "failed"; reason: string }
   | { status: "cancelling" }
   | { status: "cancelled" }
@@ -41,6 +46,8 @@ export function placeButtonLabel(confirmation: OrderConfirmation): string;
 export function paymentMethodLabel(confirmation: OrderConfirmation): string;
 export function checkableCheckoutId(state: OrderCardState): string | null;
 export function autoCheckDelayMs(checksSoFar: number): number | null;
+export function checkableOrderId(state: OrderCardState): string | null;
+export function orderCheckDelayMs(checksSoFar: number): number | null;
 
 export function orderConfirmationFromEvent(raw: unknown): OrderConfirmation | null;
 export function countdownLabel(expiresAt: string, nowMs: number): string | null;

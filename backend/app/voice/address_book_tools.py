@@ -176,6 +176,13 @@ class AddressBookToolExecutor:
             entries.append(entry)
         view["status"] = "ok"
         view["addresses"] = entries
+        if addresses.selection_removed and not self.session.store_address(provider):
+            view["selection_removed"] = True
+            view["message"] = (
+                f"The previously selected {STORE_LABELS[provider]} address was removed in the "
+                "store app. Say so in one line and ask which saved address to use; never pick one "
+                "yourself, even if only one is listed."
+            )
         return view
 
     async def _list(self, arguments: ListArguments) -> ToolOutcome:

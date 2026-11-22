@@ -60,12 +60,15 @@ def test_public_api_exposes_only_the_guarded_zepto_cod_checkout_mutation() -> No
     assert order_operations
     # The only order mutation is the user's tap on the bound order card. Cancel,
     # choosing another payment method (a fresh card, no order) and the single
-    # payment-status read are the only other order routes.
+    # payment-status read are the only other order routes, plus the read-only
+    # order-history checks for unknown outcomes (check, reconcile-pending).
     assert sorted(op for op in order_operations if not op.startswith("GET ")) == [
         "POST /api/orders/cancel",
+        "POST /api/orders/check",
         "POST /api/orders/confirm",
         "POST /api/orders/payment-method",
         "POST /api/orders/payment-status",
+        "POST /api/orders/reconcile-pending",
     ]
 
 

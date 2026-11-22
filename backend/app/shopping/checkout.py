@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, runtime_checkable
@@ -45,8 +46,11 @@ from app.shopping.payments import (
     PrepaidGateway,
     next_checkout_status,
 )
+from app.shopping.reconciliation import RECONCILED_STATUS
 from app.shopping.ports import ApprovalRepository, BasketRepository, QuoteProvider
 
+
+logger = logging.getLogger(__name__)
 
 # One status check per attempt per this interval; earlier taps reuse the last answer.
 MIN_STATUS_CHECK_INTERVAL = timedelta(seconds=5)
@@ -338,6 +342,80 @@ class DatabaseCheckoutAttemptRepository:
                 basket.updated_at = at
             await session.flush()
             return _attempt(record)
+
+
+    async def unknown_attempts(
+        self, household_id: str | None = None, *, since: datetime | None = None
+    ) -> list[CheckoutAttempt]:
+        """Attempts whose order call outcome is unknown, newest first."""
+
+        query = select(ZeptoCheckoutAttemptRecord).where(
+            ZeptoCheckoutAttemptRecord.status == CheckoutStatus.OUTCOME_UNKNOWN.value
+        )
+        if household_id is not None:
+            query = query.where(ZeptoCheckoutAttemptRecord.household_id == household_id)
+        if since is not None:
+            query = query.where(ZeptoCheckoutAttemptRecord.created_at >= since)
+        async with self.sessions() as session:
+            records = (
+                await session.scalars(query.order_by(ZeptoCheckoutAttemptRecord.created_at.desc()))
+            ).all()
+            return [_attempt(record) for record in records]
+
+    async def reconcile(
+        self, attempt_id: str, *, provider_order_id: str, at: datetime
+    ) -> CheckoutAttempt:
+        """Settle an ``outcome_unknown`` attempt from a single order-history match.
+
+        One transaction. COD: the attempt becomes ``confirmed`` with the order
+        id, the approval is consumed and the basket is ``ordered`` (closed, so
+        the store has no open basket and the next add starts a fresh one).
+        Prepaid: the attempt becomes ``awaiting_payment`` with the order id, so
+        only the single ``check_payment_status`` reads can confirm the payment.
+        Any other state is returned unchanged (idempotent).
+        """
+
+        async with self.sessions() as session, session.begin():
+            record = await session.get(
+                ZeptoCheckoutAttemptRecord, attempt_id, with_for_update=True
+            )
+            if record is None:
+                raise NotFound("Checkout attempt not found.")
+            if record.status != CheckoutStatus.OUTCOME_UNKNOWN.value:
+                return _attempt(record)
+            if (record.payment_method or "cod") != "cod":
+                record.status = CheckoutStatus.AWAITING_PAYMENT.value
+                record.provider_order_id = provider_order_id
+                record.provider_status = RECONCILED_STATUS
+                await session.flush()
+                return _attempt(record)
+            basket = await session.get(
+                ShoppingBasketRecord, record.basket_id, with_for_update=True
+            )
+            approval = await session.get(
+                ShoppingApprovalRecord, record.approval_id, with_for_update=True
+            )
+            if approval is None or basket is None:
+                raise RuntimeError("Claimed checkout lost its approval or basket.")
+            record.status = CheckoutStatus.CONFIRMED.value
+            record.provider_order_id = provider_order_id
+            record.provider_status = RECONCILED_STATUS
+            approval.status = ApprovalStatus.CONSUMED.value
+            approval.decided_at = at
+            basket.status = BasketStatus.ORDERED.value
+            basket.updated_at = at
+            await session.flush()
+            return _attempt(record)
+
+    async def latest_for_basket(self, basket_id: str) -> CheckoutAttempt | None:
+        async with self.sessions() as session:
+            record = await session.scalar(
+                select(ZeptoCheckoutAttemptRecord)
+                .where(ZeptoCheckoutAttemptRecord.basket_id == basket_id)
+                .order_by(ZeptoCheckoutAttemptRecord.created_at.desc())
+                .limit(1)
+            )
+            return _attempt(record) if record else None
 
 
 class CheckoutService:
@@ -694,9 +772,19 @@ class CheckoutService:
     ) -> tuple[str, str]:
         order_id = getattr(result, "order_id", None)
         if not isinstance(order_id, str) or not order_id.strip():
+            logger.warning("event=zepto_cod_confirm_rejected reason=missing_order_id")
             raise ValueError("Zepto confirmation did not contain an order id.")
         payable = getattr(result, "payable_paise", None)
-        if not isinstance(payable, int) or payable != attempt.payable_paise:
+        # None: Zepto named the order but no amount; the claim already binds the
+        # approved amount, and reconciliation can verify it from order history.
+        if payable is not None and (
+            not isinstance(payable, int) or payable != attempt.payable_paise
+        ):
+            logger.warning(
+                "event=zepto_cod_confirm_rejected reason=payable_mismatch direction=%s",
+                "unreadable" if not isinstance(payable, int) else
+                ("lower" if payable < attempt.payable_paise else "higher"),
+            )
             raise ValueError("Zepto confirmed an unexpected payable amount.")
         status = getattr(result, "status", "confirmed")
         if not isinstance(status, str) or not status.strip():

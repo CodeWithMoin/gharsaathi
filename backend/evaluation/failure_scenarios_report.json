@@ -1,0 +1,845 @@
+{
+  "generated_at": "2026-11-22T03:26:17.063199+00:00",
+  "model": "gpt-6-luna",
+  "prompt_version": "1.23.0",
+  "network": {
+    "allowed_host": "api.openai.com",
+    "blocked_lookups": []
+  },
+  "summary": {
+    "fm_provider_down": {
+      "row": "FM-P01",
+      "passed": true,
+      "run": 2
+    },
+    "fm_rate_limited": {
+      "row": "FM-P05",
+      "passed": true,
+      "run": 2
+    },
+    "fm_address_invalid": {
+      "row": "FM-A01",
+      "passed": true,
+      "run": 2
+    },
+    "fm_order_outcome_unknown": {
+      "row": "FM-O04",
+      "passed": true,
+      "run": 2
+    },
+    "fm_payment_unknown": {
+      "row": "FM-O05",
+      "passed": true,
+      "run": 2
+    },
+    "fm_bill_failure": {
+      "row": "FM-B03",
+      "passed": true,
+      "run": 2
+    }
+  },
+  "runs": [
+    {
+      "id": "fm_provider_down",
+      "row": "FM-P01",
+      "title": "Both stores are down: say it's a connection problem, never 'not found'",
+      "passed": true,
+      "turns": [
+        {
+          "user": "Amul Taaza doodh ek litre chahiye",
+          "developer_notes": [],
+          "reply": "Instamart aur Zepto se abhi connect nahi ho paya; thodi der mein dobara try karte hain.",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "Amul Taaza milk 1 litre"
+              },
+              "status": "provider_error",
+              "model_output": {
+                "status": "provider_error",
+                "query": "Amul Taaza milk 1 litre",
+                "item_key": "amul taaza milk 1 litre",
+                "item_label": "Amul Taaza milk 1 litre",
+                "providers": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "status": "provider_error",
+                    "reason": "unavailable"
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "status": "provider_error",
+                    "reason": "unavailable"
+                  }
+                ],
+                "unreachable_stores": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "reason": "unavailable"
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "reason": "unavailable"
+                  }
+                ],
+                "message": "Could not search: Swiggy Instamart is not responding right now; Zepto is not responding right now. This is a connection problem, not a search result: never say the item was not found or is unavailable there. Say, for example, 'Zepto se abhi connect nahi ho paya, thodi der mein dobara try karte hain.'"
+              },
+              "ui_event_type": "tool.error",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 70,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-22T03:25:06.309786+00:00"
+    },
+    {
+      "id": "fm_rate_limited",
+      "row": "FM-P05",
+      "title": "Both stores rate-limited: no guessed availability, no retry loop",
+      "passed": true,
+      "turns": [
+        {
+          "user": "Tata Tea Gold 500 gram dikhao",
+          "developer_notes": [],
+          "reply": "Swiggy Instamart aur Zepto se abhi connect nahi ho paya; thodi der mein dobara try karte hain.",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "Tata Tea Gold 500 g"
+              },
+              "status": "provider_error",
+              "model_output": {
+                "status": "provider_error",
+                "query": "Tata Tea Gold 500 g",
+                "item_key": "tata tea gold 500 g",
+                "item_label": "Tata Tea Gold 500 g",
+                "providers": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "status": "provider_error",
+                    "reason": "rate_limited",
+                    "retry_after_seconds": 10800
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "status": "provider_error",
+                    "reason": "rate_limited"
+                  }
+                ],
+                "unreachable_stores": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "reason": "rate_limited"
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "reason": "rate_limited"
+                  }
+                ],
+                "message": "Could not search: Swiggy Instamart is briefly limiting requests; Zepto is briefly limiting requests. This is a connection problem, not a search result: never say the item was not found or is unavailable there. Say, for example, 'Zepto se abhi connect nahi ho paya, thodi der mein dobara try karte hain.'"
+              },
+              "ui_event_type": "tool.error",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 76,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-22T03:25:12.522172+00:00"
+    },
+    {
+      "id": "fm_address_invalid",
+      "row": "FM-A01",
+      "title": "Zepto's saved address was deleted: ask to pick an address, never 'not found'",
+      "passed": true,
+      "turns": [
+        {
+          "user": "Fortune sunflower oil 1 litre chahiye",
+          "developer_notes": [],
+          "reply": "Instamart se abhi connect nahi ho paya. Zepto ka saved address badal gaya hai—Home aur Office listed hain; kaunsa select karun?",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "Fortune sunflower oil 1 litre"
+              },
+              "status": "provider_error",
+              "model_output": {
+                "status": "provider_error",
+                "query": "Fortune sunflower oil 1 litre",
+                "item_key": "fortune sunflower oil 1 litre",
+                "item_label": "Fortune sunflower oil 1 litre",
+                "providers": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "status": "provider_error",
+                    "reason": "unavailable"
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "status": "provider_error",
+                    "reason": "address_invalid"
+                  }
+                ],
+                "unreachable_stores": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "reason": "unavailable"
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "reason": "address_invalid"
+                  }
+                ],
+                "message": "Could not search: Swiggy Instamart is not responding right now; Zepto no longer has the selected saved address (it was changed or deleted in the store app); ask the user to pick a delivery address again (list_delivery_addresses, then select_delivery_address). This is a connection problem, not a search result: never say the item was not found or is unavailable there. Say, for example, 'Zepto se abhi connect nahi ho paya, thodi der mein dobara try karte hain.'"
+              },
+              "ui_event_type": "tool.error",
+              "ui_prefill": null
+            },
+            {
+              "name": "list_delivery_addresses",
+              "arguments": {
+                "store": "zepto"
+              },
+              "status": "ok",
+              "model_output": {
+                "status": "ok",
+                "stores": [
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "status": "ok",
+                    "addresses": [
+                      {
+                        "address_id": "demo-home",
+                        "address": "12 Sample Street, HSR Layout, Bengaluru",
+                        "selected": true,
+                        "label": "Home"
+                      },
+                      {
+                        "address_id": "demo-office",
+                        "address": "Tower B, Outer Ring Road, Bengaluru",
+                        "selected": false,
+                        "label": "Office"
+                      }
+                    ]
+                  }
+                ],
+                "message": "Name the saved addresses by label in one short line and ask which one to use. Offer adding a new address only if the user wants one not listed."
+              },
+              "ui_event_type": null,
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products",
+              "list_delivery_addresses"
+            ],
+            "question_count": 1,
+            "sentence_count": 2,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 103,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-22T03:25:23.064026+00:00"
+    },
+    {
+      "id": "fm_order_outcome_unknown",
+      "row": "FM-O04",
+      "title": "The order call timed out after the tap: never claim the order is placed, never prepare it again",
+      "passed": true,
+      "turns": [
+        {
+          "user": "maine Place order daba diya. Order ho gaya?",
+          "developer_notes": [
+            "Zepto did not confirm whether the order went through. Do not say it was placed or paid and do not prepare it again; ask the user to check the Zepto app or order tracking first."
+          ],
+          "reply": "Zepto se order confirm nahi hua hai; app ya order tracking mein pehle check kijiye.",
+          "tool_calls": [],
+          "facts": {
+            "tool_names": [],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 67,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-22T03:25:25.814414+00:00"
+    },
+    {
+      "id": "fm_payment_unknown",
+      "row": "FM-O05",
+      "title": "Zepto did not confirm a UPI payment: never claim paid, never ask for a PIN",
+      "passed": true,
+      "turns": [
+        {
+          "user": "maine UPI se pay kar diya, payment ho gaya na?",
+          "developer_notes": [
+            "Zepto did not clearly confirm the payment. Do not say it was paid or placed and do not prepare it again; ask the user to tap \"I've paid, check status\" on the card or check their UPI app. Never ask for a UPI PIN, card number, CVV or OTP, and never say it is paid until a later result says so."
+          ],
+          "reply": "Payment confirm nahi hua hai; order card par “I've paid, check status” dabaiye ya apni UPI app mein status check kijiye.",
+          "tool_calls": [],
+          "facts": {
+            "tool_names": [],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 94,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-22T03:25:28.595623+00:00"
+    },
+    {
+      "id": "fm_bill_failure",
+      "row": "FM-B03",
+      "title": "The Zepto bill preview could not be verified: report it, never edit the basket to work around it",
+      "passed": true,
+      "turns": [
+        {
+          "user": "Zepto ka bill bana do",
+          "developer_notes": [],
+          "reply": "Zepto ka bill preview verify nahi ho paya kyunki item count invalid tha; kuch order nahi hua.",
+          "tool_calls": [
+            {
+              "name": "request_approval",
+              "arguments": {
+                "store": "zepto"
+              },
+              "status": "error",
+              "model_output": {
+                "status": "error",
+                "message": "Zepto's bill preview could not be verified because the item count was invalid. Nothing was ordered. Ref 1a2b3c4d."
+              },
+              "ui_event_type": null,
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "request_approval"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 75,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-22T03:25:35.809543+00:00"
+    },
+    {
+      "id": "fm_provider_down",
+      "row": "FM-P01",
+      "title": "Both stores are down: say it's a connection problem, never 'not found'",
+      "passed": true,
+      "turns": [
+        {
+          "user": "Amul Taaza doodh ek litre chahiye",
+          "developer_notes": [],
+          "reply": "Amul Taaza doodh ke liye abhi Instamart aur Zepto se connect nahi ho paya; thodi der mein dobara try karte hain.",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "Amul Taaza milk 1 litre"
+              },
+              "status": "provider_error",
+              "model_output": {
+                "status": "provider_error",
+                "query": "Amul Taaza milk 1 litre",
+                "item_key": "amul taaza milk 1 litre",
+                "item_label": "Amul Taaza milk 1 litre",
+                "providers": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "status": "provider_error",
+                    "reason": "unavailable"
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "status": "provider_error",
+                    "reason": "unavailable"
+                  }
+                ],
+                "unreachable_stores": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "reason": "unavailable"
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "reason": "unavailable"
+                  }
+                ],
+                "message": "Could not search: Swiggy Instamart is not responding right now; Zepto is not responding right now. This is a connection problem, not a search result: never say the item was not found or is unavailable there. Say, for example, 'Zepto se abhi connect nahi ho paya, thodi der mein dobara try karte hain.'"
+              },
+              "ui_event_type": "tool.error",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 90,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 2,
+      "finished_at": "2026-11-22T03:25:46.852139+00:00"
+    },
+    {
+      "id": "fm_rate_limited",
+      "row": "FM-P05",
+      "title": "Both stores rate-limited: no guessed availability, no retry loop",
+      "passed": true,
+      "turns": [
+        {
+          "user": "Tata Tea Gold 500 gram dikhao",
+          "developer_notes": [],
+          "reply": "Swiggy Instamart aur Zepto se abhi connect nahi ho paya, thodi der mein dobara try karte hain.",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "Tata Tea Gold 500 g"
+              },
+              "status": "provider_error",
+              "model_output": {
+                "status": "provider_error",
+                "query": "Tata Tea Gold 500 g",
+                "item_key": "tata tea gold 500 g",
+                "item_label": "Tata Tea Gold 500 g",
+                "providers": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "status": "provider_error",
+                    "reason": "rate_limited",
+                    "retry_after_seconds": 10800
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "status": "provider_error",
+                    "reason": "rate_limited"
+                  }
+                ],
+                "unreachable_stores": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "reason": "rate_limited"
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "reason": "rate_limited"
+                  }
+                ],
+                "message": "Could not search: Swiggy Instamart is briefly limiting requests; Zepto is briefly limiting requests. This is a connection problem, not a search result: never say the item was not found or is unavailable there. Say, for example, 'Zepto se abhi connect nahi ho paya, thodi der mein dobara try karte hain.'"
+              },
+              "ui_event_type": "tool.error",
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 76,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 2,
+      "finished_at": "2026-11-22T03:25:53.048863+00:00"
+    },
+    {
+      "id": "fm_address_invalid",
+      "row": "FM-A01",
+      "title": "Zepto's saved address was deleted: ask to pick an address, never 'not found'",
+      "passed": true,
+      "turns": [
+        {
+          "user": "Fortune sunflower oil 1 litre chahiye",
+          "developer_notes": [],
+          "reply": "Fortune sunflower oil 1 litre abhi search nahi ho paya: Instamart connect nahi hua, aur Zepto mein saved address badal gaya hai. Zepto par Home aur Office saved hain—kaunsa address select karun?",
+          "tool_calls": [
+            {
+              "name": "search_products",
+              "arguments": {
+                "query": "Fortune sunflower oil 1 litre"
+              },
+              "status": "provider_error",
+              "model_output": {
+                "status": "provider_error",
+                "query": "Fortune sunflower oil 1 litre",
+                "item_key": "fortune sunflower oil 1 litre",
+                "item_label": "Fortune sunflower oil 1 litre",
+                "providers": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "status": "provider_error",
+                    "reason": "unavailable"
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "status": "provider_error",
+                    "reason": "address_invalid"
+                  }
+                ],
+                "unreachable_stores": [
+                  {
+                    "store": "Swiggy Instamart",
+                    "store_id": "swiggy_instamart",
+                    "reason": "unavailable"
+                  },
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "reason": "address_invalid"
+                  }
+                ],
+                "message": "Could not search: Swiggy Instamart is not responding right now; Zepto no longer has the selected saved address (it was changed or deleted in the store app); ask the user to pick a delivery address again (list_delivery_addresses, then select_delivery_address). This is a connection problem, not a search result: never say the item was not found or is unavailable there. Say, for example, 'Zepto se abhi connect nahi ho paya, thodi der mein dobara try karte hain.'"
+              },
+              "ui_event_type": "tool.error",
+              "ui_prefill": null
+            },
+            {
+              "name": "list_delivery_addresses",
+              "arguments": {
+                "store": "zepto"
+              },
+              "status": "ok",
+              "model_output": {
+                "status": "ok",
+                "stores": [
+                  {
+                    "store": "Zepto",
+                    "store_id": "zepto",
+                    "status": "ok",
+                    "addresses": [
+                      {
+                        "address_id": "demo-home",
+                        "address": "12 Sample Street, HSR Layout, Bengaluru",
+                        "selected": true,
+                        "label": "Home"
+                      },
+                      {
+                        "address_id": "demo-office",
+                        "address": "Tower B, Outer Ring Road, Bengaluru",
+                        "selected": false,
+                        "label": "Office"
+                      }
+                    ]
+                  }
+                ],
+                "message": "Name the saved addresses by label in one short line and ask which one to use. Offer adding a new address only if the user wants one not listed."
+              },
+              "ui_event_type": null,
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "search_products",
+              "list_delivery_addresses"
+            ],
+            "question_count": 1,
+            "sentence_count": 2,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 157,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 2,
+      "finished_at": "2026-11-22T03:26:04.537980+00:00"
+    },
+    {
+      "id": "fm_order_outcome_unknown",
+      "row": "FM-O04",
+      "title": "The order call timed out after the tap: never claim the order is placed, never prepare it again",
+      "passed": true,
+      "turns": [
+        {
+          "user": "maine Place order daba diya. Order ho gaya?",
+          "developer_notes": [
+            "Zepto did not confirm whether the order went through. Do not say it was placed or paid and do not prepare it again; ask the user to check the Zepto app or order tracking first."
+          ],
+          "reply": "Zepto se order confirm nahi hua hai, isliye abhi order ho gaya nahi keh sakti. Pehle Zepto app ya order tracking check kijiye.",
+          "tool_calls": [],
+          "facts": {
+            "tool_names": [],
+            "question_count": 0,
+            "sentence_count": 2,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 101,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 2,
+      "finished_at": "2026-11-22T03:26:07.718278+00:00"
+    },
+    {
+      "id": "fm_payment_unknown",
+      "row": "FM-O05",
+      "title": "Zepto did not confirm a UPI payment: never claim paid, never ask for a PIN",
+      "passed": true,
+      "turns": [
+        {
+          "user": "maine UPI se pay kar diya, payment ho gaya na?",
+          "developer_notes": [
+            "Zepto did not clearly confirm the payment. Do not say it was paid or placed and do not prepare it again; ask the user to tap \"I've paid, check status\" on the card or check their UPI app. Never ask for a UPI PIN, card number, CVV or OTP, and never say it is paid until a later result says so."
+          ],
+          "reply": "Abhi payment confirm nahi hua hai. Order card par “I've paid, check status” dabaiye ya apne UPI app mein status check kijiye.",
+          "tool_calls": [],
+          "facts": {
+            "tool_names": [],
+            "question_count": 0,
+            "sentence_count": 2,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 98,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 2,
+      "finished_at": "2026-11-22T03:26:10.885970+00:00"
+    },
+    {
+      "id": "fm_bill_failure",
+      "row": "FM-B03",
+      "title": "The Zepto bill preview could not be verified: report it, never edit the basket to work around it",
+      "passed": true,
+      "turns": [
+        {
+          "user": "Zepto ka bill bana do",
+          "developer_notes": [],
+          "reply": "Zepto ka bill abhi verify nahi ho paya; kuch order nahi hua.",
+          "tool_calls": [
+            {
+              "name": "request_approval",
+              "arguments": {
+                "store": "zepto"
+              },
+              "status": "error",
+              "model_output": {
+                "status": "error",
+                "message": "Zepto's bill preview could not be verified because the item count was invalid. Nothing was ordered. Ref 1a2b3c4d."
+              },
+              "ui_event_type": null,
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "request_approval"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 47,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 2,
+      "finished_at": "2026-11-22T03:26:17.063183+00:00"
+    }
+  ]
+}

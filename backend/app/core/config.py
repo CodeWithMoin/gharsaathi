@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     zepto_mcp_url: str = "https://mcp.zepto.co.in/mcp"
     zepto_oauth_redirect_uri: str = "http://localhost/callback"
     zepto_oauth_scope: str = "tools:read"
+    # Zepto's saved-address snapshot auto-refreshes when older than this (minutes).
+    zepto_address_refresh_max_age_min: int = Field(default=30, ge=1, le=24 * 60)
     # Prepaid Zepto orders (UPI, Zepto Cash, pay online). Off by default; even
     # when on, a method is offered only if it is allow-listed here, covered by
     # the verified response contract (app/commerce/zepto/payments.py) and listed
@@ -58,6 +60,10 @@ class Settings(BaseSettings):
     chat_turn_timeout_seconds: float = Field(default=60.0, ge=5.0, le=180.0)
     # Shop from a photo: vision model for reading attached photos (Responses API, image input).
     photo_extraction_model: str = "gpt-6-luna"
+    # After a photo item's search, compare the photo with the store's product images
+    # (app/photos/visual_match.py). Empty model = photo_extraction_model.
+    photo_visual_match_enabled: bool = True
+    photo_visual_match_model: str = ""
     # native | tuned (option A) | smart_turn (option B); see docs/voice-turn-taking.md
     voice_turn_taking: Literal["native", "tuned", "smart_turn"] = "native"
     # Dev diagnostic: log content-free sideband event summaries (type, id field names, timing).

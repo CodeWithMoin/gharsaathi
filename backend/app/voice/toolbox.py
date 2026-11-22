@@ -153,7 +153,17 @@ class VoiceToolbox:
         )
         self.order = OrderToolExecutor(self.basket, order_confirmations)
         self.photo = PhotoToolExecutor(photo_reader, household_id)
-        self.order_status = OrderStatusToolExecutor(order_tracking, order_history, household_id)
+        self.order_status = OrderStatusToolExecutor(
+            order_tracking,
+            order_history,
+            household_id,
+            checkouts=getattr(order_confirmations, "reconciler", None),
+            on_reconciled=(
+                (lambda outcome: order_confirmations.notify_reconciled(outcome, announce=False))
+                if order_confirmations is not None
+                else None
+            ),
+        )
 
     def has_store(self, provider: ProviderName) -> bool:
         return provider in self.basket.stores
@@ -217,4 +227,8 @@ class VoiceToolbox:
         if name in BASKET_TOOL_NAMES:
             return await self.basket.execute(name, raw_arguments)
         self.choices.saw_search(raw_arguments)
-        return await self.search.execute(name, raw_arguments)
+        outcome = await self.search.execute(name, raw_arguments)
+        if name == "search_products":
+            # A search for an item read from a product photo is compared with that photo.
+            outcome = await self.photo.after_search(raw_arguments, outcome)
+        return outcome

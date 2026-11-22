@@ -65,6 +65,8 @@ class Capability:
     # True for behaviour of the voice session itself (turn-taking, transcripts)
     # rather than something the model does through a tool.
     voice_session_behavior: bool = False
+    # Shipped but labelled "Beta" in the UI; results may be less reliable.
+    beta: bool = False
 
 
 def S(status: Status, note: str = "", branch: str | None = None) -> Surface:
@@ -118,7 +120,9 @@ CAPABILITIES: tuple[Capability, ...] = (
             "with select_delivery_address: validated against the user's own snapshot, saved "
             "like PUT .../addresses/selected, moved onto the store's basket (an open bill is "
             "superseded), used by later tools in the same session, and shown on screen "
-            "(address.selected).",
+            "(address.selected). Zepto's snapshot also refreshes automatically when stale "
+            "(30 min at load/session start, 5 min at picker open, debounced); a selection "
+            "deleted in Zepto is cleared, never replaced, and the user is asked to pick again.",
         ),
         typed_chat=S(W, "Same list/select tools as voice; the switched address is kept for later turns. " + TYPED_VIA_ASSISTANT),
         ui=S(W, "Radio list per store in the setup sheet; a voice/typed switch updates it without restarting voice."),
@@ -214,7 +218,9 @@ CAPABILITIES: tuple[Capability, ...] = (
             "desktops) or Choose from gallery; client-side downscale to 1600 px JPEG (drops "
             "EXIF); thumbnail chip with remove; send with or without text; the user's bubble "
             "shows the photo thumbnail (tap for a larger view) and the saved chat keeps only "
-            "the 'Photo' placeholder plus a <=320 px, <=40 KB server-made thumbnail.",
+            "the 'Photo' placeholder plus a <=320 px, <=40 KB server-made thumbnail. The photo "
+            "menu/camera dialog and the chip carry a 'Beta' tag; an option that looks like the "
+            "photo shows 'Looks like your photo', one that does not says so.",
         ),
         backend=S(
             W,
@@ -222,10 +228,17 @@ CAPABILITIES: tuple[Capability, ...] = (
             "JPEG kept in memory per user for at most 15 min and deleted right after reading; "
             "the upload returns a metadata-free thumbnail data URL that saved chats re-validate. "
             "Strict-JSON vision extraction (PHOTO_EXTRACTION_MODEL) reads printed pack names "
-            "verbatim (printed_name, search_query), image text treated as data, prices "
-            "stripped, at most 15 items.",
+            "verbatim and identifies packs by their look (brand visible -> brand query; no brand "
+            "-> the most likely generic product plus up to 2 alternatives, never an invented "
+            "brand), image text treated as data, prices stripped, at most 15 items. A product "
+            "or shelf photo is held (read-once, same TTL) until its first 3 items' searches are "
+            "compared with it: one bounded vision call (PHOTO_VISUAL_MATCH_MODEL, 6 s) labels "
+            "the top 6 store images same_product / similar / different; code puts the same "
+            "product first and different ones last, and falls back to the normal order on any "
+            "error.",
         ),
         voice_tools=("read_attached_photo",),
+        beta=True,
         routes=("POST /api/chat/attachments", "DELETE /api/chat/attachments/{attachment_id}"),
         ui_files=(
             "frontend/app/page.tsx",
@@ -343,18 +356,23 @@ CAPABILITIES: tuple[Capability, ...] = (
             W,
             "Single-use, 5-minute confirmation bound to user, basket revision, approval, quote "
             "and address (app/shopping/order_confirmation.py), then the existing approve + "
-            "idempotent COD checkout.",
+            "idempotent COD checkout. An unknown outcome is settled only from read-only Zepto "
+            "order history (app/shopping/reconciliation.py): after the tap, on 'Check with "
+            "Zepto', on app load and from get_order_status; never by repeating the order call.",
         ),
         voice_tools=("prepare_order",),
         routes=(
             "POST /api/zepto/checkout/cod",
             "POST /api/orders/confirm",
             "POST /api/orders/cancel",
+            "POST /api/orders/check",
+            "POST /api/orders/reconcile-pending",
         ),
         ui_files=(
             "frontend/app/basket/BasketPanel.tsx",
             "frontend/app/basket/zepto-checkout-state.mjs",
             "frontend/app/order-confirmation-card.tsx",
+            "frontend/app/card-lifecycle.mjs",
         ),
     ),
     Capability(
@@ -752,6 +770,13 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "printed_name",
         "search_query",
         "product_photo",
+        "alternative_queries",
+        "identified_from",
+        # search_products photo visual-match fields and statuses.
+        "visual_match",
+        "photo_match",
+        "same_product",
+        "no_exact_match",
         # Order status tool fields and statuses (codex/order-tracking-status).
         "order_ref",
         "order_status",
@@ -761,6 +786,13 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "eta_minutes",
         "last_updated_minutes_ago",
         "no_order",
+        # Store-reported order times (codex/tracking-times).
+        "eta_passed",
+        "eta_time_india",
+        "delivered_time_india",
+        "took_minutes",
+        # Unknown-outcome reconciliation status (codex/order-confirm-reconcile).
+        "not_confirmed",
         "cancel_supported",
         "cancel_here",
         "option_id",
@@ -784,6 +816,10 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "not_saved_one_off",
         "skipped_stores",
         "user_words",
+        # Search statuses for a store that could not be reached (not "not found").
+        "provider_error",
+        "unreachable_stores",
+        "address_invalid",
         # Household-rule annotations and the delivery ETA field (search options, bill).
         "avoid_store",
         "avoided_because",
@@ -960,7 +996,8 @@ def render_markdown() -> str:
     for capability in CAPABILITIES:
         tools = ", ".join(f"`{name}`" for name in capability.voice_tools) or "—"
         cells = [_cell(getattr(capability, key)) for key, _ in SURFACES]
-        lines.append(f"| {capability.title} (`{capability.id}`) | " + " | ".join(cells) + f" | {tools} |")
+        beta = " **Beta**" if capability.beta else ""
+        lines.append(f"| {capability.title} (`{capability.id}`){beta} | " + " | ".join(cells) + f" | {tools} |")
     lines += ["", "### Backend routes by capability", ""]
     for capability in CAPABILITIES:
         if capability.routes:

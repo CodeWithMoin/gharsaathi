@@ -24,6 +24,7 @@ can log a content-free diagnostic and tell the user which check failed.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -68,8 +69,11 @@ class ZeptoConfirmedOrder:
     """The minimal, confirmed result of a successful COD submission."""
 
     order_id: str
-    payable_paise: int
+    # None when Zepto's confirmation carries no amount (for example a text-only
+    # success message); the checkout then relies on the approved amount.
+    payable_paise: int | None
     eta_minutes: int | None
+    order_code: str | None = None
 
 
 def quote_from_cod_preview(basket: Basket, payload: dict[str, Any], quoted_at: datetime) -> Quote:
@@ -212,21 +216,127 @@ def quote_from_preview(
     )
 
 
-def parse_confirmed_cod_order(payload: dict[str, Any]) -> ZeptoConfirmedOrder:
-    """Parse a completed COD order and refuse a preview or vague response."""
+_ORDER_ID_KEYS = ("orderId", "order_id", "id")
+_ORDER_CODE_KEYS = ("orderCode", "order_code", "code")
+_PAYABLE_KEYS = ("toPayAmount", "grandTotalAmount", "totalAmount", "payableAmount")
+_NESTED_ORDER_KEYS = ("order", "orderDetails", "orderDetail", "result")
+# A provider identifier: no spaces, at least one digit (codes such as
+# "UIIMJHTCC04881" or UUIDs), bounded length.
+_IDENTIFIER = re.compile(r"^(?=.*\d)[A-Za-z0-9][A-Za-z0-9_-]{5,79}$")
+_TEXT_ORDER_REFERENCE = re.compile(
+    r"\border[\s_-]*(?:id|code|number|no\.?)\s*(?:is|:|#|-)?\s*#?\s*([A-Za-z0-9][A-Za-z0-9_-]{5,79})",
+    re.IGNORECASE,
+)
+_TEXT_FAILURE = re.compile(
+    r"\b(fail(?:ed|ure)?|error|unable|could\s*not|couldn'?t|cannot|not\s+(?:been\s+)?placed|"
+    r"declined|rejected|cancel(?:led|ed)?|preview)\b",
+    re.IGNORECASE,
+)
+_TEXT_SUCCESS = re.compile(r"\b(placed|confirmed|success(?:ful(?:ly)?)?)\b", re.IGNORECASE)
 
-    data = _data(payload)
-    if _required_bool(data, "isPreview") is not False:
-        raise ZeptoSchemaError("Zepto returned a preview instead of a confirmed order.")
-    if _required_str(data, "paymentMethod") != "COD":
-        raise ZeptoSchemaError("Zepto confirmed an unexpected payment method.")
-    order_id = _required_str(data, "orderId")
-    payable = _money(data, "toPayAmount")
-    eta_minutes = _nullable_count(data, "etaInMinutes")
+
+def parse_confirmed_cod_order(payload: dict[str, Any]) -> ZeptoConfirmedOrder:
+    """Parse a completed COD order; refuse a preview or a response without an order id.
+
+    Tolerated variants, each only when the response carries a provider order
+    identifier: the id under ``orderId``/``order_id``/``id`` (or only an order
+    ``code``), the order nested under ``data``/``order``/``result``, absent
+    ``isPreview``/``paymentMethod``/payable fields, and a text-only success
+    message that names an order id or code. A response that says it is a
+    preview, uses a non-COD payment method, or contradicts itself is refused.
+    """
+
+    if isinstance(payload, dict) and set(payload) == {"content_text"}:
+        return _confirmed_from_text(payload.get("content_text"))
+    data = _confirmed_data(payload)
+    if data.get("isPreview") is True or data.get("requiresConfirmation") is True:
+        raise ZeptoPreviewCheckFailed(
+            "Zepto returned a preview instead of a confirmed order.", step="confirm.isPreview"
+        )
+    if "isPreview" in data and not isinstance(data["isPreview"], bool):
+        raise ZeptoPreviewCheckFailed("Zepto confirmation has invalid isPreview.", step="confirm.isPreview")
+    method = data.get("paymentMethod")
+    if method is not None and (not isinstance(method, str) or method.strip().upper() != "COD"):
+        raise ZeptoPreviewCheckFailed(
+            "Zepto confirmed an unexpected payment method.", step="confirm.paymentMethod"
+        )
+    order_id = _first_identifier(data, _ORDER_ID_KEYS, "confirm.orderId")
+    order_code = _first_identifier(data, _ORDER_CODE_KEYS, "confirm.orderCode")
+    if order_id is None and order_code is None:
+        raise ZeptoPreviewCheckFailed(
+            "Zepto confirmation has no order identifier.",
+            step="confirm.orderId",
+            facts={"present_id_keys": [key for key in (*_ORDER_ID_KEYS, *_ORDER_CODE_KEYS) if key in data]},
+        )
+    payable: int | None = None
+    for key in _PAYABLE_KEYS:
+        if data.get(key) is not None:
+            payable = _count(data.get(key), f"confirm.{key}")
+            break
+    raw_eta = data.get("etaInMinutes")
+    eta_minutes = None if raw_eta is None else _exact_count(raw_eta)
     return ZeptoConfirmedOrder(
-        order_id=order_id,
+        order_id=order_id or order_code or "",
         payable_paise=payable,
         eta_minutes=eta_minutes,
+        order_code=order_code,
+    )
+
+
+def _confirmed_data(payload: object) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ZeptoPreviewCheckFailed("Zepto returned an invalid confirmation.", step="confirm.envelope")
+    data: object = payload.get("data", payload)
+    if not isinstance(data, dict):
+        raise ZeptoPreviewCheckFailed("Zepto returned an invalid confirmation.", step="confirm.envelope")
+    if not any(key in data for key in (*_ORDER_ID_KEYS, *_ORDER_CODE_KEYS)):
+        for key in _NESTED_ORDER_KEYS:
+            nested = data.get(key)
+            if isinstance(nested, dict):
+                # Top-level flags (isPreview, paymentMethod) still apply.
+                return {**{k: v for k, v in data.items() if k not in _NESTED_ORDER_KEYS}, **nested}
+    return data
+
+
+def _first_identifier(data: dict[str, Any], keys: tuple[str, ...], step: str) -> str | None:
+    values: list[str] = []
+    for key in keys:
+        raw = data.get(key)
+        if raw is None:
+            continue
+        if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0:
+            raw = str(raw)
+        if not isinstance(raw, str) or not raw.strip():
+            raise ZeptoPreviewCheckFailed("Zepto confirmation has an invalid order identifier.", step=step)
+        values.append(raw.strip())
+    if len(set(values)) > 1 and step == "confirm.orderId":
+        raise ZeptoPreviewCheckFailed(
+            "Zepto confirmation has conflicting order identifiers.", step="confirm.orderId.conflict"
+        )
+    return values[0] if values else None
+
+
+def _confirmed_from_text(raw: object) -> ZeptoConfirmedOrder:
+    """Accept text only when it plainly reports success and names an order id or code."""
+
+    if not isinstance(raw, str) or not raw.strip():
+        raise ZeptoPreviewCheckFailed("Zepto returned empty text.", step="confirm.text.empty")
+    text = raw.strip()
+    if _TEXT_FAILURE.search(text):
+        raise ZeptoPreviewCheckFailed("Zepto's text does not report a placed order.", step="confirm.text.failure")
+    if not _TEXT_SUCCESS.search(text):
+        raise ZeptoPreviewCheckFailed("Zepto's text does not report a placed order.", step="confirm.text.no_success")
+    references = {match.group(1) for match in _TEXT_ORDER_REFERENCE.finditer(text)}
+    references = {value for value in references if _IDENTIFIER.match(value)}
+    if len(references) != 1:
+        raise ZeptoPreviewCheckFailed(
+            "Zepto's text does not name exactly one order.",
+            step="confirm.text.order_reference",
+            facts={"references": len(references)},
+        )
+    reference = next(iter(references))
+    return ZeptoConfirmedOrder(
+        order_id=reference, payable_paise=None, eta_minutes=None, order_code=reference
     )
 
 
