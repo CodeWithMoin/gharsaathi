@@ -384,6 +384,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   // "Swap" on a basket line: search that item; adding an option from those results replaces the line.
   const swapRef = useRef<{ provider: ProviderName; variantId: string; name: string; groupKey: string } | null>(null);
   const startSwap = (provider: ProviderName, line: BasketLine) => {
+    followScrollRef.current = true;
     const swapText = swapQuery(line);
     swapRef.current = { provider, variantId: line.ref.variant_id, name: line.name, groupKey: resultGroupIdentity({ query: swapText }).key };
     appendMessage("user", `Swap ${line.name}`);
@@ -773,7 +774,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       const height = section.offsetHeight;
       // Content that grows after it was added (a card finishing its layout, images loading)
       // keeps the reader at the bottom while they are following the conversation.
-      if (height > lastSectionHeight && followScrollRef.current && !scrollAnimatingRef.current && !pushRef.current) {
+      if (height > lastSectionHeight && followScrollRef.current && !pushRef.current) {
+        scrollAnimatingRef.current = false;
         window.scrollTo({ top: Math.max(0, document.documentElement.scrollHeight - window.innerHeight), behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
       }
       lastSectionHeight = height;

@@ -145,7 +145,7 @@ export function clearBasketCopy(/** @type {{ provider: string, lines: { quantity
   const store = STORE_LABELS[/** @type {"zepto"} */ (basket?.provider)] ?? "store";
   return {
     title: "Clear basket?",
-    body: `This removes all ${count} ${count === 1 ? "item" : "items"} from your ${store} basket. Any bill or order card for it stops working.`,
+    body: `${count === 1 ? "This removes the 1 item" : `This removes all ${count} items`} from your ${store} basket. Any bill or order card for it stops working.`,
     confirmLabel: "Clear basket",
     busyLabel: "Clearing…",
   };
