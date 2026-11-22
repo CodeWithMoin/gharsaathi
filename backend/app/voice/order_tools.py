@@ -19,7 +19,7 @@ from pydantic import ValidationError
 
 from app.shopping.approval import latest_open_approval
 from app.shopping.money import format_rupees, money_fields
-from app.shopping.errors import ShoppingError
+from app.shopping.errors import ProviderUnavailable, ShoppingError
 from app.shopping.models import Approval, ApprovalStatus, Basket
 from app.shopping.order_confirmation import (
     ORDERABLE_PROVIDERS,
@@ -28,6 +28,7 @@ from app.shopping.order_confirmation import (
 )
 from app.voice.basket_tools import (
     _STORE_PARAMETER,
+    bill_failed,
     BasketStore,
     BasketToolExecutor,
     StoreArguments,
@@ -54,7 +55,8 @@ ORDER_TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "(for example 'order kar do', 'place karo', 'approve karo'). Gets that store's "
             "current final bill (requesting it if needed) and shows an order card with a "
             "'Place order' button and Cancel. This tool never approves or places an order: "
-            "only the user's tap on 'Place order' does. Zepto cash on delivery only."
+            "only the user's tap on 'Place order' does. Call it on every such request, also "
+            "when a card is already on screen; it refreshes the card. Zepto cash on delivery only."
         ),
         "parameters": {
             "type": "object",
@@ -120,6 +122,8 @@ class OrderToolExecutor:
             return await self._prepare(StoreArguments.model_validate(arguments))
         except ValidationError:
             return _error("Invalid arguments for this tool.")
+        except ProviderUnavailable as exc:
+            return bill_failed(exc)
         except ShoppingError as exc:
             return _error(str(exc))
 

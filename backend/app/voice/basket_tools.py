@@ -18,7 +18,7 @@ from app.commerce.swiggy.models import Product
 from app.shopping.approval import ApprovalService, latest_open_approval
 from app.shopping.basket import BasketService, item_total_paise
 from app.shopping.money import format_rupees, money_fields
-from app.shopping.errors import ShoppingError
+from app.shopping.errors import ProviderUnavailable, ShoppingError
 from app.shopping.models import (
     Basket,
     BasketLine,
@@ -291,6 +291,10 @@ class BasketToolExecutor:
                 return await self._view(StoreArguments.model_validate(arguments))
             if name == "request_approval":
                 return await self._request_approval(StoreArguments.model_validate(arguments))
+        except ProviderUnavailable as exc:
+            if name == "request_approval":
+                return bill_failed(exc)
+            return _error(str(exc))
         except ValidationError:
             return _error("Invalid arguments for this tool.")
         except ShoppingError as exc:
@@ -566,3 +570,21 @@ def _not_connected(provider: ProviderName) -> ToolOutcome:
 
 def _error(message: str) -> ToolOutcome:
     return ToolOutcome(model_output={"status": "error", "message": message})
+
+
+BILL_FAILED_NOTE = (
+    "The store could not prepare or verify this bill; the basket is unchanged and nothing "
+    "was ordered. Say the reason in one short line. Do not change the basket yourself and "
+    "do not suggest basket edits as a workaround (no removing, re-adding or ordering fewer "
+    "packs to test the bill) unless the reason names an item problem such as out of stock "
+    "or a quantity limit. Otherwise offer only: try again in a little while, or use the "
+    "store's app."
+)
+
+
+def bill_failed(exc: ProviderUnavailable) -> ToolOutcome:
+    """A provider or checking failure on a bill: report it, never work around it."""
+
+    return ToolOutcome(
+        model_output={"status": "bill_failed", "reason": str(exc), "message": BILL_FAILED_NOTE}
+    )

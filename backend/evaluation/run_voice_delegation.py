@@ -46,6 +46,7 @@ from app.memory.recall import (
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.shopping.memory import InMemoryApprovalRepository, InMemoryBasketRepository
+from app.shopping.errors import ProviderUnavailable
 from app.shopping.order_confirmation import OrderConfirmations
 from app.shopping.models import Basket, Charge, OfferOpportunity, Quote
 from app.memory.remembered import memory_summary_block
@@ -235,6 +236,16 @@ class OfferQuoteProvider(DemoZeptoQuoteProvider):
         )
 
 
+class FailingPreviewQuoteProvider(DemoZeptoQuoteProvider):
+    """Zepto's preview check fails, as the live quantity-mismatch bug did; no bill exists."""
+
+    async def quote(self, basket: Basket) -> Quote:
+        raise ProviderUnavailable(
+            "Zepto's bill preview could not be verified because the item count was invalid. "
+            "Nothing was ordered. Ref 1a2b3c4d."
+        )
+
+
 class HomeOfficeAddressBook:
     """Two saved addresses per store, in memory; no provider call."""
 
@@ -345,7 +356,11 @@ def build_toolbox(
     approval_repo = InMemoryApprovalRepository()
     quotes = {
         "swiggy_instamart": DemoQuoteProvider(),
-        "zepto": OfferQuoteProvider() if scenario.get("quote_offers") else DemoZeptoQuoteProvider(),
+        "zepto": (
+            FailingPreviewQuoteProvider() if scenario.get("quote_failure")
+            else OfferQuoteProvider() if scenario.get("quote_offers")
+            else DemoZeptoQuoteProvider()
+        ),
     }
     memory: Any = ScenarioMemory(scenario["memory"]) if scenario.get("memory") else None
     if memory_db is not None:

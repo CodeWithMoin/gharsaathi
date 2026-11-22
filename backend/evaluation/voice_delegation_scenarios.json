@@ -1358,6 +1358,77 @@
           }
         }
       ]
+    },
+    {
+      "id": "b1-bill-failure-no-workaround",
+      "title": "A provider bill-check failure is reported in one line; the basket is not edited and no basket workaround is suggested.",
+      "catalogue": "demo",
+      "quote_failure": true,
+      "turns": [
+        {
+          "user": "Zepto se do Tata Tea Gold 500 g add kar do",
+          "expect": {
+            "tools_required": [
+              "add_to_basket"
+            ],
+            "add_count": 1,
+            "add_store": "zepto"
+          }
+        },
+        {
+          "user": "order kar do",
+          "expect": {
+            "tools_required": [
+              "prepare_order"
+            ],
+            "tools_forbidden": [
+              "add_to_basket",
+              "set_basket_quantity"
+            ],
+            "reply_forbids_any": [
+              "ek pack",
+              "1 pack",
+              "hata",
+              "remove",
+              "dobara add",
+              "kam kar",
+              "quantity 1"
+            ],
+            "reply_mentions_any": [
+              "dobara",
+              "baad",
+              "app",
+              "try"
+            ],
+            "max_questions": 1
+          }
+        },
+        {
+          "user": "ab kya karein?",
+          "expect": {
+            "tools_forbidden": [
+              "add_to_basket",
+              "set_basket_quantity"
+            ],
+            "reply_forbids_any": [
+              "ek pack",
+              "1 pack",
+              "hata",
+              "remove",
+              "dobara add",
+              "kam kar",
+              "quantity 1"
+            ],
+            "reply_mentions_any": [
+              "dobara",
+              "baad",
+              "app",
+              "try"
+            ],
+            "max_questions": 1
+          }
+        }
+      ]
     }
   ]
 }
