@@ -578,11 +578,6 @@ async def test_fm_b03_quantity_two_with_distinct_product_count_is_a_valid_bill()
     assert output["status"] == "awaiting_user_approval"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="FM-B03: on main a bill failure is a generic 'error' with no rule against basket "
-    "workarounds; codex/voice-reliability adds status 'bill_failed' with that rule.",
-)
 async def test_fm_b03_contract_bill_failure_is_bill_failed() -> None:
     world = FaultWorld()
     world.quotes.faults = [Raise(transport_error("http_500"))]
