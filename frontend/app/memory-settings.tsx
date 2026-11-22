@@ -1,8 +1,11 @@
 "use client";
 
-import { ArrowCounterClockwise, Check, CircleNotch, PencilSimple, Sparkle, Trash, Warning } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowSquareOut, Check, CircleNotch, ClockCounterClockwise, PencilSimple, Sparkle, Trash, Warning } from "@phosphor-icons/react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ApiError } from "./authenticated-api";
+import { fullResyncAvailability } from "./history-import-summary.mjs";
+import { providerLabel, RETENTION_CHOICES, usePurchaseHistoryImport, type HistoryProvider } from "./purchase-history-import";
+import { MEMORY_SWITCH_LABEL, MEMORY_TERM } from "./settings-map.mjs";
 import { PREFERENCE_CATEGORIES, RouteUnavailableError, useMemoryApi, type MemoryPermission } from "./memory-api";
 import { correctionPayload, editableFields, preferencePermissionState, profileResetPayload, summaryView, type MemoryRecord, type MemorySummaryResponse, type SummaryRow } from "./memory-groups.mjs";
 import { initialEditValues } from "./input-flows.mjs";
@@ -11,6 +14,7 @@ import { InputDialog } from "./ui/input-dialog";
 import { hasUnsavedChanges } from "./ui/input-dialog-logic.mjs";
 
 const ring = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+const SECTION_HEADING = "px-1 text-[11px] font-bold uppercase tracking-[.13em] text-muted";
 const BADGE_STYLES: Record<string, string> = {
   "Just learned": "bg-success-soft text-success",
   "You told us": "bg-accent-soft text-accent-strong",
@@ -25,13 +29,23 @@ function errorText(cause: unknown, fallback: string) {
   return fallback;
 }
 
+type MemorySettingsProps = {
+  /** Profile rows (name, language…) are edited on Settings → Profile. */
+  onEditProfile?: () => void;
+  commerceMode?: "demo" | "live";
+  swiggyConnected?: boolean;
+  zeptoConnected?: boolean;
+};
+
 /**
- * Settings → "What GharSaathi knows": everything saved, grouped (Home, Food,
- * Usual buys, Avoid, Shopping style, From your orders), each with where it came
- * from and when, plus Edit / Delete and Delete everything.
+ * Settings → "What GharSaathi knows": the Memory switch, everything saved, grouped
+ * (Home, Food, Usual buys, Avoid, Shopping style, From your orders) with where it came
+ * from and when plus Edit / Delete, then History (order-history import) and Privacy
+ * (Delete everything, Privacy Policy).
  */
-export function MemorySettings({ onEditProfile }: { onEditProfile?: () => void } = {}) {
+export function MemorySettings({ onEditProfile, commerceMode = "demo", swiggyConnected = false, zeptoConnected = false }: MemorySettingsProps = {}) {
   const api = useMemoryApi();
+  const history = usePurchaseHistoryImport({ swiggyConnected, zeptoConnected });
   const headingRef = useRef<HTMLHeadingElement>(null);
   const forgetAllButtonRef = useRef<HTMLButtonElement>(null);
   const [memories, setMemories] = useState<MemoryRecord[] | undefined>(undefined);
@@ -110,7 +124,7 @@ export function MemorySettings({ onEditProfile }: { onEditProfile?: () => void }
     setPermissionError("");
     try {
       await Promise.all(PREFERENCE_CATEGORIES.map((category) => api.setPreferencePermission(category, allowed)));
-      setNotice({ tone: "ok", text: allowed ? "Your preferences will now be used while shopping." : "Turned off. Saved preferences are kept but not used." });
+      setNotice({ tone: "ok", text: allowed ? `${MEMORY_TERM} on. GharSaathi will use what you've told it while shopping.` : `${MEMORY_TERM} off. Everything stays listed here but isn't used while shopping.` });
     } catch (cause) {
       setPermissionError(errorText(cause, "Could not save this setting."));
     } finally {
@@ -195,6 +209,7 @@ export function MemorySettings({ onEditProfile }: { onEditProfile?: () => void }
       await api.clearOrderHistory();
       setClearOrders(false);
       setNotice({ tone: "ok", text: "Order history removed from GharSaathi. Your store orders are not changed." });
+      history.reload();
       await loadMemories();
       headingRef.current?.focus();
     } catch (cause) {
@@ -220,7 +235,7 @@ export function MemorySettings({ onEditProfile }: { onEditProfile?: () => void }
     {memories === undefined
       ? <div className="space-y-2" aria-label="Loading what GharSaathi knows" role="status"><div className="h-16 animate-pulse rounded-2xl bg-surface-strong" /><div className="h-16 animate-pulse rounded-2xl bg-surface-strong" /></div>
       : <>
-        {loadError && <div role="alert" className="flex items-start gap-2 rounded-2xl border border-danger-border bg-danger-soft p-3 text-xs leading-5 text-danger-hover"><Warning size={16} className="mt-0.5 shrink-0" /><span className="min-w-0 flex-1">{loadError}</span><button type="button" onClick={() => void loadMemories()} className={`min-h-9 shrink-0 rounded-lg border border-accent-border px-2.5 font-semibold ${ring}`}>Retry</button></div>}
+        {loadError && <div role="alert" className="flex items-start gap-2 rounded-2xl border border-danger-border bg-danger-soft p-3 text-xs leading-5 text-danger-hover"><Warning size={16} className="mt-0.5 shrink-0" /><span className="min-w-0 flex-1">{loadError}</span><button type="button" onClick={() => void loadMemories()} className={`min-h-11 shrink-0 rounded-lg border border-accent-border px-3 font-semibold ${ring}`}>Retry</button></div>}
 
         {view.suggestions.length > 0 && <section aria-labelledby="memory-suggestions" className="rounded-2xl border border-zepto-border bg-zepto-soft p-3">
           <h4 id="memory-suggestions" className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.13em] text-zepto-muted"><Sparkle size={14} weight="fill" />Suggestions</h4>
@@ -240,7 +255,7 @@ export function MemorySettings({ onEditProfile }: { onEditProfile?: () => void }
         {view.total === 0 && !loadError && <div className="rounded-2xl border border-dashed border-accent-border bg-surface px-4 py-5 text-sm leading-6 text-muted">Nothing saved yet. Just tell GharSaathi, for example ‘always get Amul milk’.</div>}
 
         {view.groups.map((group) => <section key={group.id} aria-labelledby={`memory-group-${group.id}`}>
-          <h4 id={`memory-group-${group.id}`} className="px-1 text-[11px] font-bold uppercase tracking-[.13em] text-muted">{group.title} <span className="font-semibold text-subtle">· {group.rows.length}</span></h4>
+          <h4 id={`memory-group-${group.id}`} className={SECTION_HEADING}>{group.title} <span className="font-semibold text-subtle">· {group.rows.length}</span></h4>
           <ul className="mt-2 overflow-hidden rounded-2xl border border-border bg-surface">
             {group.rows.map((row, index) => <MemoryItemRow
               key={row.id}
@@ -254,11 +269,28 @@ export function MemorySettings({ onEditProfile }: { onEditProfile?: () => void }
               onUndo={() => void undo(row)}
             />)}
           </ul>
-          {group.id === "from_orders" && <button type="button" disabled={busyId !== null || clearOrdersBusy} onClick={() => setClearOrders(true)} className={`mt-2 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-danger-border bg-surface px-3 text-xs font-semibold text-danger disabled:opacity-50 ${ring}`}><Trash size={13} weight="bold" />Remove order history</button>}
         </section>)}
-
-        {forgetAllAvailable && view.deletable > 0 && <button ref={forgetAllButtonRef} type="button" onClick={() => void startForgetAll()} disabled={forgetAllBusy || busyId !== null} className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-accent-border bg-surface px-4 text-sm font-semibold text-danger hover:bg-danger-soft disabled:opacity-55 ${ring}`}>{forgetAllBusy && !forgetAll ? <CircleNotch size={16} className="animate-spin" /> : <Trash size={16} weight="bold" />}Delete everything</button>}
       </>}
+
+    <HistorySection
+      history={history}
+      commerceMode={commerceMode}
+      swiggyConnected={swiggyConnected}
+      zeptoConnected={zeptoConnected}
+      hasOrderRows={view.groups.some((group) => group.id === "from_orders" && group.rows.length > 0)}
+      removeDisabled={busyId !== null || clearOrdersBusy}
+      onRemove={() => setClearOrders(true)}
+      onImported={() => void loadMemories()}
+    />
+
+    <section aria-labelledby="memory-privacy" className="space-y-2">
+      <h4 id="memory-privacy" className={SECTION_HEADING}>Privacy</h4>
+      <div className="rounded-2xl border border-border bg-surface p-3.5">
+        <p className="text-xs leading-5 text-muted">Only you can see this. Order history is read-only and stays on GharSaathi&apos;s server, and it never becomes a guess about what&apos;s in stock at home.</p>
+        {memories !== undefined && forgetAllAvailable && view.deletable > 0 && <button ref={forgetAllButtonRef} type="button" onClick={() => void startForgetAll()} disabled={forgetAllBusy || busyId !== null} className={`mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-danger-border bg-surface px-4 text-sm font-semibold text-danger hover:bg-danger-soft disabled:opacity-55 ${ring}`}>{forgetAllBusy && !forgetAll ? <CircleNotch size={16} className="animate-spin" /> : <Trash size={16} weight="bold" />}Delete everything</button>}
+        <a href="/privacy" target="_blank" rel="noreferrer" className={`mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg text-xs font-semibold text-accent-ink underline underline-offset-2 ${ring}`}>Privacy Policy<ArrowSquareOut size={13} weight="bold" aria-hidden="true" /></a>
+      </div>
+    </section>
 
     <EditPreferenceDialog
       row={editingRow}
@@ -296,25 +328,109 @@ export function MemorySettings({ onEditProfile }: { onEditProfile?: () => void }
 }
 
 function PermissionCard({ state, busy, error, onToggle }: { state: "on" | "off" | "partial" | undefined; busy: boolean; error: string; onToggle: () => void }) {
-  const labelId = useId();
-  const descriptionId = useId();
-  const on = state === "on";
   const description = state === undefined
     ? "Loading…"
-    : on
-      ? "Your preferences are used in search and baskets."
+    : state === "on"
+      ? `${MEMORY_TERM} is on: brands, sizes and things to avoid are used in search and baskets.`
       : state === "partial"
-        ? "Only some preferences are in use. Turn this on to use all of them."
-        : "Off. Saved preferences stay visible but are not used while shopping.";
+        ? `${MEMORY_TERM} is only partly on. Turn it on to use everything below.`
+        : `${MEMORY_TERM} is off. Everything stays listed here but isn't used while shopping.`;
   return <div className="rounded-2xl border border-border bg-surface p-3.5">
-    <div className="flex items-center gap-3">
-      <div className="min-w-0 flex-1"><p id={labelId} className="text-sm font-semibold">Use saved preferences</p><p id={descriptionId} className="mt-0.5 text-xs leading-5 text-muted">{description}</p></div>
-      <button type="button" role="switch" aria-checked={on} aria-labelledby={labelId} aria-describedby={descriptionId} disabled={state === undefined || busy} onClick={onToggle} className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-55 ${on ? "bg-accent" : "bg-border-strong"} ${ring} focus-visible:ring-offset-2`}>
-        <span className={`absolute top-0.5 grid size-6 place-items-center rounded-full bg-white shadow transition-[left] ${on ? "left-[22px]" : "left-0.5"}`}>{busy && <CircleNotch size={12} className="animate-spin text-accent-ink" />}</span>
-      </button>
-    </div>
+    <SwitchRow label={MEMORY_SWITCH_LABEL} description={description} checked={state === "on"} disabled={state === undefined} busy={busy} onToggle={onToggle} />
     {error && <p role="alert" className="mt-2 text-[11px] text-danger">{error}</p>}
   </div>;
+}
+
+/** The one on/off switch style used on this page. */
+function SwitchRow({ label, description, checked, disabled = false, busy = false, onToggle }: { label: string; description: string; checked: boolean; disabled?: boolean; busy?: boolean; onToggle: () => void }) {
+  const labelId = useId();
+  const descriptionId = useId();
+  return <div className="flex items-center gap-3">
+    <div className="min-w-0 flex-1"><p id={labelId} className="text-sm font-semibold">{label}</p><p id={descriptionId} className="mt-0.5 text-xs leading-5 text-muted">{description}</p></div>
+    <button type="button" role="switch" aria-checked={checked} aria-labelledby={labelId} aria-describedby={descriptionId} disabled={disabled || busy} onClick={onToggle} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors after:absolute after:-inset-x-1 after:-inset-y-2 after:content-[''] disabled:opacity-55 ${checked ? "bg-accent" : "bg-border-strong"} ${ring} focus-visible:ring-offset-2`}>
+      <span className={`absolute left-0.5 top-0.5 grid size-6 place-items-center rounded-full bg-white shadow transition-transform duration-200 ease-[cubic-bezier(.23,1,.32,1)] motion-reduce:transition-none ${checked ? "translate-x-5" : "translate-x-0"}`}>{busy && <CircleNotch size={12} className="animate-spin text-accent-ink" />}</span>
+    </button>
+  </div>;
+}
+
+type HistoryController = ReturnType<typeof usePurchaseHistoryImport>;
+
+/**
+ * History: whether GharSaathi learns usuals from past orders (read-only import), how
+ * long that data is kept, Refresh / Re-import, weekly sync per store, and Remove.
+ */
+function HistorySection({ history, commerceMode, swiggyConnected, zeptoConnected, hasOrderRows, removeDisabled, onRemove, onImported }: {
+  history: HistoryController;
+  commerceMode: "demo" | "live";
+  swiggyConnected: boolean;
+  zeptoConnected: boolean;
+  hasOrderRows: boolean;
+  removeDisabled: boolean;
+  onRemove: () => void;
+  onImported: () => void;
+}) {
+  const retentionId = useId();
+  const { permission, busy } = history;
+  const allowed = permission?.allowed === true;
+  const connectedProviders = ([swiggyConnected ? "swiggy" : null, zeptoConnected ? "zepto" : null] as const).filter((provider): provider is HistoryProvider => provider !== null);
+  const fullBlocked = connectedProviders.map((provider) => ({ provider, ...fullResyncAvailability(history.statuses[provider]) })).filter((item) => !item.available);
+  const fullAvailable = connectedProviders.length > 0 && fullBlocked.length < connectedProviders.length;
+  const canImport = commerceMode === "live" && connectedProviders.length > 0;
+  const description = permission === undefined
+    ? "Loading…"
+    : allowed
+      ? "On. Your recent orders suggest repeat items. Nothing is added or ordered on its own."
+      : commerceMode === "demo"
+        ? "Off. Not available in safe demo mode."
+        : !connectedProviders.length
+          ? "Off. Connect a store first (Settings → Stores)."
+          : "Off. Turn on to let GharSaathi read your recent orders (read-only) and learn your usuals.";
+  const after = (ran: Promise<boolean>) => void ran.then((ok) => { if (ok) onImported(); });
+  const small = `flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-accent-border bg-surface px-3 text-xs font-semibold text-ink-secondary disabled:opacity-45 ${ring}`;
+
+  return <section aria-labelledby="memory-history" aria-busy={busy !== null} className="space-y-2">
+    <h4 id="memory-history" className={SECTION_HEADING}>History</h4>
+    <div className="rounded-2xl border border-border bg-surface p-3.5">
+      <SwitchRow
+        label="Learn from my orders"
+        description={description}
+        checked={allowed}
+        disabled={permission === undefined || (!allowed && !canImport)}
+        busy={busy === "enable" || busy === "skip"}
+        onToggle={() => after(allowed ? history.skip() : history.enable())}
+      />
+
+      <div className="mt-3 border-t border-border pt-3">
+        <label htmlFor={retentionId} className="block text-xs font-semibold text-ink-secondary">Delete imported order data after</label>
+        <select id={retentionId} value={history.retentionDays} disabled={busy !== null || permission === undefined} onChange={(event) => { const days = Number(event.target.value); if (allowed) void history.changeRetention(days); else history.setRetentionDays(days); }} className="mt-1.5 min-h-11 w-full rounded-xl border border-border-strong bg-white px-3 text-sm outline-none focus:border-accent focus-visible:ring-2 focus-visible:ring-focus/30 disabled:opacity-60">
+          {RETENTION_CHOICES.map((choice) => <option key={choice.days} value={choice.days}>{choice.days === 365 ? "1 year" : `${choice.days} days`}</option>)}
+        </select>
+      </div>
+
+      {allowed && <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border pt-3">
+        <button type="button" onClick={() => after(history.refresh())} disabled={busy !== null || !canImport} className={small}>{busy === "refresh" ? <CircleNotch size={14} className="animate-spin" /> : <ClockCounterClockwise size={14} weight="bold" />}{busy === "refresh" ? "Refreshing…" : "Refresh usuals"}</button>
+        <button type="button" onClick={() => after(history.fullResync())} disabled={busy !== null || !fullAvailable || !canImport} className={small}>{busy === "full" && <CircleNotch size={14} className="animate-spin" />}{busy === "full" ? "Re-importing…" : "Re-import full history"}</button>
+      </div>}
+      {allowed && fullBlocked.length > 0 && <p className="mt-2 text-[11px] leading-4 text-muted">{fullBlocked.map((item) => `${providerLabel(item.provider)} full re-import: ${item.label}.`).join(" ")}</p>}
+
+      {allowed && commerceMode === "live" && connectedProviders.length > 0 && <div className="mt-3 space-y-3 border-t border-border pt-3">
+        {connectedProviders.map((provider) => <SwitchRow
+          key={provider}
+          label={`Keep my ${provider === "swiggy" ? "Swiggy" : "Zepto"} history up to date`}
+          description={`${provider === "swiggy" ? "Swiggy only shares the last 15 days, so" : "When on,"} GharSaathi reads new orders at most once a week, when you open the app. Read-only.`}
+          checked={history.statuses[provider]?.auto_sync_enabled === true}
+          busy={busy === "auto"}
+          disabled={busy !== null}
+          onToggle={() => void history.setAutoSync(provider, history.statuses[provider]?.auto_sync_enabled !== true)}
+        />)}
+      </div>}
+
+      {history.result && <div role="status" className="mt-3 space-y-1 rounded-xl bg-success-soft px-3 py-2 text-[11px] leading-5 text-success">{history.result.cached ? <p>Already checked recently, so the store wasn&apos;t asked again.</p> : history.result.lines.map((line) => <p key={line}>{line}</p>)}</div>}
+      {history.error && <p role="alert" className="mt-3 text-[11px] leading-4 text-danger">{history.error}</p>}
+
+      {(allowed || hasOrderRows) && <button type="button" disabled={removeDisabled || busy !== null} onClick={onRemove} className={`mt-3 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-danger-border bg-surface px-3 text-xs font-semibold text-danger disabled:opacity-50 ${ring}`}><Trash size={13} weight="bold" />Remove order history</button>}
+    </div>
+  </section>;
 }
 
 function MemoryItemRow({ row, first, busy, disabled, showUndo, onEdit, onDelete, onUndo }: {
@@ -390,7 +506,7 @@ function ForgetAllDialog({ open, count, busy, onCancel, onConfirm }: { open: boo
     open={open}
     tone="destructive"
     title="Delete everything?"
-    message={<>{count} saved {count === 1 ? "item" : "items"} will be permanently deleted—home, food, usual buys, avoid, shopping style and suggestions. Your name, language and order history stay; change them above. This can&apos;t be undone.</>}
+    message={<>{count} saved {count === 1 ? "item" : "items"} will be permanently deleted—home, food, usual buys, avoid, shopping style and suggestions. Your name, language and order history stay; change them in Profile and History. This can&apos;t be undone.</>}
     confirmLabel="Delete everything"
     busyLabel="Deleting…"
     busy={busy}

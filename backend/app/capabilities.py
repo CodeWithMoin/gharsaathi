@@ -186,6 +186,29 @@ CAPABILITIES: tuple[Capability, ...] = (
         ui_files=("frontend/app/product-comparison.tsx",),
     ),
     Capability(
+        id="compare_options",
+        title="Compare options on screen: price difference, unit price, pack, store",
+        voice=S(
+            W,
+            "compare_options(option_ids | item + positions, aspect): code works out price "
+            "differences, unit prices per 100 g / 100 ml / piece and the best value in stock; "
+            "the model repeats its strings.",
+        ),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
+        ui=S(
+            W,
+            "One live comparison card (comparison.ready): 2-4 columns with price, MRP, unit "
+            "price, stock, ETA, 'Cheapest' / 'Best value per 100 ml' badges and Add.",
+        ),
+        backend=S(
+            W,
+            "app/shopping/compare.py: pack parsing (g/kg, ml/L, pcs, multipacks), unit prices in "
+            "paise (half-up), never across grams and millilitres; read-only.",
+        ),
+        voice_tools=("compare_options",),
+        ui_files=("frontend/app/comparison-card-ui.tsx", "frontend/app/comparison-card.mjs"),
+    ),
+    Capability(
         id="multi_item_request",
         title="Ask for several items in one message ('atta, dal aur doodh')",
         voice=S(W, "Backend prompt tells the model to search each item separately."),
@@ -847,6 +870,26 @@ CAPABILITIES: tuple[Capability, ...] = (
         ui_files=("frontend/app/inbound-calls-ui.tsx", "frontend/app/order-status-card.tsx"),
     ),
     Capability(
+        id="inbound_live_delivery_context",
+        title="Live delivery context for the inbound agent (Sarvam API tool)",
+        voice=S(
+            U,
+            "Not part of the user's voice session. The Sarvam inbound agent calls the "
+            "get_delivery_context API tool during a delivery call.",
+        ),
+        typed_chat=S(U, "Not a chat feature."),
+        ui=S(U, "No UI: it reads the tracked order and the directions saved in the delivery-line popup."),
+        backend=S(
+            P,
+            "POST /api/sarvam/delivery-context, off by default (SARVAM_LIVE_CONTEXT_ENABLED), "
+            "static tool token (SARVAM_TOOL_TOKEN), 20 requests/min. Active only while the "
+            "owner's tracked order is placed, packed or out for delivery (or delivered in the "
+            "last 15 min); returns that order's address, saved directions, handover note and "
+            "ETA; never a phone number, OTP or payment detail. Tested offline only.",
+        ),
+        routes=("POST /api/sarvam/delivery-context",),
+    ),
+    Capability(
         id="support_complaint",
         title="Prepare a support complaint with evidence",
         voice=S(
@@ -1057,6 +1100,15 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "item_summary",
         "bill_breakdown",
         "fees_total",
+        # compare_options arguments, result fields and statuses.
+        "option_ids",
+        "price_difference",
+        "price_line",
+        "unit_price",
+        "unit_price_difference",
+        "unit_price_line",
+        "better_value",
+        "options_not_on_screen",
         # summarize_my_memory and search_products household-fact fields.
         "more_on_screen",
         "nothing_saved",

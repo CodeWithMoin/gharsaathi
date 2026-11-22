@@ -10,6 +10,7 @@ import {
   riderCallTime,
   riderCardsToShow,
   riderOutcomeText,
+  riderAssistAvailable,
   riderStatus,
 } from "../../app/rider-assist.mjs";
 
@@ -57,4 +58,11 @@ test("the switch reflects the server flag, owner and setup", () => {
   assert.equal(riderStatus({ ...base, feature_enabled: false }).label, "Turned off on this server");
   assert.equal(riderStatus({ ...base, owner_configured: false }).active, false);
   assert.equal(riderStatus({ ...base, stream_auth_configured: false }).label, "Server setup incomplete");
+});
+
+test("Rider assist (Vobiz) counts as available only when the server flag and owner are set", () => {
+  assert.equal(riderAssistAvailable({ feature_enabled: true, owner_configured: true }), true);
+  assert.equal(riderAssistAvailable({ feature_enabled: false, owner_configured: true }), false);
+  assert.equal(riderAssistAvailable({ feature_enabled: true, owner_configured: false }), false);
+  assert.equal(riderAssistAvailable(null), false);
 });

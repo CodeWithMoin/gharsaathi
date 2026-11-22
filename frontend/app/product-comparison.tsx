@@ -226,7 +226,7 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
     scrollToIndex(next, false);
   };
 
-  const arrowClass = `grid size-8 place-items-center rounded-full border border-border-strong bg-surface text-ink-secondary transition-[transform,background-color,opacity] duration-150 hover:bg-white active:scale-[.94] disabled:cursor-default disabled:opacity-35 ${focusRing}`;
+  const arrowClass = `grid size-8 place-items-center rounded-full text-ink-secondary transition-[transform,background-color,opacity] duration-150 hover:bg-white active:scale-[.94] disabled:cursor-default disabled:opacity-35 ${focusRing}`;
 
   return (
     <motion.section
@@ -238,12 +238,13 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
       className="min-w-0 max-w-full"
     >
       <div className="mb-2 flex min-h-8 items-center gap-2 px-1">
-        <h3 className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[.12em] text-accent-strong">{groupBadge(label, options.length)}</h3>
-        {overflowing && <span className="ml-auto text-[11px] font-semibold tabular-nums text-muted" aria-hidden>{positionLabel(active, options.length)}</span>}
+        <h3 className="min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[.12em] text-accent-strong">{groupBadge(label, options.length)}</h3>
         {overflowing && (
-          <div className="hidden items-center gap-1.5 sm:flex">
-            <button type="button" onClick={() => scrollToIndex(active - 1, true)} disabled={atStart} aria-label={`Previous ${label} option`} className={arrowClass}><CaretLeft size={14} weight="bold" /></button>
-            <button type="button" onClick={() => scrollToIndex(active + 1, true)} disabled={atEnd} aria-label={`Next ${label} option`} className={arrowClass}><CaretRight size={14} weight="bold" /></button>
+          // One compact pill: ‹ 1/6 › — keeps the title readable on narrow phones.
+          <div className="hidden shrink-0 items-center rounded-full border border-border-strong bg-surface sm:flex">
+            <button type="button" onClick={() => scrollToIndex(active - 1, true)} disabled={atStart} aria-label={`Previous ${label} option`} className={arrowClass}><CaretLeft size={13} weight="bold" /></button>
+            <span className="min-w-[2.25rem] text-center text-[11px] font-semibold tabular-nums text-muted" aria-hidden>{positionLabel(active, options.length)}</span>
+            <button type="button" onClick={() => scrollToIndex(active + 1, true)} disabled={atEnd} aria-label={`Next ${label} option`} className={arrowClass}><CaretRight size={13} weight="bold" /></button>
           </div>
         )}
       </div>
@@ -253,7 +254,7 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
           tabIndex={overflowing ? 0 : -1}
           onKeyDown={onKeyDown}
           aria-label={`${label} options`}
-          className="relative flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-1 outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="relative -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 outline-none [scrollbar-width:none] sm:mx-0 sm:scroll-px-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
         >
           {options.map(({ key, product, number, badge }) => (
             <li key={key} className="w-[min(78%,15.5rem)] shrink-0 snap-start sm:w-[calc((100%-1.5rem)/3)]">
@@ -276,3 +277,4 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
     </motion.section>
   );
 }
+

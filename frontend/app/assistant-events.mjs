@@ -3,6 +3,7 @@ import { voiceApprovalFromToolEvent } from "./voice-approval.mjs";
 import { orderConfirmationFromEvent } from "./order-confirmation.mjs";
 import { settleAddressFormAck } from "./address-form-merge.mjs";
 import { basketFromEvent } from "./card-lifecycle.mjs";
+import { comparisonFromEvent } from "./comparison-card.mjs";
 
 const ACK_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -33,6 +34,7 @@ const ADDRESS_UNAVAILABLE_MESSAGES = {
  *   onAddressRemoved?: (provider: "swiggy_instamart" | "zepto") => void,
  *   onPhotoRead?: (read: { attachmentId: string, itemCount: number }) => void,
  *   onMemorySummary?: () => void,
+ *   onComparison?: (comparison: import("./comparison-card.mjs").Comparison) => void,
  * }} handlers
  */
 export function applyAssistantEvent(raw, handlers) {
@@ -58,6 +60,12 @@ export function applyAssistantEvent(raw, handlers) {
     return unreachable
       ? { kind: "results", message: `Found options. ${unreachable}`, notice: unreachable }
       : { kind: "results", message: "Found options. Showing the best choices." };
+  }
+  if (event.type === "comparison.ready") {
+    const comparison = comparisonFromEvent(event);
+    if (!comparison) return null;
+    handlers.onComparison?.(comparison);
+    return { kind: "comparison", message: comparison.headline || "Comparison is on screen." };
   }
   if (event.type === "tool.not_connected") {
     return { kind: "not_connected", message: "Connect a store and choose a delivery address." };

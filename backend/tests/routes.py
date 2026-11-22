@@ -26,6 +26,9 @@ PUBLIC_ROUTES: dict[str, str] = {
     # the Vobiz auth token, checked fail-closed; off unless RIDER_ASSIST_ENABLED.
     "POST /api/rider/vobiz/answer": "Vobiz answer URL; Vobiz webhook signature (V3/V2) required",
     "POST /api/rider/vobiz/after-stream": "Vobiz redirect after the stream; Vobiz webhook signature required",
+    # Sarvam agent API tool: SARVAM_TOOL_TOKEN (constant-time compare); 404 unless
+    # SARVAM_LIVE_CONTEXT_ENABLED; answers only for SARVAM_INBOUND_OWNER_USER_ID.
+    "POST /api/sarvam/delivery-context": "Sarvam API tool; static tool token required, off by default",
 }
 
 # Local dev inspector (app/api/dev.py): each needs a verified user, but answers 404

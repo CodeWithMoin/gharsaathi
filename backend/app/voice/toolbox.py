@@ -43,6 +43,7 @@ from app.voice.memory_tools import (
 from app.shopping.models import ProviderName
 from app.shopping.order_confirmation import OrderConfirmations
 from app.voice.order_tools import ORDER_TOOL_DEFINITIONS, ORDER_TOOL_NAMES, OrderToolExecutor
+from app.voice.compare_tools import COMPARE_TOOL_DEFINITIONS, COMPARE_TOOL_NAMES, CompareToolExecutor
 from app.voice.express_tools import EXPRESS_TOOL_DEFINITIONS, EXPRESS_TOOL_NAMES, ExpressToolExecutor
 from app.voice.photo_tools import PHOTO_TOOL_DEFINITIONS, PHOTO_TOOL_NAMES, PhotoReading, PhotoToolExecutor
 from app.voice.order_status_tools import (
@@ -93,6 +94,7 @@ VOICE_TOOL_DEFINITIONS = [
     *PHOTO_TOOL_DEFINITIONS,
     *ORDER_STATUS_TOOL_DEFINITIONS,
     *SAVED_LIST_TOOL_DEFINITIONS,
+    *COMPARE_TOOL_DEFINITIONS,
 ]
 
 
@@ -197,6 +199,9 @@ class VoiceToolbox:
         self.saved_lists = SavedListToolExecutor(
             saved_lists, baskets, self._list_targets, household_id
         )
+        self.compare = CompareToolExecutor(
+            options, self.search.shown, lambda option_id: option_id in self._stale_options
+        )
 
     def _list_targets(self) -> dict[ProviderName, StoreTarget]:
         # The session's current stores and addresses (use_address updates them).
@@ -248,6 +253,8 @@ class VoiceToolbox:
             return await self.express.execute(name, raw_arguments)
         if name in SAVED_LIST_TOOL_NAMES:
             return await self.saved_lists.execute(name, raw_arguments)
+        if name in COMPARE_TOOL_NAMES:
+            return await self.compare.execute(name, raw_arguments)
         if name in ORDER_STATUS_TOOL_NAMES:
             return await self.order_status.execute(name, raw_arguments)
         if name in MEMORY_WRITE_TOOL_NAMES:
@@ -275,6 +282,8 @@ class VoiceToolbox:
         if name == "search_products":
             # A search for an item read from a product photo is compared with that photo.
             outcome = await self.photo.after_search(raw_arguments, outcome)
+            # Photo matching may reorder the cards; compare_options follows the screen.
+            self.search.shown.record_results(outcome.model_output)
         return outcome
 
     async def _recall_then_search(self, name: str, raw_arguments: str) -> ToolOutcome:
@@ -294,6 +303,7 @@ class VoiceToolbox:
         searched = await self.photo.after_search(
             query, await self.search.execute(SEARCH_TOOL_NAME, query)
         )
+        self.search.shown.record_results(searched.model_output)
         searched_ok = searched.model_output.get("status") == "ok"
         note = recalled.model_output.get("note", "")
         return ToolOutcome(

@@ -1,10 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CheckCircle, Circle, Clock, DeviceMobile, MapPin, Package, Phone, Truck, XCircle } from "@phosphor-icons/react";
+import { CheckCircle, Circle, Clock, DeviceMobile, Lifebuoy, MapPin, NavigationArrow, Package, Phone, PhoneIncoming, Truck, XCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApiRequest } from "./authenticated-api";
 import { LiveOrderTracking } from "./order-tracking";
+import { orderCardLinks, type OrderCardLink } from "./home-header.mjs";
 import { applyTrackingRead, deliveredText, etaText, finishedOrderSummary, isFinal, orderHeadline, orderSteps, placedText, pollDelayMs, updatedText, type OrderStatusCard as Card } from "./order-status.mjs";
 import { InputDialog } from "./ui/input-dialog";
 
@@ -13,10 +14,18 @@ import { InputDialog } from "./ui/input-dialog";
  * tracking monitor. It asks the backend only while the tab is visible and the
  * order is still moving, at the provider's allowed interval.
  */
-export function OrderStatusCard({ card, onChange, onUpdate, riderLine = null }: {
+export function OrderStatusCard({ card, onChange, onUpdate, riderLine = null, deliveryLineReady = false, onOpenDeliveryLine, onOpenDirections, onOpenSupport }: {
   card: Card;
   /** From a call to the inbound delivery line, e.g. "Rider has your directions". */
   riderLine?: string | null;
+  /** The Sarvam delivery line is on for this server. */
+  deliveryLineReady?: boolean;
+  /** Opens Settings → Delivery line. */
+  onOpenDeliveryLine?: () => void;
+  /** Opens the directions editor for the selected address. */
+  onOpenDirections?: () => void;
+  /** Opens the existing Order help flow. */
+  onOpenSupport?: () => void;
   /** Something worth saving with the chat changed (status, ETA, tracking stopped, a seen update). */
   onChange: (card: Card) => void;
   /** A new in-app update (out for delivery, delivered, delayed, cancelled) to show as a toast. */
@@ -95,6 +104,13 @@ export function OrderStatusCard({ card, onChange, onUpdate, riderLine = null }: 
   const summary = [live.itemCount !== null ? `${live.itemCount} ${live.itemCount === 1 ? "item" : "items"}` : null, live.payable, "Cash on delivery"].filter(Boolean).join(" · ");
 
   const finished = finishedOrderSummary(live);
+  const links = orderCardLinks({ final: isFinal(live), deliveryLineReady }).filter((link) => link.id !== "help" || onOpenSupport).filter((link) => link.id !== "delivery-line" || onOpenDeliveryLine);
+  const openLink = (link: OrderCardLink) => {
+    if (link.id === "help") onOpenSupport?.();
+    else if (link.id === "delivery-line") onOpenDeliveryLine?.();
+    else if (onOpenDirections) onOpenDirections();
+    else setTrackOpen(true);
+  };
   if (finished && !expanded) {
     return <motion.div id={`order-status-${live.orderId}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12">
       <button type="button" onClick={() => setExpanded(true)} aria-expanded={false} aria-label={`${finished}. Show order details`} className={`flex max-w-full items-center gap-2 truncate rounded-full px-3 py-1.5 text-[11px] font-medium transition hover:bg-surface-strong ${cancelled ? "bg-surface-strong text-danger-hover" : "bg-success-soft text-success-strong"}`}>
@@ -135,6 +151,11 @@ export function OrderStatusCard({ card, onChange, onUpdate, riderLine = null }: 
         <button type="button" onClick={() => setTrackOpen(true)} className="rounded-full bg-inverse px-5 py-2.5 text-sm font-semibold text-on-inverse transition hover:bg-inverse-hover active:scale-[.98]">Track order</button>
         <p className="flex items-center gap-1.5 text-xs leading-5 text-muted"><DeviceMobile size={15} className="shrink-0" />Open the {live.store} app to see the rider{isFinal(live) ? "" : " or to cancel"}.</p>
       </div>
+      {links.length > 0 && <nav aria-label="Order actions" className={`-mx-1 mt-3 grid gap-1 border-t border-border pt-2 ${links.length === 3 ? "grid-cols-3" : links.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+        {links.map((link) => <button key={link.id} type="button" onClick={() => openLink(link)} className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[11px] font-semibold leading-tight transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${links.length === 1 ? "flex-row justify-start gap-1.5 px-2 text-xs" : ""} ${link.id === "delivery-line" && deliveryLineReady ? "text-success-strong" : "text-accent-ink"}`}>
+          {link.id === "delivery-line" ? <PhoneIncoming size={17} weight={deliveryLineReady ? "fill" : "bold"} className="shrink-0" aria-hidden="true" /> : link.id === "directions" ? <NavigationArrow size={17} weight="bold" className="shrink-0" aria-hidden="true" /> : <Lifebuoy size={17} weight="bold" className="shrink-0" aria-hidden="true" />}<span className="max-w-full">{link.label}</span>
+        </button>)}
+      </nav>}
     </section>
     <InputDialog open={trackOpen} title="Track order" description={`${live.store} order #${live.orderId}. Updates are read-only.`} onClose={() => setTrackOpen(false)}>
       <LiveOrderTracking initialProvider="zepto" initialOrderId={live.orderId} initialMonitorId={live.monitorId ?? undefined} />
