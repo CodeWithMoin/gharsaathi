@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,15 @@ from app.main import app
 from tests.layers import LAYERS, LEGACY_LAYERS
 
 TESTS_ROOT = Path(__file__).resolve().parent
+FAILURE_MODES_DOC = TESTS_ROOT.parent.parent / "docs" / "FAILURE_MODES.md"
+
+
+def failure_mode_test_refs() -> list[str]:
+    """Backend test references (``tests/...py[::prefix]``) named in docs/FAILURE_MODES.md."""
+
+    if not FAILURE_MODES_DOC.exists():
+        return []
+    return sorted(set(re.findall(r"`(tests/[\w/]+\.py(?:::\w+)?)`", FAILURE_MODES_DOC.read_text(encoding="utf-8"))))
 
 
 def _layer_for(path: Path) -> str | None:
@@ -25,7 +35,11 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     """Mark every test with exactly one layer before `-m` deselection runs."""
 
     unclassified: set[str] = set()
+    refs = failure_mode_test_refs()
     for item in items:
+        # `make test-failures` selects the tests the failure-mode catalogue names.
+        if any(item.nodeid == ref or item.nodeid.startswith(ref + ("" if "::" in ref else "::")) for ref in refs):
+            item.add_marker(pytest.mark.failure_mode)
         if any(item.iter_markers(name="live")) or any(item.iter_markers(name="live_cart")):
             continue
         layer = _layer_for(Path(item.fspath))
