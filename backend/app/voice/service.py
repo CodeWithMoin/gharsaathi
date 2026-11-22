@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import secrets
 from typing import Any, Literal
@@ -5,6 +6,12 @@ from typing import Any, Literal
 import httpx
 from pydantic import BaseModel, Field
 
+from app.conversations.context import (
+    ConversationContextReader,
+    RecentConversationContext,
+    context_instructions_block,
+    live_input_items,
+)
 from app.core.config import Settings
 from app.memory.recall import HouseholdMemory, PreferenceRecaller
 from app.memory.remembered import memory_summary_block
@@ -28,6 +35,9 @@ from app.voice.tools import (
 
 
 logger = logging.getLogger(__name__)
+
+# Voice start never waits long for chat context; without it the session starts blank.
+CONTEXT_TIMEOUT_SECONDS = 2.0
 
 
 class VoiceError(Exception):
@@ -63,25 +73,40 @@ def build_session_config(
     tool_definitions: list[dict[str, Any]] | None = None,
     profile: UserProfile | None = None,
     household_memory: HouseholdMemory | None = None,
+    context: RecentConversationContext | None = None,
 ) -> dict[str, Any]:
-    return {
+    """GPT-Live session config.
+
+    Earlier turns of this chat seed GPT-Live through ``input`` (startup history,
+    https://developers.openai.com/api/docs/guides/live-conversations#seed-a-session-with-prior-conversation);
+    the summary, on-screen state and previous chats go in its instructions as
+    quoted reference data. The backend model gets the whole context block.
+    """
+
+    session: dict[str, Any] = {
         "model": settings.live_model,
         "instructions": with_profile(
             live_instructions(LIVE_INSTRUCTIONS, settings.voice_turn_taking), profile
-        ),
+        )
+        + context_instructions_block(context, include_turns=False),
         "audio": {"output": {"voice": settings.live_voice}},
         "delegation": {
             "type": "responses",
             "responses": {
                 "model": settings.live_backend_model,
                 "instructions": with_profile(BACKEND_INSTRUCTIONS, profile)
-                + memory_summary_block(household_memory),
+                + memory_summary_block(household_memory)
+                + context_instructions_block(context),
                 "tools": tool_definitions if tool_definitions is not None else TOOL_DEFINITIONS,
                 "tool_choice": "auto",
                 "parallel_tool_calls": True,
             },
         },
     }
+    history = live_input_items(context)
+    if history:
+        session["input"] = history
+    return session
 
 
 class LiveSessionService:
@@ -99,6 +124,7 @@ class LiveSessionService:
         preference_recall: PreferenceRecaller | None = None,
         profile_reader: ProfileReader | None = None,
         addresses: AddressDescriber | None = None,
+        context_reader: ConversationContextReader | None = None,
     ) -> None:
         self.settings = settings
         self.searcher = searcher
@@ -110,13 +136,18 @@ class LiveSessionService:
         self.preference_recall = preference_recall
         self.profile_reader = profile_reader
         self.addresses = addresses
+        self.context_reader = context_reader
         self._http_client = http_client
 
     @property
     def basket_enabled(self) -> bool:
         return self.baskets is not None and self.approvals is not None
 
-    def _tool_executor(
+    @property
+    def tool_definitions(self) -> list[dict[str, Any]]:
+        return VOICE_TOOL_DEFINITIONS if self.basket_enabled else TOOL_DEFINITIONS
+
+    def tool_executor(
         self, address_id: str | None, zepto_address_id: str | None, household_id: str
     ) -> ToolExecutor:
         if self.basket_enabled:
@@ -144,7 +175,7 @@ class LiveSessionService:
             )
         return ShoppingToolExecutor(self.searcher, address_id)
 
-    async def _profile(self, household_id: str) -> UserProfile | None:
+    async def profile(self, household_id: str) -> UserProfile | None:
         if self.profile_reader is None or not household_id:
             return None
         try:
@@ -153,7 +184,7 @@ class LiveSessionService:
             logger.warning("Voice profile read failed: %s", type(exc).__name__)
             return None
 
-    async def _household_memory(self, household_id: str) -> HouseholdMemory | None:
+    async def household_memory(self, household_id: str) -> HouseholdMemory | None:
         reader = getattr(self.preference_recall, "household_memory", None)
         if not callable(reader) or not household_id:
             return None
@@ -161,6 +192,17 @@ class LiveSessionService:
             return await reader(household_id)
         except Exception as exc:  # noqa: BLE001 - memory must not block voice
             logger.warning("Voice memory summary failed: %s", type(exc).__name__)
+            return None
+
+    async def conversation_context(self, household_id: str) -> RecentConversationContext | None:
+        if self.context_reader is None or not household_id:
+            return None
+        try:
+            return await asyncio.wait_for(
+                self.context_reader.load(household_id), CONTEXT_TIMEOUT_SECONDS
+            )
+        except Exception as exc:  # noqa: BLE001 - missing context must not block voice
+            logger.warning("Voice chat context read failed: %s", type(exc).__name__)
             return None
 
     async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
@@ -179,17 +221,21 @@ class LiveSessionService:
         api_key = self.settings.openai_api_key.get_secret_value().strip()
         if not api_key:
             raise VoiceConfigurationError("Set OPENAI_API_KEY in .env to enable voice.")
-        profile = await self._profile(household_id)
-        household_memory = await self._household_memory(household_id)
+        profile, household_memory, context = await asyncio.gather(
+            self.profile(household_id),
+            self.household_memory(household_id),
+            self.conversation_context(household_id),
+        )
         try:
             response = await self._post(
                 f"{self.settings.openai_base_url.rstrip('/')}/live/sessions",
                 json={
                     "session": build_session_config(
                         self.settings,
-                        VOICE_TOOL_DEFINITIONS if self.basket_enabled else TOOL_DEFINITIONS,
+                        self.tool_definitions,
                         profile,
                         household_memory if self.basket_enabled else None,
+                        context=context,
                     ),
                     "transport": {"type": "webrtc", "sdp": offer_sdp},
                 },
@@ -213,7 +259,7 @@ class LiveSessionService:
         events_token = secrets.token_urlsafe(32)
         self.hub.start(
             session_id,
-            self._tool_executor(swiggy_address_id, zepto_address_id, household_id),
+            self.tool_executor(swiggy_address_id, zepto_address_id, household_id),
             owner_id=household_id,
             events_token=events_token,
         )

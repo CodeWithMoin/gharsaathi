@@ -292,6 +292,8 @@ class ShoppingApprovalRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Quote snapshot for this exact approval (see Approval.quote).
+    quote: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
 class ZeptoCheckoutAttemptRecord(Base):
@@ -558,6 +560,9 @@ class Conversation(Base):
         ForeignKey("memory_subjects.id", ondelete="CASCADE"), index=True
     )
     state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # Rolling model summary of the chat ({text, turn_count, model, updated_at}),
+    # written in the background; deleted with the row.
+    summary: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

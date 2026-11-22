@@ -8,7 +8,9 @@ import { Brand } from "./brand";
 import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, type Approval, type ApprovalRequest, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
 import { groupProductsForComparison, INITIAL_COMPARISON_GROUPS, ProductComparison, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
-import { basketSummary, collapseBasketCard, emptyTimeline, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordResults, restoreTimeline, summaryText, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
+import { basketSummary, collapseBasketCard, dropResultGroup, emptyTimeline, finishResultGroup, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordResultGroup, restoreTimeline, summaryText, withResultGroups, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
+import { groupBadge, restoreResultGroups, resultGroupIdentity, resultsHeadline, type ResultGroup } from "./result-groups.mjs";
+import { conversationTitle, relativeChatDate, searchConversations, visibleConversations, type ConversationSummary } from "./chat-list.mjs";
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
 import { PersonalizationOnboarding } from "./personalization-onboarding";
@@ -19,15 +21,16 @@ import { FirstRunOnboarding } from "./first-run-onboarding";
 import { AccountSettingsSheet } from "./account-settings-sheet";
 import { ZeptoAddressForm, type ZeptoAddressPrefill } from "./zepto-address-form";
 import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
+import { applyAssistantEvent } from "./assistant-events.mjs";
 
 const LEGACY_CHAT_STORAGE_KEY = "gharsaathi:conversation:v1";
 
 type Address = { id: string; address_line: string; category?: string; tag?: string };
 type CommerceMode = "demo" | "live";
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string };
-type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; timeline?: unknown; updated_at: string };
-type ConversationSummary = { id: string; title: string; preview: string; updated_at: string; is_active: boolean };
+type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; timeline?: unknown; result_groups?: unknown; updated_at: string };
 type LegacyConversation = { submittedQuery?: string; products?: Product[]; searched?: boolean };
+type ChatTurnResponse = { conversation_id: string | null; reply: string; ui_events: unknown[] };
 let swiggyConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
 let zeptoConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
 
@@ -36,16 +39,6 @@ const suggestions = [
   { label: "Shampoo + batteries", query: "Shampoo and batteries" },
   { label: "Pet supplies", query: "Pet supplies" },
 ];
-
-function conversationTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const today = new Date();
-  const sameDay = date.toDateString() === today.toDateString();
-  return sameDay
-    ? new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit" }).format(date)
-    : new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(date);
-}
 
 export default function Home() {
   return <FirstRunOnboarding>{({ firstName, openSetup }) => <ShoppingChat userName={firstName} onOpenSetup={openSetup} />}</FirstRunOnboarding>;
@@ -79,16 +72,14 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [addressId, setAddressId] = useState("");
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
-  const [products, setProducts] = useState<Product[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [recentChats, setRecentChats] = useState<ConversationSummary[]>([]);
   const [chatSearch, setChatSearch] = useState("");
   const [recentChatsLoading, setRecentChatsLoading] = useState(false);
-  const [resultsAfterMessageId, setResultsAfterMessageId] = useState<string | null>(null);
-  const [loading, setLoading] = useState<"connection" | "addresses" | "search" | "disconnect" | null>("connection");
-  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState<"connection" | "addresses" | "search" | "assistant" | "disconnect" | null>("connection");
+  const [chatFailure, setChatFailure] = useState<{ query: string; message: string } | null>(null);
   const [chatHydrated, setChatHydrated] = useState(false);
   const [message, setMessage] = useState("Checking your Swiggy connection…");
   const addressRequestRef = useRef<Promise<void> | null>(null);
@@ -97,7 +88,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const lastSearchRef = useRef<{ key: string; at: number } | null>(null);
   const conversationSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const conversationSaveTimerRef = useRef<number | null>(null);
+  const pendingConversationSaveRef = useRef<(() => void) | null>(null);
   const chatMessagesRef = useRef<ChatMessage[]>([]);
+  const conversationIdRef = useRef<string | null>(null);
   // Set when the saved chat could not be loaded, so the first save starts a new chat instead of overwriting it.
   const startFreshConversationRef = useRef(false);
   const selectedAddress = useMemo(() => addresses.find((address) => address.id === addressId), [addresses, addressId]);
@@ -163,12 +156,12 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     setZeptoAddressFormOpen(true);
     setSetupOpen(true);
   }, []);
-  const handleVoiceResults = useCallback((searchQuery: string, foundProducts: Product[]) => {
+  // Each searched item gets its own result group; searching it again replaces the group.
+  const handleVoiceResults = useCallback((searchQuery: string, foundProducts: Product[], item: { itemKey?: string; itemLabel?: string }) => {
+    const identity = resultGroupIdentity({ ...item, query: searchQuery, products: foundProducts });
+    const afterMessageId = latestMessageId(chatMessagesRef.current);
     setSubmittedQuery(searchQuery);
-    setProducts(foundProducts);
-    setSearched(true);
-    setResultsAfterMessageId(chatMessagesRef.current.at(-1)?.id ?? null);
-    setTimeline(recordResults);
+    setTimeline((current) => recordResultGroup(current, { ...identity, query: searchQuery, products: foundProducts, status: "done", afterMessageId }));
     setMessage(`${foundProducts.length} ${commerceMode === "demo" ? "demo" : "live"} options found.`);
   }, [commerceMode]);
   const handleVoiceTranscript = useCallback((turn: VoiceTranscriptTurn) => {
@@ -205,13 +198,19 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       : restoredMessages;
     const fallbackResultAnchor = [...repairedMessages].reverse().find((item) => item.role === "user")?.id ?? null;
     setSubmittedQuery(localReply ? "" : conversation.submitted_query);
-    setProducts(localReply ? [] : conversation.products);
-    setSearched(localReply ? false : conversation.searched);
     setChatMessages(repairedMessages);
     chatMessagesRef.current = repairedMessages;
-    setResultsAfterMessageId(localReply ? null : conversation.results_after_message_id ?? fallbackResultAnchor);
+    conversationIdRef.current = conversation.id;
     const restoredTimeline = restoreTimeline(conversation.timeline);
-    setTimeline(restoredTimeline);
+    const restoredGroups = localReply ? [] : restoreResultGroups<Product>({
+      resultGroups: conversation.result_groups,
+      products: conversation.products,
+      searched: conversation.searched,
+      submittedQuery: conversation.submitted_query,
+      resultsAfterMessageId: conversation.results_after_message_id ?? fallbackResultAnchor,
+      resultsSeq: restoredTimeline.resultsSeq,
+    });
+    setTimeline(withResultGroups(restoredTimeline, restoredGroups));
     const newest = [...restoredTimeline.live].sort((a, b) => b.seq - a.seq)[0];
     if (newest) setBasketProvider(newest.provider);
     billStageRef.current = {};
@@ -223,7 +222,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const loadRecentChats = useCallback(async () => {
     setRecentChatsLoading(true);
     try {
-      setRecentChats(await apiRequest<ConversationSummary[]>("/api/conversations?limit=30"));
+      setRecentChats(visibleConversations(await apiRequest<ConversationSummary[]>("/api/conversations?limit=30&exclude_empty=true")));
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Could not load recent chats.");
     } finally {
@@ -379,9 +378,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         const migratedProducts = Array.isArray(legacy.products) ? legacy.products : [];
         const migratedSearched = legacy.searched === true;
         setSubmittedQuery(legacy.submittedQuery);
-        setProducts(migratedProducts);
-        setSearched(migratedSearched);
         const migratedMessages: ChatMessage[] = [{ id: `legacy-${Date.now().toString(36)}`, role: "user", content: legacy.submittedQuery, modality: "text", created_at: new Date().toISOString() }];
+        const migratedGroups = restoreResultGroups<Product>({ products: migratedProducts, searched: migratedSearched, submittedQuery: legacy.submittedQuery, resultsAfterMessageId: migratedMessages[0].id });
+        setTimeline((current) => withResultGroups(current, migratedGroups));
         setChatMessages(migratedMessages);
         void apiRequest<PersistedConversation>("/api/conversations/current", {
           method: "PUT",
@@ -419,9 +418,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
   useEffect(() => {
     if (!chatHydrated || (!submittedQuery && !chatMessages.length)) return;
-    const timer = window.setTimeout(() => {
+    const save = () => {
       conversationSaveTimerRef.current = null;
-      const snapshot = conversationSnapshot({ submittedQuery, products, searched, messages: chatMessages, resultsAfterMessageId, timeline });
+      pendingConversationSaveRef.current = null;
+      const snapshot = conversationSnapshot({ submittedQuery, products: [], searched: false, messages: chatMessages, resultsAfterMessageId: null, timeline });
       conversationSaveQueueRef.current = conversationSaveQueueRef.current
         .catch(() => undefined)
         .then(async () => {
@@ -429,24 +429,36 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
             await apiRequest<null>("/api/conversations/new", { method: "POST" });
             startFreshConversationRef.current = false;
           }
-          await apiRequest<PersistedConversation>("/api/conversations/current", {
+          const saved = await apiRequest<PersistedConversation>("/api/conversations/current", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(snapshot),
           });
+          conversationIdRef.current = saved.id;
           setChatSaveFailed(false);
         })
         .catch((cause: unknown) => {
           setChatSaveFailed(true);
           setMessage(cause instanceof Error ? cause.message : "Could not save this chat.");
         });
-    }, 250);
+    };
+    const timer = window.setTimeout(save, 250);
+    const flush = () => { window.clearTimeout(timer); save(); };
     conversationSaveTimerRef.current = timer;
+    pendingConversationSaveRef.current = flush;
     return () => {
       window.clearTimeout(timer);
       if (conversationSaveTimerRef.current === timer) conversationSaveTimerRef.current = null;
+      if (pendingConversationSaveRef.current === flush) pendingConversationSaveRef.current = null;
     };
-  }, [apiRequest, chatHydrated, chatMessages, products, resultsAfterMessageId, searched, submittedQuery, timeline]);
+  }, [apiRequest, chatHydrated, chatMessages, submittedQuery, timeline]);
+
+  // The server reads chat context for voice sessions and typed turns; run any
+  // debounced save now and wait for the queue.
+  const flushConversationSave = useCallback(async () => {
+    pendingConversationSaveRef.current?.();
+    await conversationSaveQueueRef.current.catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const updateFollow = () => {
@@ -498,7 +510,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       window.cancelAnimationFrame(frame);
       scrollAnimatingRef.current = false;
     };
-  }, [chatHydrated, chatMessages, loading, products, submittedQuery, supportOpen, timeline, trackingOpen, voiceOpen]);
+  }, [chatHydrated, chatMessages, loading, submittedQuery, supportOpen, timeline, trackingOpen, voiceOpen]);
 
   async function startNewChat() {
     if (conversationSaveTimerRef.current !== null) {
@@ -507,11 +519,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     }
     setVoiceOpen(false);
     setSubmittedQuery("");
-    setProducts([]);
-    setSearched(false);
     setChatMessages([]);
     chatMessagesRef.current = [];
-    setResultsAfterMessageId(null);
+    conversationIdRef.current = null;
+    setChatFailure(null);
     setTimeline(emptyTimeline());
     billStageRef.current = {};
     pendingBillStageRef.current = {};
@@ -610,6 +621,46 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       setMessage("Ready when you are.");
       return;
     }
+    if (loading === "assistant") return;
+    const swiggyReady = connected === true && Boolean(addressId);
+    const zeptoReady = zeptoConnected === true && Boolean(zeptoAddressId);
+    followScrollRef.current = true;
+    const userMessage: ChatMessage = { id: `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, role: "user", content: clean, modality: "text", created_at: new Date().toISOString() };
+    const withUser = [...chatMessagesRef.current, userMessage];
+    chatMessagesRef.current = withUser;
+    setChatMessages(withUser);
+    setQuery("");
+    setVoiceOpen(false);
+    setChatFailure(null);
+    setLoading("assistant");
+    try {
+      await flushConversationSave();
+      const turn = await apiRequest<ChatTurnResponse>("/api/chat/turn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation_id: conversationIdRef.current, message: clean, swiggy_address_id: swiggyReady ? addressId : null, zepto_address_id: zeptoReady ? zeptoAddressId : null }),
+      });
+      if (turn.conversation_id) conversationIdRef.current ??= turn.conversation_id;
+      const reply: ChatMessage = { id: `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}-assistant`, role: "assistant", content: turn.reply, modality: "text", created_at: new Date().toISOString() };
+      const withReply = [...chatMessagesRef.current, reply];
+      chatMessagesRef.current = withReply;
+      setChatMessages(withReply);
+      for (const event of turn.ui_events) {
+        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm });
+        if (outcome?.kind === "not_connected") setSetupOpen(true);
+        if (outcome) setMessage(outcome.message);
+      }
+    } catch (cause) {
+      const detail = cause instanceof ApiError && [502, 503, 504].includes(cause.status) ? cause.message : "Assistant abhi jawab nahi de paayi.";
+      setChatFailure({ query: clean, message: `${detail} Chahein to seedha store search kar sakte hain.` });
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  // Fallback when the assistant turn fails: one direct store search for the
+  // message the user already sent, shown as its own result group.
+  async function runDirectSearch(clean: string) {
     const searchKey = `${addressId}\u0000${zeptoAddressId}\u0000${clean.toLocaleLowerCase()}`;
     const inFlight = searchRequestsRef.current.get(searchKey);
     if (inFlight) return inFlight;
@@ -620,24 +671,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
     followScrollRef.current = true;
     setSubmittedQuery(clean);
-    const userMessageId = `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    setChatMessages((current) => {
-      const next = [...current, {
-        id: userMessageId,
-        role: "user" as const,
-        content: clean,
-        modality: "text" as const,
-        created_at: new Date().toISOString(),
-      }];
-      chatMessagesRef.current = next;
-      return next;
-    });
-    setResultsAfterMessageId(userMessageId);
-    setTimeline(recordResults);
-    setQuery("");
-    setVoiceOpen(false);
-    setProducts([]);
-    setSearched(false);
+    const afterMessageId = latestMessageId(chatMessagesRef.current);
     const swiggyReady = connected === true && Boolean(addressId);
     const zeptoReady = zeptoConnected === true && Boolean(zeptoAddressId);
     if (!swiggyReady && !zeptoReady) {
@@ -645,6 +679,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       setMessage("Connect a store and choose its saved delivery address first.");
       return;
     }
+    const identity = resultGroupIdentity({ query: clean });
+    setTimeline((current) => recordResultGroup(current, { ...identity, query: clean, products: [], status: "searching", afterMessageId }));
 
     const request = (async () => {
       setLoading("search");
@@ -662,12 +698,12 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         const outcomes = await Promise.allSettled(searches);
         const combined = outcomes.flatMap((outcome) => outcome.status === "fulfilled" ? outcome.value : []);
         const failures = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
-        setProducts(combined);
-        setSearched(true);
+        setTimeline((current) => finishResultGroup(current, identity.key, { products: combined, status: "done" }));
         if (combined.length) setMessage(`${combined.length} ${commerceMode === "demo" ? "demo" : "live"} options found across ready stores.`);
         else if (failures.length) setMessage(failures[0].reason instanceof Error ? failures[0].reason.message : "Store search failed.");
         else setMessage("No matching products found at the selected addresses.");
       } catch (cause) {
+        setTimeline((current) => dropResultGroup(current, identity.key));
         setMessage(cause instanceof Error ? cause.message : "Search failed.");
       } finally {
         setLoading(null);
@@ -712,7 +748,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     try {
       await apiRequest<null>("/api/swiggy/disconnect", { method: "POST" });
       swiggyConnectionRequest = null;
-      setConnected(false); setAddresses([]); setAddressId(""); setProducts([]); setMessage("Swiggy disconnected.");
+      setConnected(false); setAddresses([]); setAddressId(""); setTimeline((current) => ({ ...current, groups: [] })); setMessage("Swiggy disconnected.");
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Could not disconnect Swiggy."); }
     finally { setLoading(null); }
   }
@@ -757,18 +793,14 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const headerCard = liveCard(timeline, basketProvider);
   const headerCardIsNewest = headerCard !== null && headerCard.seq === timeline.seq && headerCard.afterMessageId === latestMessageId(chatMessages);
   const hasChat = Boolean(submittedQuery || chatMessages.length);
-  const filteredRecentChats = recentChats.filter((chat) => {
-    const needle = chatSearch.trim().toLocaleLowerCase();
-    return !needle || chat.title.toLocaleLowerCase().includes(needle) || chat.preview.toLocaleLowerCase().includes(needle);
-  });
-  const searchOutcome = loading === "search" ? (
-    <motion.div key="searching-response" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex items-center gap-1.5" aria-label="GharSaathi is searching">{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">{commerceMode === "demo" ? "Static demo catalogue mein dekh rahi hoon" : zeptoSearchReady ? "Swiggy aur Zepto par dekh rahi hoon" : "Swiggy Instamart par dekh rahi hoon"}</span></div></div></motion.div>
-  ) : searched && !products.length ? (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 max-w-md rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex gap-3"><Basket size={20} className="mt-0.5 shrink-0 text-[#c6531d]" /><p className="text-sm leading-6">Is address par kuch nahi mila. Product ya brand ko thoda broadly bolkar try karein.</p></div></div></motion.div>
-  ) : products.length ? (() => {
-    const productCount = groupProductsForComparison(products).length;
-    return <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><div className="mb-2 w-fit max-w-full rounded-[18px] bg-[#fffdf9] px-4 py-3 shadow-[0_14px_34px_-32px_rgba(74,43,27,.65)]"><p className="text-[13px] leading-5"><strong>{productCount === 1 ? "1 relevant option mila." : productCount > INITIAL_COMPARISON_GROUPS ? `${productCount} options mile—top ${INITIAL_COMPARISON_GROUPS} yahan hain.` : `${productCount} relevant options mile.`}</strong> {productCount > 1 ? (commerceMode === "demo" ? "Add karte hi agla item khulega." : `${zeptoSearchReady ? "Swiggy aur Zepto" : "Swiggy Instamart"} ke options compare karein.`) : "Best matching option neeche hai."}</p></div><ProductComparison products={products} commerceMode={commerceMode} addingSku={addingSku} onAdd={addProduct} /><p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p></motion.div>;
-  })() : null;
+  const filteredRecentChats = searchConversations(recentChats, chatSearch);
+  const newestGroupSeq = Math.max(0, ...timeline.groups.map((group) => group.seq));
+  const renderResultGroup = (group: ResultGroup<Product>) => {
+    if (group.status === "searching") return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex items-center gap-1.5" aria-label={`GharSaathi is searching for ${group.label}`}>{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">{commerceMode === "demo" ? "Static demo catalogue mein dekh rahi hoon" : zeptoSearchReady ? "Swiggy aur Zepto par dekh rahi hoon" : "Swiggy Instamart par dekh rahi hoon"}</span></div></div></motion.div>;
+    if (!group.products.length) return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 max-w-md rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex gap-3"><Basket size={20} className="mt-0.5 shrink-0 text-[#c6531d]" /><p className="text-sm leading-6"><strong className="font-semibold">{group.label}:</strong> is address par kuch nahi mila. Product ya brand ko thoda broadly bolkar try karein.</p></div></div></motion.div>;
+    const optionCount = groupProductsForComparison(group.products).length;
+    return <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><div className="mb-2 w-fit max-w-full rounded-[18px] bg-[#fffdf9] px-4 py-3 shadow-[0_14px_34px_-32px_rgba(74,43,27,.65)]"><p className="text-[11px] font-bold uppercase tracking-[.12em] text-[#b65a2e]">{groupBadge(group.label, optionCount)}</p><p className="mt-1 text-[13px] leading-5"><strong>{resultsHeadline(optionCount, INITIAL_COMPARISON_GROUPS)}</strong> {optionCount > 1 ? (commerceMode === "demo" ? "Add karte hi agla item khulega." : `${zeptoSearchReady ? "Swiggy aur Zepto" : "Swiggy Instamart"} ke options compare karein.`) : "Best matching option neeche hai."}</p></div><ProductComparison products={group.products} commerceMode={commerceMode} addingSku={addingSku} onAdd={addProduct} />{group.seq === newestGroupSeq && <p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p>}</motion.div>;
+  };
 
   return <main className="grain min-h-[100dvh] overflow-hidden bg-[#f8f2ea] text-[#35241c]">
     <AnimatePresence>
@@ -802,8 +834,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
                 <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl bg-white text-[#9a6d58] ring-1 ring-[#eaded5]"><ChatCircleDots size={17} weight={chat.is_active ? "fill" : "regular"} /></span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2">
-                    <span className="block min-w-0 flex-1 truncate text-sm font-semibold text-[#3d2b23]">{chat.title}</span>
-                    <span className="shrink-0 text-[11px] text-[#a18c80]">{conversationTime(chat.updated_at)}</span>
+                    <span className="block min-w-0 flex-1 truncate text-sm font-semibold text-[#3d2b23]">{conversationTitle(chat)}</span>
+                    <span className="shrink-0 text-[11px] text-[#a18c80]">{relativeChatDate(chat.updated_at)}</span>
                   </span>
                   <span className="mt-1 block truncate text-xs leading-4 text-[#8b7569]">{chat.preview}</span>
                 </span>
@@ -842,13 +874,13 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mr-7 sm:mr-12">
           <div className="min-w-0 max-w-[620px]">
             <div className="rounded-[7px_20px_20px_20px] bg-[#fffdf9] px-4 py-3.5 shadow-[0_16px_40px_-34px_rgba(74,43,27,.7)] sm:px-5 sm:py-4"><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hello, {userName}. <strong className="font-semibold">Aaj ghar ke liye kya mangwana hai?</strong></p><p className="mt-1 text-[13px] leading-5 text-[#806f65] sm:mt-1.5 sm:text-sm sm:leading-6">Bas bol dijiye—main ready stores par saath mein check karungi.</p></div>
-            {!hasChat && <div className="mt-3 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">{suggestions.map((suggestion) => <button key={suggestion.query} onClick={() => void runSearch(suggestion.query)} disabled={loading === "search"} className="min-h-10 rounded-2xl bg-[#eee2d8]/80 px-2 py-2 text-[11px] font-medium leading-4 text-[#70584b] transition hover:bg-[#e7d7cb] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-0 sm:rounded-full sm:px-3.5 sm:text-xs">{suggestion.label}</button>)}</div>}
+            {!hasChat && <div className="mt-3 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">{suggestions.map((suggestion) => <button key={suggestion.query} onClick={() => void runSearch(suggestion.query)} disabled={loading === "search" || loading === "assistant"} className="min-h-10 rounded-2xl bg-[#eee2d8]/80 px-2 py-2 text-[11px] font-medium leading-4 text-[#70584b] transition hover:bg-[#e7d7cb] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-0 sm:rounded-full sm:px-3.5 sm:text-xs">{suggestion.label}</button>)}</div>}
           </div>
         </motion.div>
 
         <AnimatePresence initial={false}>
-          {placeTimelineItems({ messages: chatMessages, resultsAfterMessageId, timeline, showResults: searchOutcome !== null }).map((item) => {
-            if (item.kind === "results") return <div key="search-outcome" className="contents">{searchOutcome}</div>;
+          {placeTimelineItems({ messages: chatMessages, timeline }).map((item) => {
+            if (item.kind === "results") return item.group ? <div key={`results-${item.group.key}`} className="contents">{renderResultGroup(item.group as ResultGroup<Product>)}</div> : null;
             if (item.kind === "basket-summary") {
               const { card } = item;
               return <motion.div key={`basket-summary-${card.provider}-${card.seq}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12"><p className="flex max-w-full items-center gap-2 truncate rounded-full bg-[#efe5dc] px-3 py-1.5 text-[11px] font-medium text-[#806f65]"><ShoppingCartSimple size={13} className="shrink-0 text-[#a6876f]" /><span className="shrink-0 font-semibold text-[#6b5446]">{card.provider === "zepto" ? "Zepto" : "Instamart"}</span><span className="truncate">{summaryText(card)}</span></p></motion.div>;
@@ -869,6 +901,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
             );
           })}
         </AnimatePresence>
+        {loading === "assistant" && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="w-fit rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex items-center gap-1.5" role="status" aria-label="GharSaathi is typing">{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">Soch rahi hoon…</span></div></div></motion.div>}
+        {chatFailure && loading !== "assistant" && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div role="alert" className="max-w-md rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><p className="text-sm leading-6 text-[#9e4536]">{chatFailure.message}</p><button type="button" onClick={() => { const failedQuery = chatFailure.query; setChatFailure(null); void runDirectSearch(failedQuery); }} className="mt-3 flex items-center gap-1.5 rounded-full bg-[#3b2a22] px-4 py-2 text-xs font-semibold text-white transition active:scale-[.97]"><MagnifyingGlass size={14} /> Seedha search karein</button></div></motion.div>}
         {chatSaveFailed && <p role="status" className="mt-6 text-center text-[11px] leading-4 text-[#9e4536]">Ye chat abhi save nahi hui. Agla message aate hi phir koshish hogi.</p>}
 
         <AnimatePresence>{supportOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><SupportPanel onClose={() => setSupportOpen(false)} onTrackOrder={() => { setSupportOpen(false); setTrackingOpen(true); }} /></motion.div>}</AnimatePresence>
@@ -878,8 +912,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
     <div className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-[#f8f2ea] via-[#f8f2ea] to-transparent px-4 pb-4 pt-10 sm:pb-6">
       <AnimatePresence mode="wait">
-        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
-          <div className="flex items-center gap-2 rounded-[26px] border border-[#deccbf] bg-[#fffdf9] p-2 pl-5 shadow-[0_24px_60px_-28px_rgba(70,40,24,.55),inset_0_1px_0_rgba(255,255,255,.9)]"><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search"} className="min-w-0 flex-1 bg-transparent py-2 text-[15px] outline-none placeholder:text-[#a28e82] disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() ? <button type="submit" aria-label="Send request" disabled={loading === "search"} className="grid size-12 shrink-0 place-items-center rounded-full bg-[#3b2a22] text-white transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} disabled={loading === "search"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-[#c6531d] text-white shadow-[0_12px_30px_-14px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-[#c6531d]" /><Microphone size={23} /></button>}</div>
+        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} beforeSessionStart={flushConversationSave} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
+          <div className="flex items-center gap-2 rounded-[26px] border border-[#deccbf] bg-[#fffdf9] p-2 pl-5 shadow-[0_24px_60px_-28px_rgba(70,40,24,.55),inset_0_1px_0_rgba(255,255,255,.9)]"><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search" || loading === "assistant"} className="min-w-0 flex-1 bg-transparent py-2 text-[15px] outline-none placeholder:text-[#a28e82] disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() ? <button type="submit" aria-label="Send request" disabled={loading === "search" || loading === "assistant"} className="grid size-12 shrink-0 place-items-center rounded-full bg-[#3b2a22] text-white transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} disabled={loading === "search" || loading === "assistant"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-[#c6531d] text-white shadow-[0_12px_30px_-14px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-[#c6531d]" /><Microphone size={23} /></button>}</div>
           <p className="mt-2.5 text-center text-[10px] text-[#8d7a6f]">Hindi · English · Hinglish &nbsp;·&nbsp; You approve every purchase</p>
         </motion.form>}
       </AnimatePresence>

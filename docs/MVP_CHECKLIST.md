@@ -46,3 +46,5 @@ features start.
 | 2026-11-22 | 7 | False "Store item prices changed" (MRP subtotal vs offer total) | `codex/chat-layout-bill` (merged) | |
 | 2026-11-22 | 8 | Promo question drifted into "samaan poora mila?" | `codex/voice-recall-offers` | |
 | 2026-11-22 | 9 | Typed text only runs a keyword search | `codex/typed-chat-assistant` | |
+| 2026-11-22 | 5 | Reopened voice forgot the chat ("Kya dhoondhna tha mujhe?") | `codex/voice-continuity-multiitem` (backend context + summaries) | |
+| 2026-11-22 | 6 | Second item's results replaced the first (atta never shown) | backend `item_key` + `result_groups` here; UI on `codex/results-groups-drawer` | |

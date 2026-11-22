@@ -150,7 +150,8 @@ class DatabaseApprovalRepository:
     async def save(self, approval: Approval) -> None:
         async with self.sessions() as session, session.begin():
             record = await session.get(ShoppingApprovalRecord, approval.id)
-            values = approval.model_dump(mode="python")
+            values = approval.model_dump(mode="python", exclude={"quote"})
+            values["quote"] = approval.quote.model_dump(mode="json") if approval.quote else None
             if record is None:
                 session.add(ShoppingApprovalRecord(**values))
                 return
@@ -230,5 +231,6 @@ def _approval(record: ShoppingApprovalRecord) -> Approval:
             "created_at": record.created_at,
             "expires_at": record.expires_at,
             "decided_at": record.decided_at,
+            "quote": record.quote,
         }
     )
