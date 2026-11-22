@@ -254,6 +254,8 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
           tabIndex={overflowing ? 0 : -1}
           onKeyDown={onKeyDown}
           aria-label={`${label} options`}
+          // Soft edge fades only on the side that has more cards to swipe to.
+          style={overflowing ? { maskImage: edgeFade(atStart, atEnd), WebkitMaskImage: edgeFade(atStart, atEnd) } : undefined}
           className="relative flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-1 outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {options.map(({ key, product, number, badge }) => (
@@ -276,4 +278,10 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
       </div>
     </motion.section>
   );
+}
+
+function edgeFade(atStart: boolean, atEnd: boolean): string {
+  const left = atStart ? "black 0" : "transparent 0, black 28px";
+  const right = atEnd ? "black 100%" : "black calc(100% - 44px), transparent 100%";
+  return `linear-gradient(to right, ${left}, ${right})`;
 }
