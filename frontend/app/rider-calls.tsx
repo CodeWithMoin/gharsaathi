@@ -9,6 +9,7 @@ import {
   RIDER_POLL_MS,
   RIDER_SETTINGS_PATH,
   newRiderCalls,
+  riderAssistAvailable,
   riderCallCardText,
   riderCardsToShow,
   riderToastText,
@@ -38,7 +39,7 @@ export function useRiderCalls({ latestMessageIdRef, onToast }: { latestMessageId
   useEffect(() => {
     let alive = true;
     void request<RiderSettings>(RIDER_SETTINGS_PATH)
-      .then((settings) => { if (alive) setActive(settings.feature_enabled && settings.owner_configured); })
+      .then((settings) => { if (alive) setActive(riderAssistAvailable(settings)); })
       .catch(() => { /* Rider assist is optional; no card, no polling. */ });
     return () => { alive = false; };
   }, [request]);
@@ -76,7 +77,7 @@ export function useRiderCalls({ latestMessageIdRef, onToast }: { latestMessageId
 
   const cards: RiderCardEntry[] = riderCardsToShow(calls, Date.now(), dismissed).map((card) => ({ card, afterMessageId: anchors.current.get(card.id) ?? null }));
   const dismiss = useCallback((id: string) => setDismissed((current) => new Set(current).add(id)), []);
-  return { cards, dismiss };
+  return { cards, dismiss, available: active };
 }
 
 /** Timeline system card: "Rider called · 8:24 am · 'Gate pe hoon, flat number?' — answered from your notes". */

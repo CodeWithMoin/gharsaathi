@@ -56,7 +56,7 @@ export type ProviderImportProgress =
   | { state: "done"; result: HistoryImportResult }
   | { state: "failed"; message: string };
 
-export type HistoryBusy = "enable" | "skip" | "refresh" | "full" | "auto" | "disable" | null;
+export type HistoryBusy = "enable" | "skip" | "refresh" | "full" | "auto" | "retention" | "disable" | null;
 
 export const RETENTION_CHOICES = [
   { days: 30, label: "30 din" },
@@ -67,7 +67,8 @@ export const RETENTION_CHOICES = [
 export const providerLabel = (provider: HistoryProvider) => provider === "swiggy" ? "Swiggy Instamart" : "Zepto";
 
 /**
- * Purchase-history permission and import, shared by the setup sheet and onboarding.
+ * Purchase-history permission and import, shared by onboarding, the setup sheet and
+ * Settings → What GharSaathi knows → History.
  * Imports run one store at a time so Zepto's sequential detail reads stay bounded.
  */
 export function usePurchaseHistoryImport({ swiggyConnected, zeptoConnected }: { swiggyConnected: boolean; zeptoConnected: boolean }) {
@@ -196,6 +197,12 @@ export function usePurchaseHistoryImport({ swiggyConnected, zeptoConnected }: { 
     setStatuses((current) => ({ ...current, [provider]: status }));
   }, "Could not save the weekly-sync setting."), [request, run]);
 
+  /** Changes how long imported order data is kept; only while order history is on. */
+  const changeRetention = useCallback((days: number) => run("retention", async () => {
+    setPermission(await savePermission(true, days));
+    setRetentionDays(days);
+  }, "Could not save how long order history is kept."), [run, savePermission]);
+
   const disable = useCallback(() => run("disable", async () => {
     setPermission(await savePermission(false, 0));
     await request<null>("/api/memory/purchase-history", { method: "DELETE" });
@@ -210,6 +217,7 @@ export function usePurchaseHistoryImport({ swiggyConnected, zeptoConnected }: { 
     reload: () => setReloadKey((value) => value + 1),
     retentionDays,
     setRetentionDays,
+    changeRetention,
     busy,
     result,
     progress,

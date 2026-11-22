@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the "Saved preferences" settings screen: grouping, readable
+ * Pure helpers for Settings → What GharSaathi knows (Memory): grouping, readable
  * English sentences, origin badges, the undo window and the
  * correction payload for inline edits. No I/O; safe to unit test.
  */

@@ -318,7 +318,7 @@ export function ConsentStep({ updatedTerms, focusHeading, onAccept }: {
     </label>
     <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-[20px] bg-surface-strong p-4 text-[14px] leading-6 text-ink-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus">
       <input type="checkbox" checked={personalizationAllowed} onChange={(event) => setPersonalizationAllowed(event.target.checked)} className="mt-1 size-[18px] shrink-0 accent-accent" />
-      <span><strong className="font-semibold text-ink-secondary">Optional:</strong> Allow personalisation from saved preferences. Shopping-history import stays a separate choice and is never enabled automatically.</span>
+      <span><strong className="font-semibold text-ink-secondary">Optional:</strong> Turn on Memory, so GharSaathi uses what you tell it (brands, sizes, things to avoid). Order-history import stays a separate choice and is never turned on automatically.</span>
     </label>
     <p className="mt-3 text-[12px] leading-5 text-muted">You can change personalisation choices later. Accepting Terms is required; personalisation is not.</p>
   </StepFrame>;

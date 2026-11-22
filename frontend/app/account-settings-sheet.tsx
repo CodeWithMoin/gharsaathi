@@ -3,18 +3,13 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
-  Bell,
   Brain,
   CaretRight,
-  Check,
   CircleNotch,
-  Eye,
-  Lifebuoy,
   MapPin,
   PencilSimple,
   Phone,
-  ShieldCheck,
-  SignOut,
+  PhoneIncoming,
   Storefront,
   Translate,
   X,
@@ -25,10 +20,14 @@ import { ADDRESS_FORM_OPTIONS } from "./onboarding-flow.mjs";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useApiRequest } from "./authenticated-api";
 import { MemorySettings } from "./memory-settings";
-import { NotificationsDetail, notificationsSubtitle, type NotificationsController } from "./notification-settings";
+import { NotificationSwitch, type NotificationsController } from "./notification-settings";
 import { profileChanges, profileDraft, type ProfileUpdate, type ProfileValues } from "./input-flows.mjs";
 import { InputDialog } from "./ui/input-dialog";
 import { RiderAssistSettings } from "./rider-assist-settings";
+import { deliveryLineSettingsView, type DeliveryLineConfig } from "./delivery-line-settings.mjs";
+import { MEMORY_TERM, SETTINGS_DRAWER_CLASS, sectionHeading, settingsRows, type SettingsRowId, type SettingsSection } from "./settings-map.mjs";
+
+export type { SettingsSection } from "./settings-map.mjs";
 
 export type AccountSettingsStore = {
   id: string;
@@ -36,13 +35,6 @@ export type AccountSettingsStore = {
   connected: boolean;
   /** A provider-specific status such as "Address ready" or "Needs reconnect". */
   detail?: string;
-};
-
-export type AccountSettingsAddress = {
-  id: string;
-  label: string;
-  detail?: string;
-  selected?: boolean;
 };
 
 export type AccountSettingsIdentity = {
@@ -60,19 +52,22 @@ export type AccountSettingsSheetProps = {
   /** This is deliberately surfaced inside Stores, never in the account header. */
   commerceMode?: "demo" | "live";
   languageLabel?: string;
-  privacySummary?: string;
-  addresses?: AccountSettingsAddress[];
+  /** Starts the store's own OAuth login (readiness is checked first); never opens another sheet. */
   onConnectStore?: (storeId: string) => void;
+  /** Opens the Disconnect confirmation popup for a connected store. */
   onDisconnectStore?: (storeId: string) => void;
-  onManagePreferences?: () => void;
-  onLanguageChange?: (language: "hinglish" | "hindi" | "english") => void;
-  onManagePrivacy?: () => void;
-  onManageAddresses?: () => void;
-  onSelectAddress?: (addressId: string) => void;
   /** Opens the "Choose delivery address" popup for one connected store. */
   onChooseStoreAddress?: (storeId: string) => void;
-  /** Opens the Order help popup (the header no longer has its own help button). */
-  onOpenSupport?: () => void;
+  /** Store whose login is being prepared, and the last connection problem, shown on Stores. */
+  connectingStoreId?: string | null;
+  storeError?: string;
+  onLanguageChange?: (language: "hinglish" | "hindi" | "english") => void;
+  /** Sarvam delivery line config from the page (`undefined` while loading, `null` if unreadable). */
+  deliveryLine?: DeliveryLineConfig | null;
+  /** Delivery line → "Directions for this address". */
+  onOpenDeliveryDirections?: () => void;
+  /** Show the parked Vobiz Rider assist row; only when the server reports it on. */
+  riderAssistAvailable?: boolean;
   onSignOut: () => void;
   signOutPending?: boolean;
   /** Browser notifications; the page owns the controller so the order prompt shares it. */
@@ -81,11 +76,10 @@ export type AccountSettingsSheetProps = {
   initialSection?: SettingsSection;
 };
 
-export type SettingsSection = "stores" | "preferences" | "memory" | "privacy" | "addresses" | "notifications" | "rider" | null;
-
 /**
- * A controlled, mobile-first account panel. It intentionally has only an overview
- * and one detail layer, so connected-store and address flows never become a settings maze.
+ * The right push drawer: a profile header row, Stores, What GharSaathi knows and
+ * Delivery line (Beta), then a Sign out link. One width on every page
+ * (`SETTINGS_DRAWER_CLASS`) and one detail layer, so it never becomes a settings maze.
  */
 export function AccountSettingsSheet({
   open,
@@ -94,30 +88,27 @@ export function AccountSettingsSheet({
   stores = [],
   commerceMode = "demo",
   languageLabel = "Hinglish",
-  privacySummary = "Memory on for choices you share",
-  addresses = [],
   onConnectStore,
   onDisconnectStore,
-  onManagePreferences,
-  onLanguageChange,
-  onManagePrivacy,
-  onManageAddresses,
-  onSelectAddress,
   onChooseStoreAddress,
-  onOpenSupport,
+  connectingStoreId = null,
+  storeError = "",
+  onLanguageChange,
+  deliveryLine,
+  onOpenDeliveryDirections,
+  riderAssistAvailable = false,
   onSignOut,
   signOutPending = false,
   notifications,
   initialSection = null,
 }: AccountSettingsSheetProps) {
   const [section, setSection] = useState<SettingsSection>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  // Focus moves into the drawer itself on open (not the close button), so no focus ring shows
+  // after a tap; keyboard users Tab to Back/Close and still get their focus-visible ring.
+  const panelRef = useRef<HTMLElement>(null);
   const titleId = useId();
   const reducedMotion = useReducedMotion() ?? false;
   const connectedStoreCount = stores.filter((store) => store.connected).length;
-  const addressSummary = addresses.length === 0
-    ? "Add a delivery address"
-    : addresses.find((address) => address.selected)?.label ?? `${addresses.length} saved ${addresses.length === 1 ? "address" : "addresses"}`;
 
   useEffect(() => {
     if (open && initialSection) setSection(initialSection);
@@ -130,7 +121,7 @@ export function AccountSettingsSheet({
     }
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+    const focusTimer = window.setTimeout(() => panelRef.current?.focus({ preventScroll: true }), 0);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onOpenChange(false);
     };
@@ -143,30 +134,27 @@ export function AccountSettingsSheet({
   }, [onOpenChange, open]);
 
   const close = () => onOpenChange(false);
-  const heading = section === "stores"
-    ? "Stores"
-    : section === "preferences"
-      ? "Preferences"
-      : section === "memory"
-        ? "What GharSaathi knows"
-        : section === "privacy"
-          ? "Privacy & memory"
-          : section === "addresses"
-            ? "Addresses"
-            : section === "notifications"
-              ? "Notifications"
-              : section === "rider"
-                ? "Rider assist"
-                : "Account";
+  const heading = sectionHeading(section);
+  const storeConnected = (id: string) => stores.some((store) => store.id === id && store.connected);
+  const rows = settingsRows({ riderAssist: riderAssistAvailable });
+  const line = deliveryLineSettingsView(deliveryLine);
+  const rowDetails: Record<SettingsRowId, { icon: ReactNode; subtitle: string }> = {
+    stores: { icon: <Storefront size={21} weight="duotone" />, subtitle: connectedStoreCount ? `${connectedStoreCount} store${connectedStoreCount === 1 ? "" : "s"} connected` : "Connect a shopping store" },
+    memory: { icon: <Brain size={21} weight="duotone" />, subtitle: `${MEMORY_TERM}, order history, privacy` },
+    delivery: { icon: <PhoneIncoming size={21} weight="duotone" />, subtitle: line.ready ? `On · ${line.display}` : "An AI answers delivery calls you decline" },
+    rider: { icon: <Phone size={21} weight="duotone" />, subtitle: "Server-enabled rider calls" },
+  };
 
   // A right-side push drawer: the page shell in page.tsx slides left by the same width with
   // the same spring and owns the backdrop, so tapping the pushed page closes this panel.
   return <AnimatePresence>
     {open && <motion.section
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${section === "memory" || section === "rider" ? "w-[min(94vw,420px)]" : "w-3/4 max-w-[360px]"} flex-col overflow-hidden bg-surface-muted text-ink`}
+        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${SETTINGS_DRAWER_CLASS} flex-col overflow-hidden bg-surface-muted text-ink outline-none`}
         initial={reducedMotion ? { opacity: 0 } : { x: "100%" }}
         animate={{ x: 0, opacity: 1 }}
         exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}
@@ -175,41 +163,42 @@ export function AccountSettingsSheet({
         <header className="flex items-center justify-between px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
           {section ? <button type="button" onClick={() => setSection(null)} className="grid size-11 place-items-center rounded-full text-ink-secondary transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Back to account settings"><ArrowLeft size={20} weight="bold" /></button> : <span className="size-11" />}
           <h2 id={titleId} className="font-display text-lg font-semibold tracking-[-.04em]">{heading}</h2>
-          <button ref={closeButtonRef} type="button" onClick={close} className="grid size-11 place-items-center rounded-full text-ink-secondary transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Close account settings"><X size={20} weight="bold" /></button>
+          <button type="button" onClick={close} className="grid size-11 place-items-center rounded-full text-ink-secondary transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Close account settings"><X size={20} weight="bold" /></button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <AnimatePresence mode="wait" initial={false}>
             {section === null
               ? <motion.div key="overview" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: .16 }}>
-                <div className="flex items-center gap-3 rounded-[22px] border border-border bg-surface p-3.5">
-                  {identity.imageUrl ? <Image src={identity.imageUrl} alt="" width={48} height={48} className="size-12 rounded-2xl object-cover" /> : <span aria-hidden="true" className="grid size-12 place-items-center rounded-2xl bg-accent text-base font-bold text-on-accent">{initials(identity.name)}</span>}
-                  <div className="min-w-0"><p className="truncate text-sm font-semibold">{identity.name}</p>{identity.email && <p className="mt-0.5 truncate text-xs text-muted">{identity.email}</p>}</div>
-                </div>
+                <button type="button" onClick={() => setSection("profile")} aria-label={`Profile: ${identity.name}`} className="flex min-h-[76px] w-full items-center gap-3 rounded-[22px] border border-border bg-surface p-3.5 text-left transition hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                  {identity.imageUrl ? <Image src={identity.imageUrl} alt="" width={48} height={48} className="size-12 rounded-2xl object-cover" /> : <span aria-hidden="true" className="grid size-12 shrink-0 place-items-center rounded-2xl bg-accent text-base font-bold text-on-accent">{initials(identity.name)}</span>}
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{identity.name}</span><span className="mt-0.5 block truncate text-xs text-muted">{identity.email ?? `Profile · ${languageLabel}`}</span></span>
+                  <CaretRight size={17} className="shrink-0 text-subtle" weight="bold" />
+                </button>
 
                 <nav aria-label="Account settings" className="mt-4 overflow-hidden rounded-[22px] border border-border bg-surface">
-                  <SettingsRow icon={<Storefront size={21} weight="duotone" />} title="Stores" subtitle={connectedStoreCount ? `${connectedStoreCount} store${connectedStoreCount === 1 ? "" : "s"} connected` : "Connect a shopping store"} onClick={() => setSection("stores")} />
-                  <SettingsRow icon={<Translate size={21} weight="duotone" />} title="Preferences" subtitle={languageLabel} onClick={() => setSection("preferences")} />
-                  <SettingsRow icon={<Brain size={21} weight="duotone" />} title="What GharSaathi knows" subtitle="Home, food, usual buys, avoid" onClick={() => setSection("memory")} />
-                  <SettingsRow icon={<ShieldCheck size={21} weight="duotone" />} title="Privacy & memory" subtitle={privacySummary} onClick={() => setSection("privacy")} />
-                  {notifications && <SettingsRow icon={<Bell size={21} weight="duotone" />} title="Notifications" subtitle={notificationsSubtitle(notifications.view)} onClick={() => setSection("notifications")} />}
-                  <SettingsRow icon={<Phone size={21} weight="duotone" />} title="Rider assist (Beta)" subtitle="An AI answers missed delivery calls" onClick={() => setSection("rider")} />
-                  <SettingsRow icon={<MapPin size={21} weight="duotone" />} title="Addresses" subtitle={addressSummary} onClick={() => setSection("addresses")} last={!onOpenSupport} />
-                  {onOpenSupport && <SettingsRow icon={<Lifebuoy size={21} weight="duotone" />} title="Help with an order" subtitle="Missing, damaged or late items" onClick={onOpenSupport} last />}
+                  {rows.map((row, index) => <SettingsRow
+                    key={row.id}
+                    icon={rowDetails[row.id].icon}
+                    title={row.title}
+                    subtitle={rowDetails[row.id].subtitle}
+                    onClick={() => setSection(row.section)}
+                    last={index === rows.length - 1}
+                  />)}
                 </nav>
 
-                <button type="button" onClick={onSignOut} disabled={signOutPending} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-accent-border bg-surface px-4 text-sm font-semibold text-danger transition hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-55">
-                  {signOutPending ? <CircleNotch size={18} className="animate-spin" /> : <SignOut size={18} weight="bold" />}{signOutPending ? "Signing out…" : "Sign out"}
-                </button>
+                <div className="mt-5 flex justify-center">
+                  <button type="button" onClick={onSignOut} disabled={signOutPending} className="flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-danger underline-offset-4 transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-55">
+                    {signOutPending && <CircleNotch size={15} className="animate-spin" />}{signOutPending ? "Signing out…" : "Sign out"}
+                  </button>
+                </div>
               </motion.div>
               : <motion.div key={section} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 14 }} transition={{ duration: .16 }}>
-                {section === "stores" && <StoresDetail stores={stores} commerceMode={commerceMode} onConnectStore={onConnectStore} onDisconnectStore={onDisconnectStore} />}
-                {section === "preferences" && <PreferencesDetail languageLabel={languageLabel} onLanguageChange={onLanguageChange} onManagePreferences={onManagePreferences} />}
-                {section === "memory" && <MemorySettings onEditProfile={() => setSection("preferences")} />}
-                {section === "privacy" && <SimpleDetail icon={<Eye size={24} weight="duotone" />} title={privacySummary} description="You choose what GharSaathi remembers. Shopping history alone never becomes a stock prediction." action="Review privacy & memory" onAction={onManagePrivacy} />}
-                {section === "notifications" && notifications && <NotificationsDetail controller={notifications} />}
-                {section === "rider" && <RiderAssistSettings />}
-                {section === "addresses" && <AddressesDetail addresses={addresses} stores={stores} onSelectAddress={onSelectAddress} onManageAddresses={onManageAddresses} onChooseStoreAddress={onChooseStoreAddress} />}
+                {section === "profile" && <div className="space-y-4"><ProfileDetail languageLabel={languageLabel} onLanguageChange={onLanguageChange} />{notifications && <NotificationSwitch controller={notifications} />}</div>}
+                {section === "stores" && <StoresDetail stores={stores} commerceMode={commerceMode} connectingStoreId={connectingStoreId} error={storeError} onConnectStore={onConnectStore} onDisconnectStore={onDisconnectStore} onChooseStoreAddress={onChooseStoreAddress} />}
+                {section === "memory" && <MemorySettings onEditProfile={() => setSection("profile")} commerceMode={commerceMode} swiggyConnected={storeConnected("swiggy")} zeptoConnected={storeConnected("zepto")} />}
+                {section === "delivery" && <DeliveryLineDetail config={deliveryLine} onOpenDirections={onOpenDeliveryDirections} />}
+                {section === "rider" && riderAssistAvailable && <RiderAssistSettings />}
               </motion.div>}
           </AnimatePresence>
         </div>
@@ -218,8 +207,8 @@ export function AccountSettingsSheet({
 }
 
 /** A 44px+ account trigger whose fallback label is the requested M-style initial. */
-export function AccountMenuButton({ name, onClick, imageUrl }: { name: string; onClick: () => void; imageUrl?: string }) {
-  return <button type="button" onClick={onClick} aria-label="Open account settings" className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-accent text-sm font-bold text-on-accent shadow-[0_12px_26px_-20px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:scale-[.96]">
+export function AccountMenuButton({ name, onClick, imageUrl, active = false }: { name: string; onClick: () => void; imageUrl?: string; active?: boolean }) {
+  return <button type="button" onClick={onClick} aria-label="Open account settings" aria-expanded={active} className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-accent text-sm font-bold text-on-accent shadow-[0_12px_26px_-20px_rgb(var(--accent-shadow)/.8)] transition-[background-color,transform] duration-150 ease-out hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[.96] motion-reduce:active:scale-100">
     {imageUrl ? <Image src={imageUrl} alt="" width={44} height={44} className="size-full object-cover" /> : initials(name)}
   </button>;
 }
@@ -230,15 +219,22 @@ function SettingsRow({ icon, title, subtitle, onClick, last = false }: { icon: R
   </button>;
 }
 
-function StoresDetail({ stores, commerceMode, onConnectStore, onDisconnectStore }: { stores: AccountSettingsStore[]; commerceMode: "demo" | "live"; onConnectStore?: (storeId: string) => void; onDisconnectStore?: (storeId: string) => void }) {
+function StoresDetail({ stores, commerceMode, connectingStoreId, error, onConnectStore, onDisconnectStore, onChooseStoreAddress }: { stores: AccountSettingsStore[]; commerceMode: "demo" | "live"; connectingStoreId: string | null; error: string; onConnectStore?: (storeId: string) => void; onDisconnectStore?: (storeId: string) => void; onChooseStoreAddress?: (storeId: string) => void }) {
+  const storeAction = (store: AccountSettingsStore) => {
+    if (commerceMode === "demo") return null;
+    if (store.connected) return <button type="button" onClick={() => onDisconnectStore?.(store.id)} disabled={!onDisconnectStore} className="min-h-10 rounded-xl border border-accent-border px-3 text-xs font-semibold text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-55">Disconnect</button>;
+    const connecting = connectingStoreId === store.id;
+    return <button type="button" onClick={() => onConnectStore?.(store.id)} disabled={!onConnectStore || connecting} className="flex min-h-10 items-center gap-1.5 rounded-xl bg-accent px-3 text-xs font-semibold text-on-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-60">{connecting && <CircleNotch size={13} className="animate-spin" />}{connecting ? "Checking…" : "Connect"}</button>;
+  };
   return <div>
     <div className="rounded-2xl border border-border bg-surface p-4"><p className="text-[11px] font-bold uppercase tracking-[.13em] text-muted">Shopping mode</p><div className="mt-2 flex items-center gap-2"><span className={`size-2 rounded-full ${commerceMode === "live" ? "bg-success" : "bg-warning"}`} /><p className="text-sm font-semibold">{commerceMode === "live" ? "Live shopping" : "Safe demo mode"}</p></div><p className="mt-1 text-xs leading-5 text-muted">{commerceMode === "live" ? "Searches use your connected stores. Purchases still need your approval." : "Try the experience without provider calls or store changes."}</p></div>
-    <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface">{stores.length ? stores.map((store, index) => <div key={store.id} className={`flex min-h-[76px] items-center gap-3 px-3.5 ${index ? "border-t border-border" : ""}`}><span className="grid size-10 place-items-center rounded-xl bg-accent-soft text-accent-hover"><Storefront size={21} weight="duotone" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{store.name}</span><span className="mt-0.5 block truncate text-xs text-muted">{store.detail ?? (store.connected ? "Connected" : "Not connected")}</span></span>{store.connected ? <button type="button" onClick={() => onDisconnectStore?.(store.id)} className="min-h-10 rounded-xl border border-accent-border px-3 text-xs font-semibold text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">Manage</button> : <button type="button" onClick={() => onConnectStore?.(store.id)} className="min-h-10 rounded-xl bg-accent px-3 text-xs font-semibold text-on-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">Connect</button>}</div>) : <p className="px-4 py-5 text-sm leading-6 text-muted">No stores are connected yet. Connect one when you’re ready to search live catalogues.</p>}</div>
+    <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface">{stores.length ? stores.map((store, index) => <div key={store.id} className={index ? "border-t border-border" : ""}>
+      <div className="flex min-h-[76px] items-center gap-3 px-3.5"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-hover"><Storefront size={21} weight="duotone" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{store.name}</span><span className="mt-0.5 block truncate text-xs text-muted">{store.detail ?? (store.connected ? "Connected" : "Not connected")}</span></span>{storeAction(store)}</div>
+      {store.connected && onChooseStoreAddress && <button type="button" onClick={() => onChooseStoreAddress(store.id)} className="flex min-h-11 w-full items-center gap-2 border-t border-border px-3.5 text-left text-xs font-semibold text-accent-ink transition-colors hover:bg-canvas focus-visible:relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"><MapPin size={15} weight="bold" className="shrink-0" /><span className="min-w-0 flex-1 truncate">Change {store.name} address</span><CaretRight size={14} weight="bold" className="shrink-0 text-subtle" /></button>}
+    </div>) : <p className="px-4 py-5 text-sm leading-6 text-muted">No stores are connected yet. Connect one when you’re ready to search live catalogues.</p>}</div>
+    {error && <p role="alert" className="mt-3 rounded-xl bg-danger-soft px-3 py-2 text-xs leading-5 text-danger-hover">{error}</p>}
+    {commerceMode === "live" && <p className="mt-3 px-1 text-[11px] leading-4 text-muted">You log in on the store’s own page. GharSaathi never asks for your password or OTP.</p>}
   </div>;
-}
-
-function SimpleDetail({ icon, title, description, action, onAction }: { icon: ReactNode; title: string; description: string; action: string; onAction?: () => void }) {
-  return <div className="rounded-2xl border border-border bg-surface p-4"><span className="grid size-11 place-items-center rounded-xl bg-accent-soft text-accent-hover">{icon}</span><h3 className="mt-4 text-base font-semibold tracking-[-.02em]">{title}</h3><p className="mt-2 text-sm leading-6 text-muted">{description}</p><button type="button" onClick={onAction} disabled={!onAction} className="mt-5 min-h-11 w-full rounded-xl border border-accent-border px-4 text-sm font-semibold text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:opacity-55">{action}</button></div>;
 }
 
 type AddressForm = "masculine" | "feminine" | "neutral";
@@ -258,7 +254,7 @@ const REPLY_STYLES: { id: ReplyStyle; label: string; hint: string }[] = [
 ];
 const choiceClass = (selected: boolean) => `min-h-11 rounded-xl px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-60 ${selected ? "bg-accent text-on-accent" : "border border-accent-border text-ink-secondary"}`;
 
-function PreferencesDetail({ languageLabel, onLanguageChange, onManagePreferences }: { languageLabel: string; onLanguageChange?: (language: "hinglish" | "hindi" | "english") => void; onManagePreferences?: () => void }) {
+function ProfileDetail({ languageLabel, onLanguageChange }: { languageLabel: string; onLanguageChange?: (language: "hinglish" | "hindi" | "english") => void }) {
   const request = useApiRequest();
   const [profile, setProfile] = useState<VoiceProfile | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -297,7 +293,6 @@ function PreferencesDetail({ languageLabel, onLanguageChange, onManagePreference
         setSavedNotice(true);
       }}
     />}
-    {onManagePreferences && <button type="button" onClick={onManagePreferences} className="mt-3 min-h-11 w-full rounded-xl border border-accent-border px-4 text-sm font-semibold text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">More preferences</button>}
     <EditProfileDialog
       open={editing && profile !== null}
       initial={draft}
@@ -401,9 +396,35 @@ function EditProfileDialog({ open, initial, languageEditable, onClose, onSave }:
   </InputDialog>;
 }
 
-function AddressesDetail({ addresses, stores, onSelectAddress, onManageAddresses, onChooseStoreAddress }: { addresses: AccountSettingsAddress[]; stores: AccountSettingsStore[]; onSelectAddress?: (addressId: string) => void; onManageAddresses?: () => void; onChooseStoreAddress?: (storeId: string) => void }) {
-  const connectedStores = onChooseStoreAddress ? stores.filter((store) => store.connected) : [];
-  return <div><div className="overflow-hidden rounded-2xl border border-border bg-surface">{addresses.length ? addresses.map((address, index) => <button type="button" key={address.id} onClick={() => onSelectAddress?.(address.id)} className={`flex min-h-[72px] w-full items-center gap-3 px-3.5 text-left focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus ${index ? "border-t border-border" : ""}`}><span className="grid size-10 place-items-center rounded-xl bg-accent-soft text-accent-hover"><MapPin size={20} weight="duotone" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{address.label}</span>{address.detail && <span className="mt-0.5 block truncate text-xs text-muted">{address.detail}</span>}</span>{address.selected && <span className="grid size-6 place-items-center rounded-full bg-success-soft text-success" aria-label="Selected address"><Check size={14} weight="bold" /></span>}</button>) : <p className="px-4 py-5 text-sm leading-6 text-muted">Add a delivery address to use with a connected store.</p>}</div>{connectedStores.map((store) => <button key={store.id} type="button" onClick={() => onChooseStoreAddress?.(store.id)} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-accent-border bg-surface px-4 text-sm font-semibold text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"><MapPin size={16} weight="bold" />Choose {store.name} address</button>)}<button type="button" onClick={onManageAddresses} disabled={!onManageAddresses} className="mt-4 min-h-11 w-full rounded-xl border border-accent-border bg-surface px-4 text-sm font-semibold text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:opacity-55">Manage addresses</button></div>;
+/**
+ * Delivery line (Beta): the Sarvam AI number answers delivery calls the owner declines.
+ * Forwarding is "when busy" only; forwarding unanswered or unreachable calls would loop
+ * when the AI transfers the rider back.
+ */
+function DeliveryLineDetail({ config, onOpenDirections }: { config: DeliveryLineConfig | null | undefined; onOpenDirections?: () => void }) {
+  const line = deliveryLineSettingsView(config);
+  const code = "rounded-md bg-surface-muted px-1.5 py-0.5 font-mono text-[12px] font-semibold text-ink";
+  return <div className="space-y-4">
+    <div className="rounded-2xl border border-border bg-surface p-4">
+      <span className="grid size-11 place-items-center rounded-xl bg-accent-soft text-accent-hover"><PhoneIncoming size={24} weight="duotone" /></span>
+      <p className="mt-4 text-sm leading-6 text-ink-secondary">When a delivery rider calls and you decline, an AI answers for you. It guides the rider step by step using your saved directions. It never shares OTPs or payment details.</p>
+      <dl className="mt-4 divide-y divide-border rounded-xl border border-border text-sm">
+        <div className="flex items-center gap-3 px-3 py-2.5"><dt className="w-24 shrink-0 text-xs text-muted">AI number</dt><dd className="min-w-0 flex-1 font-semibold tabular-nums">{line.display}</dd></div>
+        <div className="flex items-center gap-3 px-3 py-2.5"><dt className="w-24 shrink-0 text-xs text-muted">Status</dt><dd className="flex min-w-0 flex-1 items-center gap-2 font-semibold"><span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${line.ready ? "bg-success" : config === undefined ? "bg-border-strong" : "bg-warning"}`} />{line.status}</dd></div>
+      </dl>
+    </div>
+
+    <section aria-labelledby="delivery-line-how" className="rounded-2xl border border-border bg-surface p-4">
+      <h3 id="delivery-line-how" className="text-sm font-semibold">How to use</h3>
+      <p className="mt-1.5 text-xs leading-5 text-muted">Decline the rider’s call (or press the side button twice). The AI picks it up.</p>
+      <h3 className="mt-4 text-sm font-semibold">Forwarding: when busy only</h3>
+      <p className="mt-1.5 text-xs leading-6 text-muted">Dial <span className={code}>{line.forwarding}</span> on your phone once. Turn it off with <span className={code}>{line.off}</span>.</p>
+      <p className="mt-1.5 text-[11px] leading-4 text-muted">Don’t forward unanswered or unreachable calls; the AI would loop when it hands the rider back to you.</p>
+    </section>
+
+    <button type="button" onClick={onOpenDirections} disabled={!onOpenDirections} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-inverse px-4 text-sm font-semibold text-on-inverse transition-transform active:scale-[.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 motion-reduce:active:scale-100"><MapPin size={16} weight="bold" />Directions for this address</button>
+    <p className="-mt-2 px-1 text-[11px] leading-4 text-muted">Landmark, step-by-step route, gate note and handover for your selected address.</p>
+  </div>;
 }
 
 function initials(name: string) {
