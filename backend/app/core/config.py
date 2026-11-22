@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     support_data_path: Path = Field(default=Path("backend/.data/support"))
     tracking_data_path: Path = Field(default=Path("backend/.data/tracking"))
     tracking_polling_enabled: bool = True
+    # Browser (Web Push) notifications. All three must be set, else the feature
+    # is hidden. Generate a pair with `make vapid-keys`.
+    web_push_vapid_public_key: str = ""
+    web_push_vapid_private_key: SecretStr = SecretStr("")
+    web_push_subject: str = ""
 
     @field_validator(
         "swiggy_token_store_path",

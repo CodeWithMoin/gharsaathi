@@ -633,3 +633,67 @@ class MemoryChoiceSignal(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class WebPushSubscriptionRecord(Base):
+    """One browser's push subscription. Endpoint and keys are encrypted at rest.
+
+    ``endpoint_hash`` (SHA-256 of the endpoint) is the lookup key, so the
+    endpoint itself is never stored in clear. One endpoint belongs to one user:
+    a different user subscribing the same browser takes it over.
+    """
+
+    __tablename__ = "web_push_subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128), index=True)
+    endpoint_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    encrypted_subscription: Mapped[str] = mapped_column(Text)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_success_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WebPushPreferenceRecord(Base):
+    """Which notification kinds the user switched off, per user (not per device)."""
+
+    __tablename__ = "web_push_preferences"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128), unique=True)
+    disabled_kinds: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # The one-time "Get delivery updates as notifications?" prompt was answered.
+    order_prompt_answered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WebPushEventRecord(Base):
+    """One push event per (user, dedupe key): dedupe and the per-user rate limit."""
+
+    __tablename__ = "web_push_events"
+    __table_args__ = (
+        UniqueConstraint("user_id", "dedupe_key", name="uq_web_push_events_user_key"),
+        Index("ix_web_push_events_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128))
+    dedupe_key: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(32))
+    # pending | sent | failed | rate_limited
+    outcome: Mapped[str] = mapped_column(String(16), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
