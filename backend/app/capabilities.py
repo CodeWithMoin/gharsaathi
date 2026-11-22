@@ -430,23 +430,48 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="order_history",
         title="See past orders",
-        voice=S(M, "No voice tool."),
-        typed_chat=S(M, TYPED_NO_TOOL),
-        ui=S(M, "No frontend caller."),
+        voice=S(
+            W,
+            "list_recent_orders: up to 5 recent Zepto orders (code, status, items, total) from "
+            "Zepto's read-only list_order_history, for 'pichla order kya tha?'.",
+        ),
+        typed_chat=S(W, "Same tool. " + TYPED_VIA_ASSISTANT),
+        ui=S(M, "No order-history screen."),
         backend=S(
             P,
-            "Zepto only. app/api/swiggy_orders.py exists but is not mounted in app.main, "
-            "so /api/swiggy/orders does not exist.",
+            "Zepto only (one connected Zepto account per deployment). app/api/swiggy_orders.py "
+            "exists but is not mounted in app.main, so /api/swiggy/orders does not exist.",
         ),
+        voice_tools=("list_recent_orders",),
         routes=("GET /api/zepto/orders", "GET /api/zepto/orders/{order_id}"),
     ),
     Capability(
         id="order_tracking",
         title="Track a delivery",
-        voice=S(M, "No voice tool."),
-        typed_chat=S(M, TYPED_NO_TOOL),
-        ui=S(W, "LiveOrderTracking panel (also reachable from support)."),
-        backend=S(W, "Read-only provider status polling."),
+        voice=S(
+            W,
+            "get_order_status('latest' or an order id/code) answers 'mera order kahan hai / "
+            "kitna time aur / order aaya?' in one line from the household's own monitor (or "
+            "Zepto history when none), with the store's ETA if given and when it was last "
+            "updated if stale; never guessed.",
+        ),
+        typed_chat=S(W, "Same tool. " + TYPED_VIA_ASSISTANT),
+        ui=S(
+            W,
+            "A placed Zepto order card becomes a live status card (placed → packed → out for "
+            "delivery → delivered / cancelled), saved with the chat; in-app toast for out for "
+            "delivery, delivered, delayed (ETA later by ≥10 min) and cancelled. Track order "
+            "opens LiveOrderTracking in a popup; Settings → Help with an order → Track too.",
+        ),
+        backend=S(
+            W,
+            "Read-only provider status polling at the provider's interval. POST /api/orders/confirm "
+            "starts a monitor for a provider-confirmed Zepto order (idempotent per order). Zepto "
+            "status comes from get_order_status when the live catalogue has it, else the read-only "
+            "get_order_detail (shipment status + Zepto's committed ETA). Updates are in-app only: "
+            "no push, SMS or calls.",
+        ),
+        voice_tools=("get_order_status",),
         routes=(
             "POST /api/tracking/monitors",
             "GET /api/tracking/monitors",
@@ -454,7 +479,44 @@ CAPABILITIES: tuple[Capability, ...] = (
             "POST /api/tracking/monitors/{monitor_id}/refresh",
             "DELETE /api/tracking/monitors/{monitor_id}",
         ),
-        ui_files=("frontend/app/order-tracking.tsx",),
+        ui_files=(
+            "frontend/app/order-tracking.tsx",
+            "frontend/app/order-status-card.tsx",
+            "frontend/app/order-status.mjs",
+        ),
+    ),
+    Capability(
+        id="order_cancel",
+        title="Cancel a placed order",
+        voice=S(
+            U,
+            "Zepto's documented MCP tools have no cancel tool. She says it can't be done here and "
+            "to cancel in the Zepto app quickly, before packing. get_order_status reports "
+            "cancel_supported: true only if the live catalogue ever exposes an order-cancel tool; "
+            "it is never called. Using one would need its own tap-confirmed card, like Place order.",
+        ),
+        typed_chat=S(U, "Same as voice."),
+        ui=S(U, "The status card says to open the Zepto app to cancel."),
+        backend=S(
+            U,
+            "No cancel call exists. app/tracking/cancellation.py only detects a cancel tool in "
+            "the live catalogue.",
+        ),
+    ),
+    Capability(
+        id="payment_methods",
+        title="Pay online / UPI / wallet",
+        voice=S(
+            U,
+            "Only cash on delivery is supported here; she does not promise UPI at the door.",
+        ),
+        typed_chat=S(U, "Same as voice."),
+        ui=S(U, "The order card shows Cash on delivery only."),
+        backend=S(
+            U,
+            "Zepto's catalogue has online, UPI and wallet order tools; GharSaathi uses only the "
+            "approval-bound COD path.",
+        ),
     ),
     Capability(
         id="support_complaint",
@@ -608,6 +670,17 @@ UNMOUNTED_ROUTERS: dict[str, str] = {
 # be a defined voice tool.
 PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
     {
+        # Order status tool fields and statuses (codex/order-tracking-status).
+        "order_ref",
+        "order_status",
+        "order_status_label",
+        "out_for_delivery",
+        "live_tracking",
+        "eta_minutes",
+        "last_updated_minutes_ago",
+        "no_order",
+        "cancel_supported",
+        "cancel_here",
         "option_id",
         "item_id",
         "store_id",

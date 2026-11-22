@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
@@ -36,6 +37,11 @@ class TrackingSnapshot(BaseModel):
     delivered: bool = False
     cancelled: bool = False
     disabled: bool = False
+    # The store's own short order code ("Z123"), when its status tool returns one.
+    order_code: str | None = Field(default=None, max_length=64)
+    # True only when the live provider catalogue exposes an order-cancellation
+    # tool. GharSaathi never calls it; this only tells the assistant what exists.
+    cancel_supported: bool = False
 
     @property
     def terminal(self) -> bool:
@@ -62,6 +68,19 @@ class TrackingEvent(BaseModel):
     snapshot: TrackingSnapshot
 
 
+NotificationKind = Literal["out_for_delivery", "delivered", "delayed", "cancelled"]
+
+
+class TrackingNotification(BaseModel):
+    """One in-app update worth telling the household about (never push/SMS/calls)."""
+
+    id: str
+    kind: NotificationKind
+    occurred_at: datetime
+    message: str = Field(max_length=200)
+    eta_at: datetime | None = None
+
+
 class OrderWatch(BaseModel):
     """A persisted user-requested tracking subscription for one order."""
 
@@ -75,9 +94,13 @@ class OrderWatch(BaseModel):
     snapshot: TrackingSnapshot | None = None
     last_fingerprint: str | None = None
     events: list[TrackingEvent] = Field(default_factory=list, max_length=100)
+    notifications: list[TrackingNotification] = Field(default_factory=list, max_length=20)
     consecutive_failures: int = Field(default=0, ge=0)
     last_error: str | None = Field(default=None, max_length=300)
     checked_at: datetime | None = None
+    # Last successful provider read: when ``snapshot`` was reported. A failed
+    # read updates ``checked_at`` only, so stale status stays visible.
+    status_at: datetime | None = None
     next_check_at: datetime | None = None
     stopped_at: datetime | None = None
     stop_reason: str | None = Field(default=None, max_length=160)

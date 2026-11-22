@@ -16,8 +16,9 @@ import asyncio
 import json
 import re
 import socket
+import tempfile
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -56,6 +57,9 @@ from app.voice.tools import ProductSearcher
 from app.voice.ui_ack import UiAck, apply_ack
 from app.commerce.swiggy.models import Address, AddressList, AddressResolution, Pagination
 from app.commerce.zepto.models import ConnectionStatus as ZeptoConnectionStatus
+from app.tracking.models import StartTrackingRequest, TrackingProvider, TrackingSnapshot, TrackingStatus
+from app.tracking.service import OrderTrackingService
+from app.tracking.store import OrderTrackingStore
 from evaluation.memory_db import ScenarioMemoryDatabase
 from evaluation.run_realtime_voice import MASCULINE_SELF_FORMS
 
@@ -255,6 +259,43 @@ class HomeOfficeAddressBook:
         return addresses
 
 
+class FakeTrackingAdapter:
+    """Scripted read-only order status for one scenario; no provider call."""
+
+    provider = TrackingProvider.ZEPTO
+
+    def __init__(self, spec: dict[str, Any]) -> None:
+        self.spec = spec
+
+    async def fetch_delivery_status(self, *, order_id: str, address_id: str | None) -> TrackingSnapshot:
+        status = TrackingStatus(self.spec.get("status", "out_for_delivery"))
+        eta = self.spec.get("eta_minutes")
+        return TrackingSnapshot(
+            status=status,
+            provider_status=self.spec.get("provider_status"),
+            eta_at=datetime.now(UTC) + timedelta(minutes=eta) if eta is not None else None,
+            poll_interval_seconds=600,
+            delivered=status == TrackingStatus.DELIVERED,
+            cancelled=status == TrackingStatus.CANCELLED,
+            order_code=self.spec.get("order_code"),
+        )
+
+
+async def scenario_tracking(spec: dict[str, Any] | None) -> OrderTrackingService:
+    """A tracking service on a throwaway directory, with the scenario's placed order watched."""
+
+    service = OrderTrackingService(
+        OrderTrackingStore(Path(tempfile.mkdtemp(prefix="qa-tracking-"))),
+        {TrackingProvider.ZEPTO: FakeTrackingAdapter(spec or {})},
+    )
+    if spec:
+        await service.ensure(
+            HOUSEHOLD_ID,
+            StartTrackingRequest(provider=TrackingProvider.ZEPTO, order_id=spec.get("order_id", "ZEP-QA-1")),
+        )
+    return service
+
+
 class LiveZeptoConnection:
     """A connected live Zepto for the address form only; nothing else is reachable."""
 
@@ -267,6 +308,7 @@ def build_toolbox(
     catalogues: dict[str, Any],
     scenario: dict[str, Any] | None = None,
     memory_db: ScenarioMemoryDatabase | None = None,
+    order_tracking: OrderTrackingService | None = None,
 ) -> VoiceToolbox:
     scenario = scenario or {}
     swiggy: ProductSearcher = DemoSwiggyService()
@@ -303,6 +345,9 @@ def build_toolbox(
         preference_recall=memory,
         order_confirmations=OrderConfirmations(basket_repo, approvals),
         address_book=HomeOfficeAddressBook() if scenario.get("address_book") == "home_office" else None,
+        # Demo Zepto history is empty and its catalogue has no tools: nothing leaves the process.
+        order_tracking=order_tracking,
+        order_history=DemoZeptoService(),
     )
 
 
@@ -389,7 +434,8 @@ def _numbers(value: Any) -> set[float]:
 
 def _eta_minutes(value: Any) -> set[int]:
     text = json.dumps(value, ensure_ascii=False)
-    return {int(match) for match in re.findall(r'"delivery_eta": "(\d+)', text)}
+    pattern = r'"(?:delivery_eta|eta_minutes|last_updated_minutes_ago)": "?(\d+)'
+    return {int(match) for match in re.findall(pattern, text)}
 
 
 def _size_value(pack_size: str | None) -> float:
@@ -656,7 +702,8 @@ async def run_scenario(
     memory_db: ScenarioMemoryDatabase | None = None
     if "memory_db" in scenario:
         memory_db = await ScenarioMemoryDatabase.create(HOUSEHOLD_ID, scenario["memory_db"])
-    toolbox = build_toolbox(scenario["catalogue"], catalogues, scenario, memory_db)
+    tracking = await scenario_tracking(scenario.get("tracking"))
+    toolbox = build_toolbox(scenario["catalogue"], catalogues, scenario, memory_db, tracking)
     withheld = set(scenario.get("withhold_tools", []))
     if withheld or scenario.get("memory"):
         delegation = {

@@ -64,7 +64,9 @@ test("the countdown reads minutes:seconds and ends at expiry", () => {
 });
 
 test("only a provider-confirmed order id counts as placed", () => {
-  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: "ZEP-1" } }), { status: "placed", orderId: "ZEP-1" });
+  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: "ZEP-1" } }), { status: "placed", orderId: "ZEP-1", tracking: null });
+  const tracking = { monitor_id: "m1", order: { order_id: "ZEP-1" } };
+  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: "ZEP-1", tracking } }), { status: "placed", orderId: "ZEP-1", tracking });
   assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: null } }), { status: "unknown" });
   assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "outcome_unknown" } }), { status: "unknown" });
   assert.deepEqual(orderCardStateFromResponse({ ok: false, status: 409, message: "This order card expired." }), { status: "failed", reason: "This order card expired." });

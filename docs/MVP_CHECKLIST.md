@@ -10,7 +10,7 @@ passes the automated gate **and** a real session.
 |---|---|---|
 | All test layers | `make test` | 0 failures |
 | Frontend static checks | `cd frontend && npm run lint && npx tsc --noEmit && npm run build` | clean |
-| Voice brain end-to-end (real backend model, real tools, demo stores) | `cd backend && uv run --with-requirements requirements.txt python -m evaluation.run_voice_delegation` | all MVP scenarios pass, twice in a row |
+| Voice brain end-to-end (real backend model, real tools, demo stores, fake tracking) | `cd backend && uv run --with-requirements requirements.txt python -m evaluation.run_voice_delegation` | all MVP scenarios pass, twice in a row (incl. `t1`–`t3` order status / cancel / payment) |
 | Real stores, read-only (owner consent) | `make live-smoke` | connection, tool catalogue, addresses, one search per store parse |
 
 ## Real-session checklist (owner, live mode)
@@ -33,6 +33,7 @@ Do **not** tap Approve or **Place order** unless step 11 or 12 is being run on p
 | 11 | Real order (explicit go-ahead only) | One cheap Zepto item → bill → Approve → confirm COD | Exactly one Zepto order; basket locked; order visible in Zepto |
 | 12 | Real one-tap order (explicit go-ahead only) | One cheap Zepto item → say "order kar do" → tap **Place order** on the card | Exactly one Zepto order; card shows "Order placed · #<id>"; she says "Order ho gaya" only after that; basket locked; a second tap or an old card is refused |
 | 13 | Address switch + new address (voice) | Say "delivery address change karo", then "Office"; then "naya address add karo, <your building>", then "floor 3, <area>", then "number mera bhar dena" | She names the saved addresses in one line and switches (setup sheet shows the new selection, voice keeps running, an open bill for that store is cancelled); the **Add delivery address** popup opens over everything (dimmed backdrop, Escape/Cancel closes, asks before discarding typed text) with only the building filled; she says it is open only once it is visible; the follow-up fills floor + area without touching typed fields; no sample placeholders look like values; coordinates and contact number stay empty and she says to type the number |
+| 14 | Order status after a tap (needs step 12's order) | After **Place order**, watch the card; reload; say "mera order kahan hai", "kitna time aur", "order cancel kar do", "payment phone se kar sakte hain?" | The order card becomes a status card at the same place (Placed → Packed → Out for delivery → Delivered), with Zepto's ETA when given and "Updated … ago"; later messages appear below it; reload keeps it; **Track order** opens the tracking popup; a toast only for out for delivery, delivered, a ≥10 min delay or cancelled; she answers in one line from the latest Zepto status ("Out for delivery hai, Zepto ~6 min bata raha hai."), says when it was last updated if old, never guesses; cancel → "Zepto app mein … Cancel dabaiye"; payment → only cash on delivery |
 
 ## Bug rule
 

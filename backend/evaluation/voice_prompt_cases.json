@@ -1,5 +1,5 @@
 {
-  "version": "1.14.0",
+  "version": "1.15.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -607,6 +607,50 @@
       "user": "[Backend result, already on screen: Cadbury Dairy Milk 50 g ₹50, Zepto, avoided: true, avoided_because: never suggest chocolate.]",
       "required_any": ["phir bhi", "fir bhi", "kaha tha"],
       "forbidden_any": ["add ho gaya", "nahi dikha sakti", "₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "order_status_from_backend_only",
+      "history": [
+        {"role": "user", "content": "Mera order kahan hai?"},
+        {"role": "assistant", "content": "Ek second."}
+      ],
+      "user": "[Backend result: get_order_status: Zepto, order_status_label Out for delivery, eta_minutes 6, stale false.]",
+      "required_any": ["out for delivery", "6 min", "~6"],
+      "forbidden_any": ["10 min", "15 min", "pahunch gaya", "deliver ho gaya"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "order_status_stale_says_last_update",
+      "history": [
+        {"role": "user", "content": "Kitna time aur lagega?"},
+        {"role": "assistant", "content": "Ek second."}
+      ],
+      "user": "[Backend result: get_order_status: Zepto, order_status_label Being packed, no eta_minutes, stale true, last_updated_minutes_ago 14.]",
+      "required_any": ["14 min", "14 minute"],
+      "forbidden_any": ["5 min", "10 min", "~"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "cancel_redirects_to_zepto_app",
+      "user": "Mera Zepto order cancel kar do.",
+      "required_any": ["zepto app"],
+      "forbidden_any": ["cancel ho gaya", "cancel kar diya", "cancel kar di", "cancelled"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "payment_cod_only",
+      "user": "Payment mere phone pe se kar sakte ho?",
+      "required_any": ["cash on delivery"],
+      "forbidden_any": ["upi se kar sakte", "upi kar sakte", "card se kar sakte", "online pay kar sakte", "door par upi", "delivery par upi"],
       "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05
