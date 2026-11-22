@@ -26,6 +26,7 @@ from app.conversations.context import RecentConversationContext
 from app.core.config import Settings
 from app.voice.service import LiveSessionService, build_session_config
 from app.voice.toolbox import ToolExecutor
+from app.voice.ui_ack import UiAck, screen_report_block
 
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,13 @@ CHANNEL_CONTEXT = {
         "address form, tool use and keeping replies short.\n"
     ),
 }
+# Typed replies are rendered together with their ui_events, so the form cannot
+# be confirmed within the same turn; the browser reports it with the next turn.
+TYPED_FORM_REQUESTED = (
+    "The Zepto address form is being shown with this reply. Nothing was saved. Say it is "
+    "opening on screen (not that it is already open), and ask the user to check the details, "
+    "set the map location, type the contact number, and tap Save. Never say the address was added."
+)
 SEARCH_CONTEXT_HEADER = (
     "Search results already shown to the user earlier in this chat (tool output, "
     "newest last). Their option_id values are still valid for add_to_basket."
@@ -230,6 +238,7 @@ class ChatTurnService:
         zepto_address_id: str | None = None,
         *,
         current_chat: bool = True,
+        ui_acks: list[UiAck] | None = None,
     ) -> ChatTurnResult:
         if not user_id:
             raise ValueError("A verified user is required for typed chat.")
@@ -240,7 +249,9 @@ class ChatTurnService:
             stats: dict[str, Any] = {"rounds": 0, "tools": [], "outcome": "ok"}
             try:
                 async with asyncio.timeout(self.settings.chat_turn_timeout_seconds):
-                    result = await self._loop(client, session, user_id, message, current_chat, stats)
+                    result = await self._loop(
+                        client, session, user_id, message, current_chat, stats, ui_acks or []
+                    )
             except TimeoutError as exc:
                 stats["outcome"] = "timeout"
                 raise ChatTimeout("Jawab mein bahut der ho gayi. Ek baar phir likhiye.") from exc
@@ -266,7 +277,11 @@ class ChatTurnService:
         message: str,
         current_chat: bool,
         stats: dict[str, Any],
+        ui_acks: list[UiAck] | None = None,
     ) -> ChatTurnResult:
+        words = getattr(session.toolbox, "user_words", None)
+        if words is not None:
+            words.add(message)
         delegation = await self._delegation(user_id, "typed", message, current_chat)
         allowed = {tool["name"] for tool in delegation["tools"]}
         request_input: list[dict[str, Any]] = []
@@ -283,6 +298,8 @@ class ChatTurnService:
             request_input.append(
                 {"role": "developer", "content": ORDER_UPDATES_HEADER + "\n" + "\n".join(order_updates)}
             )
+        if ui_acks:
+            request_input.append({"role": "developer", "content": screen_report_block(ui_acks)})
         request_input.append({"role": "user", "content": message})
 
         ui_events: list[dict[str, Any]] = []
@@ -374,6 +391,12 @@ class ChatTurnService:
             return {"status": "error", "message": "The tool failed unexpectedly."}
         if outcome.ui_event is not None:
             ui_events.append(outcome.ui_event)
+        if outcome.model_output.get("status") == "form_requested":
+            outcome.model_output["message"] = TYPED_FORM_REQUESTED
+        current = getattr(session.toolbox, "current_addresses", None)
+        if callable(current):
+            # A voice-style address switch keeps this session (and its options).
+            session.addresses = current()
         if name == SEARCH_TOOL and outcome.model_output.get("status") == "ok":
             session.search_contexts = (
                 session.search_contexts + [json.dumps(outcome.model_output, ensure_ascii=False)]

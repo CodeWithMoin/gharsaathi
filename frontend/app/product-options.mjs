@@ -2,9 +2,13 @@
  * Pure logic for the per-item options carousel: which options show, in what
  * order, the badge on the first card, position labels and accessible names.
  *
- * Order: the household's remembered option first, then a preferred one, then
- * the rest in the backend's order (its best match first). Unavailable options
- * go last. Options the household asked to avoid are hidden.
+ * The assistant's search decides the order and sends each option's `position`;
+ * the model refers to options by the same number, so cards are shown in that
+ * order and numbered with it, never re-sorted here.
+ *
+ * Products without `position` (older saved chats, typed /api search) use the
+ * fallback: remembered first, then preferred, then the backend's order;
+ * unavailable last; avoided hidden.
  *
  * Money is never formatted or subtracted here: cards show the backend's
  * `price.offer_display` / `mrp_display` / `saving_display` strings.
@@ -41,18 +45,40 @@ export function bestPickBadge(product) {
   return "Best match";
 }
 
+/** @param {unknown} value */
+const validPosition = (value) => (Number.isInteger(value) && /** @type {number} */ (value) >= 1 ? /** @type {number} */ (value) : null);
+
 /**
- * @template {{ provider?: string, product_id: string, sku_id: string, name?: unknown, available?: unknown, remembered?: unknown, preferred?: unknown, avoided?: unknown }} P
+ * @template {{ provider?: string, product_id: string, sku_id: string, name?: unknown, available?: unknown, remembered?: unknown, preferred?: unknown, avoided?: unknown, position?: unknown }} P
  * @param {P[]} products
  * @param {number} [limit]
  * @returns {{ key: string, product: P, number: number, badge: string | null }[]}
  */
 export function orderOptions(products, limit = MAX_OPTIONS) {
+  const named = products.filter((product) => product && text(product.name));
+  if (named.length && named.every((product) => validPosition(product.position) !== null)) {
+    return [...named]
+      .sort((a, b) => /** @type {number} */ (validPosition(a.position)) - /** @type {number} */ (validPosition(b.position)))
+      .slice(0, limit)
+      .map((product) => {
+        const number = /** @type {number} */ (validPosition(product.position));
+        return { key: `${optionKey(product)}:${number}`, product, number, badge: number === 1 ? bestPickBadge(product) : null };
+      });
+  }
+  return fallbackOrder(named, limit);
+}
+
+/**
+ * @template {{ provider?: string, product_id: string, sku_id: string, name?: unknown, available?: unknown, remembered?: unknown, preferred?: unknown, avoided?: unknown }} P
+ * @param {P[]} products
+ * @param {number} limit
+ */
+function fallbackOrder(products, limit) {
   const seen = new Set();
   /** @type {{ product: P, index: number, key: string }[]} */
   const kept = [];
   products.forEach((product, index) => {
-    if (!product || !text(product.name) || product.avoided === true) return;
+    if (product.avoided === true) return;
     const key = optionKey(product);
     if (seen.has(key)) return;
     seen.add(key);

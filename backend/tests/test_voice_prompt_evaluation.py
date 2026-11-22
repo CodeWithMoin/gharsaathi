@@ -4,6 +4,8 @@ import re
 import pytest
 
 from app.shopping.money import format_rupees
+from app.voice.address_book_tools import ListArguments as AddressListArguments
+from app.voice.address_book_tools import SelectArguments as AddressSelectArguments
 from app.voice.address_tools import OpenAddressFormArguments
 from app.voice.basket_tools import AddArguments, QuantityArguments, StoreArguments
 from app.voice.memory_tools import RecallArguments
@@ -423,6 +425,8 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "list_preferences": ListArguments,
         "confirm_memory": DecisionArguments,
         "prepare_order": StoreArguments,
+        "list_delivery_addresses": AddressListArguments,
+        "select_delivery_address": AddressSelectArguments,
     }
     assert set(validators) == set(definitions)
 
@@ -445,7 +449,7 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
             issued_options.update(
                 item["option_id"] for item in result.get("results", []) if "option_id" in item
             )
-    assert {"search_products", "add_to_basket", "request_approval", "open_address_form", "prepare_order"} <= used
+    assert {"search_products", "add_to_basket", "request_approval", "open_address_form", "prepare_order", "list_delivery_addresses", "select_delivery_address"} <= used
     lines_text = _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n")
     for index, line in enumerate(lines_text):
         if line.startswith("Assistant:") and "Place order" in line:
@@ -526,3 +530,37 @@ def test_backend_example_adds_cheaper_store_without_asking() -> None:
     assert json.loads(add.split(" ", 3)[3])["option_id"] == cheapest["option_id"]
     reply = lines[start + 5]
     assert reply.startswith("Assistant:") and "?" not in reply and "sasta" in reply
+
+
+BREVITY_CASES = [
+    ("brevity_add_filler_no_narration", "Ek second.", "Theek hai, ek second, yeh add karne ka try kar rahi hoon."),
+    ("brevity_add_filler_no_narration", "Bas ek pal.", "Ek second. Ek second."),
+    ("brevity_search_filler_two_words", "Zara rukiye.", "Ek second, Fortune sunflower oil 1 litre dhoondh rahi hoon."),
+    ("brevity_no_repeated_filler", "Bas ek pal.", "Ek second."),
+    ("brevity_basket_request_no_opener", "Ek second.", "Okay, ek second."),
+    ("brevity_direct_answer_no_filler", "AXE Apollo 150 ml ₹299 ka hai.", "Ek second. AXE Apollo 150 ml ₹299 ka hai."),
+    ("brevity_capability_one_sentence", "Main products dhoondh kar compare karti hoon aur basket bana deti hoon.", "Theek hai, main products dhoondh sakti hoon. Basket bhi bana sakti hoon."),
+    ("brevity_refusal_one_sentence", "Cricket score main nahi bata sakti; shopping mein kuch chahiye toh bataiye.", "Theek hai, cricket score main nahi bata sakti."),
+    ("brevity_yes_no_answer_one_sentence", "Haan, Zepto par cash on delivery hota hai.", "Haan, hota hai. Main dekh rahi hoon ki aapke liye kya ho sakta hai."),
+]
+
+
+@pytest.mark.parametrize(("case_id", "good", "bad"), BREVITY_CASES)
+def test_brevity_cases_score_good_and_bad_replies(case_id: str, good: str, bad: str) -> None:
+    case = _cases()[case_id]
+
+    assert score_case(case, good)["passed"] is True
+    assert score_case(case, bad)["passed"] is False
+
+
+def test_live_prompt_has_a_separate_brevity_section() -> None:
+    brevity = LIVE_INSTRUCTIONS.split("\n# Brevity\n", 1)[1].split("\n# ", 1)[0]
+    assert "at most once per\n  turn" in brevity
+    assert "Never say the same filler twice" in brevity
+    assert "Never narrate" in brevity
+    assert "## Brevity" in BACKEND_INSTRUCTIONS
+    for line in _examples(LIVE_INSTRUCTIONS, "\n# Examples\n"):
+        if line.startswith("Assistant:"):
+            reply = line.removeprefix("Assistant:").strip()
+            assert not reply.casefold().startswith(("theek hai", "okay", "sure")), line
+            assert "kar rahi hoon" not in reply and "dekh rahi hoon" not in reply, line

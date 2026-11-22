@@ -37,6 +37,12 @@ logger = logging.getLogger(__name__)
 
 
 MAX_RESULTS_FOR_MODEL = 6
+# Options shown for one searched item. The browser numbers cards by `position`.
+MAX_OPTIONS_PER_ITEM = 8
+POSITION_NOTE = (
+    " Results are in the order shown on screen; 'position' is the card number the "
+    "user sees for this item (1 = first card)."
+)
 REMEMBERED_NOTE = (
     " A 'remembered' option matches this household's own past purchase or confirmed "
     "preference (same name and pack size; bought_on names another store). It is a past "
@@ -45,9 +51,9 @@ REMEMBERED_NOTE = (
 
 HOUSEHOLD_RULES_NOTE = (
     " This household's own saved rules were applied: skipped_stores were not searched, "
-    "hidden_by_household_rules options were left out, 'avoided' marks an option the "
-    "user asked for despite a rule, and 'preferred' marks a saved preference. Mention a "
-    "skipped store or avoided option once, briefly."
+    "hidden_by_household_rules options were left out (hidden_rules names the avoid rule "
+    "when the user asked for such an option), and 'preferred' marks a saved preference. "
+    "Mention a skipped store or hidden option once, briefly."
 )
 
 SEARCH_PRODUCTS_TOOL: dict[str, Any] = {
@@ -164,6 +170,48 @@ def _product_for_model(product: Product) -> dict[str, Any]:
     return entry
 
 
+@dataclass(frozen=True)
+class RankedOption:
+    """One option for a searched item, with the household annotations that order it."""
+
+    provider: ProviderName
+    product: Product
+    remembered: str | None = None
+    preferred: bool = False
+
+
+def _option_rank(option: RankedOption) -> int:
+    if not option.product.available:
+        return 3
+    if option.remembered:
+        return 0
+    if option.preferred:
+        return 1
+    return 2
+
+
+def order_options(
+    options: list[RankedOption], limit: int = MAX_OPTIONS_PER_ITEM
+) -> list[RankedOption]:
+    """The one display order for a searched item, shared by the model and the screen.
+
+    Remembered first, then preferred, then the rest in provider order;
+    unavailable options last. Duplicates and unnamed options are dropped.
+    Avoided options must already be removed. Index + 1 is the card's position.
+    """
+
+    seen: set[tuple[str, str, str]] = set()
+    kept: list[RankedOption] = []
+    for option in options:
+        key = (option.provider, option.product.product_id, option.product.sku_id)
+        if not option.product.name.strip() or key in seen:
+            continue
+        seen.add(key)
+        kept.append(option)
+    # sorted() is stable, so equal ranks keep provider order.
+    return sorted(kept, key=_option_rank)[:limit]
+
+
 class ShoppingToolExecutor:
     def __init__(
         self,
@@ -252,21 +300,26 @@ class ShoppingToolExecutor:
                 },
             )
 
-        products = result.products
+        ordered = order_options(
+            [RankedOption("swiggy_instamart", product) for product in result.products],
+            MAX_RESULTS_FOR_MODEL,
+        )
+        products = [option.product for option in ordered]
         return ToolOutcome(
             model_output={
                 "status": "ok",
                 "store": "Swiggy Instamart",
                 "query": query,
                 **item_fields(query),
-                "total_variants": len(products),
+                "total_variants": len(result.products),
                 "results": [
-                    {"option_id": self._remember(product), **_product_for_model(product)}
-                    for product in products[:MAX_RESULTS_FOR_MODEL]
+                    {"option_id": self._remember(product), "position": position, **_product_for_model(product)}
+                    for position, product in enumerate(products, 1)
                 ],
                 "note": (
                     "Prices are the store's current prices; quote the price strings exactly. Nothing was added. "
                     "Use option_id with add_to_basket only when the user asks."
+                    + POSITION_NOTE
                 ),
             },
             ui_event={
@@ -274,7 +327,9 @@ class ShoppingToolExecutor:
                 "query": query,
                 **item_fields(query),
                 "store": "Swiggy Instamart",
-                "products": [p.model_dump() for p in products],
+                "products": [
+                    {**p.model_dump(), "position": position} for position, p in enumerate(products, 1)
+                ],
             },
         )
 
@@ -400,20 +455,28 @@ class MultiProviderShoppingToolExecutor:
         per_store_limit = max(1, MAX_RESULTS_FOR_MODEL // len(successful))
         remembered_count = 0
         filtered_count = 0
+        hidden_rules: list[str] = []
+        candidates: list[RankedOption] = []
+        targets: dict[ProviderName, ProviderSearchTarget] = {}
+        decisions: dict[int, dict[str, Any]] = {}
+        remembered_marks: dict[int, dict[str, Any]] = {}
         for outcome in successful:
             target = outcome["target"]
             assert isinstance(target, ProviderSearchTarget)
             products = outcome["products"]
             assert isinstance(products, list)
             stores.append(target.store)
-            decisions: dict[int, dict[str, Any]] = {}
-            remembered_sources: dict[int, str] = {}
+            targets[target.provider] = target
             if rules:
                 kept: list[Product] = []
                 for product in products:
                     decision = product_decision(rules, product, target.provider, arguments.query)
-                    if decision is not None and decision.get("drop"):
+                    if decision is not None and (decision.get("drop") or decision.get("avoided")):
+                        # Avoided options are hidden from the model and the screen alike.
                         filtered_count += 1
+                        label = decision.get("avoided_because")
+                        if label and label not in hidden_rules:
+                            hidden_rules.append(str(label))
                         continue
                     if decision is not None:
                         decisions[id(product)] = decision
@@ -421,42 +484,48 @@ class MultiProviderShoppingToolExecutor:
                 products = kept
             for product in products[:per_store_limit]:
                 assert isinstance(product, Product)
-                entry = {
-                    "provider": target.store,
-                    "store_id": target.provider,
-                    "add_supported": target.add_supported,
-                    **_product_for_model(product),
-                    **decisions.get(id(product), {}),
-                }
-                if memory is not None:
-                    remembered = remembered_for(product, target.provider, memory)
-                    if remembered is not None:
-                        entry["remembered"] = remembered
-                        remembered_sources[id(product)] = str(remembered["source"])
-                        remembered_count += 1
-                if target.add_supported:
-                    option_id = f"opt{len(self.options) + 1}"
-                    self.options[option_id] = SearchOption(target.provider, target.store, product)
-                    entry["option_id"] = option_id
-                model_results.append(entry)
-            ui_products.extend(
+                remembered = remembered_for(product, target.provider, memory) if memory is not None else None
+                if remembered is not None:
+                    remembered_marks[id(product)] = remembered
+                candidates.append(
+                    RankedOption(
+                        target.provider,
+                        product,
+                        remembered=str(remembered["source"]) if remembered is not None else None,
+                        preferred=bool(decisions.get(id(product), {}).get("preferred")),
+                    )
+                )
+
+        # One order for the model and the screen: "doosra wala" is card 2 for both.
+        for position, option in enumerate(order_options(candidates), 1):
+            target = targets[option.provider]
+            product = option.product
+            entry = {
+                "position": position,
+                "provider": target.store,
+                "store_id": target.provider,
+                "add_supported": target.add_supported,
+                **_product_for_model(product),
+                **decisions.get(id(product), {}),
+            }
+            if id(product) in remembered_marks:
+                entry["remembered"] = remembered_marks[id(product)]
+                remembered_count += 1
+            if target.add_supported:
+                option_id = f"opt{len(self.options) + 1}"
+                self.options[option_id] = SearchOption(target.provider, target.store, product)
+                entry["option_id"] = option_id
+            model_results.append(entry)
+            ui_products.append(
                 {
                     **product.model_dump(),
                     "provider": target.provider,
                     "provider_label": target.store,
-                    **{
-                        key: value
-                        for key, value in decisions.get(id(product), {}).items()
-                        if key in {"preferred", "avoided"}
-                    },
-                    # The browser shows the remembered option first, with its badge.
-                    **(
-                        {"remembered": remembered_sources[id(product)]}
-                        if id(product) in remembered_sources
-                        else {}
-                    ),
+                    "position": position,
+                    **({"preferred": True} if option.preferred else {}),
+                    # The browser badges card 1 from these annotations.
+                    **({"remembered": option.remembered} if option.remembered else {}),
                 }
-                for product in products[:per_store_limit]
             )
 
         model_output: dict[str, Any] = {
@@ -474,12 +543,13 @@ class MultiProviderShoppingToolExecutor:
                 "Current item prices only; quote the price strings exactly. Nothing was added. "
                 "Only results with an "
                 "option_id can be added, to that store's own local basket."
+                + POSITION_NOTE
                 + (REMEMBERED_NOTE if remembered_count else "")
                 + (
                     HOUSEHOLD_RULES_NOTE
                     if skipped
                     or filtered_count
-                    or any("preferred" in entry or "avoided" in entry for entry in model_results)
+                    or any("preferred" in entry for entry in model_results)
                     else ""
                 )
             ),
@@ -488,6 +558,8 @@ class MultiProviderShoppingToolExecutor:
             model_output["skipped_stores"] = skipped
         if filtered_count:
             model_output["hidden_by_household_rules"] = filtered_count
+        if hidden_rules:
+            model_output["hidden_rules"] = hidden_rules
         return ToolOutcome(
             model_output=model_output,
             ui_event={

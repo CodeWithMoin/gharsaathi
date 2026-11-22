@@ -21,6 +21,8 @@ from app.user_profile import ProfileReader, UserProfile
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.shopping.order_confirmation import OrderConfirmations
+from app.voice.address_book_tools import AddressBook
+from app.voice.address_prefill import RecentUserWords
 from app.voice.address_tools import ZeptoConnectionChecker
 from app.voice.profile_context import with_profile
 from app.voice.basket_tools import AddressDescriber
@@ -139,6 +141,7 @@ class LiveSessionService:
         addresses: AddressDescriber | None = None,
         context_reader: ConversationContextReader | None = None,
         order_confirmations: OrderConfirmations | None = None,
+        address_book: AddressBook | None = None,
     ) -> None:
         self.settings = settings
         self.searcher = searcher
@@ -152,6 +155,7 @@ class LiveSessionService:
         self.addresses = addresses
         self.context_reader = context_reader
         self.order_confirmations = order_confirmations
+        self.address_book = address_book
         self._http_client = http_client
         # One kept-alive connection to OpenAI per event loop, so a session start
         # does not pay for a fresh TLS handshake (and client setup) every time.
@@ -192,6 +196,8 @@ class LiveSessionService:
                 preference_recall=self.preference_recall,
                 addresses=self.addresses,
                 order_confirmations=self.order_confirmations,
+                address_book=self.address_book,
+                user_words=RecentUserWords(lambda: self.saved_user_words(household_id)),
             )
         if self.zepto_searcher is not None:
             return MultiProviderShoppingToolExecutor(
@@ -201,6 +207,14 @@ class LiveSessionService:
                 ]
             )
         return ShoppingToolExecutor(self.searcher, address_id)
+
+    async def saved_user_words(self, household_id: str) -> str:
+        """The user's own turns in the saved current chat (server-side, never the model's)."""
+
+        context = await self.conversation_context(household_id)
+        if context is None:
+            return ""
+        return " ".join(turn.text for turn in context.turns if turn.role == "user")
 
     async def profile(
         self, household_id: str, timeout: float | None = None

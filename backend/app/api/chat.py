@@ -14,6 +14,7 @@ from app.database.session import get_session_factory
 from app.dependencies import ChatServiceDependency
 from app.legal_consent import ConsentedUserIdDependency
 from app.memory.service import MemoryService
+from app.voice.ui_ack import UiAck
 
 
 router = APIRouter()
@@ -28,6 +29,8 @@ class ChatTurnRequest(BaseModel):
     message: str = Field(min_length=1, max_length=MAX_TYPED_MESSAGE_CHARS)
     swiggy_address_id: str | None = Field(default=None, min_length=1, max_length=256)
     zepto_address_id: str | None = Field(default=None, min_length=1, max_length=256)
+    # What the browser actually showed after the previous reply (address form).
+    ui_acks: list[UiAck] = Field(default_factory=list, max_length=4)
 
     @field_validator("message")
     @classmethod
@@ -80,6 +83,7 @@ async def chat_turn(
             body.swiggy_address_id,
             body.zepto_address_id,
             current_chat=current_chat,
+            ui_acks=body.ui_acks,
         )
     except ChatConfigurationError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.core.config import get_settings
 from app.dependencies import SidebandHubDependency, VoiceServiceDependency
 from app.voice.sideband import FINISHED
+from app.voice.ui_ack import UiAck
 from app.voice.service import LiveSession, VoiceConfigurationError, VoiceProviderError
 from app.legal_consent import ConsentedUserIdDependency
 
@@ -137,3 +138,24 @@ async def session_events(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/sessions/{session_id}/ui-ack", status_code=status.HTTP_204_NO_CONTENT)
+async def ui_ack(
+    session_id: Annotated[str, Path(min_length=1, max_length=256)],
+    body: UiAck,
+    request: Request,
+    hub: SidebandHubDependency,
+    user_id: ConsentedUserIdDependency,
+) -> None:
+    """The browser reports whether a UI event (the address form) is really on screen.
+
+    Only the verified user who created the voice session may report; any other
+    caller gets the same 404 as an unknown session.
+    """
+
+    _check_origin(request)
+    channel = hub.owned_channel(session_id, user_id)
+    if channel is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown voice session.")
+    channel.acks.resolve(body)

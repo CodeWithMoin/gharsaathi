@@ -1,6 +1,9 @@
 import { sanitizeAddressPrefill } from "./voice-address-prefill.mjs";
 import { voiceApprovalFromToolEvent } from "./voice-approval.mjs";
 import { orderConfirmationFromEvent } from "./order-confirmation.mjs";
+import { settleAddressFormAck } from "./address-form-merge.mjs";
+
+const ACK_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
 const PROVIDERS = new Set(["swiggy_instamart", "zepto"]);
 
@@ -22,6 +25,7 @@ const ADDRESS_UNAVAILABLE_MESSAGES = {
  *   onApprovalRequested?: (provider: "swiggy_instamart" | "zepto", request: any) => void,
  *   onAddressForm?: (request: { prefill: Record<string, string> } | { unavailable: string }) => void,
  *   onOrderConfirmation?: (confirmation: import("./order-confirmation.mjs").OrderConfirmation) => void,
+ *   onAddressSelected?: (selection: { provider: "swiggy_instamart" | "zepto", addressId: string, label?: string, billCancelled: boolean }) => void,
  * }} handlers
  */
 export function applyAssistantEvent(raw, handlers) {
@@ -80,8 +84,27 @@ export function applyAssistantEvent(raw, handlers) {
     };
   }
   if (event.type === "address_form.open" && event.provider === "zepto") {
-    handlers.onAddressForm?.({ prefill: sanitizeAddressPrefill(event.prefill) });
-    return { kind: "address_form", message: "The address form is open—check the details and tap Save." };
+    // Never dropped: whatever happens, the screen reports whether the form is visible.
+    let result;
+    try {
+      result = handlers.onAddressForm?.({ prefill: sanitizeAddressPrefill(event.prefill) });
+    } catch {
+      result = Promise.resolve({ form_visible: false, reason: "render_failed" });
+    }
+    const ackId = typeof event.ack_id === "string" && ACK_ID.test(event.ack_id) ? event.ack_id : undefined;
+    const ack = settleAddressFormAck(result).then((value) => ({ ...value, ...(ackId ? { ack_id: ackId } : {}) }));
+    return { kind: "address_form", message: "Showing the address form—check the details and tap Save.", ack, ackId };
+  }
+  if (event.type === "address.selected" && provider && typeof event.address_id === "string" && event.address_id) {
+    const label = typeof event.label === "string" && event.label ? event.label.slice(0, 80) : undefined;
+    const billCancelled = event.bill_cancelled === true;
+    handlers.onAddressSelected?.({ provider, addressId: event.address_id, label, billCancelled });
+    if (billCancelled) handlers.onBasketTouched?.(provider);
+    const store = provider === "zepto" ? "Zepto" : "Swiggy Instamart";
+    return {
+      kind: "address",
+      message: `${store} will deliver to ${label ?? "the selected address"}.${billCancelled ? " The open bill was cancelled—get a new one." : ""}`,
+    };
   }
   if (event.type === "address_form.unavailable" && typeof event.reason === "string") {
     handlers.onAddressForm?.({ unavailable: event.reason });

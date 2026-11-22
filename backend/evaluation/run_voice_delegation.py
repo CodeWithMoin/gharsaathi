@@ -53,6 +53,9 @@ from app.voice.service import build_session_config
 from app.voice.memory_write_tools import MEMORY_WRITE_TOOL_NAMES
 from app.voice.toolbox import VOICE_TOOL_DEFINITIONS, VoiceToolbox
 from app.voice.tools import ProductSearcher
+from app.voice.ui_ack import UiAck, apply_ack
+from app.commerce.swiggy.models import Address, AddressList, AddressResolution, Pagination
+from app.commerce.zepto.models import ConnectionStatus as ZeptoConnectionStatus
 from evaluation.memory_db import ScenarioMemoryDatabase
 from evaluation.run_realtime_voice import MASCULINE_SELF_FORMS
 
@@ -85,6 +88,11 @@ ORDER_REFUSAL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 NEGATION_PATTERN = re.compile(r"\bnahi\b|\bnahin\b|\bnot\b|\bcan't\b|\bcannot\b|नहीं|\bnhi\b", re.IGNORECASE)
+FORM_OPEN_CLAIM_PATTERN = re.compile(
+    r"(?:form|फ़ॉर्म|फॉर्म)[^.?!]*(?:khul gaya|khula hai|screen par hai|open hai|is open|khul chuka|खुल गया)",
+    re.IGNORECASE,
+)
+PHONE_FILL_CLAIM_PATTERN = re.compile(r"number[^.?!]*(?:bhar diya|daal diya|fill kar diya|filled)", re.IGNORECASE)
 SAVED_CLAIM_PATTERN = re.compile(
     r"(?:address )?(?:save ho gaya|save kar diya|saved|add ho gaya|add kar diya)|सेव हो गया", re.IGNORECASE
 )
@@ -222,6 +230,38 @@ class OfferQuoteProvider(DemoZeptoQuoteProvider):
         )
 
 
+class HomeOfficeAddressBook:
+    """Two saved addresses per store, in memory; no provider call."""
+
+    def __init__(self) -> None:
+        self.selected = {"swiggy_instamart": DEMO_ADDRESS_ID, "zepto": DEMO_ADDRESS_ID}
+
+    async def saved(self, household_id: str, provider: str) -> AddressList:
+        return AddressList(
+            addresses=[
+                Address(id=DEMO_ADDRESS_ID, tag="Home", category="HOME", address_line="12 Sample Street, HSR Layout, Bengaluru"),
+                Address(id="demo-office", tag="Office", category="WORK", address_line="Tower B, Outer Ring Road, Bengaluru"),
+            ],
+            pagination=Pagination(page=1, page_size=10, total=2, total_pages=1),
+            resolution=AddressResolution(default_address_id=self.selected[provider], resolution_source="saved_selection"),
+        )
+
+    async def select(self, household_id: str, provider: str, address_id: str) -> AddressList | None:
+        addresses = await self.saved(household_id, provider)
+        if address_id not in {item.id for item in addresses.addresses}:
+            return None
+        self.selected[provider] = address_id
+        addresses.resolution.default_address_id = address_id
+        return addresses
+
+
+class LiveZeptoConnection:
+    """A connected live Zepto for the address form only; nothing else is reachable."""
+
+    async def connection_status(self) -> ZeptoConnectionStatus:
+        return ZeptoConnectionStatus(connected=True, mode="live")
+
+
 def build_toolbox(
     catalogue: str,
     catalogues: dict[str, Any],
@@ -259,9 +299,10 @@ def build_toolbox(
         zepto,
         DEMO_ADDRESS_ID,
         HOUSEHOLD_ID,
-        zepto_connection=DemoZeptoService(),
+        zepto_connection=LiveZeptoConnection() if scenario.get("address_form_screen") else DemoZeptoService(),
         preference_recall=memory,
         order_confirmations=OrderConfirmations(basket_repo, approvals),
+        address_book=HomeOfficeAddressBook() if scenario.get("address_book") == "home_office" else None,
     )
 
 
@@ -273,8 +314,10 @@ async def run_turn(
     toolbox: VoiceToolbox,
     user_text: str,
     previous_response_id: str | None,
+    screen: str | None = None,
 ) -> tuple[str, list[dict[str, Any]], str]:
     calls: list[dict[str, Any]] = []
+    toolbox.user_words.add(user_text)
     request_input: list[dict[str, Any]] = [{"role": "user", "content": user_text}]
     previous = previous_response_id
     for _ in range(MAX_TOOL_ROUNDS):
@@ -294,6 +337,13 @@ async def run_turn(
         request_input = []
         for item in function_calls:
             outcome = await toolbox.execute(item.name, item.arguments)
+            ack_id = (outcome.ui_event or {}).get("ack_id")
+            if ack_id and screen:
+                # The simulated browser: the form shows (or fails), as page.tsx reports it.
+                prefill = (outcome.ui_event or {}).get("prefill") or {}
+                ack = UiAck(ack_id=ack_id, form_visible=screen == "visible", reason="shown" if screen == "visible" else "render_failed",
+                            filled_fields=sorted(prefill) if screen == "visible" else [])
+                outcome.model_output = apply_ack(outcome.model_output, ack)
             try:
                 arguments: Any = json.loads(item.arguments)
             except json.JSONDecodeError:
@@ -446,11 +496,14 @@ def check_turn(
                 "name": option.get("name"),
                 "pack_size": option.get("pack_size"),
                 "store_id": option.get("store_id"),
+                "position": option.get("position"),
                 "price": option.get("price"),
             }
         )
         if "add_store" in expect and option.get("store_id") != expect["add_store"]:
             failures.append(f"Added to {option.get('store_id')}, expected {expect['add_store']}.")
+        if "add_position" in expect and option.get("position") != expect["add_position"]:
+            failures.append(f"Added card {option.get('position')}, expected card {expect['add_position']}.")
         needle = expect.get("add_product_contains")
         if needle and needle.lower() not in str(option.get("name", "")).lower():
             failures.append(f"Added {option.get('name')!r}, expected a product containing {needle!r}.")
@@ -506,6 +559,23 @@ def check_turn(
         for key in expect.get("address_null_fields", []):
             if forms and arguments.get(key):
                 failures.append(f"open_address_form invented {key}={arguments.get(key)!r}.")
+    if expect.get("address_listed") and "list_delivery_addresses" not in names:
+        failures.append("Did not list the saved addresses first.")
+    if "address_selected" in expect:
+        picked = [call for call in calls if call["name"] == "select_delivery_address" and call["status"] == "selected"]
+        if not picked or picked[-1]["arguments"].get("address_id") != expect["address_selected"]:
+            failures.append(f"Expected select_delivery_address {expect['address_selected']}, got {[(c['arguments'], c['status']) for c in calls if c['name'] == 'select_delivery_address']}.")
+    if "prefill_equals" in expect:
+        forms = [call for call in calls if call["name"] == "open_address_form" and call.get("ui_prefill") is not None]
+        if not forms or forms[-1]["ui_prefill"] != expect["prefill_equals"]:
+            failures.append(f"Form prefill {forms[-1]['ui_prefill'] if forms else None}, expected {expect['prefill_equals']}.")
+    if expect.get("form_claim_needs_ack"):
+        visible = any(call["status"] == "form_opened" for call in calls)
+        claims = _claim_sentences(FORM_OPEN_CLAIM_PATTERN, reply)
+        if claims and not visible:
+            failures.append(f"Claimed the form is open without form_visible: {claims}.")
+    if expect.get("no_phone_fill_claim") and _claim_sentences(PHONE_FILL_CLAIM_PATTERN, reply):
+        failures.append(f"Claimed to fill the phone number: {_claim_sentences(PHONE_FILL_CLAIM_PATTERN, reply)}.")
     if expect.get("no_saved_claim") and _claim_sentences(SAVED_CLAIM_PATTERN, reply):
         failures.append(f"Reply claims the address was saved: {_claim_sentences(SAVED_CLAIM_PATTERN, reply)}.")
     if "add_pack_size" in expect:
@@ -611,7 +681,9 @@ async def run_scenario(
     turns: list[dict[str, Any]] = []
     for turn in scenario["turns"]:
         try:
-            reply, calls, previous = await run_turn(client, delegation, toolbox, turn["user"], previous)
+            reply, calls, previous = await run_turn(
+                client, delegation, toolbox, turn["user"], previous, turn.get("screen", scenario.get("address_form_screen"))
+            )
         except Exception as exc:
             turns.append({"user": turn["user"], "error": f"{type(exc).__name__}: {exc}", "failures": ["turn errored"]})
             break
