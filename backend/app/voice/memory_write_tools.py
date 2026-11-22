@@ -156,7 +156,9 @@ MEMORY_WRITE_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": LIST_PREFERENCES,
         "description": (
             "Read-only: what this household asked you to remember, plus pending suggestions, "
-            "with memory_ref values for update or forget. Use for 'tumhe kya yaad hai?'."
+            "with memory_ref values for update or forget. Use only to find a memory_ref "
+            "(summarize_my_memory answers 'kya yaad hai?'); never to look up a product before "
+            "searching or adding."
         ),
         "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
         "strict": True,

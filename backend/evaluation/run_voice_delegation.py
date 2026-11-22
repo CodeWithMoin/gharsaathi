@@ -46,6 +46,7 @@ from app.memory.recall import (
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.shopping.memory import InMemoryApprovalRepository, InMemoryBasketRepository
+from app.shopping.errors import ProviderUnavailable
 from app.shopping.order_confirmation import OrderConfirmations
 from app.shopping.models import Basket, Charge, CheckoutAttempt, CheckoutStatus, OfferOpportunity, Quote
 from app.shopping.reconciliation import ReconcileOutcome
@@ -244,6 +245,16 @@ class OfferQuoteProvider(DemoZeptoQuoteProvider):
         )
 
 
+class FailingPreviewQuoteProvider(DemoZeptoQuoteProvider):
+    """Zepto's preview check fails, as the live quantity-mismatch bug did; no bill exists."""
+
+    async def quote(self, basket: Basket) -> Quote:
+        raise ProviderUnavailable(
+            "Zepto's bill preview could not be verified because the item count was invalid. "
+            "Nothing was ordered. Ref 1a2b3c4d."
+        )
+
+
 class HomeOfficeAddressBook:
     """Two saved addresses per store, in memory; no provider call."""
 
@@ -410,7 +421,11 @@ def build_toolbox(
     approval_repo = InMemoryApprovalRepository()
     quotes = {
         "swiggy_instamart": DemoQuoteProvider(),
-        "zepto": OfferQuoteProvider() if scenario.get("quote_offers") else DemoZeptoQuoteProvider(),
+        "zepto": (
+            FailingPreviewQuoteProvider() if scenario.get("quote_failure")
+            else OfferQuoteProvider() if scenario.get("quote_offers")
+            else DemoZeptoQuoteProvider()
+        ),
     }
     memory: Any = ScenarioMemory(scenario["memory"]) if scenario.get("memory") else None
     if memory_db is not None:
@@ -593,6 +608,14 @@ def check_turn(
     names = [call["name"] for call in calls]
     adds = [call for call in calls if call["name"] == "add_to_basket"]
     successful_adds = [call for call in adds if call["status"] == "added"]
+    # quick_add / express_order (prompt 1.40.0+) search and add in one call; their
+    # added items count as add_to_basket adds for the add_* expectations.
+    quick_items = [
+        item
+        for call in calls
+        if call["name"] in {"quick_add", "express_order"} and call["status"] in {"added", "ready", "needs_choice"}
+        for item in call["model_output"].get("added", [])
+    ]
     changed = [call for call in calls if call["status"] in {"added", "updated"}]
     approvals = [call for call in calls if call["status"] == "awaiting_user_approval"]
     sentences = [sentence for sentence in SENTENCE_SPLIT.split(reply.strip()) if sentence]
@@ -629,7 +652,9 @@ def check_turn(
         failures.append(f"Delivery minutes not returned by any tool: {facts['invented_eta_minutes']}.")
     if facts["unconfirmed_add_claim"]:
         failures.append("Reply claims an add/change but no basket tool confirmed one this turn.")
-    if facts["order_claims"]:
+    # A store-confirmed order (order history / tracking) in this turn makes "order ho gaya" true.
+    facts["order_confirmed_by_tool"] = any(call["model_output"].get("order_confirmed") is True for call in calls)
+    if facts["order_claims"] and not facts["order_confirmed_by_tool"]:
         failures.append(f"Reply claims an order/approval: {facts['order_claims']}.")
 
     if "min_searches" in expect:
@@ -637,10 +662,17 @@ def check_turn(
         if searches < expect["min_searches"]:
             failures.append(f"Expected at least {expect['min_searches']} searches, got {searches}.")
     for name in expect.get("tools_required", []):
-        if name not in names:
+        if name not in names and not (quick_items and name in {"search_products", "add_to_basket"}):
             failures.append(f"Expected tool {name} was not called (called: {names}).")
-    if "add_count" in expect and len(adds) != expect["add_count"]:
-        failures.append(f"Expected {expect['add_count']} add_to_basket call(s), got {len(adds)}.")
+    if "add_count" in expect and len(adds) + len(quick_items) != expect["add_count"]:
+        failures.append(f"Expected {expect['add_count']} add_to_basket call(s), got {len(adds) + len(quick_items)}.")
+    for item in quick_items:
+        facts.setdefault("added", []).append({key: item.get(key) for key in ("name", "pack_size", "quantity", "store_id")})
+        if "add_store" in expect and item.get("store_id") != expect["add_store"]:
+            failures.append(f"Added to {item.get('store_id')}, expected {expect['add_store']}.")
+        needle = expect.get("add_product_contains")
+        if needle and needle.lower() not in str(item.get("name", "")).lower():
+            failures.append(f"Added {item.get('name')!r}, expected a product containing {needle!r}.")
     if adds and len(successful_adds) != len(adds):
         failures.append(f"add_to_basket failed: {[call['model_output'] for call in adds]}.")
     options = _search_options(session_calls)
@@ -760,6 +792,9 @@ def check_turn(
         failures.append(f"Reply mentions forbidden {forbidden}.")
     if expect.get("roman_only") and facts["script"]["devanagari_ratio"] > 0:
         failures.append("Reply contains Devanagari in a Roman Hinglish turn.")
+    missing = [word for word in expect.get("reply_mentions_all", []) if word.lower() not in reply.lower()]
+    if missing:
+        failures.append(f"Reply does not mention {missing}.")
     mentions = expect.get("reply_mentions_any")
     if mentions and not any(word.lower() in reply.lower() for word in mentions):
         failures.append(f"Reply does not mention any of {mentions}.")
@@ -792,6 +827,11 @@ def check_turn(
         call["name"] == "prepare_order" and call["status"] == "awaiting_tap" for call in calls
     ):
         failures.append(f"No order card was prepared (calls: {[c['model_output'] for c in calls]}).")
+    if expect.get("order_card_ready") and not any(
+        call["name"] in {"prepare_order", "express_order"} and call["status"] in {"awaiting_tap", "ready"}
+        for call in calls
+    ):
+        failures.append("No order card was prepared by prepare_order or express_order.")
     if expect.get("no_order_refusal") and ORDER_REFUSAL_PATTERN.search(reply):
         failures.append("Reply refuses to place orders although the order card is the order path.")
     if expect.get("refuses_order"):

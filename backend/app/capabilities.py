@@ -1012,6 +1012,11 @@ UNMOUNTED_ROUTERS: dict[str, str] = {
 # be a defined voice tool.
 PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
     {
+        # Bill/order failure status (codex/voice-reliability).
+        "bill_failed",
+        "item_summary",
+        "bill_breakdown",
+        "fees_total",
         # summarize_my_memory and search_products household-fact fields.
         "more_on_screen",
         "nothing_saved",
@@ -1019,7 +1024,6 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "usual_quantity",
         # express_order / quick_add / clear_basket result fields and statuses.
         "also_in_basket",
-        "bill_breakdown",
         "items_removed",
         "named_brand_and_size",
         "needs_choice",

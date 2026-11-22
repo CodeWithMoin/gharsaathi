@@ -56,6 +56,10 @@ _ALIASES = {
     "sabun": "detergent",
     "ande": "eggs",
 }
+def _search_text(product: Product) -> str:
+    return f"{product.name} {product.brand or ''} {product.pack_size or ''}".lower()
+
+
 _GENERIC_TERMS = {"monthly", "groceries", "grocery", "essentials", "breakfast", "regular"}
 
 _DEMO_ZEPTO_OFFERS = {
@@ -137,14 +141,14 @@ class DemoSwiggyService:
         if not words or words & _GENERIC_TERMS:
             products = DEMO_PRODUCTS
         else:
-            products = [
-                product
-                for product in DEMO_PRODUCTS
-                if any(
-                    word in f"{product.name} {product.brand or ''} {product.pack_size or ''}".lower()
-                    for word in words
-                )
+            # Single letters and bare numbers ("1 L") match nearly everything; rank by
+            # the meaningful words a product shares with the query.
+            meaningful = {word for word in words if len(word) > 1 and not word.isdigit()} or words
+            scored = [
+                (sum(word in _search_text(product) for word in meaningful), index, product)
+                for index, product in enumerate(DEMO_PRODUCTS)
             ]
+            products = [product for score, _, product in sorted(scored, key=lambda item: (-item[0], item[1])) if score]
         timed_products = [
             product.model_copy(update={"delivery_value": "18", "delivery_unit": "min"})
             for product in (products or DEMO_PRODUCTS[:4])

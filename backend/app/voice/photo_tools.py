@@ -54,7 +54,11 @@ NEXT_STEP = (
     "An item with brand null and identified_from visual is the most likely generic product: "
     "say so naturally (brand not visible, it looks like …) and search it; never add a brand. "
     "Say the photo feature is in beta only when an item's confidence is low. "
-    "Never add to the basket without the user's go-ahead."
+    "Never add to the basket without the user's go-ahead. If the user's own message already "
+    "asked to buy or order the photo's items ('order karo', 'buy this'), that is the go-ahead "
+    "for high-confidence items: search, add the matching pack (the cheaper store when both "
+    "have it, without asking which store) and, for an order request, call prepare_order in "
+    "the same turn."
 )
 STATUS_MESSAGES = {
     "no_items": (
