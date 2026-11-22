@@ -1,5 +1,5 @@
 {
-  "version": "1.30.0",
+  "version": "1.40.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -701,6 +701,42 @@
       "required_any": ["confirm nahi", "Check with Zepto", "abhi confirm", "Zepto app"],
       "forbidden_any": ["order ho gaya", "confirm kar diya", "order place ho gaya", "order place kar diya", "raste mein hai", "on its way"],
       "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "express_order_delegates_without_question",
+      "user": "2 Amul lassi order kar do.",
+      "required_any": ["Ek second", "Bas ek pal", "Zara rukiye", "kar rahi hoon", "dekh rahi", "ready kar rahi"],
+      "forbidden_any": ["kaunsa", "konsa", "chahiye kya", "size chahiye", "order ho gaya", "order place kar diya", "nahi kar sakti", "cannot place"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "usual_milk_order_delegates_without_question",
+      "user": "Usual milk mangwa do.",
+      "required_any": ["Ek second", "Bas ek pal", "Zara rukiye", "kar rahi hoon", "dekh rahi", "ready kar rahi"],
+      "forbidden_any": ["kaunsa", "konsa", "brand", "size chahiye", "order ho gaya", "order place kar diya"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "plain_add_delegates_without_asking_first",
+      "user": "Doodh add karo.",
+      "required_any": ["Ek second", "Bas ek pal", "Zara rukiye", "kar rahi hoon", "dekh rahi", "ready kar rahi"],
+      "forbidden_any": ["kaunsa", "konsa", "brand aur size", "size chahiye", "add ho gaya", "add kiya"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "clear_cart_delegates_one_line",
+      "user": "Clear cart.",
+      "required_any": ["Ek second", "Bas ek pal", "Zara rukiye", "kar rahi hoon", "dekh rahi", "ready kar rahi", "khali", "clear"],
+      "forbidden_any": ["pakka", "sure?", "confirm karun", "order ho gaya"],
+      "max_questions": 0,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05
     }

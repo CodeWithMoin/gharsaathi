@@ -112,3 +112,11 @@ host, demo stores, faults injected by the harness, no order possible):
 ```bash
 cd backend && uv run --with-requirements requirements.txt python -m evaluation.run_failure_scenarios [--scenario fm_provider_down]
 ```
+
+**Turns to order.** `evaluation/run_turns_to_order.py` (scenarios in
+`evaluation/turns_to_order_scenarios.json`, report `turns_to_order_report.json`)
+drives the real backend model from one request ("2 Amul lassi order kar do",
+"clear cart", …) through scripted answers until the order card is on screen or
+the basket is empty, and records user turns, model rounds and latency per
+`--label`. Demo stores and fixtures only, DNS restricted to the OpenAI host, the
+card is never tapped.

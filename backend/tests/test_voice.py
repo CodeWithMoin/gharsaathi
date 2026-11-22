@@ -120,6 +120,7 @@ async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
     names = {tool["name"] for tool in tools}
     assert names == {
         "search_products", "add_to_basket", "set_basket_quantity", "view_basket", "request_approval",
+        "clear_basket", "express_order", "quick_add",
         "open_address_form", "recall_household_preferences", "remember_preference",
         "update_preference", "forget_preference", "list_preferences", "confirm_memory",
         "prepare_order", "list_delivery_addresses", "select_delivery_address",
@@ -131,9 +132,12 @@ async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
         "checkout" not in name and "approve" not in name and "cancel" not in name for name in names
     )
     # The other order tools only read status and history.
+    # express_order ends in the same order card as prepare_order.
     assert {name for name in names if "order" in name} == {
-        "prepare_order", "get_order_status", "list_recent_orders"
+        "prepare_order", "express_order", "get_order_status", "list_recent_orders"
     }
+    express = next(tool for tool in tools if tool["name"] == "express_order")
+    assert "Never approves, pays or places an order" in express["description"]
     prepare = next(tool for tool in tools if tool["name"] == "prepare_order")
     assert "never approves or places an order" in prepare["description"]
 

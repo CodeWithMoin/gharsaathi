@@ -544,6 +544,7 @@ class ChatTurnService:
             logger.exception("Chat tool %s failed", name)
             ui_events.append(dict(TOOL_FAILED_EVENT))
             return {"status": "error", "message": "The tool failed unexpectedly."}
+        ui_events.extend(getattr(outcome, "extra_ui_events", None) or [])
         if outcome.ui_event is not None:
             ui_events.append(outcome.ui_event)
         if outcome.model_output.get("status") == "form_requested":

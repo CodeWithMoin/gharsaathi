@@ -159,6 +159,20 @@ class BasketService:
 
         return await self._edit(household_id, provider, change)
 
+    async def clear(self, household_id: str, provider: ProviderName) -> Basket:
+        """Empty the open basket in one revision-checked edit (supersedes its bill).
+
+        Refused like every edit while checkout is pending or its outcome is unknown.
+        """
+
+        def change(basket: Basket) -> bool:
+            if not basket.lines:
+                return False
+            basket.lines.clear()
+            return True
+
+        return await self._edit(household_id, provider, change)
+
     async def set_address(
         self, household_id: str, provider: ProviderName, address_id: str
     ) -> Basket:

@@ -9,7 +9,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC
-from typing import Any, Protocol, get_args
+from typing import Any, Literal, Protocol, get_args
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -18,7 +18,7 @@ from app.commerce.swiggy.models import Product
 from app.shopping.approval import ApprovalService, latest_open_approval
 from app.shopping.basket import BasketService, item_total_paise
 from app.shopping.money import format_rupees, money_fields
-from app.shopping.errors import ShoppingError
+from app.shopping.errors import InvalidBasketChange, ShoppingError
 from app.shopping.models import (
     Basket,
     BasketLine,
@@ -52,7 +52,8 @@ BASKET_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "description": (
             "Add an option from this conversation's product results to its store's local "
             "basket. Use only option_id returned by search_products; the store comes from "
-            "that option. This does not change a provider cart or place an order."
+            "that option. This does not change a provider cart or place an order. The result "
+            "includes the whole basket after the add; do not call view_basket after it."
         ),
         "parameters": {
             "type": "object",
@@ -70,7 +71,9 @@ BASKET_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "set_basket_quantity",
         "description": (
             "Change a local basket line's quantity. Use item_id and store_id from view_basket. "
-            "Quantity zero removes the item. This never places an order."
+            "Quantity zero removes the item (to empty the whole basket use clear_basket). The "
+            "result includes the whole basket after the change; do not call view_basket after "
+            "it. This never places an order."
         ),
         "parameters": {
             "type": "object",
@@ -117,9 +120,36 @@ BASKET_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         },
         "strict": True,
     },
+    {
+        "type": "function",
+        "name": "clear_basket",
+        "description": (
+            "Empty the local basket in one step, for 'clear cart', 'basket khali karo', 'sab "
+            "hata do'. store: zepto, swiggy_instamart, or all (null also means every store "
+            "with items). Any open bill or order card for that basket is cancelled. The "
+            "result has everything for a one-line reply; do not call view_basket after it."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "store": {
+                    "type": ["string", "null"],
+                    "enum": [*STORE_IDS, "all", None],
+                    "description": "zepto, swiggy_instamart, all, or null for every store with items.",
+                }
+            },
+            "required": ["store"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
 ]
 
 BASKET_TOOL_NAMES = frozenset(tool["name"] for tool in BASKET_TOOL_DEFINITIONS)
+CHANGE_RESULT_NOTE = (
+    " This result already shows the whole basket after the change; reply from it and do "
+    "not call view_basket."
+)
 
 
 @dataclass(frozen=True)
@@ -150,6 +180,10 @@ class QuantityArguments(BaseModel):
 
 class StoreArguments(BaseModel):
     store: ProviderName | None = None
+
+
+class ClearArguments(BaseModel):
+    store: Literal["swiggy_instamart", "zepto", "all"] | None = None
 
 
 def address_for_model(summary: SavedAddressSummary | None) -> dict[str, Any]:
@@ -291,6 +325,8 @@ class BasketToolExecutor:
                 return await self._view(StoreArguments.model_validate(arguments))
             if name == "request_approval":
                 return await self._request_approval(StoreArguments.model_validate(arguments))
+            if name == "clear_basket":
+                return await self._clear(ClearArguments.model_validate(arguments))
         except ValidationError:
             return _error("Invalid arguments for this tool.")
         except ShoppingError as exc:
@@ -513,6 +549,77 @@ class BasketToolExecutor:
             },
         )
 
+    async def _clear(self, arguments: ClearArguments) -> ToolOutcome:
+        if arguments.store in STORE_IDS:
+            store = self._store(arguments.store)  # type: ignore[arg-type]
+            if store is None:
+                return _not_connected(arguments.store)  # type: ignore[arg-type]
+            targets = [store]
+        else:
+            targets = list(self.stores.values())
+        cleared: list[dict[str, Any]] = []
+        locked: list[dict[str, str]] = []
+        events: list[dict[str, Any]] = []
+        for store in targets:
+            basket = await self._active(store)
+            if not basket.lines:
+                continue
+            if basket.status == BasketStatus.CHECKOUT_PENDING:
+                locked.append(_locked(store))
+                continue
+            had_bill = basket.status in {BasketStatus.AWAITING_APPROVAL, BasketStatus.APPROVED}
+            try:
+                emptied = await self.baskets.clear(self.household_id, store.provider)
+            except InvalidBasketChange:
+                # Checkout started between the read and the edit; anything else is an error.
+                if (await self._active(store)).status != BasketStatus.CHECKOUT_PENDING:
+                    raise
+                locked.append(_locked(store))
+                continue
+            self._quotes.pop(store.provider, None)
+            cleared.append(
+                {
+                    "store": store.label,
+                    "store_id": store.provider,
+                    "items_removed": sum(line.quantity for line in basket.lines),
+                    "bill_cancelled": had_bill,
+                }
+            )
+            events.append(
+                {"type": "basket.updated", "provider": store.provider, "basket": _basket_ui(emptied, store)}
+            )
+        status = "cleared" if cleared else "locked" if locked else "already_empty"
+        return ToolOutcome(
+            model_output={
+                "status": status,
+                "cleared": cleared,
+                **({"locked": locked} if locked else {}),
+                "note": CLEARED_NOTE,
+            },
+            ui_event=events[-1] if events else None,
+            extra_ui_events=events[:-1],
+        )
+
+
+CLEARED_NOTE = (
+    "Reply in one line from this result only: which store's basket was emptied and, when "
+    "bill_cancelled, that its bill/order card was cancelled. already_empty: say the basket "
+    "is already empty. For each locked store say its message. Nothing was ordered. Do not "
+    "call view_basket."
+)
+LOCKED_MESSAGE = (
+    "{store} is still confirming an earlier order from this basket (outcome not known yet), "
+    "so it cannot be cleared. Check the order card ('Check with Zepto') or the {store} app first."
+)
+
+
+def _locked(store: BasketStore) -> dict[str, str]:
+    return {
+        "store": store.label,
+        "store_id": store.provider,
+        "message": LOCKED_MESSAGE.format(store=store.label),
+    }
+
 
 def _basket_ui(basket: Basket, store: BasketStore) -> dict[str, Any]:
     return {
@@ -542,7 +649,7 @@ def _basket_outcome(
             "status": status,
             **basket_for_model(basket, store, address),
             **(current_bill or {}),
-            "note": BASKET_NOTE,
+            "note": BASKET_NOTE + (CHANGE_RESULT_NOTE if status in {"added", "updated"} else ""),
         },
         ui_event={"type": "basket.updated", "provider": store.provider, "basket": _basket_ui(basket, store)},
     )
