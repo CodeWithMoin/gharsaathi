@@ -1,6 +1,6 @@
 {
   "generated": "2026-11-22",
-  "method": "median ms over N live runs (OpenAI gpt-6-luna Responses, demo catalogues + harness fixtures, no store network); before = main at 2cc851b, default (medium) effort",
+  "method": "median ms over N live runs (OpenAI gpt-6-luna Responses, demo catalogues + harness fixtures, no store network); before = main at 2cc851b, default (medium) effort; final = this branch after merging main (prompt 1.30.0), medium effort. JEV reranking is not included (demo/fake stores); in production it adds ~0.4 s inside each store's search stage.",
   "offline_fakes_ms": {
     "before": {
       "search_both_healthy_ms (Swiggy 0.7 s, Zepto 1.1 s)": 1101.3,
@@ -383,6 +383,105 @@
         "n": 3,
         "total_ms_median": 10548.0
       }
+    },
+    "final_medium_after_merge_1_30": {
+      "delegation:choc-recall:t1": {
+        "n": 3,
+        "total_ms_median": 6942.0,
+        "rounds_median": 2,
+        "model_ms_median": 6941.0,
+        "first_round_ms_median": 2063.0,
+        "final_round_ms_median": 3950.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 61,
+        "input_tokens_median": 24809,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:choc-recall:t2": {
+        "n": 3,
+        "total_ms_median": 6394.0,
+        "rounds_median": 2,
+        "model_ms_median": 6394.0,
+        "first_round_ms_median": 3392.0,
+        "final_round_ms_median": 3297.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 0,
+        "input_tokens_median": 25834,
+        "tool_patterns": [
+          "add_to_basket/reply"
+        ]
+      },
+      "typed:choc-recall:t1": {
+        "n": 3,
+        "total_ms_median": 6452.0
+      },
+      "typed:choc-recall:t2": {
+        "n": 3,
+        "total_ms_median": 5625.0
+      },
+      "delegation:choc-specified:t1": {
+        "n": 3,
+        "total_ms_median": 8739.0,
+        "rounds_median": 3,
+        "model_ms_median": 8739.0,
+        "first_round_ms_median": 2393.0,
+        "final_round_ms_median": 3109.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 29,
+        "input_tokens_median": 37583,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:choc-specified:t1": {
+        "n": 3,
+        "total_ms_median": 9018.0
+      },
+      "delegation:coke-memory:t1": {
+        "n": 3,
+        "total_ms_median": 5580.0,
+        "rounds_median": 2,
+        "model_ms_median": 5580.0,
+        "first_round_ms_median": 2258.0,
+        "final_round_ms_median": 3322.0,
+        "tool_ms_median": 0.0,
+        "reasoning_tokens_median": 12,
+        "input_tokens_median": 24645,
+        "tool_patterns": [
+          "recall_household_preferences/reply"
+        ]
+      },
+      "delegation:coke-memory:t2": {
+        "n": 3,
+        "total_ms_median": 11020.0,
+        "rounds_median": 3,
+        "model_ms_median": 11020.0,
+        "first_round_ms_median": 3370.0,
+        "final_round_ms_median": 3077.0,
+        "tool_ms_median": 1.0,
+        "reasoning_tokens_median": 105,
+        "input_tokens_median": 39287,
+        "tool_patterns": [
+          "search_products/add_to_basket/reply"
+        ]
+      },
+      "typed:coke-memory:t1": {
+        "n": 3,
+        "total_ms_median": 6399.0
+      },
+      "typed:coke-memory:t2": {
+        "n": 3,
+        "total_ms_median": 12347.0
+      }
     }
+  },
+  "delegation_eval": {
+    "main_before_medium": "26/30 (fails s9, s10, s16, s19)",
+    "branch_low_pre_merge": "29/30 (s9)",
+    "branch_low_after_1_22": "32/33 (s4)",
+    "branch_low_after_1_30": "32/34 (s4, t3); s4 isolated low 4/11 fail vs medium 0/9 -> default kept at medium",
+    "branch_medium_final": "30/34 (s10, m2, s17, t3); m2/s17/t3 equally flaky on main (3x rerun)"
   }
 }
