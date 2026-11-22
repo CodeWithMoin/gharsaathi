@@ -437,6 +437,7 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "update_preference": UpdateArguments,
         "forget_preference": ForgetArguments,
         "list_preferences": ListArguments,
+        "summarize_my_memory": ListArguments,
         "confirm_memory": DecisionArguments,
         "prepare_order": StoreArguments,
         "clear_basket": ClearArguments,

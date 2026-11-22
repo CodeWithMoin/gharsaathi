@@ -30,10 +30,20 @@ PreferenceKind = Literal[
     "avoid_product",
     "avoid_brand",
     "rule",
+    "diet",
+    "avoid_ingredient",
+    "usual_quantity",
+    "shopping_style",
+    "household",
+    "delivery_note",
+    "usual_item",
+    "routine",
+    "goal",
 ]
-PreferenceGroup = Literal["pasand", "kabhi_nahi", "niyam"]
+PreferenceGroup = Literal["pasand", "kabhi_nahi", "niyam", "ghar"]
 MemoryOrigin = Literal["explicit", "stated", "inferred"]
 
+# Kinds the voice/typed remember/update tools may write (the tool enum).
 PREFERENCE_KINDS: tuple[str, ...] = (
     "prefer_brand",
     "prefer_pack_size",
@@ -43,6 +53,20 @@ PREFERENCE_KINDS: tuple[str, ...] = (
     "avoid_brand",
     "rule",
 )
+# Household facts the user told us directly (today: only the owner's manual
+# demo seed, app.memory.demo_seed). Shown, edited and deleted like the rest.
+HOUSEHOLD_KINDS: tuple[str, ...] = (
+    "diet",
+    "avoid_ingredient",
+    "usual_quantity",
+    "shopping_style",
+    "household",
+    "delivery_note",
+    "usual_item",
+    "routine",
+    "goal",
+)
+ALL_KINDS: tuple[str, ...] = (*PREFERENCE_KINDS, *HOUSEHOLD_KINDS)
 
 KIND_TO_TYPE: dict[str, str] = {
     "prefer_brand": "brand_preference",
@@ -52,7 +76,45 @@ KIND_TO_TYPE: dict[str, str] = {
     "avoid_product": "product_avoidance",
     "avoid_brand": "brand_avoidance",
     "rule": "shopping_rule",
+    "diet": "diet_preference",
+    "avoid_ingredient": "ingredient_avoidance",
+    "usual_quantity": "quantity_preference",
+    "shopping_style": "shopping_style",
+    "household": "household_fact",
+    "delivery_note": "delivery_note",
+    "usual_item": "usual_item",
+    "routine": "household_routine",
+    "goal": "shopping_goal",
 }
+
+# A food filter the household chose. The value is a code-controlled enum, so
+# "jain" here is a diet (no meat, eggs, onion, garlic or root vegetables), not
+# a stored religious trait; free words about faith are still refused.
+DIET_LABELS: dict[str, str] = {
+    "vegetarian": "Vegetarian",
+    "eggetarian": "Vegetarian, eggs are fine",
+    "jain": "Jain food (no onion, garlic or root vegetables)",
+    "non_vegetarian": "Non-vegetarian",
+}
+SHOPPING_STYLE_LABELS: dict[str, str] = {
+    "cheapest": "Show the cheapest option first",
+    "balanced": "Balance price and quality",
+    "premium": "Prefers premium brands",
+}
+# household facts: item names the attribute, value is a small enum or count.
+HOUSEHOLD_FACTS: dict[str, tuple[str, ...]] = {
+    "people": tuple(str(number) for number in range(1, 16)),
+    "kids": ("yes", "no"),
+    "baby": ("yes", "no"),
+    "pets": ("none", "dog", "cat", "dog_and_cat", "other"),
+}
+HOUSEHOLD_FACT_LABELS: dict[str, str] = {
+    "people": "People at home",
+    "kids": "Children at home",
+    "baby": "Baby at home",
+    "pets": "Pets",
+}
+MAX_USUAL_QUANTITY = 20
 TYPE_TO_KIND: dict[str, str] = {value: key for key, value in KIND_TO_TYPE.items()}
 
 # Older memory types that the extractor or sample seed may have written.
@@ -68,6 +130,15 @@ GROUP_BY_KIND: dict[str, PreferenceGroup] = {
     "avoid_product": "kabhi_nahi",
     "avoid_brand": "kabhi_nahi",
     "rule": "niyam",
+    "diet": "niyam",
+    "avoid_ingredient": "kabhi_nahi",
+    "usual_quantity": "pasand",
+    "shopping_style": "niyam",
+    "household": "ghar",
+    "delivery_note": "ghar",
+    "usual_item": "pasand",
+    "routine": "ghar",
+    "goal": "niyam",
 }
 
 VALUE_KEY_BY_KIND: dict[str, str] = {
@@ -78,12 +149,26 @@ VALUE_KEY_BY_KIND: dict[str, str] = {
     "avoid_store": "store",
     "avoid_product": "product",
     "rule": "rule",
+    "diet": "diet",
+    "avoid_ingredient": "ingredient",
+    "usual_quantity": "quantity",
+    "shopping_style": "style",
+    "household": "fact",
+    "delivery_note": "note",
+    "usual_item": "usual_product",
+    "routine": "routine",
+    "goal": "goal",
 }
+# Kinds whose value may be a sentence ("Morning: milk with oats ...").
+LONG_VALUE_KINDS: frozenset[str] = frozenset({"routine", "delivery_note"})
+MAX_LONG_VALUE_CHARS = 200
+# Kinds whose value is a code-controlled enum; the policy word list is not
+# applied to that enum value (see DIET_LABELS).
+ENUM_VALUE_KINDS: frozenset[str] = frozenset({"diet", "shopping_style", "household"})
 
 # Every memory_type covered by the single "remember my preferences" switch.
-HOUSEHOLD_PREFERENCE_TYPES: tuple[str, ...] = (
-    *KIND_TO_TYPE.values(),
-    "quantity_preference",
+HOUSEHOLD_PREFERENCE_TYPES: tuple[str, ...] = tuple(
+    dict.fromkeys((*KIND_TO_TYPE.values(), "quantity_preference"))
 )
 PREFERENCE_PURPOSE = "personalize_search"
 # The Settings switch toggles these categories (frontend memory-api.ts
@@ -111,6 +196,8 @@ RULE_LABELS: dict[str, str] = {
     "prefer_larger_packs": "Prefer larger packs",
     "prefer_smaller_packs": "Prefer smaller packs",
     "ask_before_substitute": "Ask before substituting an item",
+    "prefer_best_unit_value": "Prefer the best value per unit",
+    "substitute_closest_and_tell": "If something is out of stock, pick the closest alternative and say so",
 }
 
 MAX_ITEM_CHARS = 60
@@ -195,7 +282,7 @@ class PreferenceSpec(BaseModel):
 
     kind: PreferenceKind
     item: str | None = Field(default=None, max_length=MAX_ITEM_CHARS * 2)
-    value: str = Field(min_length=1, max_length=MAX_VALUE_CHARS * 2)
+    value: str = Field(min_length=1, max_length=MAX_LONG_VALUE_CHARS * 2)
     user_words: str | None = Field(default=None, max_length=MAX_USER_WORDS_CHARS * 2)
 
     @field_validator("item")
@@ -211,13 +298,18 @@ class PreferenceSpec(BaseModel):
     @field_validator("value")
     @classmethod
     def clean_value(cls, value: str) -> str:
-        cleaned = _clean(value, MAX_VALUE_CHARS)
-        if cleaned is None or len(cleaned) < 2:
+        cleaned = _clean(value, MAX_LONG_VALUE_CHARS)
+        if cleaned is None:
             raise ValueError("value must name a brand, size, store, product or rule")
         return cleaned
 
     @model_validator(mode="after")
     def check_kind_value(self) -> PreferenceSpec:
+        # Counts ("4 people", "2 packs") may be one character; names may not.
+        if len(self.value) < 2 and self.kind not in {"household", "usual_quantity"}:
+            raise ValueError("value must name a brand, size, store, product or rule")
+        if len(self.value) > MAX_VALUE_CHARS and self.kind not in LONG_VALUE_KINDS:
+            raise ValueError(f"must be at most {MAX_VALUE_CHARS} characters")
         if self.kind in {"prefer_store", "avoid_store"}:
             store = normalise_store(self.value)
             if store is None:
@@ -226,8 +318,25 @@ class PreferenceSpec(BaseModel):
         elif self.kind == "rule":
             if self.value not in RULE_LABELS:
                 raise ValueError(f"rule must be one of {', '.join(RULE_LABELS)}")
-        elif self.kind in {"prefer_brand", "prefer_pack_size"} and self.item is None:
-            raise ValueError("item is required for a brand or pack-size preference")
+        elif self.kind in {"prefer_brand", "prefer_pack_size", "usual_quantity", "usual_item"} and self.item is None:
+            raise ValueError("item is required for a brand, pack-size or quantity preference")
+        elif self.kind == "diet":
+            self.value = _enum_value(self.value, DIET_LABELS, "diet")
+        elif self.kind == "shopping_style":
+            self.value = _enum_value(self.value, SHOPPING_STYLE_LABELS, "value preference")
+        elif self.kind == "household":
+            allowed = HOUSEHOLD_FACTS.get((self.item or "").casefold())
+            if allowed is None:
+                raise ValueError(f"household item must be one of {', '.join(HOUSEHOLD_FACTS)}")
+            self.item = (self.item or "").casefold()
+            self.value = _enum_value(self.value, {value: value for value in allowed}, self.item)
+        if self.kind == "usual_quantity":
+            if not self.value.isdigit() or not 1 <= int(self.value) <= MAX_USUAL_QUANTITY:
+                raise ValueError(f"quantity must be a whole number from 1 to {MAX_USUAL_QUANTITY}")
+            self.value = str(int(self.value))
+        if self.kind in ENUM_VALUE_KINDS:
+            # Enum facts are told, not quoted: no free words are kept with them.
+            self.user_words = None
         return self
 
     @property
@@ -237,26 +346,30 @@ class PreferenceSpec(BaseModel):
     def texts(self) -> list[str]:
         return [text for text in (self.item, self.value, self.user_words) if text]
 
+    def policy_texts(self) -> list[str]:
+        """Texts the sensitive-data policy checks; an enum value is code-controlled."""
+        if self.kind in ENUM_VALUE_KINDS:
+            return [text for text in (self.user_words,) if text]
+        return self.texts()
+
     def to_value(self, origin: MemoryOrigin) -> dict[str, Any]:
         value: dict[str, Any] = {"kind": self.kind, "origin": origin}
         if self.item:
             value["product_category"] = self.item
-        if self.kind in {"prefer_brand", "avoid_brand"}:
-            value["brand"] = self.value
-        elif self.kind == "prefer_pack_size":
-            value["pack_size"] = self.value
-        elif self.kind in {"prefer_store", "avoid_store"}:
-            value["store"] = self.value
-        elif self.kind == "avoid_product":
-            value["product"] = self.value
-        else:
-            value["rule"] = self.value
+        value[VALUE_KEY_BY_KIND[self.kind]] = self.value
         if self.user_words:
             value["user_words"] = self.user_words
         return value
 
     def summary(self) -> str:
         return summary_for(self.kind, self.item, self.value)
+
+
+def _enum_value(raw: str, allowed: dict[str, str], label: str) -> str:
+    key = "_".join(raw.casefold().replace("-", " ").split())
+    if key not in allowed:
+        raise ValueError(f"{label} must be one of {', '.join(allowed)}")
+    return key
 
 
 def summary_for(kind: str, item: str | None, value: str) -> str:
@@ -278,6 +391,25 @@ def summary_for(kind: str, item: str | None, value: str) -> str:
         return f"Never suggest {value}"
     if kind == "avoid_brand":
         return f"Avoid {value}{scope}"
+    if kind == "diet":
+        return f"Diet: {DIET_LABELS.get(value, value)}"
+    if kind == "avoid_ingredient":
+        return f"Keep out: {value}"
+    if kind == "usual_quantity":
+        return f"{item}: usually {value}"
+    if kind == "shopping_style":
+        return SHOPPING_STYLE_LABELS.get(value, value)
+    if kind == "household":
+        label = HOUSEHOLD_FACT_LABELS.get(item or "", item or "Home")
+        return f"{label}: {value.replace('_', ' ')}"
+    if kind == "delivery_note":
+        return f"Delivery note: {value}"
+    if kind == "usual_item":
+        return f"{item}: usually {value}"
+    if kind == "routine":
+        return f"Routine: {value}"
+    if kind == "goal":
+        return f"Goal: {value}"
     return RULE_LABELS.get(value, value)
 
 
@@ -352,3 +484,74 @@ def spec_of(memory: MemoryItem) -> PreferenceSpec | None:
         return PreferenceSpec(kind=kind, item=item_of(memory), value=value)  # type: ignore[arg-type]
     except ValueError:
         return None
+
+
+def structured_kind(memory_type: str, value: dict[str, Any]) -> str | None:
+    """The household-fact kind of a memory (diet, keep-outs, usual quantity...), else None.
+
+    Older kinds keep their free-form edit path, so this needs the stored kind.
+    """
+    raw_kind = value.get("kind")
+    if isinstance(raw_kind, str) and raw_kind in HOUSEHOLD_KINDS:
+        return raw_kind
+    return None
+
+
+def text_for_value(kind: str, value: dict[str, Any]) -> str:
+    """The stored one-line text of a structured memory, from its fields only."""
+    item = value.get("product_category")
+    main = value.get(VALUE_KEY_BY_KIND[kind])
+    text = summary_for(kind, item if isinstance(item, str) else None, str(main or ""))
+    if kind != "prefer_pack_size" and isinstance(value.get("pack_size"), str):
+        text += f", {value['pack_size']}"
+    if kind != "usual_quantity" and value.get("quantity"):
+        text += f", usually {value['quantity']}"
+    return text
+
+
+def checked_correction(memory_type: str, value: dict[str, Any]) -> dict[str, Any]:
+    """Validate an on-screen edit of a structured memory; returns the cleaned value.
+
+    Raises ValueError (bad shape or enum) or returns the value unchanged for
+    older free-form memory types. The sensitive-data policy is checked on the
+    same texts a new memory of that kind would be checked on.
+    """
+    kind = structured_kind(memory_type, value)
+    if kind is None:
+        return value
+    key = VALUE_KEY_BY_KIND[kind]
+    main = value.get(key)
+    item = value.get("product_category")
+    spec = PreferenceSpec(
+        kind=kind,  # type: ignore[arg-type]
+        item=item if isinstance(item, str) else None,
+        value=str(main) if main is not None else "",
+    )
+    cleaned = dict(value)
+    cleaned[key] = spec.value
+    if spec.item:
+        cleaned["product_category"] = spec.item
+    for extra in ("pack_size", "product_name", "quantity"):
+        if extra in cleaned and extra != key:
+            text = _clean(str(cleaned[extra]), MAX_VALUE_CHARS)
+            if text is None:
+                del cleaned[extra]
+            elif extra == "quantity" and (
+                not text.isdigit() or not 1 <= int(text) <= MAX_USUAL_QUANTITY
+            ):
+                raise ValueError(f"quantity must be a whole number from 1 to {MAX_USUAL_QUANTITY}")
+            else:
+                cleaned[extra] = text
+    category = sensitive_category(
+        *spec.policy_texts(),
+        *(str(cleaned[extra]) for extra in ("pack_size", "product_name") if extra in cleaned),
+    )
+    if category is not None:
+        raise SensitiveValueError(category)
+    return cleaned
+
+
+class SensitiveValueError(ValueError):
+    def __init__(self, category: str) -> None:
+        super().__init__(category)
+        self.category = category

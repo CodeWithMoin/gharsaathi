@@ -15,7 +15,14 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.database.models import MemoryItem, MemorySubject
-from app.memory.household import HOUSEHOLD_PREFERENCE_TYPES, kind_of, summary_for
+from app.memory.household import (
+    HOUSEHOLD_KINDS,
+    HOUSEHOLD_PREFERENCE_TYPES,
+    MAX_USUAL_QUANTITY,
+    display_value_of,
+    kind_of,
+    summary_for,
+)
 from app.memory.household import STORE_LABELS as STORE_LABELS_BY_ID
 from app.memory.purchase_graph import PurchaseGraphService
 from app.memory.repository import MemoryRepository
@@ -62,6 +69,7 @@ class PreferenceCandidate(BaseModel):
     product: str | None = None
     product_category: str | None = None
     pack_size: str | None = None
+    quantity: str | None = None
     summary: str | None = None
     product_name: str | None = None
     store: str | None = None
@@ -105,6 +113,12 @@ class RememberedItem(BaseModel):
     item: str | None = None
     product: str | None = None
     rule: str | None = None
+    # The structured value of a household fact (diet, keep-out, style...) and
+    # a usual pack count told for this item.
+    value: str | None = None
+    quantity: int | None = None
+    # The exact product told with a usual brand ("Taaza toned milk").
+    product_name: str | None = None
 
 
 class HouseholdMemory(BaseModel):
@@ -161,8 +175,20 @@ def _preference_candidate(memory: MemoryItem) -> PreferenceCandidate:
         product=value.get("product"),
         product_category=value.get("product_category"),
         pack_size=value.get("pack_size"),
+        quantity=value.get("quantity"),
         summary=memory.text,
     )
+
+
+def _text(raw: object) -> str | None:
+    return raw.strip() if isinstance(raw, str) and raw.strip() else None
+
+
+def _quantity(raw: object) -> int | None:
+    text = str(raw).strip() if isinstance(raw, (str, int)) else ""
+    if text.isdigit() and 1 <= int(text) <= MAX_USUAL_QUANTITY:
+        return int(text)
+    return None
 
 
 def _memory_haystack(memory: MemoryItem) -> str:
@@ -276,8 +302,11 @@ async def household_memory_for_person(
             kind = kind_of(memory)
             store = memory.value.get("store")
             rule = memory.value.get("rule")
+            fact = display_value_of(memory) if kind in HOUSEHOLD_KINDS else None
             if kind in {"prefer_store", "avoid_store", "rule"}:
                 name = summary_for(kind, candidate.product_category, str(store or rule or ""))
+            elif kind in HOUSEHOLD_KINDS:
+                name = summary_for(kind, candidate.product_category, fact or "") if fact else ""
             else:
                 name = " ".join(
                     part
@@ -297,6 +326,9 @@ async def household_memory_for_person(
                         item=candidate.product_category,
                         product=candidate.product,
                         rule=rule if isinstance(rule, str) else None,
+                        value=fact,
+                        quantity=_quantity(memory.value.get("quantity")),
+                        product_name=_text(memory.value.get("product_name")),
                     )
                 )
     graph = PurchaseGraphService(session)

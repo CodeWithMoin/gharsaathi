@@ -59,7 +59,13 @@ BASKET_TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "option_id": {"type": "string", "description": "An option_id returned by search_products."},
-                "quantity": {"type": "integer", "description": "Packs to add, from 1 to 50."},
+                "quantity": {
+                    "type": ["integer", "null"],
+                    "description": (
+                        "Packs to add, from 1 to 50. null when the user named no quantity: "
+                        "the option's usual_quantity is used, else 1."
+                    ),
+                },
             },
             "required": ["option_id", "quantity"],
             "additionalProperties": False,
@@ -169,7 +175,7 @@ class AddressDescriber(Protocol):
 
 class AddArguments(BaseModel):
     option_id: str = Field(min_length=1, max_length=64)
-    quantity: int = Field(ge=1, le=50)
+    quantity: int | None = Field(default=None, ge=1, le=50)
 
 
 class QuantityArguments(BaseModel):
@@ -411,12 +417,17 @@ class BasketToolExecutor:
             return _error(f"{product.name} is unavailable right now, so it was not added.")
         if store.address_id:
             await self.baskets.set_address(self.household_id, store.provider, store.address_id)
+        quantity = arguments.quantity or option.usual_quantity or 1
         basket = await self.baskets.add_line(
             self.household_id,
             store.provider,
-            _line_from_product(store.provider, product, arguments.quantity),
+            _line_from_product(store.provider, product, quantity),
         )
-        return await self._outcome(basket, store, "added")
+        outcome = await self._outcome(basket, store, "added")
+        if arguments.quantity is None and option.usual_quantity:
+            outcome.model_output["quantity_added"] = quantity
+            outcome.model_output["quantity_from"] = "household_usual"
+        return outcome
 
     async def _set_quantity(self, arguments: QuantityArguments) -> ToolOutcome:
         if arguments.store is not None:

@@ -25,12 +25,15 @@ from app.commerce.zepto.errors import (
 from app.memory.recall import HouseholdMemory, HouseholdMemoryReader
 from app.memory.household_rules import (
     avoided_store_rule,
+    keep_outs,
     product_decision,
     rules_from_memory,
+    sort_mode,
     store_rule_label,
+    usual_quantity,
     without_store_names,
 )
-from app.memory.remembered import remembered_for
+from app.memory.remembered import pack_key, remembered_for
 from app.shopping.models import ProviderName, rupees_to_paise
 from app.shopping.money import money_fields
 from app.voice.timing import ms_since, record, stage
@@ -60,6 +63,15 @@ HOUSEHOLD_RULES_NOTE = (
     " This household's own saved rules were applied: skipped_stores were not searched, "
     "hidden_by_household_rules options were left out, and 'preferred' marks a saved "
     "preference. Mention a skipped store or hidden option once, briefly."
+)
+INGREDIENT_CHECK_NOTE = (
+    " ingredient_check lists what this household keeps out of food. Options whose names "
+    "show it were hidden, but store names do not list every ingredient: for packaged food, "
+    "say once, briefly, to check the pack label before ordering."
+)
+USUAL_QUANTITY_NOTE = (
+    " usual_quantity is the pack count this household told us for this item; when the user "
+    "names no quantity, call add_to_basket with quantity null and the code uses it."
 )
 AVOIDED_NOTE = (
     " An 'avoided' option is one the user named although their own saved rule "
@@ -153,6 +165,8 @@ class SearchOption:
     provider: ProviderName
     store: str
     product: Product
+    # The household's told pack count for this item, the add default.
+    usual_quantity: int | None = None
 
 
 class ToolOutcome(BaseModel):
@@ -209,15 +223,34 @@ def _option_rank(option: RankedOption) -> int:
     return 2
 
 
+def _delivery_minutes(product: Product) -> float:
+    try:
+        value = float(product.delivery_value or "")
+    except ValueError:
+        return float("inf")
+    unit = (product.delivery_unit or "").casefold()
+    return value * 60 if unit.startswith("h") else value if unit.startswith("m") else float("inf")
+
+
+def _unit_price(product: Product) -> float:
+    # The pack size alone when given: the name's "12 Pack" is already in "840 g".
+    size = pack_key(product.pack_size) or pack_key(product.name)
+    if size is None or size[0] * size[1] <= 0:
+        return float("inf")
+    return product.price.offer_price / (size[0] * size[1])
+
+
 def order_options(
-    options: list[RankedOption], limit: int = MAX_OPTIONS_PER_ITEM
+    options: list[RankedOption], limit: int = MAX_OPTIONS_PER_ITEM, sort: str | None = None
 ) -> list[RankedOption]:
     """The one display order for a searched item, shared by the model and the screen.
 
     Remembered first, then preferred, then the rest in provider order;
     unavailable options last. Duplicates and unnamed options are dropped.
     Avoided options the user did not name must already be removed; named ones
-    keep provider order. Index + 1 is the card's position.
+    keep provider order. ``sort`` ("cheapest" / "fastest", the household's own
+    saved choice) orders options of the same rank by price or delivery time.
+    Index + 1 is the card's position.
     """
 
     seen: set[tuple[str, str, str]] = set()
@@ -229,6 +262,12 @@ def order_options(
         seen.add(key)
         kept.append(option)
     # sorted() is stable, so equal ranks keep provider order.
+    if sort == "cheapest":
+        return sorted(kept, key=lambda option: (_option_rank(option), option.product.price.offer_price))[:limit]
+    if sort == "unit_value":
+        return sorted(kept, key=lambda option: (_option_rank(option), _unit_price(option.product)))[:limit]
+    if sort == "fastest":
+        return sorted(kept, key=lambda option: (_option_rank(option), _delivery_minutes(option.product)))[:limit]
     return sorted(kept, key=_option_rank)[:limit]
 
 
@@ -559,7 +598,8 @@ class MultiProviderShoppingToolExecutor:
                 )
 
         # One order for the model and the screen: "doosra wala" is card 2 for both.
-        for position, option in enumerate(order_options(candidates), 1):
+        usual_count = 0
+        for position, option in enumerate(order_options(candidates, sort=sort_mode(rules) if rules else None), 1):
             target = targets[option.provider]
             product = option.product
             entry = {
@@ -574,9 +614,13 @@ class MultiProviderShoppingToolExecutor:
             if id(product) in remembered_marks:
                 entry["remembered"] = remembered_marks[id(product)]
                 remembered_count += 1
+            usual = usual_quantity(rules, query, product) if rules else None
+            if usual is not None:
+                entry["usual_quantity"] = usual
+                usual_count += 1
             if target.add_supported:
                 option_id = f"opt{len(self.options) + 1}"
-                self.options[option_id] = SearchOption(target.provider, target.store, product)
+                self.options[option_id] = SearchOption(target.provider, target.store, product, usual)
                 entry["option_id"] = option_id
             model_results.append(entry)
             ui_products.append(
@@ -612,8 +656,12 @@ class MultiProviderShoppingToolExecutor:
                     else ""
                 )
                 + (AVOIDED_NOTE if any(entry.get("avoided") for entry in model_results) else "")
+                + (INGREDIENT_CHECK_NOTE if rules and keep_outs(rules) else "")
+                + (USUAL_QUANTITY_NOTE if usual_count else "")
             ),
         }
+        if rules and keep_outs(rules):
+            model_output["ingredient_check"] = keep_outs(rules)
         if any(outcome["status"] != "ok" for outcome in outcomes):
             # stores_checked already names the stores that answered.
             model_output["provider_statuses"] = [_provider_status(outcome) for outcome in outcomes]

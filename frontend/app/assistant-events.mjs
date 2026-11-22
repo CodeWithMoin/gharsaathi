@@ -32,6 +32,7 @@ const ADDRESS_UNAVAILABLE_MESSAGES = {
  *   onSupportOpen?: () => void,
  *   onAddressRemoved?: (provider: "swiggy_instamart" | "zepto") => void,
  *   onPhotoRead?: (read: { attachmentId: string, itemCount: number }) => void,
+ *   onMemorySummary?: () => void,
  * }} handlers
  */
 export function applyAssistantEvent(raw, handlers) {
@@ -138,6 +139,12 @@ export function applyAssistantEvent(raw, handlers) {
     const itemCount = Number.isInteger(event.item_count) && event.item_count >= 0 ? event.item_count : 0;
     handlers.onPhotoRead?.({ attachmentId: event.attachment_id.slice(0, 64), itemCount });
     return { kind: "photo", message: itemCount ? `Read ${itemCount} ${itemCount === 1 ? "item" : "items"} from the photo.` : "No shopping items found in the photo." };
+  }
+  if (event.type === "memory.summary") {
+    // Read-only: opens Settings → What GharSaathi knows.
+    if (!handlers.onMemorySummary) return null;
+    handlers.onMemorySummary();
+    return { kind: "memory", message: "Showing what GharSaathi knows about you." };
   }
   if (event.type === "address_form.unavailable" && typeof event.reason === "string") {
     handlers.onAddressForm?.({ unavailable: event.reason });

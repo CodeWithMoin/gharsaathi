@@ -53,6 +53,14 @@ from app.memory.recommender import (
 DATA_CATEGORY = "purchase_history"
 PURPOSE = "proactive_reorder"
 DELIVERED_STATUSES = {"delivered", "completed"}
+# Demo-only generated history (app.memory.demo_synth). Such orders feed patterns,
+# suggestions and recall like real ones, but never take part in provider imports
+# (known-order stops, lookup ids) and never stand for a real order.
+SYNTHETIC_ORDER_PREFIX = "synth-"
+
+
+def is_synthetic_order_id(order_id: str | None) -> bool:
+    return bool(order_id) and str(order_id).startswith(SYNTHETIC_ORDER_PREFIX)
 SYNC_CACHE = timedelta(minutes=10)
 FULL_RESYNC_INTERVAL = timedelta(hours=24)
 AUTO_SYNC_INTERVAL = timedelta(days=7)
@@ -163,6 +171,8 @@ class RecalledPurchase(BaseModel):
     provider_item_id: str | None = None
     last_purchased_at: datetime
     purchase_count: int = Field(ge=1)
+    # Every order behind it is generated demo history (app.memory.demo_synth).
+    synthetic: bool = False
 
 
 class PurchaseGraphService:
@@ -276,7 +286,12 @@ class PurchaseGraphService:
             sync_state.backfill_complete = False
             sync_state.resume_page = read.next_page
 
-        orders = [order for order in read.orders if order.created_at >= cutoff]
+        # A provider id can never collide with (or overwrite) generated demo history.
+        orders = [
+            order
+            for order in read.orders
+            if order.created_at >= cutoff and not is_synthetic_order_id(order.order_id)
+        ]
         if read.error is not None and not orders:
             sync_state.fetched_order_count = 0
             sync_state.imported_order_count = 0
@@ -432,8 +447,14 @@ class PurchaseGraphService:
                 )
             )
         ).all()
+        # Generated demo orders are not provider orders: they never stop an incremental
+        # read or count as skipped_known.
         return frozenset(
-            value for row in rows for value in row if isinstance(value, str) and value
+            value
+            for order_id, lookup_id in rows
+            if not is_synthetic_order_id(order_id)
+            for value in (order_id, lookup_id)
+            if isinstance(value, str) and value
         )
 
     async def import_orders(
@@ -629,6 +650,24 @@ class PurchaseGraphService:
             reverse=True,
         )[:limit]
 
+    async def last_real_order(self, actor: MemorySubject) -> PurchaseOrderNode | None:
+        """The newest imported order that is not generated demo history.
+
+        For anything that means "my last order" (reorder, order help): synthetic
+        demo orders are never picked.
+        """
+        return (
+            await self.session.execute(
+                select(PurchaseOrderNode)
+                .where(
+                    PurchaseOrderNode.subject_id == actor.id,
+                    ~PurchaseOrderNode.provider_order_id.startswith(SYNTHETIC_ORDER_PREFIX),
+                )
+                .order_by(PurchaseOrderNode.occurred_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
     async def has_history_permission(self, actor: MemorySubject) -> bool:
         try:
             await self._permission(actor)
@@ -679,6 +718,7 @@ class PurchaseGraphService:
                     provider_item_id=product.provider_item_id,
                     last_purchased_at=observed,
                     purchase_count=1,
+                    synthetic=is_synthetic_order_id(order.provider_order_id),
                 )
             else:
                 found[product.id] = RecalledPurchase(
@@ -687,6 +727,7 @@ class PurchaseGraphService:
                     provider_item_id=current.provider_item_id,
                     last_purchased_at=max(current.last_purchased_at, observed),
                     purchase_count=current.purchase_count + 1,
+                    synthetic=current.synthetic and is_synthetic_order_id(order.provider_order_id),
                 )
         return sorted(
             found.values(), key=lambda item: item.last_purchased_at, reverse=True
@@ -885,7 +926,7 @@ class PurchaseGraphService:
                 subject_id=subject_id,
                 provider=provider,
                 provider_order_id=source.order_id,
-                provider_lookup_id=source.lookup_id,
+                provider_lookup_id=None if is_synthetic_order_id(source.order_id) else source.lookup_id,
                 status=source.status,
                 occurred_at=source.created_at,
                 provider_updated_at=source.updated_at,
@@ -900,7 +941,8 @@ class PurchaseGraphService:
             self.session.add(order)
             await self.session.flush()
         else:
-            order.provider_lookup_id = source.lookup_id or order.provider_lookup_id
+            if not is_synthetic_order_id(source.order_id):
+                order.provider_lookup_id = source.lookup_id or order.provider_lookup_id
             order.status = source.status
             order.occurred_at = source.created_at
             order.provider_updated_at = source.updated_at
