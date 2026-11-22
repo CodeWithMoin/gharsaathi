@@ -35,7 +35,16 @@ MAX_OUTPUT_TOKENS = 1_500
 PhotoKind = Literal["product_photo", "shopping_list", "screenshot", "shelf", "unclear"]
 Confidence = Literal["high", "medium", "low"]
 
-_FIELD_LIMITS = {"product": 80, "brand": 60, "variant": 60, "pack_size": 30, "evidence": 80}
+_FIELD_LIMITS = {
+    "product": 80,
+    "printed_name": 80,
+    "brand": 60,
+    "variant": 60,
+    "pack_size": 30,
+    "search_query": 120,
+    "evidence": 80,
+}
+_WORD = re.compile(r"[^\W_]+", re.UNICODE)
 _PRICE = re.compile(r"(?:₹|\brs\.?|\binr)\s*\d[\d,]*(?:\.\d+)?(?:\s*/-)?|\d[\d,]*(?:\.\d+)?\s*(?:₹|/-|rupees?\b|rs\b)", re.I)
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _INSTRUCTION = re.compile(
@@ -67,15 +76,31 @@ kind:
 - unclear: not about shopping (people, scenery, documents, memes), or unreadable.
   Then items is empty.
 
+Read packaging verbatim first. When a product name is printed on a pack or
+label, copy it exactly as printed (brand, product line, variant, pack size),
+for example "Amul Lassi 200 ml", "Amul Masti Spiced Buttermilk", "Maggi 2-Minute
+Masala Noodles". Never replace a legible product name with its category or a
+related product: "Amul Lassi" is not "flavoured milk" and not "Amul Kool";
+"Masti Spiced Buttermilk" is not "lassi". Use a category word only when no
+product name can be read.
+
 Each item:
-- product: short English name a shopper would search ("toned milk", "atta",
-  "detergent powder"); translate Hindi or Hinglish words ("doodh" -> "milk").
+- printed_name: the product name exactly as printed on the pack or written in
+  the list (Roman script; transliterate Hindi), including brand and variant,
+  without the pack size; null when nothing is legible (for example an
+  unlabelled vegetable).
+- product: short English name of what it is, as printed when a name is legible
+  ("lassi", "spiced buttermilk", "toned milk", "atta"); translate Hindi or
+  Hinglish list words ("doodh" -> "milk").
 - brand: only when written or clearly visible, else null. Never guess a brand.
-- variant: flavour or type when written ("Taaza", "masala"), else null.
-- pack_size: as written ("1 L", "5 kg", "500 g"), else null.
+- variant: flavour or type when written ("Taaza", "masala", "Rose"), else null.
+- pack_size: as written ("200 ml", "1 L", "5 kg", "500 g"), else null.
 - quantity: a count only when written ("x2", "2 packet"), else null.
-- confidence: high = clearly legible; medium = partly legible or inferred from
-  packaging; low = a guess.
+- search_query: what to type into a store's search box to find this exact
+  product: printed_name plus pack_size when they are legible ("Amul Lassi
+  200 ml"); otherwise brand, product, variant and pack size you can see.
+- confidence: high = the name is clearly legible; medium = partly legible or
+  inferred from packaging colours or logo; low = a guess.
 - evidence: the short text you read (Roman script, at most 60 characters), or a
   2-4 word visual description for an unlabelled item.
 
@@ -97,13 +122,18 @@ EXTRACTION_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["product", "brand", "variant", "pack_size", "quantity", "confidence", "evidence"],
+                "required": [
+                    "printed_name", "product", "brand", "variant", "pack_size", "quantity",
+                    "search_query", "confidence", "evidence",
+                ],
                 "properties": {
+                    "printed_name": {"type": ["string", "null"]},
                     "product": {"type": "string"},
                     "brand": {"type": ["string", "null"]},
                     "variant": {"type": ["string", "null"]},
                     "pack_size": {"type": ["string", "null"]},
                     "quantity": {"type": ["integer", "null"]},
+                    "search_query": {"type": "string"},
                     "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
                     "evidence": {"type": "string"},
                 },
@@ -118,10 +148,13 @@ class PhotoItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     product: str
+    # The name as printed on the pack, when legible; the search uses it verbatim.
+    printed_name: str | None = None
     brand: str | None = None
     variant: str | None = None
     pack_size: str | None = None
     quantity: int | None = None
+    search_query: str = ""
     confidence: Confidence = "low"
     evidence: str = ""
 
@@ -148,6 +181,44 @@ def _clean_text(value: str | None, limit: int) -> str | None:
     text = _PRICE.sub("", _CONTROL.sub(" ", value))
     text = re.sub(r"\s+", " ", text).strip(" ,;:-")
     return text[:limit].strip() or None
+
+
+def _words(text: str | None) -> list[str]:
+    return [word.lower() for word in _WORD.findall(text or "")]
+
+
+def _join(*parts: str | None) -> str:
+    """Join parts, skipping any whose words are already present."""
+
+    out: list[str] = []
+    seen: list[str] = []
+    for part in parts:
+        words = _words(part)
+        if not part or not words or all(word in seen for word in words):
+            continue
+        out.append(part)
+        seen.extend(words)
+    return " ".join(out)
+
+
+def search_query_for(fields: dict[str, str | None]) -> str:
+    """The store search for an item, built from the printed name whenever one was read.
+
+    A legible printed name always wins over the model's own query, so a photo of
+    "Amul Lassi" can never become a search for a category or a sibling product.
+    """
+
+    printed = fields.get("printed_name")
+    query = fields.get("search_query") or ""
+    if printed:
+        query_words = set(_words(query))
+        if not query or not all(word in query_words for word in _words(printed)):
+            query = _join(printed, fields.get("pack_size"))
+        elif fields.get("pack_size") and not all(word in query_words for word in _words(fields.get("pack_size"))):
+            query = _join(query, fields.get("pack_size"))
+    if not query:
+        query = _join(fields.get("brand"), fields.get("variant"), fields.get("product"), fields.get("pack_size"))
+    return query[: _FIELD_LIMITS["search_query"]].strip()
 
 
 def sanitize_extraction(raw: Any) -> PhotoExtraction:
@@ -182,7 +253,8 @@ def sanitize_extraction(raw: Any) -> PhotoExtraction:
         product = fields["product"]
         if not product:
             continue
-        key = (product.lower(), (fields["brand"] or "").lower(), (fields["pack_size"] or "").lower())
+        query = search_query_for(fields)
+        key = (" ".join(_words(query)), "", "")
         if key in seen:
             continue
         seen.add(key)
@@ -190,10 +262,12 @@ def sanitize_extraction(raw: Any) -> PhotoExtraction:
         kept.append(
             PhotoItem(
                 product=product,
+                printed_name=fields["printed_name"],
                 brand=fields["brand"],
                 variant=fields["variant"],
                 pack_size=fields["pack_size"],
                 quantity=quantity,
+                search_query=query,
                 confidence=item.confidence,
                 evidence=fields["evidence"] or "",
             )
@@ -231,7 +305,7 @@ class OpenAIPhotoExtractor:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "input_text", "text": "List the products in this photo."},
+                            {"type": "input_text", "text": "List the products in this photo. Read printed product names exactly."},
                             {"type": "input_image", "image_url": image_url, "detail": "high"},
                         ],
                     }

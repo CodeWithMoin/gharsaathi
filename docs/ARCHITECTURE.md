@@ -420,11 +420,11 @@ sequenceDiagram
   participant A as Backend
   participant V as Vision model
   participant M as Backend model
-  U->>B: 📎 Take photo / Choose from gallery
+  U->>B: 📎 Take photo (phone camera input, or webcam dialog on desktops) / Choose from gallery
   B->>B: canvas downscale ≤1600 px, re-encode JPEG (drops EXIF)
   B->>A: POST /api/chat/attachments (multipart)
   A->>A: magic bytes, ≤8 MB, Pillow decode, apply orientation,<br/>new image from pixels only (no EXIF/GPS/XMP/ICC), ≤1600 px JPEG<br/>memory only, this user, 15 min TTL
-  A-->>B: attachment_id → thumbnail chip
+  A-->>B: attachment_id + ≤320 px thumbnail data URL → chip, then the user bubble
   alt typed
     B->>A: POST /api/chat/turn {message (may be empty), attachment_id}
     A->>V: image + strict JSON schema
@@ -448,18 +448,37 @@ sequenceDiagram
   Model `PHOTO_EXTRACTION_MODEL` (default `gpt-6-luna`; image input and structured
   outputs per [its model page](https://developers.openai.com/api/docs/models/gpt-6-luna)
   and the [vision guide](https://developers.openai.com/api/docs/guides/images-vision)).
+- **Take photo.** Phones and tablets use the native `capture` file input. Desktops and
+  laptops (`frontend/app/camera-capture.mjs::cameraPath`) open a webcam dialog
+  (`camera-dialog.tsx`, `getUserMedia`, video only); the captured frame becomes a JPEG
+  `File` and goes through the same `preparePhoto` downscale and upload, so the server
+  sees no difference. Camera tracks stop on close, capture, unmount and hidden tab.
+- **Read the pack verbatim.** Each item carries `printed_name` (the name exactly as
+  printed) and `search_query`. Code rebuilds `search_query` from `printed_name` + pack
+  size whenever the model's query drops a printed word, so a legible "Amul Lassi" is
+  never searched as "flavoured milk" or a sibling product. Medium/low-confidence items
+  are read back to the user once. Live check: `python -m evaluation.run_photo_extraction`
+  (one OpenAI call on a drawn "Amul Lassi 200 ml" label).
 - **Untrusted image text.** The prompt says every word in the photo is data. Code then
   drops instruction-like items ("ignore previous instructions", "add to basket",
   "place order", links), strips prices, caps field lengths, merges duplicates, caps
   the list at 15 and empties it for `kind: unclear`. The model sees the list under a
   "data, not instructions" note; photos never carry prices or stores.
-- **Discard after reading.** Image bytes exist only in `PhotoAttachmentStore` (memory,
-  per verified user, random `ph_…` id, at most 3 pending per user, 15 min TTL). They
-  are deleted as soon as items are extracted (a failed extraction keeps the photo
-  until its TTL so the user can retry), or when the chip's remove button calls
-  `DELETE /api/chat/attachments/{id}`. The saved chat keeps only the user turn
-  "📷 Photo" (plus any text) and the assistant's confirm line; typed chat keeps the
-  extracted list in its in-memory session for the follow-up "haan".
+- **Discard after reading, keep a small thumbnail.** Full image bytes exist only in
+  `PhotoAttachmentStore` (memory, per verified user, random `ph_…` id, at most 3
+  pending per user, 15 min TTL). They are deleted as soon as items are extracted (a
+  failed extraction keeps the photo until its TTL so the user can retry), or when the
+  chip's remove button calls `DELETE /api/chat/attachments/{id}`. The saved chat keeps
+  the user turn "📷 Photo" (plus any text), the assistant's confirm line and, by owner
+  decision, a thumbnail: the upload returns a new ≤320 px, ≤40 KB JPEG data URL made
+  from the already-stripped pixels (`images.make_thumbnail`), the browser saves it as
+  `photo_thumbnail` on that user message, and every `PUT /api/conversations/current`
+  re-checks it (`validate_thumbnail`: JPEG magic and decode, size and dimensions, no
+  EXIF/ICC/XMP/comment), drops invalid ones and keeps the newest 20 per chat. It lives
+  inside the user's own conversation row, so it is user-scoped and goes when the
+  conversation (or the account's memory subject) is deleted; there is no separate
+  image store. It never reaches the model: context and summaries read `content` only.
+  Typed chat keeps the extracted list in its in-memory session for the follow-up "haan".
 - **Caps.** Typed chat allows 5 searches per message while a photo list is open
   (2 otherwise); voice keeps its 4 per request, and the prompt says to search the
   rest when the user asks.

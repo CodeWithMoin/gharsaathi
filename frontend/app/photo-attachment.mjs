@@ -8,6 +8,10 @@ export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 export const GALLERY_ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif";
 export const CAMERA_ACCEPT = "image/*";
 export const PHOTO_PLACEHOLDER = "📷 Photo";
+// The server-made bubble thumbnail (backend app/photos/images.py: <=320 px, <=40 KB JPEG).
+export const THUMBNAIL_PREFIX = "data:image/jpeg;base64,";
+export const MAX_THUMBNAIL_CHARS = THUMBNAIL_PREFIX.length + Math.ceil((40 * 1024) / 3) * 4;
+export const MAX_SAVED_THUMBNAILS = 20;
 
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 const HEIF_NAME = /\.(heic|heif)$/i;
@@ -50,6 +54,38 @@ export function photoMessageContent(text) {
   return clean ? `${PHOTO_PLACEHOLDER}\n${clean}` : PHOTO_PLACEHOLDER;
 }
 
+/** Only a small JPEG data URL may be shown or saved as a bubble thumbnail. */
+export function isPhotoThumbnail(value) {
+  return typeof value === "string" && value.startsWith(THUMBNAIL_PREFIX) && value.length <= MAX_THUMBNAIL_CHARS && /^[A-Za-z0-9+/]+=*$/.test(value.slice(THUMBNAIL_PREFIX.length));
+}
+
+/** The bubble's text when the photo itself is shown: the placeholder line is dropped. */
+export function photoBubbleText(content) {
+  const text = content ?? "";
+  if (text === PHOTO_PLACEHOLDER) return "";
+  return text.startsWith(`${PHOTO_PLACEHOLDER}\n`) ? text.slice(PHOTO_PLACEHOLDER.length + 1) : text;
+}
+
+/**
+ * Saved messages keep a valid thumbnail on the newest MAX_SAVED_THUMBNAILS user
+ * photo turns only; the in-session preview (a blob: URL) is never saved.
+ */
+export function savedPhotoFields(messages) {
+  let kept = 0;
+  const out = new Array(messages.length);
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const { photo_preview: _preview, photo_thumbnail: thumbnail, ...rest } = messages[index];
+    void _preview;
+    if (rest.role === "user" && isPhotoThumbnail(thumbnail) && kept < MAX_SAVED_THUMBNAILS) {
+      kept += 1;
+      out[index] = { ...rest, photo_thumbnail: thumbnail };
+    } else {
+      out[index] = rest;
+    }
+  }
+  return out;
+}
+
 export const idlePhoto = Object.freeze({ status: "idle" });
 
 /**
@@ -60,9 +96,12 @@ export function photoReducer(state, action) {
   switch (action.type) {
     case "start":
       return { status: "uploading", token: action.token, previewUrl: action.previewUrl ?? null };
+    case "preview":
+      if (state.status !== "uploading" || state.token !== action.token) return state;
+      return { ...state, previewUrl: action.previewUrl ?? null };
     case "uploaded":
       if (state.status !== "uploading" || state.token !== action.token) return state;
-      return { status: "ready", token: state.token, previewUrl: state.previewUrl, attachmentId: action.attachmentId };
+      return { status: "ready", token: state.token, previewUrl: state.previewUrl, attachmentId: action.attachmentId, thumbnail: isPhotoThumbnail(action.thumbnail) ? action.thumbnail : null };
     case "failed":
       if (state.status !== "uploading" || state.token !== action.token) return state;
       return { status: "error", token: state.token, previewUrl: state.previewUrl, message: action.message };

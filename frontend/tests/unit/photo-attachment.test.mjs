@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { applyAssistantEvent } from "../../app/assistant-events.mjs";
+import { conversationSnapshot } from "../../app/conversation-snapshot.mjs";
 import {
   GALLERY_ACCEPT,
   PHOTO_PLACEHOLDER,
@@ -8,8 +9,13 @@ import {
   canSend,
   downscaleSize,
   idlePhoto,
+  MAX_SAVED_THUMBNAILS,
+  THUMBNAIL_PREFIX,
   isHeif,
+  isPhotoThumbnail,
+  photoBubbleText,
   photoMessageContent,
+  savedPhotoFields,
   photoReducer,
   uploadErrorMessage,
   validatePhotoFile,
@@ -83,4 +89,46 @@ test("photo.read events clear the chip through onPhotoRead; malformed ones are i
   assert.equal(applyAssistantEvent({ type: "photo.read" }, { onPhotoRead: () => assert.fail() }), null);
   const none = applyAssistantEvent({ type: "photo.read", attachment_id: "ph_x", item_count: 0 }, {});
   assert.match(none.message, /No shopping items/);
+});
+
+const THUMB = `${THUMBNAIL_PREFIX}/9j/4AAQSkZJRgABAQ==`;
+
+test("the local preview shows at once and the server thumbnail arrives with ready", () => {
+  let state = photoReducer(idlePhoto, { type: "start", token: 1, previewUrl: "blob:raw" });
+  assert.equal(state.previewUrl, "blob:raw");
+  state = photoReducer(state, { type: "preview", token: 1, previewUrl: "blob:prepared" });
+  assert.equal(state.previewUrl, "blob:prepared");
+  assert.equal(photoReducer(state, { type: "preview", token: 9, previewUrl: "blob:stale" }), state);
+  const ready = photoReducer(state, { type: "uploaded", token: 1, attachmentId: "ph_1", thumbnail: THUMB });
+  assert.equal(ready.thumbnail, THUMB);
+  const unsafe = photoReducer(state, { type: "uploaded", token: 1, attachmentId: "ph_1", thumbnail: "javascript:alert(1)" });
+  assert.equal(unsafe.thumbnail, null);
+});
+
+test("only small JPEG data URLs count as thumbnails", () => {
+  assert.equal(isPhotoThumbnail(THUMB), true);
+  assert.equal(isPhotoThumbnail("blob:http://localhost/x"), false);
+  assert.equal(isPhotoThumbnail("data:image/svg+xml;base64,PHN2Zz4="), false);
+  assert.equal(isPhotoThumbnail(`${THUMBNAIL_PREFIX}abc"onerror="x`), false);
+  assert.equal(isPhotoThumbnail(THUMBNAIL_PREFIX + "A".repeat(60_000)), false);
+  assert.equal(isPhotoThumbnail(null), false);
+});
+
+test("the bubble drops the placeholder line when it shows the photo", () => {
+  assert.equal(photoBubbleText(PHOTO_PLACEHOLDER), "");
+  assert.equal(photoBubbleText(`${PHOTO_PLACEHOLDER}\nbuy this`), "buy this");
+  assert.equal(photoBubbleText("just text"), "just text");
+});
+
+test("saved chats keep the newest thumbnails, never the local preview", () => {
+  const messages = Array.from({ length: MAX_SAVED_THUMBNAILS + 2 }, (_, index) => ({ id: `m${index}`, role: "user", content: PHOTO_PLACEHOLDER, photo_thumbnail: THUMB, photo_preview: "blob:x" }));
+  messages.push({ id: "a", role: "assistant", content: "ok", photo_thumbnail: THUMB });
+  const saved = savedPhotoFields(messages);
+  assert.equal(saved.filter((message) => message.photo_thumbnail).length, MAX_SAVED_THUMBNAILS);
+  assert.equal(saved[0].photo_thumbnail, undefined);
+  assert.equal(saved.at(-2).photo_thumbnail, THUMB);
+  assert.equal(saved.at(-1).photo_thumbnail, undefined);
+  assert.ok(saved.every((message) => !("photo_preview" in message)));
+  const snapshot = conversationSnapshot({ submittedQuery: "", products: [], searched: false, messages: [{ id: "u", role: "user", content: `${PHOTO_PLACEHOLDER}\nbuy this`, modality: "text", created_at: "2026-11-22T10:00:00Z", photo_thumbnail: THUMB, photo_preview: "blob:y" }], resultsAfterMessageId: null });
+  assert.deepEqual(snapshot.messages, [{ id: "u", role: "user", content: `${PHOTO_PLACEHOLDER}\nbuy this`, modality: "text", created_at: "2026-11-22T10:00:00Z", photo_thumbnail: THUMB }]);
 });
