@@ -61,7 +61,7 @@ export function HeaderOrderChip({ chip, onOpen }: { chip: HeaderChip; onOpen: (o
       type="button"
       onClick={() => onOpen(chip.orderId)}
       aria-label={chip.label}
-      className={`flex h-9 min-w-0 max-w-[13rem] items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold transition-[transform,background-color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[.97] motion-reduce:active:scale-100 sm:max-w-xs ${chip.tone === "late" ? "bg-warning-soft text-warning hover:bg-warning-border" : "bg-accent-soft text-accent-strong hover:bg-accent-border"}`}
+      className={`flex h-11 min-w-0 max-w-[13rem] items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold transition-[transform,background-color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[.97] motion-reduce:active:scale-100 sm:max-w-xs ${chip.tone === "late" ? "bg-warning-soft text-warning hover:bg-warning-border" : "bg-accent-soft text-accent-strong hover:bg-accent-border"}`}
     >
       <Icon size={14} weight="fill" className="shrink-0" aria-hidden />
       <span className="truncate">{chip.text}</span>

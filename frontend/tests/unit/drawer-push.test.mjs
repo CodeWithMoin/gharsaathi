@@ -9,10 +9,15 @@ test("drawer width is 75% of the viewport, capped at 360px", () => {
   assert.equal(drawerWidth(Number.NaN), 0);
 });
 
-test("chats push the page right and settings mirror it to the left", () => {
+test("settings drawer is 85% of the viewport, capped at 400px, on every page", () => {
+  assert.equal(drawerWidth(390, "settings"), 331.5);
+  assert.equal(drawerWidth(1440, "settings"), 400);
+});
+
+test("chats push the page right and settings push it left by their own widths", () => {
   assert.equal(pushOffset("chats", 390), 292.5);
-  assert.equal(pushOffset("settings", 390), -292.5);
-  assert.equal(pushOffset("settings", 1440), -360);
+  assert.equal(pushOffset("settings", 390), -331.5);
+  assert.equal(pushOffset("settings", 1440), -400);
   assert.equal(pushOffset(null, 390), 0);
 });
 

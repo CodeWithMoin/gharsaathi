@@ -870,6 +870,26 @@ CAPABILITIES: tuple[Capability, ...] = (
         ui_files=("frontend/app/inbound-calls-ui.tsx", "frontend/app/order-status-card.tsx"),
     ),
     Capability(
+        id="inbound_live_delivery_context",
+        title="Live delivery context for the inbound agent (Sarvam API tool)",
+        voice=S(
+            U,
+            "Not part of the user's voice session. The Sarvam inbound agent calls the "
+            "get_delivery_context API tool during a delivery call.",
+        ),
+        typed_chat=S(U, "Not a chat feature."),
+        ui=S(U, "No UI: it reads the tracked order and the directions saved in the delivery-line popup."),
+        backend=S(
+            P,
+            "POST /api/sarvam/delivery-context, off by default (SARVAM_LIVE_CONTEXT_ENABLED), "
+            "static tool token (SARVAM_TOOL_TOKEN), 20 requests/min. Active only while the "
+            "owner's tracked order is placed, packed or out for delivery (or delivered in the "
+            "last 15 min); returns that order's address, saved directions, handover note and "
+            "ETA; never a phone number, OTP or payment detail. Tested offline only.",
+        ),
+        routes=("POST /api/sarvam/delivery-context",),
+    ),
+    Capability(
         id="support_complaint",
         title="Prepare a support complaint with evidence",
         voice=S(

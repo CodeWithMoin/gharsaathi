@@ -11,6 +11,67 @@ These are durable product conventions for the mobile shopping chat.
 - Preserve explicit approval for purchases and support messages. Clearly distinguish prepared/approved from actually submitted or purchased.
 - Use static demo data while iterating on UI. Live provider calls happen only when explicitly switching to live mode.
 
+## Header, address first and the settings drawer
+
+Mobile-first (phone browsers and the Home Screen app); desktop shows the same centred column.
+
+**Header** (`home-header-bar.tsx`, logic `headerAddress` in `home-header.mjs`), Swiggy-style,
+one 68 px row: **☰** (recent chats, left drawer, 44 px, far left) · the **address block**
+(pin, bold label + ▾, one muted line of the address, both truncate; tap → Choose delivery
+address for that store) · **basket** with its item badge (only when the basket has items) ·
+**avatar** (photo or initials, 44 px; opens the right drawer). The avatar replaced the old
+store icon, which only opened Settings; basket access was already its own cart button, so it
+stays a cart icon with the badge beside the avatar. ☰ stays in the header rather than moving
+recent chats into the avatar drawer: at 360 px the address block still gets about 190 px. A
+moving order's live chip sits on a second header row (a 44 px chip; the page adds 52 px of top padding),
+so the address never shares the row with it. The block prefers Zepto's selected address
+(Zepto places orders), then Swiggy's; with no valid address it reads "Choose address · For
+Zepto"; with no store "Connect a store" (tap → Settings → Stores).
+
+**Address first** (`addressGate`, `deliver-first.tsx`): on open or a new chat, when a store
+is connected, every connected store has finished loading its saved addresses, and none has a
+valid selection (never chosen, or the chosen one is gone), the home screen shows **Where should
+we deliver?** instead of the greeting and composer: saved addresses as large rows (one tap
+saves it and the chat continues), **Add address** (Zepto, live) and **Refresh from …**. It
+is inline like the onboarding pages, not a popup: it is the first step of the home screen,
+not an interruption. With an address chosen nothing blocks and the header is the only place
+the address shows (the greeting does not repeat it). Changing the address keeps the existing
+behaviour: bill and order cards are invalidated by the basket/address rules and the shared
+delivery line is revoked (`delivery-line-panel.tsx`).
+
+**Right drawer** (`account-settings-sheet.tsx`, map in `settings-map.mjs`): one width on the
+overview and every subpage, `w-[85vw] max-w-[400px]` (`SETTINGS_DRAWER_CLASS`; the page is
+pushed by the same `drawerWidth(…, "settings")`), wide enough for memory rows with badges and
+Edit/Delete. Every subpage uses the same header (back · title · close) and spacing.
+
+| Row | Opens |
+|---|---|
+| Profile header row (avatar, name, email) | **Profile**: name, how to address you, reply language (Edit profile popup), reply style (Quick/Detailed), **Notifications** switch |
+| Stores | Shopping mode, Connect (the store's own login, callback checked first) / **Disconnect** (confirm popup), **Change … address** per connected store |
+| What GharSaathi knows | Memory switch, saved items, History, Privacy (above) |
+| Delivery line (Beta) | What it does, the AI number (+91 80 6426 4240, display only), status from `/api/inbound-delivery/config`, how to use (decline the call, or press the side button twice), forwarding **when busy only**: `**67*+918064264240#`, off with `##002#` (never unanswered/unreachable: the AI's transfer back would loop), **Directions for this address** (the directions editor popup below) |
+| Rider assist (Beta) | The parked Vobiz page; the row exists only when `/api/rider/settings` reports `feature_enabled` and `owner_configured` (`riderAssistAvailable`) |
+| **Sign out** | A small text link under the rows |
+
+Removed from the drawer: Addresses (→ header), Notifications (→ Profile), Privacy & memory and
+"More preferences" (→ What GharSaathi knows), Help with an order (→ order card). Nothing in
+Settings opens the legacy setup sheet or reopens onboarding (unit-tested); the setup sheet is
+kept only for the OAuth return, "not connected" voice/chat events and the direct-search fallback.
+
+**Order card links** (`orderCardLinks`, `order-status-card.tsx`): under a moving order,
+**Delivery line ready** / **Set up delivery line** (→ Settings → Delivery line), **Directions**
+(→ the directions editor) and **Need help?** (→ Order help, always shown, also on a delivered
+order once expanded). One row of equal cells (icon above a short label, 56 px tall; a lone
+Need help? is a single left-aligned row). The header chip and the card's "Arriving by…" both
+read the order's `etaAt`.
+
+**Directions for this address** (`InputDialog` in `page.tsx` wrapping `DeliveryLinePanel`):
+landmark, route steps, gate note and handover for the selected address of that store, and
+sharing it with the delivery line. Opened from Settings → Delivery line and the order card.
+
+The drawer moves focus to the panel itself on open, not to the close button, so no focus ring
+appears after a tap; keyboard users Tab to Back/Close and get the normal focus-visible ring.
+
 ## Input popups (`frontend/app/ui/input-dialog.tsx`)
 
 Every flow that asks the user to type or choose something opens in `InputDialog`,
@@ -19,20 +80,24 @@ never inline in whatever sheet happens to be open. Current users:
 | Popup | Where | Notes |
 |---|---|---|
 | Add delivery address | `address-form-sheet.tsx` | Voice, typed chat, onboarding and the picker's "Add a new address" |
-| Choose delivery address | `address-picker-dialog.tsx` | One store at a time; tapping an address saves it right away; Refresh; Zepto (live) can add a new address on top. Opened from the setup sheet's address rows and Settings → Addresses. No voice/typed event opens it yet (none exists) |
+| Choose delivery address | `address-picker-dialog.tsx` | One store at a time; tapping an address saves it right away; Refresh; Zepto (live) can add a new address on top. Opened from the header address block, "Change … address" on Settings → Stores and the setup sheet's address rows. No voice/typed event opens it yet (none exists) |
 | Edit preference | `memory-settings.tsx` | Unsaved-changes guard; save errors show inside the popup; fixed-set answers (diet, value preference, home questions) are a choice |
 | Delete everything | `memory-settings.tsx` | `ConfirmDialog`, destructive; name, language and order history stay |
-| Remove order history | `memory-settings.tsx` (From your orders) | `ConfirmDialog`, destructive; store orders are not changed |
+| Remove order history | `memory-settings.tsx` (History) | `ConfirmDialog`, destructive; store orders are not changed |
 
 Settings → **What GharSaathi knows** (`memory-settings.tsx`, view logic `summaryView` in
-`memory-groups.mjs`) lists everything saved in six groups: Home, Food, Usual buys, Avoid,
-Shopping style, From your orders. Each row shows its source (You told us · Said in passing ·
-From your repeated choices · From your orders · From demo history) and when it was updated,
-with Edit and Delete (profile rows: Edit opens Preferences, Reset goes back to the default;
-order rows are read-only). "What do you know about me?" by voice or chat opens it
-(`memory.summary` event).
-| Edit profile | `account-settings-sheet.tsx` | Name, how to address you and reply language in one popup with one Save; only changed fields are sent |
-| Disconnect Swiggy / Zepto | `page.tsx` setup sheet | `ConfirmDialog`, destructive; closes only after the disconnect succeeds |
+`memory-groups.mjs`) starts with the **Memory** switch ("Use what I've told you"), then lists
+everything saved in six groups: Home, Food, Usual buys, Avoid, Shopping style, From your
+orders. Each row shows its source (You told us · Said in passing · From your repeated choices ·
+From your orders · From demo history) and when it was updated, with Edit and Delete (profile
+rows: Edit opens Profile, Reset goes back to the default; order rows are read-only). Below the
+groups: **History** (Learn from my orders on/off, how long imported order data is kept,
+Refresh usuals, Re-import full history, weekly sync per store, Remove order history) and
+**Privacy** (Delete everything, Privacy Policy link). "Memory" is the one word for what
+GharSaathi remembers; "saved preferences" is not used anywhere (unit-tested). "What do you
+know about me?" by voice or chat opens it (`memory.summary` event).
+| Edit profile | `account-settings-sheet.tsx` (Settings → Profile) | Name, how to address you and reply language in one popup with one Save; only changed fields are sent |
+| Disconnect Swiggy / Zepto | Settings → Stores **Disconnect** and the `page.tsx` setup sheet | `ConfirmDialog`, destructive; closes only after the disconnect succeeds |
 | Add a photo | `photo-attachment-ui.tsx` (📎 in the composer and beside the voice pill) | Two choices: **Take photo** and and **Choose from gallery**; the file inputs live outside the popup. On phones and tablets **Take photo** clicks the native `capture="environment"` input; elsewhere it opens **Take a photo**. The picked photo shows at once (local preview, before upload finishes) as a thumbnail chip with **Remove photo** above the composer or pill |
 | Take a photo (webcam) | `camera-dialog.tsx`, logic in `camera-capture.mjs` | Desktops/laptops only (`cameraPath()`: no mobile UA, not iPadOS, not touch-first, `getUserMedia` present). Live preview (video only, about 1600 px wide, front camera mirrored in the preview only), **Capture** (focused on open) → **Retake** / **Use photo**, **Cancel**, a switch-camera button when there is more than one camera. Permission, denied ("Allow camera access in your browser settings, or choose a photo from your files" + **Choose from files**), no camera and camera-in-use states are read out by a status line. Tracks stop on close, capture, unmount and when the tab is hidden. The frame goes through the same downscale/JPEG/upload pipeline as a picked photo |
 | Your photo (larger view) | `PhotoBubbleImage` in `photo-attachment-ui.tsx` | Tapping the photo in a user bubble. This session shows the local copy; reopened chats show the saved ≤320 px thumbnail. Chats saved before thumbnails show the "📷 Photo" text only |
@@ -75,10 +140,10 @@ sheet under 640 px and centered above, reduced-motion respected. Pure logic
 
 ## Browser notifications
 
-- Opt-in only. Settings → **Notifications** has one switch ("Notifications on this
-  device"); the browser permission prompt appears only after that tap, never on load.
-  When on: a "Tell me when" checklist (one per kind, all on by default) and **Send a
-  test notification**.
+- Opt-in only. Settings → **Profile** has one **Notifications** switch with its status and
+  hint (`NotificationSwitch`); the browser permission prompt appears only after that tap,
+  never on load. Every kind of update stays on (the server default); there is no per-kind
+  checklist in Settings any more.
 - After the first placed order, a one-time inline prompt above the composer: "Get
   delivery updates as notifications?" with **Not now** and **Turn on**. Either answer
   is remembered on the server, so it never shows again (on any device).

@@ -2,7 +2,7 @@
 
 import { useClerk, useUser } from "@clerk/nextjs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, Basket, ChatCircleDots, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
+import { ArrowRight, Basket, ChatCircleDots, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, ShieldCheck, ShoppingCartSimple, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
 import { DRAWER_PANEL_TRANSITION, DRAWER_SPRING, pushOffset, restoreScrollTarget, viewportInsets, type DrawerName } from "./drawer-push.mjs";
@@ -14,13 +14,19 @@ import { directSearchOutcome, restoreResultGroups, resultGroupIdentity, type Res
 import { conversationTitle, relativeChatDate, searchConversations, visibleConversations, type ConversationSummary } from "./chat-list.mjs";
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
+import { DeliveryLinePanel } from "./delivery-line-panel";
+import { InputDialog } from "./ui/input-dialog";
 import { PersonalizationOnboarding } from "./personalization-onboarding";
 import { useWeeklyHistoryAutoSync } from "./purchase-history-import";
 import { SupportDialog } from "./support-panel";
 import { VoicePanel, useVoicePrewarm, type VoiceAddressFormRequest, type VoiceTranscriptTurn } from "./voice-panel";
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
 import { FirstRunOnboarding } from "./first-run-onboarding";
+import { DeliverFirst } from "./deliver-first";
 import { AccountSettingsSheet, type SettingsSection } from "./account-settings-sheet";
+import { HomeHeader } from "./home-header-bar";
+import { useDeliveryLineConfig } from "./delivery-line-config";
+import { addressGate, addressLabel, headerAddress } from "./home-header.mjs";
 import { RiderCallCard, useRiderCalls } from "./rider-calls";
 import { InboundCallCard, useInboundCalls } from "./inbound-calls-ui";
 import { placeInboundCalls, riderDirectionsLine } from "./inbound-calls.mjs";
@@ -43,7 +49,7 @@ import { OrderStatusCard } from "./order-status-card";
 import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
 import { PhotoAttachButton, PhotoBubbleImage, PhotoChip, usePhotoAttachment } from "./photo-attachment-ui";
 import { attachmentIdFor, canSend, photoBubbleText, photoMessageContent } from "./photo-attachment.mjs";
-import { HeaderOrderChip, QuickChips, QuickToastView, useQuickActions } from "./quick-chips";
+import { QuickChips, QuickToastView, useQuickActions } from "./quick-chips";
 import { headerOrderChip, swapQuery } from "./quick-actions.mjs";
 import { SavedListsDialog } from "./saved-lists-dialog";
 import { ComparisonCard } from "./comparison-card-ui";
@@ -68,10 +74,10 @@ const suggestions = [
 ];
 
 export default function Home() {
-  return <FirstRunOnboarding>{({ firstName, openSetup }) => <ShoppingChat userName={firstName} onOpenSetup={openSetup} />}</FirstRunOnboarding>;
+  return <FirstRunOnboarding>{({ firstName }) => <ShoppingChat userName={firstName} />}</FirstRunOnboarding>;
 }
 
-function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { startWithSetupOpen?: boolean; userName: string; onOpenSetup?: () => void }) {
+function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetupOpen?: boolean; userName: string }) {
   const { signOut } = useClerk();
   const { user } = useUser();
   const apiRequest = useApiRequest();
@@ -100,6 +106,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [setupOpen, setSetupOpen] = useState(startWithSetupOpen);
   const [supportOpen, setSupportOpen] = useState(false);
   const [trackingOpen, setTrackingOpen] = useState(false);
+  // "Directions" (Settings → Delivery line, and the order card) opens main's directions editor for that store's selected address.
+  const [directionsStore, setDirectionsStore] = useState<"swiggy" | "zepto" | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [commerceMode, setCommerceMode] = useState<CommerceMode>("demo");
   const [zeptoConnected, setZeptoConnected] = useState<boolean | null>(null);
@@ -120,6 +128,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [disconnectConfirm, setDisconnectConfirm] = useState<{ store: "swiggy" | "zepto"; open: boolean }>({ store: "swiggy", open: false });
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addressId, setAddressId] = useState("");
+  // Set once each store's saved addresses have been read, so "Where should we deliver?" never flashes while loading.
+  const [swiggyAddressesLoaded, setSwiggyAddressesLoaded] = useState(false);
+  const [zeptoAddressesLoaded, setZeptoAddressesLoaded] = useState(false);
+  const [storeConnectError, setStoreConnectError] = useState("");
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -145,6 +157,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const latestMessageIdRef = useRef<string | null>(null);
   latestMessageIdRef.current = latestMessageId(chatMessages);
   const riderCalls = useRiderCalls({ latestMessageIdRef, onToast: setOrderToast });
+  const deliveryLine = useDeliveryLineConfig();
   // Calls to the Sarvam inbound delivery line: a card next to the order, and a status line.
   const inboundCalls = useInboundCalls({ onToast: setOrderToast });
   const conversationIdRef = useRef<string | null>(null);
@@ -454,6 +467,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       if (cause instanceof ApiError && cause.status === 401) setConnected(false);
       } finally {
         setLoading(null);
+        setSwiggyAddressesLoaded(true);
       }
     })();
     addressRequestRef.current = request;
@@ -483,6 +497,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         setMessage(cause instanceof Error ? cause.message : "Could not load Zepto addresses.");
       } finally {
         setZeptoBusy(false);
+        setZeptoAddressesLoaded(true);
       }
     })();
     zeptoAddressRequestRef.current = request;
@@ -693,11 +708,21 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     setChatDrawerOpen(next === "chats");
     setAccountSettingsOpen(next === "settings");
   };
-  // Order help is a popup; the settings drawer row (and later a `support.open` UI event) opens it.
+  // Order help is a popup; the order card's "Need help?" and the `support.open` UI event open it.
   // "What do you know about me?" opens Settings on the memory page.
   const openMemorySummary = useCallback(() => {
     setSettingsSection("memory");
     setAccountSettingsOpen(true);
+  }, []);
+  const openSettingsSection = useCallback((section: SettingsSection) => {
+    setChatDrawerOpen(false);
+    setSettingsSection(section);
+    setAccountSettingsOpen(true);
+  }, []);
+  const openDirections = useCallback((store: "swiggy" | "zepto") => {
+    setChatDrawerOpen(false);
+    setAccountSettingsOpen(false);
+    setDirectionsStore(store);
   }, []);
   const openSupport = useCallback(() => {
     setChatDrawerOpen(false);
@@ -1120,27 +1145,29 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     }
   }
 
-  async function beginProviderConnection(provider: "swiggy" | "zepto") {
+  /** Checks the OAuth callback first, then opens the store's own login. Returns a problem to show, or null. */
+  async function beginProviderConnection(provider: "swiggy" | "zepto"): Promise<string | null> {
     if (provider === "zepto") setZeptoBusy(true);
     else setLoading("connection");
     try {
       const readiness = await apiRequest<{ ready: boolean; message: string }>(`/api/${provider}/oauth/readiness`);
       if (!readiness.ready) {
         setMessage(readiness.message);
-        return;
+        return readiness.message;
       }
       const { authorization_url: authorizationUrl } = await apiRequest<{ authorization_url: string }>(`/api/${provider}/oauth/authorization`, { method: "POST" });
       window.location.assign(authorizationUrl);
+      return null;
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : `Could not prepare ${provider} login.`);
+      const problem = cause instanceof Error ? cause.message : `Could not prepare ${provider} login.`;
+      setMessage(problem);
+      return problem;
     } finally {
       if (provider === "zepto") setZeptoBusy(false);
       else setLoading((value) => value === "connection" ? null : value);
     }
   }
 
-  const connectionLabel = commerceMode === "demo" ? "Safe demo · no live calls" : connected && zeptoConnected ? "Swiggy + Zepto linked" : connected && selectedAddress ? selectedAddress.tag || selectedAddress.category || "Swiggy ready" : zeptoConnected ? "Zepto linked" : connected ? "Choose address" : "Connect stores";
-  const readyStoreCount = Number(connected === true && Boolean(selectedAddress)) + Number(zeptoSearchReady);
   const basketCount = cartBadgeCount(baskets);
   const storeItemCount = (provider: ProviderName) => cartBadgeCount({ [provider]: baskets[provider] });
   // The header cart opens a store that actually has items, so the badge and the basket it opens always agree.
@@ -1150,6 +1177,17 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const headerCard = liveCard(timeline, cartProvider);
   const headerCardIsNewest = headerCard !== null && headerCard.seq === timeline.seq && headerCard.afterMessageId === latestMessageId(chatMessages);
   const hasChat = Boolean(submittedQuery || chatMessages.length);
+  // Swiggy-style address block in the header, and "Where should we deliver?" before the greeting.
+  const storeAddresses = {
+    zepto: { connected: zeptoConnected, addresses: zeptoAddresses, selectedId: zeptoAddressId, loaded: zeptoAddressesLoaded },
+    swiggy: { connected, addresses, selectedId: addressId, loaded: swiggyAddressesLoaded },
+  };
+  const headerAddressView = headerAddress(storeAddresses);
+  const deliverGate = hasChat ? null : addressGate(storeAddresses);
+  const openHeaderAddress = () => {
+    if (headerAddressView.store) setAddressPicker(headerAddressView.store);
+    else if (headerAddressView.state === "connect") openSettingsSection("stores");
+  };
   const chips = quick.chips(orderChip !== null);
   const basketStores = (["zepto", "swiggy_instamart"] as ProviderName[]).filter((provider) => storeItemCount(provider) > 0);
   const chipsLocked = loading === "search" || loading === "assistant";
@@ -1218,21 +1256,34 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     <AnimatePresence>
       {drawer && <motion.button type="button" aria-label={drawer === "chats" ? "Close chats" : "Close account settings"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12, ease: "easeOut" }} onClick={() => { setChatDrawerOpen(false); setAccountSettingsOpen(false); }} className="fixed inset-0 z-40 bg-scrim/20" />}
     </AnimatePresence>
-    <header style={{ top: insets.top }} className="fixed inset-x-0 top-0 z-30 bg-surface pt-[env(safe-area-inset-top)] shadow-[0_10px_35px_-30px_rgb(var(--shadow)/.7)]">
-      <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
-        <button type="button" onClick={() => openDrawer("chats")} aria-label="Open shopping chats" className="grid size-10 shrink-0 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-focus/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface text-ink-secondary transition hover:bg-accent-soft active:scale-[.96]"><List size={21} /></button>
-        {orderChip && <div className="ml-2 flex min-w-0 flex-1 justify-center sm:ml-4 sm:justify-start"><HeaderOrderChip chip={orderChip} onOpen={(orderId) => document.getElementById(`order-status-${orderId}`)?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" })} /></div>}
-        <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
-          {basketCount > 0 && <button onClick={() => { if (headerCardIsNewest) { hideBasket(cartProvider); return; } followScrollRef.current = true; setBasketProvider(cartProvider); showBasketAtLatest(cartProvider, billStageRef.current[cartProvider] ?? "updated"); }} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-focus/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface text-ink-secondary transition hover:bg-accent-soft active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-focus/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface bg-accent px-1 text-[9px] font-bold leading-4 text-on-accent">{basketCount}</span></button>}
-          <button onClick={() => openDrawer("settings")} aria-label={`Open account and store settings. ${connectionLabel}`} className={`relative ml-0.5 grid size-10 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-focus/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface transition active:scale-[.98] ${accountSettingsOpen ? "bg-accent-soft text-accent-strong" : "bg-white/70 text-ink-secondary hover:bg-surface-muted"}`}><Storefront size={18} className="text-accent-ink" /><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-focus/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface border-2 border-surface ${readyStoreCount > 0 ? "bg-success" : "bg-subtle"}`} aria-hidden="true" /></button>
-        </nav>
-      </div>
-    </header>
+    <HomeHeader
+      top={insets.top}
+      address={headerAddressView}
+      basketCount={basketCount}
+      orderChip={orderChip}
+      userName={userName}
+      userImageUrl={user?.hasImage ? user.imageUrl : undefined}
+      accountOpen={accountSettingsOpen}
+      onOpenChats={() => openDrawer("chats")}
+      onOpenAddress={openHeaderAddress}
+      onOpenBasket={() => { if (headerCardIsNewest) { hideBasket(cartProvider); return; } followScrollRef.current = true; setBasketProvider(cartProvider); showBasketAtLatest(cartProvider, billStageRef.current[cartProvider] ?? "updated"); }}
+      onOpenAccount={() => openDrawer("settings")}
+      onOpenOrder={(orderId) => document.getElementById(`order-status-${orderId}`)?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" })}
+    />
 
-    <section ref={chatSectionRef} style={{ ...(push ? { transform: `translateY(${-push.scrollY}px)` } : {}), ...(dockHeight ? { paddingBottom: dockHeight + 24 } : {}) }} className={`mx-auto flex min-h-[100dvh] max-w-4xl flex-col overflow-x-clip px-4 pt-[calc(96px+env(safe-area-inset-top))] sm:px-6 ${hasChat && chips.length && !voiceOpen ? "pb-52 sm:pb-56" : "pb-40 sm:pb-44"}`}>
+    <section ref={chatSectionRef} style={{ ...(push ? { transform: `translateY(${-push.scrollY}px)` } : {}), ...(dockHeight ? { paddingBottom: dockHeight + 24 } : {}) }} className={`mx-auto flex min-h-[100dvh] max-w-4xl flex-col overflow-x-clip px-4 ${orderChip ? "pt-[calc(148px+env(safe-area-inset-top))]" : "pt-[calc(96px+env(safe-area-inset-top))]"} sm:px-6 ${hasChat && chips.length && !voiceOpen ? "pb-52 sm:pb-56" : "pb-40 sm:pb-44"}`}>
       <div className="flex-1">
         <div className="mb-5 sm:mb-8"><span className="text-[10px] font-semibold uppercase tracking-[.18em] text-subtle">Today</span></div>
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mr-7 sm:mr-12">
+        {deliverGate ? <motion.div key="deliver-first" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} data-testid="deliver-first">
+          <DeliverFirst
+            gate={deliverGate}
+            commerceMode={commerceMode}
+            refreshing={deliverGate.store === "zepto" ? zeptoBusy : loading === "addresses"}
+            onSelect={(id) => void (deliverGate.store === "zepto" ? selectZeptoAddress(id) : selectAddress(id))}
+            onAdd={deliverGate.canAdd ? () => setAddressPopupOpen(true) : undefined}
+            onRefresh={() => void (deliverGate.store === "zepto" ? loadZeptoAddresses(true) : loadAddresses(true))}
+          />
+        </motion.div> : <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mr-7 sm:mr-12">
           <div className="min-w-0 max-w-[620px]">
             <div className="w-fit max-w-full rounded-[7px_20px_20px_20px] border border-border bg-surface px-4 py-3.5 sm:px-5 sm:py-4">{replyLanguage === "english"
               ? <><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hi {userName}, <strong className="font-semibold">what do you need for home today?</strong></p><p className="mt-1 text-[13px] leading-5 text-muted sm:mt-1.5 sm:text-sm sm:leading-6">Just say it—I&apos;ll check all your ready stores together.</p></>
@@ -1240,7 +1291,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
             {!hasChat && chips.length > 0 && <QuickChips chips={chips} busyKey={quick.busyKey} disabled={chipsLocked} onChip={(chip) => { followScrollRef.current = true; void quick.run(chip); }} className="-mx-1 mt-3" />}
             {!hasChat && <div className="mt-3 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">{suggestions.map((suggestion) => <button key={suggestion.query} onClick={() => void runSearch(suggestion.query)} disabled={loading === "search" || loading === "assistant"} className="min-h-10 rounded-2xl bg-surface-strong/80 px-2 py-2 text-[11px] font-medium leading-4 text-ink-secondary transition hover:bg-border-strong active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-0 sm:rounded-full sm:px-3.5 sm:text-xs">{suggestion.label}</button>)}</div>}
           </div>
-        </motion.div>
+        </motion.div>}
 
         <AnimatePresence initial={false}>
           {placeInboundCalls(placeRiderCalls(withComparisonCard(withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard), comparisonCard), riderCalls.cards), inboundCalls.cards).map((item) => {
@@ -1252,7 +1303,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
               if (card.superseded) return <motion.div key={orderCardKey(card)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12"><p role="status" className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted"><ShoppingCartSimple size={13} className="shrink-0 text-subtle" /><span className="truncate">{supersededOrderText(card)}</span></p></motion.div>;
               return <OrderConfirmationCard key={orderCardKey(card)} confirmation={card.confirmation} onResult={(state) => handleOrderCardResult(card, state)} />;
             }
-            if (item.kind === "order-status") return <OrderStatusCard key={`order-status-${item.card.orderId}`} card={item.card} onChange={handleOrderStatusChange} onUpdate={setOrderToast} riderLine={riderDirectionsLine(inboundCalls.calls, item.card)} />;
+            if (item.kind === "order-status") return <OrderStatusCard key={`order-status-${item.card.orderId}`} card={item.card} onChange={handleOrderStatusChange} onUpdate={setOrderToast} riderLine={riderDirectionsLine(inboundCalls.calls, item.card)} deliveryLineReady={deliveryLine?.enabled === true} onOpenDeliveryLine={() => openSettingsSection("delivery")} onOpenDirections={() => openDirections("zepto")} onOpenSupport={openSupport} />;
             if (item.kind === "results") return item.group ? <div key={`results-${item.group.key}`} className="contents">{renderResultGroup(item.group as ResultGroup<Product>)}</div> : null;
             if (item.kind === "basket-summary") {
               const { card } = item;
@@ -1296,7 +1347,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     <AnimatePresence>{quick.toast && !orderToast && <motion.div key={`quick-toast-${quick.toast.id}`} initial={{ opacity: 0, y: reducedMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reducedMotion ? 0 : 6 }} transition={{ duration: .18, ease: [0.23, 1, 0.32, 1] }} style={{ bottom: insets.bottom + (hasChat && chips.length && !voiceOpen ? 156 : 112) }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><QuickToastView toast={quick.toast} onDismiss={quick.dismissToast} /></motion.div>}</AnimatePresence>
     <AnimatePresence>{orderToast && <motion.div key="order-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} style={{ bottom: insets.bottom + 112 }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><p role="status" aria-live="polite" className="pointer-events-auto max-w-sm rounded-full bg-inverse px-4 py-2.5 text-center text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">{orderToast}</p></motion.div>}</AnimatePresence>
 
-    <div ref={dockRef} style={{ bottom: insets.bottom }} className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+    <div ref={dockRef} style={{ bottom: insets.bottom }} className={`fixed inset-x-0 bottom-0 z-20 ${deliverGate && !voiceOpen ? "hidden" : ""} bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]`}>
       <AnimatePresence mode="wait">
         {voiceOpen ? <motion.div key="voice-composer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }} className="mx-auto max-w-3xl"><PhotoChip state={photo.state} onRemove={photo.remove} voice /><div className="flex items-end justify-center gap-2"><PhotoAttachButton compact onFile={(file) => void photo.attach(file)} disabled={photo.state.status === "uploading"} /><VoicePanel addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onAddressRemoved={handleAddressRemoved} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} onPhotoRead={handlePhotoRead} onMemorySummary={openMemorySummary} onComparison={handleComparison} beforeSessionStart={flushConversationSave} /><span aria-hidden="true" className="size-11 shrink-0" /></div></motion.div> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
           {hasChat && chips.length > 0 && <QuickChips chips={chips} busyKey={quick.busyKey} disabled={chipsLocked} onChip={(chip) => { followScrollRef.current = true; void quick.run(chip); }} className="-mx-1 mb-2" />}
@@ -1313,36 +1364,26 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       open={accountSettingsOpen}
       initialSection={settingsSection}
       onOpenChange={(open) => { setAccountSettingsOpen(open); if (!open) setSettingsSection(null); }}
-      identity={{ name: userName, email: user?.primaryEmailAddress?.emailAddress }}
+      identity={{ name: userName, email: user?.primaryEmailAddress?.emailAddress, imageUrl: user?.hasImage ? user.imageUrl : undefined }}
       commerceMode={commerceMode}
       languageLabel={replyLanguage.replace(/^./, (letter) => letter.toUpperCase())}
-      privacySummary="You control saved preferences"
       stores={[
-        { id: "swiggy", name: "Swiggy Instamart", connected: connected === true, detail: commerceMode === "demo" ? "Demo catalogue" : connected ? (selectedAddress?.tag || selectedAddress?.category || "Connected") : "Not connected" },
-        { id: "zepto", name: "Zepto", connected: zeptoConnected === true, detail: commerceMode === "demo" ? "Demo catalogue" : zeptoSearchReady ? "Search ready" : zeptoConnected ? "Connected" : "Not connected" },
+        { id: "swiggy", name: "Swiggy Instamart", connected: connected === true, detail: commerceMode === "demo" ? "Demo catalogue" : connected ? (selectedAddress ? `Delivering to ${addressLabel(selectedAddress)}` : "Choose an address") : "Not connected" },
+        { id: "zepto", name: "Zepto", connected: zeptoConnected === true, detail: commerceMode === "demo" ? "Demo catalogue" : zeptoConnected ? (selectedZeptoAddress ? `Delivering to ${addressLabel(selectedZeptoAddress)}` : "Choose an address") : "Not connected" },
       ]}
-      addresses={[
-        ...addresses.map((address) => ({ id: `swiggy:${address.id}`, label: address.tag || address.category || "Swiggy address", detail: address.address_line, selected: addressId === address.id })),
-        ...zeptoAddresses.map((address) => ({ id: `zepto:${address.id}`, label: address.tag || address.category || "Zepto address", detail: address.address_line, selected: zeptoAddressId === address.id })),
-      ]}
-      onConnectStore={() => { setAccountSettingsOpen(false); setSetupOpen(true); }}
-      onDisconnectStore={() => { setAccountSettingsOpen(false); setSetupOpen(true); }}
+      connectingStoreId={loading === "connection" && connected === false ? "swiggy" : zeptoBusy && zeptoConnected === false ? "zepto" : null}
+      storeError={storeConnectError}
+      onConnectStore={(storeId) => { setStoreConnectError(""); void beginProviderConnection(storeId === "zepto" ? "zepto" : "swiggy").then((problem) => { if (problem) setStoreConnectError(problem); }); }}
+      onDisconnectStore={(storeId) => setDisconnectConfirm({ store: storeId === "zepto" ? "zepto" : "swiggy", open: true })}
+      onChooseStoreAddress={(storeId) => setAddressPicker(storeId === "zepto" ? "zepto" : "swiggy")}
       onLanguageChange={(language) => {
         if (!user) return;
         const currentProfile = user.unsafeMetadata.gharsaathiProfile as Record<string, unknown> | undefined;
         void user.update({ unsafeMetadata: { ...user.unsafeMetadata, gharsaathiProfile: { ...currentProfile, language } } });
       }}
-      onManagePrivacy={() => { setAccountSettingsOpen(false); setSetupOpen(true); }}
-      onManageAddresses={() => { setAccountSettingsOpen(false); setSetupOpen(true); }}
-      onChooseStoreAddress={(storeId) => setAddressPicker(storeId === "zepto" ? "zepto" : "swiggy")}
-      onSelectAddress={(value) => {
-        const [provider, ...idParts] = value.split(":");
-        const id = idParts.join(":");
-        if (provider === "zepto") void selectZeptoAddress(id);
-        else void selectAddress(id);
-      }}
-      onManagePreferences={onOpenSetup ? () => { setAccountSettingsOpen(false); onOpenSetup(); } : undefined}
-      onOpenSupport={openSupport}
+      deliveryLine={deliveryLine}
+      onOpenDeliveryDirections={() => openDirections(headerAddressView.store ?? "zepto")}
+      riderAssistAvailable={riderCalls.available}
       onSignOut={() => void signOut({ redirectUrl: "/" })}
     />
 
@@ -1384,6 +1425,14 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         void (disconnectConfirm.store === "zepto" ? disconnectZepto() : disconnect()).then((done) => { if (done) setDisconnectConfirm((current) => ({ ...current, open: false })); });
       }}
     />
+    <InputDialog open={directionsStore !== null} title="Directions for this address" description="What the delivery line tells the rider. Saved for this address only." closeLabel="Close directions" onClose={() => setDirectionsStore(null)}>
+      {directionsStore && <DeliveryLinePanel
+        provider={directionsStore}
+        address={(() => { const selected = directionsStore === "zepto" ? selectedZeptoAddress : selectedAddress; return selected ? { id: selected.id, label: selected.tag || selected.category, text: selected.address_line } : null; })()}
+        recipientName={userName}
+        onChangeAddress={() => setAddressPicker(directionsStore)}
+      />}
+    </InputDialog>
     <SavedListsDialog open={quick.lists.open} mode={quick.lists.mode} basketStores={basketStores} addingListId={quick.addingListId} onClose={quick.closeLists} onAddList={(list) => void quick.addList(list)} onChanged={() => void quick.reload()} />
     <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} onTrackOrder={() => { setSupportOpen(false); setTrackingOpen(true); }} />
     <AddressFormSheet open={addressPopupOpen} prefillRequest={addressPrefillRequest} onAdded={applyAddedZeptoAddress} onClose={closeAddressPopup} onPrefillApplied={handleAddressPrefillApplied} />

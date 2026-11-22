@@ -54,7 +54,7 @@
   --accent-shadow: 182 74 24;
 }
 * { box-sizing: border-box; }
-html { background: rgb(var(--color-bg)); }
+html { background: rgb(var(--color-bg)); scrollbar-gutter: stable; }
 body { margin: 0; background: rgb(var(--color-bg)); color: rgb(var(--color-text)); font-family: "DM Sans", sans-serif; }
 button, input { font: inherit; }
 .font-display { font-family: "Outfit", sans-serif; }

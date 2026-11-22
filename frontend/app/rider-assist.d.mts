@@ -31,6 +31,7 @@ export type RiderCall = {
 export function notesDraft(notes: Partial<DeliveryNotes> | null | undefined): NotesDraft;
 export function notesError(draft: { landmark: string; directions: string }): string | null;
 export function notesPayload(draft: NotesDraft): { landmark: string | null; directions: string | null; handoff: string; preferred_language: string };
+export function riderAssistAvailable(settings: { feature_enabled?: boolean; owner_configured?: boolean } | null | undefined): boolean;
 export function riderStatus(settings: Omit<RiderSettings, "notes"> | null | undefined): { label: string; active: boolean; canToggle: boolean };
 export function riderOutcomeText(call: { outcome: string; answered_from?: string[] }): string;
 export function riderCallTime(iso: string): string;
