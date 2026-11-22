@@ -15,7 +15,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.conversations.context import ConversationContextLoader, RecentConversationContext, ContextTurn
-from app.conversations.summarizer import BackgroundConversationSummaries, SummaryOutput
+from app.conversations.summarizer import BackgroundConversationSummaries, DisabledConversationSummaries, SummaryOutput
 from app.core.config import Settings
 from app.database.base import Base
 from app.database.models import Conversation
@@ -218,7 +218,9 @@ async def test_loader_uses_summaries_falls_back_and_stays_user_scoped(client, su
     await client.put("/api/conversations/current", headers=user("moin"), json=chat(2, "Amul dahi chahiye"))
     await client.post("/api/conversations/new", headers=user("moin"))
     await summaries.wait_idle()
-    app.dependency_overrides.pop(get_conversation_summaries)  # the next archive is not summarised
+    # The next archive is not summarised. Never pop the override: the real service would
+    # use the configured OpenAI key and database from a background task.
+    app.dependency_overrides[get_conversation_summaries] = DisabledConversationSummaries
     await client.put("/api/conversations/current", headers=user("moin"), json=chat(2, "Shampoo chahiye"))
     await client.post("/api/conversations/new", headers=user("moin"))
     await client.put("/api/conversations/current", headers=user("moin"), json=chat(3, "Aashirvaad atta"))

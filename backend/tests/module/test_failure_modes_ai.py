@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from app.chat.service import EMPTY_REPLY, ChatProviderError, ChatTurnService
+from app.chat.service import EMPTY_REPLY, INCOMPLETE_REPLY, ChatProviderError, ChatTurnService
 from app.core.config import Settings
 from app.photos.extraction import OpenAIPhotoExtractor, PhotoExtractionError, PhotoReader
 from app.photos.store import PhotoAttachmentStore
@@ -24,6 +24,7 @@ from app.voice import sideband as sideband_module
 from app.voice.photo_tools import PhotoToolExecutor
 from app.voice.service import LiveSessionService, VoiceConfigurationError, VoiceProviderError
 from app.voice.sideband import FINISHED, SidebandHub, SidebandRunner
+from app.user_profile import UserProfile
 from app.voice.tools import ToolOutcome
 from tests.fault_injection import (
     HOUSEHOLD,
@@ -137,42 +138,72 @@ async def test_fm_ai06_typed_chat_empty_output_or_refusal_gets_a_fixed_retry_lin
     assert result.ui_events == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="FM-AI07: when the model fails after a basket-changing tool round, /api/chat/turn "
-    "returns 502 and drops that round's ui_events, so the basket changed server-side but the "
-    "chat shows no basket card until a reload.",
-)
-async def test_fm_ai07_model_failure_after_a_basket_change_still_reports_the_change() -> None:
-    world = FaultWorld()
-    responses = FaultyResponses(
+def ai07_script(*failure: object) -> FaultyResponses:
+    return FaultyResponses(
         [
             [function_call("search_products", "c1", query="Amul Taaza milk")],
             [function_call("add_to_basket", "c2", option_id="opt1", quantity=1)],
-            openai_error("rate_limit"),
+            *failure,
         ]
     )
-    service = chat(world, responses)
+
+
+async def test_fm_ai07_model_failure_after_a_basket_change_still_reports_the_change() -> None:
+    world = FaultWorld()
+    service = chat(world, ai07_script(openai_error("rate_limit")))
 
     result = await service.run_turn(HOUSEHOLD, None, "Amul Taaza add karo", swiggy_address_id=SWIGGY_ADDRESS)
 
-    assert "basket.updated" in [event["type"] for event in result.ui_events]
+    assert [event["type"] for event in result.ui_events] == ["tool.results", "basket.updated"]
+    assert result.incomplete is True
+    assert result.reply == INCOMPLETE_REPLY["hinglish"]
 
 
 async def test_fm_ai07_the_basket_change_itself_is_kept_when_the_model_fails() -> None:
     world = FaultWorld()
-    responses = FaultyResponses(
-        [
-            [function_call("search_products", "c1", query="Amul Taaza milk")],
-            [function_call("add_to_basket", "c2", option_id="opt1", quantity=1)],
-            openai_error("rate_limit"),
-        ]
-    )
-    with pytest.raises(ChatProviderError):
-        await chat(world, responses).run_turn(HOUSEHOLD, None, "Amul Taaza add karo", swiggy_address_id=SWIGGY_ADDRESS)
+    responses = ai07_script(openai_error("rate_limit"))
+
+    await chat(world, responses).run_turn(HOUSEHOLD, None, "Amul Taaza add karo", swiggy_address_id=SWIGGY_ADDRESS)
 
     revision, lines, _ = await world.snapshot("swiggy_instamart")
     assert len(lines) == 1  # one add, not repeated by any retry
+    assert len(responses.requests) == 3  # the failed call is not retried and no tool re-runs
+
+
+@pytest.mark.parametrize("language", ["english", "hinglish", "hindi"])
+async def test_fm_ai07_the_short_line_follows_the_profile_language(language: str) -> None:
+    world = FaultWorld()
+    service = chat(world, ai07_script(openai_error("server")))
+
+    async def read(user_id: str) -> UserProfile:
+        return UserProfile(language=language)  # type: ignore[arg-type]
+
+    service.voice.profile_reader = SimpleNamespace(read=read)
+
+    result = await service.run_turn(HOUSEHOLD, None, "Amul Taaza add karo", swiggy_address_id=SWIGGY_ADDRESS)
+
+    assert result.reply == INCOMPLETE_REPLY[language]
+    if language == "english":
+        assert result.reply == "Something went wrong finishing that reply — your basket changes are saved."
+
+
+async def test_fm_ai07_a_timeout_after_a_basket_change_also_keeps_the_events() -> None:
+    world = FaultWorld()
+    service = chat(world, ai07_script(Slow(5)))
+    service.settings.chat_turn_timeout_seconds = 0.2
+
+    result = await service.run_turn(HOUSEHOLD, None, "Amul Taaza add karo", swiggy_address_id=SWIGGY_ADDRESS)
+
+    assert result.incomplete is True
+    assert "basket.updated" in [event["type"] for event in result.ui_events]
+
+
+async def test_fm_ai07_a_failure_after_only_a_search_is_still_an_error() -> None:
+    world = FaultWorld()
+    responses = FaultyResponses([[function_call("search_products", "c1", query="Amul Taaza milk")], openai_error("rate_limit")])
+
+    with pytest.raises(ChatProviderError):
+        await chat(world, responses).run_turn(HOUSEHOLD, None, "doodh", swiggy_address_id=SWIGGY_ADDRESS)
 
 
 async def test_fm_ai08_a_failing_tool_mid_turn_is_reported_to_the_model_not_raised() -> None:

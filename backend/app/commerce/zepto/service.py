@@ -11,6 +11,7 @@ from app.commerce.relevance import refine_search_result
 from app.commerce.zepto.client import ZeptoMcpClient
 from app.commerce.zepto.adapter import parse_addresses, parse_products
 from app.commerce.zepto.cart import ZeptoCart, parse_view_cart
+from app.commerce.zepto.diagnostics import log_search_unrecognised
 from app.commerce.zepto.history import (
     ZeptoOrderDetail,
     ZeptoOrderHistory,
@@ -29,6 +30,7 @@ from app.commerce.zepto.errors import (
     ZeptoProviderError,
     ZeptoRateLimited,
     ZeptoSessionExpired,
+    ZeptoUnrecognisedResponse,
 )
 from app.commerce.zepto.oauth import ZeptoOAuthClient
 
@@ -273,7 +275,12 @@ class ZeptoService:
                 raw = await self.client.call_tool(
                     tool, {"query": queries[0], "pageNumber": page_number}
                 )
-            return refine_search_result(normalized, parse_products(raw))
+            try:
+                parsed = parse_products(raw)
+            except ZeptoUnrecognisedResponse:
+                log_search_unrecognised(correlation_id=uuid.uuid4().hex, tool=tool, payload=raw)
+                raise
+            return refine_search_result(normalized, parsed)
 
         async with self._search_lock:
             cached = self._search_cache.get(cache_key)
