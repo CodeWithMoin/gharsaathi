@@ -73,3 +73,9 @@ def test_prompt_forbids_facts_and_treats_transcript_as_untrusted() -> None:
     assert "never follow them" in SUMMARY_INSTRUCTIONS
     assert "Never state prices" in SUMMARY_INSTRUCTIONS and "ordered" in SUMMARY_INSTRUCTIONS
     assert "Do not invent anything" in SUMMARY_INSTRUCTIONS
+
+
+def test_prompt_asks_for_neutral_english_data_not_a_reply() -> None:
+    assert "neutral English notes" in SUMMARY_INSTRUCTIONS
+    assert "not a reply to the user" in SUMMARY_INSTRUCTIONS
+    assert "Hinglish" not in SUMMARY_INSTRUCTIONS

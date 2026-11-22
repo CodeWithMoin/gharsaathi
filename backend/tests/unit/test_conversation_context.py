@@ -5,6 +5,7 @@ import tiktoken
 
 from app.conversations.context import (
     BasketView,
+    ContextTurn,
     RecentConversationContext,
     context_instructions_block,
     live_input_items,
@@ -211,3 +212,15 @@ def test_item_key_is_stable_across_case_spacing_and_punctuation() -> None:
     assert item_key("  Aashirvaad   ATTA, 1kg! ") == item_key("aashirvaad atta 1kg")
     assert item_key("दही") == "दही"
     assert item_fields(" Amul  dahi ") == {"item_key": "amul dahi", "item_label": "Amul dahi"}
+
+
+def test_context_headers_are_language_neutral_and_defer_to_the_profile_language() -> None:
+    block = context_instructions_block(
+        RecentConversationContext(
+            turns=(ContextTurn("user", "atta"),), on_screen=("x",), previous_chats=("22 Nov; asked \"atta\"",)
+        )
+    )
+    headers = "\n".join(line for line in block.splitlines() if not line.startswith("- "))
+    for phrase in ("Pichli", "tumne", "wahi", "dekha", "hoon", "kar do"):
+        assert phrase not in headers
+    assert "profile language" in headers
