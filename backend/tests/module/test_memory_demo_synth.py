@@ -334,3 +334,17 @@ def test_provider_facing_order_features_never_read_the_purchase_graph() -> None:
     for path in paths:
         text = path.read_text(encoding="utf-8")
         assert "PurchaseOrderNode" not in text and "PurchaseGraphService" not in text, path
+
+
+def test_realistic_mode_groups_purchases_into_a_few_orders_a_week() -> None:
+    answers = parse_answers(ANSWERS)
+    dense = demo_synth.generate(answers, months=12, seed=42, end=END)
+    real = demo_synth.generate(answers, months=12, seed=42, end=END, realistic=True)
+
+    weeks = 12 * 30 / 7
+    assert 3 * weeks * 0.8 <= len(real) <= 4 * weeks * 1.05
+    assert len(real) < len(dense) / 2
+    # Same purchases, just fewer orders: total units are preserved.
+    assert sum(i.quantity for o in real for i in o.items) == sum(i.quantity for o in dense for i in o.items)
+    assert len({o.order_id for o in real}) == len(real)
+    assert real == demo_synth.generate(answers, months=12, seed=42, end=END, realistic=True)

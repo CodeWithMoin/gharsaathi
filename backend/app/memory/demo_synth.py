@@ -295,8 +295,39 @@ def _order_times(answers: DemoMemoryFile) -> dict[str, float]:
     return weights
 
 
+def _consolidate(
+    slots: dict[tuple[date, str], Counter[tuple[str, str]]],
+    rng: random.Random,
+    night_weights: dict[str, float],
+    start_day: date,
+    end_day: date,
+) -> dict[tuple[date, str], Counter[tuple[str, str]]]:
+    """Fold item-level purchases into 3-4 orders a week, the way people stock up."""
+    shop_days: list[tuple[date, str]] = []
+    week = start_day
+    while week <= end_day:
+        days = sorted(rng.sample(range(7), rng.choice((3, 3, 4))))
+        for offset in days:
+            day = week + timedelta(days=offset)
+            if day <= end_day:
+                shop_days.append((day, _pick_daypart(rng, night_weights)))
+        week += timedelta(days=7)
+    merged: dict[tuple[date, str], Counter[tuple[str, str]]] = defaultdict(Counter)
+    if not shop_days:
+        return slots
+    for (day, _part), basket in slots.items():
+        target = next((slot for slot in shop_days if slot[0] >= day), shop_days[-1])
+        merged[target].update(basket)
+    return merged
+
+
 def generate(
-    answers: DemoMemoryFile, *, months: int = 12, seed: int = 42, end: date | None = None
+    answers: DemoMemoryFile,
+    *,
+    months: int = 12,
+    seed: int = 42,
+    end: date | None = None,
+    realistic: bool = False,
 ) -> list[SynthOrder]:
     """A deterministic history (same answers, months, seed and end date: same orders)."""
     if not 1 <= months <= 24:
@@ -363,6 +394,9 @@ def generate(
         category, variant = rng.choice(ONE_OFFS)
         day = start_day + timedelta(days=rng.randrange((end_day - start_day).days + 1))
         slots[(day, _pick_daypart(rng, night_weights))][(category, f"{variant.name} {variant.pack}")] += 1
+
+    if realistic:
+        slots = _consolidate(slots, rng, night_weights, start_day, end_day)
 
     orders: list[SynthOrder] = []
     for (day, part), basket in sorted(slots.items()):
@@ -525,7 +559,7 @@ async def run(args: argparse.Namespace, session: AsyncSession) -> list[str]:
         raise SynthRefused("Pass --file <answers.yaml> (or --remove).")
     answers = load_file(Path(args.file))
     end = date.fromisoformat(args.end) if args.end else None
-    orders = generate(answers, months=args.months, seed=args.seed, end=end)
+    orders = generate(answers, months=args.months, seed=args.seed, end=end, realistic=args.realistic)
     if not args.apply:
         existing = await count_synthetic(session, actor)
         return [*out, f"Dry run: nothing written. Synthetic orders there now: {existing}.", *report(orders)]
@@ -548,6 +582,11 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--file", help="The household answers file (same format as make memory-seed).")
     cli.add_argument("--months", type=int, default=12)
     cli.add_argument("--seed", type=int, default=42)
+    cli.add_argument(
+        "--realistic",
+        action="store_true",
+        help="Group purchases into 3-4 orders a week instead of one order per item and time of day.",
+    )
     cli.add_argument("--end", help="Last day of history, YYYY-MM-DD (default yesterday, IST).")
     cli.add_argument("--user-id", help="Clerk user id; defaults to the only signed-in user.")
     mode = cli.add_mutually_exclusive_group()
