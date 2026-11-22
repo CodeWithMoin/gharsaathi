@@ -1,7 +1,7 @@
 """Saved shopping lists the user creates ("Weekly list", "Monthly ration").
 
 Revision ID: 20261122_list01
-Revises: 20261122_style01
+Revises: 20261122_hist01
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision: str = "20261122_list01"
-down_revision: str | None = "20261122_style01"
+down_revision: str | None = "20261122_hist01"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

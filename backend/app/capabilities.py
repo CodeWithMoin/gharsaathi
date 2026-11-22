@@ -345,7 +345,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         ),
         backend=S(
             W,
-            "Reads only this household's ordered baskets; reorder and recent items re-check "
+            "Reads only this household's real orders (ordered basket + confirmed attempt with a "
+            "provider order id; synth- sample orders excluded); reorder and recent items re-check "
             "each item at its store and add it; nothing is quoted or ordered.",
         ),
         routes=(

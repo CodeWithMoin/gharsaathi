@@ -161,7 +161,7 @@ in hue; the pill also names the speaker in text.
   above the composer once the chat has turns (not in voice mode). Order: **Reorder last
   order** (only when there is one), **Mera order kahan hai?** (only while an order in this
   chat is moving), up to 3 recent products (the last distinct products this household
-  ordered), **My lists** (always). Nothing is predicted.
+  really ordered; synthetic sample orders never count), **My lists** (always). Nothing is predicted.
 - A chip tap is the user's own turn: it appears in the timeline as a user bubble
   ("Reorder my last order", "Add Amul Milk 500 ml", "Add my “Weekly list” to the basket"),
   then one plain-English assistant line ("Added 3 items from your last Zepto order to

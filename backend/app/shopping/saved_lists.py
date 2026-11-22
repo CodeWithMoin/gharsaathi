@@ -26,11 +26,23 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.commerce.swiggy.models import Product, ProductSearchResult
-from app.database.models import SavedShoppingListRecord, ShoppingBasketRecord
+from app.database.models import (
+    SavedShoppingListRecord,
+    ShoppingBasketRecord,
+    ZeptoCheckoutAttemptRecord,
+)
 from app.shopping.basket import MAX_QUANTITY, BasketService, same_variant
 from app.shopping.database import basket_from_record
 from app.shopping.errors import InvalidBasketChange, NotFound, ShoppingError
-from app.shopping.models import Basket, BasketLine, BasketStatus, ProductRef, ProviderName, rupees_to_paise
+from app.shopping.models import (
+    Basket,
+    BasketLine,
+    BasketStatus,
+    CheckoutStatus,
+    ProductRef,
+    ProviderName,
+    rupees_to_paise,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -267,13 +279,35 @@ class SavedListStore:
         return record
 
 
+# Demo/sample orders (codex/memory-setup) carry ids with this prefix; never repeat them.
+SYNTHETIC_PREFIX = "synth-"
+
+
 class OrderedBaskets:
-    """This household's ordered baskets, newest first (the orders GharSaathi placed)."""
+    """This household's real orders, newest first.
+
+    Real means the store confirmed it: the basket is ``ordered`` *and* a checkout
+    attempt for it is ``confirmed`` with a provider order id. Synthetic demo or
+    sample orders (``synth-`` basket or order ids) and baskets without a confirmed
+    attempt are never returned, so "Reorder last order" and recent items only
+    ever repeat what the household actually ordered.
+    """
 
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self.sessions = sessions
 
     async def recent(self, household_id: str, limit: int = RECENT_ORDERS_SCANNED) -> list[Basket]:
+        confirmed = (
+            select(ZeptoCheckoutAttemptRecord.id)
+            .where(
+                ZeptoCheckoutAttemptRecord.basket_id == ShoppingBasketRecord.id,
+                ZeptoCheckoutAttemptRecord.household_id == household_id,
+                ZeptoCheckoutAttemptRecord.status == CheckoutStatus.CONFIRMED.value,
+                ZeptoCheckoutAttemptRecord.provider_order_id.is_not(None),
+                ZeptoCheckoutAttemptRecord.provider_order_id.not_like(f"{SYNTHETIC_PREFIX}%"),
+            )
+            .exists()
+        )
         async with self.sessions() as session:
             records = (
                 await session.scalars(
@@ -281,6 +315,8 @@ class OrderedBaskets:
                     .where(
                         ShoppingBasketRecord.household_id == household_id,
                         ShoppingBasketRecord.status == BasketStatus.ORDERED.value,
+                        ShoppingBasketRecord.id.not_like(f"{SYNTHETIC_PREFIX}%"),
+                        confirmed,
                     )
                     .order_by(ShoppingBasketRecord.updated_at.desc())
                     .limit(limit)

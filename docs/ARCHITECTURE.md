@@ -133,7 +133,10 @@ flowchart TD
 
 `app/shopping/saved_lists.py`. Lists are only what the user saved and named
 (`saved_shopping_lists`, user-scoped, unique name per user, 20 lists × 40 items).
-"Repeat last order" and recent items read this household's own `ordered` baskets.
+"Repeat last order" and recent items read this household's own real orders only: an
+`ordered` basket with a `confirmed` checkout attempt that has a provider order id.
+Synthetic sample orders (`synth-` basket or order ids) and baskets without a confirmed
+attempt are never repeated.
 Adding (`add_items`, shared by `POST /api/lists/{id}/add-to-basket`,
 `POST /api/quick-actions/repeat-last`, `POST /api/quick-actions/recent-item` and the
 `add_saved_list` voice/typed tool) searches each item's name at its store and adds
