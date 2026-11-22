@@ -44,9 +44,9 @@ type ProductOptionsProps = {
 };
 
 const MAX_QUANTITY = 50;
-const STORE_DOT: Record<ProviderName, string> = { swiggy_instamart: "bg-[#c6531d]", zepto: "bg-[#7b3fc4]" };
+const STORE_DOT: Record<ProviderName, string> = { swiggy_instamart: "bg-accent", zepto: "bg-zepto" };
 const BADGE_ICON: Record<BestPickBadge, typeof Sparkle> = { "You bought this before": ClockCounterClockwise, "Your usual": Heart, "Best match": Sparkle };
-const focusRing = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c6531d]";
+const focusRing = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 function productImage(product: Product) {
   if (product.image_url) return product.image_url;
@@ -123,18 +123,18 @@ function BasketControl({ product, quantity, primary, adding, addDisabled, locked
 
   if (quantity > 0) {
     return (
-      <motion.div key="added" initial={enter} animate={shown} transition={transition} className="flex h-11 items-center rounded-full border border-[#cfe3d2] bg-[#edf5ed] text-[#2f673a]">
-        <button type="button" onClick={() => void change(quantity - 1)} disabled={busy || locked} aria-label={basketActionLabel(product, quantity === 1 ? "remove" : "decrease")} className={`grid size-11 shrink-0 place-items-center rounded-full transition-[transform,background-color] duration-150 hover:bg-[#dcecdf] active:scale-[.94] disabled:opacity-40 ${focusRing}`}><Minus size={15} weight="bold" /></button>
+      <motion.div key="added" initial={enter} animate={shown} transition={transition} className="flex h-11 items-center rounded-full border border-success-border bg-success-soft text-success-strong">
+        <button type="button" onClick={() => void change(quantity - 1)} disabled={busy || locked} aria-label={basketActionLabel(product, quantity === 1 ? "remove" : "decrease")} className={`grid size-11 shrink-0 place-items-center rounded-full transition-[transform,background-color] duration-150 hover:bg-success-border active:scale-[.94] disabled:opacity-40 ${focusRing}`}><Minus size={15} weight="bold" /></button>
         <span className="flex min-w-0 flex-1 items-center justify-center gap-1 text-xs font-semibold" aria-live="polite">
           {busy ? <CircleNotch size={15} className="animate-spin" aria-label="Updating basket" /> : <><Check size={13} weight="bold" aria-hidden />Added<span className="tabular-nums" aria-hidden>· {quantity}</span><span className="sr-only">, {quantity} in basket</span></>}
         </span>
-        <button type="button" onClick={() => void change(quantity + 1)} disabled={busy || locked || quantity >= MAX_QUANTITY || !product.available} aria-label={basketActionLabel(product, "increase")} className={`grid size-11 shrink-0 place-items-center rounded-full transition-[transform,background-color] duration-150 hover:bg-[#dcecdf] active:scale-[.94] disabled:opacity-40 ${focusRing}`}><Plus size={15} weight="bold" /></button>
+        <button type="button" onClick={() => void change(quantity + 1)} disabled={busy || locked || quantity >= MAX_QUANTITY || !product.available} aria-label={basketActionLabel(product, "increase")} className={`grid size-11 shrink-0 place-items-center rounded-full transition-[transform,background-color] duration-150 hover:bg-success-border active:scale-[.94] disabled:opacity-40 ${focusRing}`}><Plus size={15} weight="bold" /></button>
       </motion.div>
     );
   }
 
   return (
-    <motion.button key="add" initial={false} animate={shown} transition={transition} type="button" onClick={() => void onAdd(product)} disabled={!canAdd || addDisabled} aria-label={canAdd ? basketActionLabel(product, "add") : `${product.name} is unavailable`} className={`flex h-11 w-full items-center justify-center gap-1.5 rounded-full text-sm font-semibold transition-[transform,background-color] duration-150 active:scale-[.97] disabled:cursor-not-allowed ${focusRing} ${!canAdd ? "bg-[#efe6de] text-[#9a8579]" : primary ? "bg-[#c6531d] text-white hover:bg-[#b94a18] disabled:bg-[#cbb9ad]" : "border border-[#d9c7bb] bg-white text-[#6c5042] hover:bg-[#fff8f2] disabled:opacity-60"}`}>
+    <motion.button key="add" initial={false} animate={shown} transition={transition} type="button" onClick={() => void onAdd(product)} disabled={!canAdd || addDisabled} aria-label={canAdd ? basketActionLabel(product, "add") : `${product.name} is unavailable`} className={`flex h-11 w-full items-center justify-center gap-1.5 rounded-full text-sm font-semibold transition-[transform,background-color] duration-150 active:scale-[.97] disabled:cursor-not-allowed ${focusRing} ${!canAdd ? "bg-surface-strong text-subtle" : primary ? "bg-accent text-on-accent hover:bg-accent-hover disabled:bg-border-strong" : "border border-border-strong bg-white text-ink-secondary hover:bg-canvas disabled:opacity-60"}`}>
       {adding ? <CircleNotch size={16} className="animate-spin" aria-label="Adding" /> : canAdd ? <><Plus size={15} weight="bold" aria-hidden />Add</> : "Unavailable"}
     </motion.button>
   );
@@ -159,30 +159,30 @@ function OptionCard({ product, number, total, badge, commerceMode, quantity, loc
   const eta = product.delivery_value ? `${product.delivery_value} ${product.delivery_unit ?? "min"}` : null;
 
   return (
-    <article className={`flex h-full flex-col overflow-hidden rounded-[20px] border bg-[#fffdf9] shadow-[0_16px_36px_-32px_rgba(74,43,27,.7)] ${badge ? "border-[#e8c6b1]" : "border-[#e3d3c7]"}`}>
+    <article className={`flex h-full flex-col overflow-hidden rounded-[20px] border bg-surface shadow-[0_16px_36px_-32px_rgb(var(--shadow)/.7)] ${badge ? "border-accent-border" : "border-border-strong"}`}>
       <span className="sr-only">{optionPositionLabel(number, total)}{badge ? `, ${badge}` : ""}.</span>
-      <div className="relative aspect-[16/11] w-full shrink-0 bg-[#f5efe8]">
-        {image ? <Image src={image} alt="" fill sizes="(min-width: 640px) 240px, 70vw" unoptimized={image.startsWith("http")} className="object-contain p-3" /> : <span className="grid size-full place-items-center text-[#b49d90]"><ImageSquare size={26} aria-hidden /></span>}
+      <div className="relative aspect-[16/11] w-full shrink-0 bg-surface-muted">
+        {image ? <Image src={image} alt="" fill sizes="(min-width: 640px) 240px, 70vw" unoptimized={image.startsWith("http")} className="object-contain p-3" /> : <span className="grid size-full place-items-center text-subtle"><ImageSquare size={26} aria-hidden /></span>}
         <div className="absolute left-2.5 top-2.5 flex items-center gap-1.5" aria-hidden>
-          <span className="grid size-6 place-items-center rounded-full bg-[#fffdf9]/95 text-[11px] font-bold tabular-nums text-[#35241c] shadow-[0_2px_8px_-4px_rgba(53,36,28,.5)]">{number}</span>
-          {badge && BadgeIcon && <span className="flex h-6 items-center gap-1 rounded-full bg-[#c6531d] px-2 text-[10px] font-semibold text-white shadow-[0_2px_8px_-4px_rgba(53,36,28,.6)]"><BadgeIcon size={11} weight="fill" />{badge}</span>}
+          <span className="grid size-6 place-items-center rounded-full bg-surface/95 text-[11px] font-bold tabular-nums text-ink shadow-[0_2px_8px_-4px_rgb(var(--shadow)/.5)]">{number}</span>
+          {badge && BadgeIcon && <span className="flex h-6 items-center gap-1 rounded-full bg-accent px-2 text-[10px] font-semibold text-on-accent shadow-[0_2px_8px_-4px_rgb(var(--shadow)/.6)]"><BadgeIcon size={11} weight="fill" />{badge}</span>}
         </div>
       </div>
 
       <div className="flex flex-1 flex-col px-3 pb-3 pt-2.5">
         <div className="flex items-center gap-2 text-[10px]">
-          <span className="flex items-center gap-1 rounded-full bg-[#f5efe8] px-2 py-0.5 font-semibold text-[#5d4639]"><i className={`size-1.5 rounded-full ${STORE_DOT[provider]}`} aria-hidden />{storeName(product, commerceMode)}</span>
-          {eta && <span className="flex items-center gap-0.5 text-[#75645a]"><Clock size={11} aria-hidden />{eta}</span>}
-          <span className={`ml-auto flex items-center gap-0.5 font-medium ${product.available ? "text-[#397144]" : "text-[#8b7770]"}`}>{product.available && <CheckCircle size={11} weight="fill" aria-hidden />}{product.available ? "In stock" : "Out of stock"}</span>
+          <span className="flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 font-semibold text-ink-secondary"><i className={`size-1.5 rounded-full ${STORE_DOT[provider]}`} aria-hidden />{storeName(product, commerceMode)}</span>
+          {eta && <span className="flex items-center gap-0.5 text-muted"><Clock size={11} aria-hidden />{eta}</span>}
+          <span className={`ml-auto flex items-center gap-0.5 font-medium ${product.available ? "text-success" : "text-muted"}`}>{product.available && <CheckCircle size={11} weight="fill" aria-hidden />}{product.available ? "In stock" : "Out of stock"}</span>
         </div>
 
-        <h4 className="mt-2 line-clamp-2 min-h-[2.6em] text-[13px] font-semibold leading-[1.3] text-[#35241c]" title={product.name}>{product.name}</h4>
-        <p className="mt-0.5 truncate text-[11px] text-[#806f65]">{product.pack_size || "\u00a0"}</p>
+        <h4 className="mt-2 line-clamp-2 min-h-[2.6em] text-[13px] font-semibold leading-[1.3] text-ink" title={product.name}>{product.name}</h4>
+        <p className="mt-0.5 truncate text-[11px] text-muted">{product.pack_size || "\u00a0"}</p>
 
         <div className="mt-2 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
-          {prices.price ? <strong className="text-[17px] leading-none tabular-nums text-[#35241c]">{prices.price}</strong> : <span className="text-xs text-[#806f65]">Price shown in basket</span>}
-          {prices.mrp && <s className="text-[11px] tabular-nums text-[#9d8c81]"><span className="sr-only">MRP </span>{prices.mrp}</s>}
-          {prices.saving && <span className="rounded-full bg-[#edf5ed] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[#2f673a]">Save {prices.saving}</span>}
+          {prices.price ? <strong className="text-[17px] leading-none tabular-nums text-ink">{prices.price}</strong> : <span className="text-xs text-muted">Price shown in basket</span>}
+          {prices.mrp && <s className="text-[11px] tabular-nums text-subtle"><span className="sr-only">MRP </span>{prices.mrp}</s>}
+          {prices.saving && <span className="rounded-full bg-success-soft px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-success-strong">Save {prices.saving}</span>}
         </div>
 
         <div className="mt-auto pt-3">
@@ -210,7 +210,7 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
   useEffect(() => { scrollToIndex(0, false); }, [products, scrollToIndex]);
 
   if (!options.length) {
-    return <p className="w-fit max-w-full rounded-[18px] bg-[#fffdf9] px-4 py-3 text-[13px] leading-5 text-[#6c5042]"><strong className="font-semibold">{label}:</strong> only options you asked to avoid were found. Try another brand or product.</p>;
+    return <p className="w-fit max-w-full rounded-[18px] bg-surface px-4 py-3 text-[13px] leading-5 text-ink-secondary"><strong className="font-semibold">{label}:</strong> only options you asked to avoid were found. Try another brand or product.</p>;
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
@@ -222,7 +222,7 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
     scrollToIndex(next, false);
   };
 
-  const arrowClass = `grid size-8 place-items-center rounded-full border border-[#e3d3c7] bg-[#fffdf9] text-[#6c5042] transition-[transform,background-color,opacity] duration-150 hover:bg-white active:scale-[.94] disabled:cursor-default disabled:opacity-35 ${focusRing}`;
+  const arrowClass = `grid size-8 place-items-center rounded-full border border-border-strong bg-surface text-ink-secondary transition-[transform,background-color,opacity] duration-150 hover:bg-white active:scale-[.94] disabled:cursor-default disabled:opacity-35 ${focusRing}`;
 
   return (
     <motion.section
@@ -234,8 +234,8 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
       className="min-w-0 max-w-full"
     >
       <div className="mb-2 flex min-h-8 items-center gap-2 px-1">
-        <h3 className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[.12em] text-[#b65a2e]">{groupBadge(label, options.length)}</h3>
-        {overflowing && <span className="ml-auto text-[11px] font-semibold tabular-nums text-[#806f65]" aria-hidden>{positionLabel(active, options.length)}</span>}
+        <h3 className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[.12em] text-accent-strong">{groupBadge(label, options.length)}</h3>
+        {overflowing && <span className="ml-auto text-[11px] font-semibold tabular-nums text-muted" aria-hidden>{positionLabel(active, options.length)}</span>}
         {overflowing && (
           <div className="hidden items-center gap-1.5 sm:flex">
             <button type="button" onClick={() => scrollToIndex(active - 1, true)} disabled={atStart} aria-label={`Previous ${label} option`} className={arrowClass}><CaretLeft size={14} weight="bold" /></button>
@@ -243,7 +243,7 @@ export function ProductOptions({ label, products, commerceMode, addingSku, baske
           </div>
         )}
       </div>
-      <div className="rounded-[22px] has-[ul:focus-visible]:ring-2 has-[ul:focus-visible]:ring-[#c6531d] has-[ul:focus-visible]:ring-offset-2 has-[ul:focus-visible]:ring-offset-[#f8f2ea]">
+      <div className="rounded-[22px] has-[ul:focus-visible]:ring-2 has-[ul:focus-visible]:ring-focus has-[ul:focus-visible]:ring-offset-2 has-[ul:focus-visible]:ring-offset-surface-muted">
         <ul
           ref={ref}
           tabIndex={overflowing ? 0 : -1}

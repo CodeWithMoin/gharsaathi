@@ -138,10 +138,10 @@ function isProblem(status?: TrackingStatus) {
 }
 
 function StatusIcon({ status, active }: { status?: TrackingStatus; active: boolean }) {
-  const className = active ? "text-[#c6531d]" : "text-[#b9a79a]";
+  const className = active ? "text-accent" : "text-subtle";
   if (status === "out_for_delivery" || status === "arriving") return <Truck size={17} weight={active ? "fill" : "regular"} className={className} />;
-  if (status === "delivered") return <CheckCircle size={17} weight="fill" className="text-[#397144]" />;
-  if (isProblem(status)) return <WarningCircle size={17} weight="fill" className="text-[#b65745]" />;
+  if (status === "delivered") return <CheckCircle size={17} weight="fill" className="text-success" />;
+  if (isProblem(status)) return <WarningCircle size={17} weight="fill" className="text-danger" />;
   if (status === "packed") return <Package size={17} weight={active ? "fill" : "regular"} className={className} />;
   return active ? <CheckCircle size={17} weight="fill" className={className} /> : <Circle size={13} className={className} />;
 }
@@ -296,62 +296,62 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
   const checkedAt = displayTime(data?.checked_at ?? order?.updated_at);
 
   return (
-    <section className="w-full overflow-hidden rounded-[8px_22px_22px_22px] border border-[#e6d7cd] bg-[#fffdf9] shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)]" aria-label="Live order tracking">
-      <header className="flex items-start gap-3 border-b border-[#eee2da] px-4 py-3.5">
-        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f7e8dc] text-[#c6531d]"><ClockCountdown size={19} weight="fill" /></div>
+    <section className="w-full overflow-hidden rounded-[8px_22px_22px_22px] border border-border-strong bg-surface shadow-[0_18px_45px_-34px_rgb(var(--shadow)/.7)]" aria-label="Live order tracking">
+      <header className="flex items-start gap-3 border-b border-border px-4 py-3.5">
+        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"><ClockCountdown size={19} weight="fill" /></div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-[15px] font-semibold text-[#35241c]">Track an order</h2>
-            {tracking && <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#ebf5ec] px-2 py-1 text-[9px] font-bold uppercase tracking-[.08em] text-[#397144]"><span className="size-1.5 animate-pulse rounded-full bg-[#4d945d]" />Watching</span>}
+            <h2 className="truncate text-[15px] font-semibold text-ink">Track an order</h2>
+            {tracking && <span className="flex shrink-0 items-center gap-1 rounded-full bg-success-soft px-2 py-1 text-[9px] font-bold uppercase tracking-[.08em] text-success"><span className="size-1.5 animate-pulse rounded-full bg-success" />Watching</span>}
           </div>
-          <p className="mt-0.5 text-[11px] leading-4 text-[#806f65]">Read-only updates from GharSaathi’s saved order status.</p>
+          <p className="mt-0.5 text-[11px] leading-4 text-muted">Read-only updates from GharSaathi’s saved order status.</p>
         </div>
-        {onClose && <button type="button" onClick={onClose} aria-label="Close live order tracking" className="grid size-8 shrink-0 place-items-center rounded-full text-[#806f65] transition hover:bg-[#f5ebe4]"><X size={16} /></button>}
+        {onClose && <button type="button" onClick={onClose} aria-label="Close live order tracking" className="grid size-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface-strong"><X size={16} /></button>}
       </header>
 
       <div className="p-4">
         <form onSubmit={startTracking} className="space-y-2.5">
           <div className="grid grid-cols-2 gap-2">
-            {(["swiggy", "zepto"] as const).map((name) => <button key={name} type="button" onClick={() => { setProvider(name); setData(null); setTracking(false); setMonitorId(null); }} className={`rounded-xl border px-3 py-2 text-xs font-semibold capitalize transition ${provider === name ? "border-[#c6531d] bg-[#fff1e7] text-[#9e421a]" : "border-[#e5d6cb] text-[#70584b]"}`}>{name}</button>)}
+            {(["swiggy", "zepto"] as const).map((name) => <button key={name} type="button" onClick={() => { setProvider(name); setData(null); setTracking(false); setMonitorId(null); }} className={`rounded-xl border px-3 py-2 text-xs font-semibold capitalize transition ${provider === name ? "border-accent bg-accent-soft text-accent-strong" : "border-border-strong text-ink-secondary"}`}>{name}</button>)}
           </div>
           <div className="flex gap-2">
-            <label className="min-w-0 flex-1"><span className="sr-only">Order ID</span><input value={orderId} onChange={(event) => setOrderId(event.target.value)} required placeholder="Enter order ID" className="w-full rounded-xl border border-[#dfd0c5] bg-white px-3 py-2.5 text-sm outline-none placeholder:text-[#a89589] focus:border-[#c9825f]" /></label>
-            {!tracking ? <button type="submit" disabled={loading} className="flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#c6531d] px-4 py-2.5 text-xs font-semibold text-white shadow-[0_8px_22px_-12px_rgba(158,65,24,.8)] transition active:scale-[.97] disabled:opacity-50"><Play size={13} weight="fill" />Start</button> : <button type="button" onClick={() => void stopTracking()} disabled={loading} className="flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#ddcabe] px-4 py-2.5 text-xs font-semibold text-[#694d3e] transition active:scale-[.97] disabled:opacity-50"><Pause size={13} weight="fill" />Stop</button>}
+            <label className="min-w-0 flex-1"><span className="sr-only">Order ID</span><input value={orderId} onChange={(event) => setOrderId(event.target.value)} required placeholder="Enter order ID" className="w-full rounded-xl border border-border-strong bg-white px-3 py-2.5 text-sm outline-none placeholder:text-subtle focus:border-accent" /></label>
+            {!tracking ? <button type="submit" disabled={loading} className="flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2.5 text-xs font-semibold text-on-accent shadow-[0_8px_22px_-12px_rgb(var(--accent-shadow)/.8)] transition active:scale-[.97] disabled:opacity-50"><Play size={13} weight="fill" />Start</button> : <button type="button" onClick={() => void stopTracking()} disabled={loading} className="flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-border-strong px-4 py-2.5 text-xs font-semibold text-ink-secondary transition active:scale-[.97] disabled:opacity-50"><Pause size={13} weight="fill" />Stop</button>}
           </div>
         </form>
 
-        {error && <div role="alert" className="mt-3 rounded-2xl border border-[#f0cbc3] bg-[#fff0ed] px-3 py-2.5 text-xs leading-5 text-[#9f3f32]"><div className="flex items-center gap-1.5 font-semibold"><WarningCircle size={15} weight="fill" />Couldn’t show this order</div><p className="mt-0.5">{error}</p></div>}
+        {error && <div role="alert" className="mt-3 rounded-2xl border border-danger-border bg-danger-soft px-3 py-2.5 text-xs leading-5 text-danger"><div className="flex items-center gap-1.5 font-semibold"><WarningCircle size={15} weight="fill" />Couldn’t show this order</div><p className="mt-0.5">{error}</p></div>}
 
-        {loading && !order && <div className="mt-4 space-y-3" aria-live="polite"><div className="h-20 animate-pulse rounded-2xl bg-[#f7efe8]" /><div className="h-10 animate-pulse rounded-xl bg-[#fbf5f0]" /></div>}
+        {loading && !order && <div className="mt-4 space-y-3" aria-live="polite"><div className="h-20 animate-pulse rounded-2xl bg-surface-muted" /><div className="h-10 animate-pulse rounded-xl bg-canvas" /></div>}
 
-        {!loading && !error && !order && !tracking && <div className="mt-4 rounded-2xl bg-[#f7efe8] px-3.5 py-3 text-xs leading-5 text-[#725d51]"><div className="flex items-center gap-1.5 font-semibold text-[#59463c]"><Timer size={15} />Ready when you are</div><p className="mt-1">Add an order ID to save a watch for meaningful delivery changes. It continues through browser reloads.</p></div>}
+        {!loading && !error && !order && !tracking && <div className="mt-4 rounded-2xl bg-surface-muted px-3.5 py-3 text-xs leading-5 text-muted"><div className="flex items-center gap-1.5 font-semibold text-ink-secondary"><Timer size={15} />Ready when you are</div><p className="mt-1">Add an order ID to save a watch for meaningful delivery changes. It continues through browser reloads.</p></div>}
 
         {order && <div className="mt-4 space-y-3">
-          {lastChange && <div className="rounded-2xl border border-[#cfe3d2] bg-[#eef7ef] px-3 py-2.5 text-xs leading-5 text-[#32663b]"><div className="flex items-center gap-1.5 font-semibold"><BellSimple size={15} weight="fill" />Meaningful update</div><p className="mt-0.5">{lastChange}</p></div>}
+          {lastChange && <div className="rounded-2xl border border-success-border bg-success-soft px-3 py-2.5 text-xs leading-5 text-success-strong"><div className="flex items-center gap-1.5 font-semibold"><BellSimple size={15} weight="fill" />Meaningful update</div><p className="mt-0.5">{lastChange}</p></div>}
 
-          <div className={`rounded-2xl border px-3.5 py-3 ${isProblem(currentStatus) ? "border-[#efd1c8] bg-[#fff5f2]" : "border-[#e9ddd5] bg-[#fdfaf7]"}`}>
+          <div className={`rounded-2xl border px-3.5 py-3 ${isProblem(currentStatus) ? "border-danger-border bg-danger-soft" : "border-border bg-surface"}`}>
             <div className="flex items-start gap-3">
-              <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white shadow-[0_6px_16px_-12px_rgba(63,38,25,.65)]"><StatusIcon status={currentStatus} active /></div>
+              <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white shadow-[0_6px_16px_-12px_rgb(var(--shadow)/.65)]"><StatusIcon status={currentStatus} active /></div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-[#3b2a22]">{statusLabel(currentStatus, order.status_label)}</p>
-                {orderItems(order) && <p className="mt-0.5 truncate text-[11px] text-[#806f65]">{orderItems(order)}</p>}
-                {eta && <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[#704b38]"><MapPin size={14} weight="fill" />ETA {eta}</p>}
+                <p className="text-sm font-semibold text-ink">{statusLabel(currentStatus, order.status_label)}</p>
+                {orderItems(order) && <p className="mt-0.5 truncate text-[11px] text-muted">{orderItems(order)}</p>}
+                {eta && <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-ink-secondary"><MapPin size={14} weight="fill" />ETA {eta}</p>}
               </div>
             </div>
           </div>
 
-          {timeline.length > 0 && <div className="rounded-2xl border border-[#e9ddd5] bg-white">
-            <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="flex w-full items-center gap-2 px-3.5 py-3 text-left"><Package size={16} className="text-[#8d5b40]" /><span className="min-w-0 flex-1 text-xs font-semibold text-[#59463c]">Order journey</span><CaretDown size={15} className={`text-[#806f65] transition ${detailsOpen ? "rotate-180" : ""}`} /></button>
-            {detailsOpen && <ol className="border-t border-[#f0e6df] px-3.5 py-1.5">{timeline.map((event, index) => {
+          {timeline.length > 0 && <div className="rounded-2xl border border-border bg-white">
+            <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="flex w-full items-center gap-2 px-3.5 py-3 text-left"><Package size={16} className="text-accent-strong" /><span className="min-w-0 flex-1 text-xs font-semibold text-ink-secondary">Order journey</span><CaretDown size={15} className={`text-muted transition ${detailsOpen ? "rotate-180" : ""}`} /></button>
+            {detailsOpen && <ol className="border-t border-border px-3.5 py-1.5">{timeline.map((event, index) => {
               const active = event.current ?? index === timeline.length - 1;
               const time = displayTime(event.occurred_at ?? event.timestamp);
-              return <li key={event.id ?? `${event.status ?? "status"}-${index}`} className="relative flex gap-3 py-2.5 last:pb-2"><div className="relative z-10 grid size-5 shrink-0 place-items-center rounded-full bg-white"><StatusIcon status={event.status} active={active} /></div>{index < timeline.length - 1 && <span className="absolute left-[9px] top-7 h-[calc(100%-8px)] w-px bg-[#eaded5]" />}<div className="min-w-0 flex-1"><p className={`text-xs ${active ? "font-semibold text-[#4b3428]" : "text-[#756257]"}`}>{event.label ?? statusLabel(event.status)}</p>{event.description && <p className="mt-0.5 text-[11px] leading-4 text-[#806f65]">{event.description}</p>}{time && <time className="mt-0.5 block text-[10px] text-[#a38f82]">{time}</time>}</div></li>;
+              return <li key={event.id ?? `${event.status ?? "status"}-${index}`} className="relative flex gap-3 py-2.5 last:pb-2"><div className="relative z-10 grid size-5 shrink-0 place-items-center rounded-full bg-white"><StatusIcon status={event.status} active={active} /></div>{index < timeline.length - 1 && <span className="absolute left-[9px] top-7 h-[calc(100%-8px)] w-px bg-border" />}<div className="min-w-0 flex-1"><p className={`text-xs ${active ? "font-semibold text-ink" : "text-muted"}`}>{event.label ?? statusLabel(event.status)}</p>{event.description && <p className="mt-0.5 text-[11px] leading-4 text-muted">{event.description}</p>}{time && <time className="mt-0.5 block text-[10px] text-subtle">{time}</time>}</div></li>;
             })}</ol>}
           </div>}
 
-          {data?.live_tracking_supported === false && <div className="rounded-2xl border border-[#ead7cc] bg-[#fff8f3] px-3 py-2.5 text-xs leading-5 text-[#70584b]"><div className="flex items-center gap-1.5 font-semibold"><WarningCircle size={15} />Live tracking is not available for this provider</div><p className="mt-0.5">{data.provider_message || "Showing the latest saved order status only. We will not guess or repeatedly call the provider."}</p></div>}
-          <div className="flex items-center gap-2 px-0.5 text-[10px] leading-4 text-[#8d7a6f]"><Timer size={13} className="shrink-0" />{tracking ? `Shows GharSaathi’s saved updates every ${POLL_INTERVAL_MS / 1000} sec; provider cadence stays protected` : "Watching is stopped"}{checkedAt && ` · Last saved ${checkedAt}`}</div>
-          <button type="button" onClick={() => void fetchUpdate(true)} disabled={loading || !monitorId} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-[#ddcabe] px-4 py-2.5 text-xs font-semibold text-[#694d3e] transition hover:bg-[#fff8f3] active:scale-[.98] disabled:opacity-50"><ArrowsClockwise size={14} className={loading ? "animate-spin" : ""} />Refresh saved update</button>
+          {data?.live_tracking_supported === false && <div className="rounded-2xl border border-border-strong bg-canvas px-3 py-2.5 text-xs leading-5 text-ink-secondary"><div className="flex items-center gap-1.5 font-semibold"><WarningCircle size={15} />Live tracking is not available for this provider</div><p className="mt-0.5">{data.provider_message || "Showing the latest saved order status only. We will not guess or repeatedly call the provider."}</p></div>}
+          <div className="flex items-center gap-2 px-0.5 text-[10px] leading-4 text-muted"><Timer size={13} className="shrink-0" />{tracking ? `Shows GharSaathi’s saved updates every ${POLL_INTERVAL_MS / 1000} sec; provider cadence stays protected` : "Watching is stopped"}{checkedAt && ` · Last saved ${checkedAt}`}</div>
+          <button type="button" onClick={() => void fetchUpdate(true)} disabled={loading || !monitorId} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-border-strong px-4 py-2.5 text-xs font-semibold text-ink-secondary transition hover:bg-canvas active:scale-[.98] disabled:opacity-50"><ArrowsClockwise size={14} className={loading ? "animate-spin" : ""} />Refresh saved update</button>
         </div>}
       </div>
     </section>

@@ -3,10 +3,58 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { --cream: #fbf5ed; --paper: #fffdf9; --ink: #35241c; --muted: #806f65; --line: #e9dbcf; --accent: #dc5f22; }
+:root {
+  /* Semantic colour tokens as RGB channels so Tailwind opacity modifiers work. See docs/ui-decisions.md. */
+  --color-bg: 251 245 237; /* #fbf5ed */
+  --color-surface: 255 253 249; /* #fffdf9 */
+  --color-surface-muted: 248 242 234; /* #f8f2ea */
+  --color-surface-strong: 241 229 220; /* #f1e5dc */
+  --color-border: 234 222 213; /* #eaded5 */
+  --color-border-strong: 223 208 197; /* #dfd0c5 */
+  --color-text: 53 36 28; /* #35241c */
+  --color-text-secondary: 95 74 63; /* #5f4a3f */
+  --color-text-muted: 128 111 101; /* #806f65 */
+  --color-text-subtle: 161 140 128; /* #a18c80 */
+  --color-accent: 198 83 29; /* #c6531d */
+  --color-accent-hover: 185 74 24; /* #b94a18 */
+  --color-accent-strong: 157 66 26; /* #9d421a */
+  --color-accent-soft: 247 232 222; /* #f7e8de */
+  --color-accent-border: 228 202 188; /* #e4cabc */
+  --color-on-accent: 255 255 255; /* #ffffff */
+  --color-user-bubble: 59 42 34; /* #3b2a22 */
+  --color-on-user-bubble: 255 250 245; /* #fffaf5 */
+  --color-inverse: 59 42 34; /* #3b2a22 */
+  --color-inverse-hover: 74 53 43; /* #4a352b */
+  --color-on-inverse: 255 255 255; /* #ffffff */
+  --color-success: 57 113 68; /* #397144 */
+  --color-success-strong: 47 103 58; /* #2f673a */
+  --color-success-soft: 238 246 239; /* #eef6ef */
+  --color-success-border: 207 227 210; /* #cfe3d2 */
+  --color-warning: 140 81 39; /* #8c5127 */
+  --color-warning-soft: 255 240 223; /* #fff0df */
+  --color-warning-border: 240 216 197; /* #f0d8c5 */
+  --color-danger: 163 61 44; /* #a33d2c */
+  --color-danger-hover: 143 58 42; /* #8f3a2a */
+  --color-danger-soft: 252 237 234; /* #fcedea */
+  --color-danger-border: 239 207 199; /* #efcfc7 */
+  --color-focus: 198 83 29; /* #c6531d */
+  --color-zepto: 123 63 196; /* #7b3fc4 */
+  --color-zepto-strong: 95 46 145; /* #5f2e91 */
+  --color-zepto-hover: 81 39 124; /* #51277c */
+  --color-zepto-ink: 73 51 84; /* #493354 */
+  --color-zepto-muted: 118 99 129; /* #766381 */
+  --color-zepto-soft: 248 244 255; /* #f8f4ff */
+  --color-zepto-border: 222 211 239; /* #ded3ef */
+  --color-scrim: 42 27 20; /* #2a1b14 */
+  --color-meter-user: 59 42 34; /* #3b2a22 */
+  --color-meter-assistant: 198 83 29; /* #c6531d */
+  --color-meter-idle: 217 198 184; /* #d9c6b8 */
+  --shadow: 74 43 27;
+  --accent-shadow: 158 65 24;
+}
 * { box-sizing: border-box; }
-html { background: var(--cream); }
-body { margin: 0; background: var(--cream); color: var(--ink); font-family: "DM Sans", sans-serif; }
+html { background: rgb(var(--color-bg)); }
+body { margin: 0; background: rgb(var(--color-bg)); color: rgb(var(--color-text)); font-family: "DM Sans", sans-serif; }
 button, input { font: inherit; }
 .font-display { font-family: "Outfit", sans-serif; }
 .grain::after { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .025; z-index: 90; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.95' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E"); }

@@ -43,17 +43,17 @@ const REVISIT_FLAG = "gharsaathi:onboarding:revisit";
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
 function LogoMark({ size = "large" }: { size?: "large" | "small" }) {
-  return <span className={`${size === "large" ? "size-[72px] rounded-[24px]" : "size-12 rounded-[16px]"} block overflow-hidden border border-[#e7cbb8] bg-white shadow-[0_22px_55px_-32px_rgba(101,52,27,.65)]`}>
+  return <span className={`${size === "large" ? "size-[72px] rounded-[24px]" : "size-12 rounded-[16px]"} block overflow-hidden border border-accent-border bg-white shadow-[0_22px_55px_-32px_rgb(var(--shadow)/.65)]`}>
     <Image className="size-full scale-[1.08] object-cover" src="/gharsaathi-icon.png" alt="" width={96} height={96} priority />
   </span>;
 }
 
 function LoadingSplash() {
-  return <main className="grain grid min-h-[100dvh] place-items-center bg-[#f8f2ea] px-6 text-[#35241c]" aria-busy="true">
+  return <main className="grain grid min-h-[100dvh] place-items-center bg-surface-muted px-6 text-ink" aria-busy="true">
     <div className="flex flex-col items-center">
       <LogoMark />
       <p className="font-display mt-5 text-2xl font-semibold tracking-[-.04em]">GharSaathi</p>
-      <span className="mt-5 h-1 w-12 overflow-hidden rounded-full bg-[#ead8ca]" role="progressbar" aria-label="Loading GharSaathi"><span className="block h-full w-1/2 animate-pulse rounded-full bg-[#c6531d]" /></span>
+      <span className="mt-5 h-1 w-12 overflow-hidden rounded-full bg-border-strong" role="progressbar" aria-label="Loading GharSaathi"><span className="block h-full w-1/2 animate-pulse rounded-full bg-accent" /></span>
     </div>
   </main>;
 }
@@ -72,31 +72,31 @@ export function PublicOnboarding() {
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2 } }
     : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.32, ease: EASE_OUT, delay: 0.04 + index * 0.05 } };
 
-  return <main className="grain min-h-[100dvh] bg-[#f8f2ea] px-5 text-[#35241c]">
+  return <main className="grain min-h-[100dvh] bg-surface-muted px-5 text-ink">
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(2.5rem,env(safe-area-inset-top))]">
       <motion.div {...rise(0)}><LogoMark /></motion.div>
       <motion.h1 {...rise(1)} className="font-display mt-7 text-[34px] font-semibold leading-[1.08] tracking-[-.05em]">Household shopping,<br />just by asking.</motion.h1>
-      <motion.p {...rise(2)} className="mt-3 max-w-[32ch] text-[15px] leading-6 text-[#806f65]">GharSaathi searches Zepto and Swiggy, compares options and keeps your basket ready.</motion.p>
+      <motion.p {...rise(2)} className="mt-3 max-w-[32ch] text-[15px] leading-6 text-muted">GharSaathi searches Zepto and Swiggy, compares options and keeps your basket ready.</motion.p>
 
-      <motion.ul {...rise(3)} className="mt-7 divide-y divide-[#eaded5] border-y border-[#eaded5]">
+      <motion.ul {...rise(3)} className="mt-7 divide-y divide-border border-y border-border">
         {PROMISES.map((item) => <li key={item.title} className="flex items-start gap-3 py-3.5">
-          <span className="mt-0.5 shrink-0 text-[#c6531d]">{item.icon}</span>
-          <span><span className="block text-[14px] font-semibold text-[#3d2b23]">{item.title}</span><span className="mt-0.5 block text-[13px] leading-5 text-[#806f65]">{item.text}</span></span>
+          <span className="mt-0.5 shrink-0 text-accent">{item.icon}</span>
+          <span><span className="block text-[14px] font-semibold text-ink">{item.title}</span><span className="mt-0.5 block text-[13px] leading-5 text-muted">{item.text}</span></span>
         </li>)}
       </motion.ul>
 
       <motion.div {...rise(4)} className="mt-auto pt-8">
-        <label className="flex cursor-pointer items-start gap-2.5 rounded-2xl bg-[#f1e8e0] px-3.5 py-3 text-left text-[13px] leading-5 text-[#70584b] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#c6531d]">
-          <input type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-[#c6531d]" />
-          <span>I agree to GharSaathi&apos;s <a href="/terms" className="font-semibold text-[#9d421a] underline underline-offset-2">Terms</a> and <a href="/privacy" className="font-semibold text-[#9d421a] underline underline-offset-2">Privacy Policy</a>.</span>
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-2xl bg-surface-strong px-3.5 py-3 text-left text-[13px] leading-5 text-ink-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus">
+          <input type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-accent" />
+          <span>I agree to GharSaathi&apos;s <a href="/terms" className="font-semibold text-accent-strong underline underline-offset-2">Terms</a> and <a href="/privacy" className="font-semibold text-accent-strong underline underline-offset-2">Privacy Policy</a>.</span>
         </label>
         <SignUpButton mode="redirect" forceRedirectUrl="/">
-          <button type="button" disabled={!legalAccepted} className="mt-3 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 text-[15px] font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition-[transform,background-color,opacity] duration-150 ease-out hover:bg-[#b94a18] active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f8f2ea] disabled:cursor-not-allowed disabled:opacity-50">Create account <ArrowRight size={17} weight="bold" /></button>
+          <button type="button" disabled={!legalAccepted} className="mt-3 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-accent px-5 text-[15px] font-semibold text-on-accent shadow-[0_18px_38px_-20px_rgb(var(--accent-shadow)/.8)] transition-[transform,background-color,opacity] duration-150 ease-out hover:bg-accent-hover active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface-muted disabled:cursor-not-allowed disabled:opacity-50">Create account <ArrowRight size={17} weight="bold" /></button>
         </SignUpButton>
         <SignInButton mode="redirect" forceRedirectUrl="/">
-          <button type="button" className="mt-2.5 min-h-[52px] w-full rounded-full border border-[#ddc8ba] bg-[#fffdf9] px-5 text-[15px] font-semibold text-[#5c463b] transition-[transform,background-color] duration-150 ease-out hover:bg-[#fff7f1] active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f8f2ea]">I already have an account</button>
+          <button type="button" className="mt-2.5 min-h-[52px] w-full rounded-full border border-accent-border bg-surface px-5 text-[15px] font-semibold text-ink-secondary transition-[transform,background-color] duration-150 ease-out hover:bg-canvas active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface-muted">I already have an account</button>
         </SignInButton>
-        <p className="mt-3 text-center text-[12px] leading-5 text-[#8e796d]">Secure sign-in. Never share passwords or OTPs in chat.</p>
+        <p className="mt-3 text-center text-[12px] leading-5 text-muted">Secure sign-in. Never share passwords or OTPs in chat.</p>
       </motion.div>
     </div>
   </main>;
@@ -297,11 +297,11 @@ export function FirstRunOnboarding({ children }: { children: (context: AppContex
   if (!isSignedIn || !user) return <PublicOnboarding />;
 
   if (consentError) {
-    return <main className="grain grid min-h-[100dvh] place-items-center bg-[#f8f2ea] px-5 text-center text-[#35241c]">
-      <section role="alert" className="max-w-sm rounded-3xl border border-[#e1d0c4] bg-[#fffdf9] p-6 shadow-[0_22px_55px_-32px_rgba(101,52,27,.45)]">
+    return <main className="grain grid min-h-[100dvh] place-items-center bg-surface-muted px-5 text-center text-ink">
+      <section role="alert" className="max-w-sm rounded-3xl border border-border-strong bg-surface p-6 shadow-[0_22px_55px_-32px_rgb(var(--shadow)/.45)]">
         <h1 className="font-display text-2xl font-semibold">Could not load consent status</h1>
-        <p className="mt-3 text-sm leading-6 text-[#806f65]">{consentError}</p>
-        <button type="button" onClick={() => setConsentRetry((value) => value + 1)} className="mt-6 min-h-11 rounded-full bg-[#c6531d] px-5 text-sm font-semibold text-white transition-transform duration-150 ease-out active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] focus-visible:ring-offset-2">Try again</button>
+        <p className="mt-3 text-sm leading-6 text-muted">{consentError}</p>
+        <button type="button" onClick={() => setConsentRetry((value) => value + 1)} className="mt-6 min-h-11 rounded-full bg-accent px-5 text-sm font-semibold text-on-accent transition-transform duration-150 ease-out active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2">Try again</button>
       </section>
     </main>;
   }
@@ -316,7 +316,7 @@ export function FirstRunOnboarding({ children }: { children: (context: AppContex
   const back = termsOnly || (step === "done" && mode !== "revisit") ? null : stepBefore(step, snapshot);
   const focusHeading = navigated;
 
-  return <main className="grain min-h-[100dvh] bg-[#f8f2ea] text-[#35241c]">
+  return <main className="grain min-h-[100dvh] bg-surface-muted text-ink">
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col px-5 pt-[max(1rem,env(safe-area-inset-top))]">
       <OnboardingHeader
         position={progressPosition(step)}

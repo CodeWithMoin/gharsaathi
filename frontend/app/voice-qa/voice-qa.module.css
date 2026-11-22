@@ -20,7 +20,7 @@
 }
 
 .nav span {
-  color: #746f65;
+  color: rgb(var(--color-text-muted));
 }
 
 .hero {
@@ -30,7 +30,7 @@
 
 .eyebrow {
   margin: 0 0 18px;
-  color: #927141;
+  color: rgb(var(--color-warning));
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -48,17 +48,17 @@
 .hero > p:not(.eyebrow) {
   max-width: 660px;
   margin: 28px 0 0;
-  color: #5e5a52;
+  color: rgb(var(--color-text-secondary));
   font-size: 1.05rem;
   line-height: 1.65;
 }
 
 .warning {
   margin-top: 24px;
-  border-left: 3px solid #d39047;
+  border-left: 3px solid rgb(var(--color-warning));
   padding: 12px 16px;
-  background: #fff6e8;
-  color: #67481f;
+  background: rgb(var(--color-warning-soft));
+  color: rgb(var(--color-warning));
   font-size: 0.9rem;
   line-height: 1.5;
 }
@@ -70,7 +70,7 @@
 }
 
 .lab + .lab {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid rgb(var(--color-border));
   padding-top: 44px;
 }
 
@@ -84,7 +84,7 @@
 }
 
 .labHeading p:last-child {
-  color: var(--muted);
+  color: rgb(var(--color-text-muted));
   line-height: 1.6;
 }
 
@@ -92,7 +92,7 @@
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   margin: 12px 0 48px;
-  border-block: 1px solid #d8d3c9;
+  border-block: 1px solid rgb(var(--color-border-strong));
 }
 
 .metrics div {
@@ -100,7 +100,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 20px;
-  border-right: 1px solid #d8d3c9;
+  border-right: 1px solid rgb(var(--color-border-strong));
 }
 
 .metrics div:last-child {
@@ -113,7 +113,7 @@
 }
 
 .metrics span {
-  color: #746f65;
+  color: rgb(var(--color-text-muted));
   font-size: 0.76rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -129,13 +129,13 @@
   grid-template-columns: minmax(220px, 0.8fr) minmax(0, 2.2fr);
   gap: 28px;
   padding: 28px;
-  border: 1px solid #d8d3c9;
+  border: 1px solid rgb(var(--color-border-strong));
   border-radius: 18px;
-  background: #fbfaf7;
+  background: rgb(var(--color-surface));
 }
 
 .caseHeading span {
-  color: #927141;
+  color: rgb(var(--color-warning));
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -161,7 +161,7 @@
   flex-direction: column;
   padding: 16px;
   border-radius: 12px;
-  background: #f1eee7;
+  background: rgb(var(--color-surface-muted));
 }
 
 .variantTopline {
@@ -178,7 +178,7 @@
 }
 
 .variantTopline small {
-  color: #746f65;
+  color: rgb(var(--color-text-muted));
 }
 
 .variant p {
@@ -199,7 +199,7 @@
   }
 
   .metrics div {
-    border-bottom: 1px solid #d8d3c9;
+    border-bottom: 1px solid rgb(var(--color-border-strong));
   }
 
   .case {

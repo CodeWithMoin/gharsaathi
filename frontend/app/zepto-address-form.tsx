@@ -141,8 +141,8 @@ export function ZeptoAddressForm({
     }
   }
 
-  const inputClass = "mt-1.5 w-full rounded-xl border border-[#ddcec3] bg-white px-3 py-2.5 text-sm text-[#3b2a22] outline-none transition placeholder:font-normal placeholder:italic placeholder:text-[#b3a399] focus:border-[#7b3fc4] focus:ring-2 focus:ring-[#7b3fc4]/15";
-  const labelClass = "block text-[11px] font-semibold text-[#624f44]";
+  const inputClass = "mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2.5 text-sm text-ink outline-none transition placeholder:font-normal placeholder:italic placeholder:text-subtle focus:border-zepto focus:ring-2 focus:ring-zepto/15";
+  const labelClass = "block text-[11px] font-semibold text-ink-secondary";
   const text = (name: keyof AddressFormValues) => ({
     name,
     value: values[name] ?? "",
@@ -151,7 +151,7 @@ export function ZeptoAddressForm({
 
   return (
     <form id={formId} ref={formRef} onSubmit={submit} className="space-y-4" noValidate={false}>
-      {fromAssistant && <p className="rounded-xl bg-[#f4ecfb] px-3 py-2 text-[11px] font-medium leading-5 text-[#6f359f]">Filled only from what you said. Check every field, set the location, and type the contact number yourself.</p>}
+      {fromAssistant && <p className="rounded-xl bg-zepto-soft px-3 py-2 text-[11px] font-medium leading-5 text-zepto-strong">Filled only from what you said. Check every field, set the location, and type the contact number yourself.</p>}
       <div className="grid grid-cols-2 gap-3">
         <label className={labelClass}>Type<select {...text("type")} value={values.type && ADDRESS_TYPES.includes(values.type) ? values.type : "HOME"} className={inputClass}><option value="HOME">Home</option><option value="WORK">Work</option><option value="OTHER">Other</option></select></label>
         <label className={labelClass}>Label<input {...text("name")} required maxLength={80} placeholder="e.g. Home or Office" className={inputClass} /></label>
@@ -162,27 +162,27 @@ export function ZeptoAddressForm({
       </div>
       <div className="grid grid-cols-2 gap-3">
         <label className={labelClass}>Building type<select name="building_type" defaultValue="BUILDING_TYPE_SOCIETY" className={inputClass}><option value="BUILDING_TYPE_SOCIETY">Society</option><option value="BUILDING_TYPE_HOUSE">House</option><option value="BUILDING_TYPE_OTHERS">Other</option></select></label>
-        <label className={labelClass}>Floor <span className="font-normal text-[#9a8c9f]">optional</span><input {...text("floor")} maxLength={40} placeholder="Floor number" className={inputClass} /></label>
+        <label className={labelClass}>Floor <span className="font-normal text-zepto-muted">optional</span><input {...text("floor")} maxLength={40} placeholder="Floor number" className={inputClass} /></label>
       </div>
       <label className={labelClass}>Full formatted address<textarea {...text("formatted_address")} required maxLength={500} rows={2} placeholder="Street, area, city, state and PIN code" className={inputClass} /></label>
       <label className={labelClass}>Area / city / state<input {...text("short_address")} required maxLength={200} placeholder="Area, city and state" className={inputClass} /></label>
-      <label className={labelClass}>Nearby landmark <span className="font-normal text-[#9a8c9f]">optional</span><input {...text("landmark")} maxLength={160} placeholder="A place nearby" className={inputClass} /></label>
+      <label className={labelClass}>Nearby landmark <span className="font-normal text-zepto-muted">optional</span><input {...text("landmark")} maxLength={160} placeholder="A place nearby" className={inputClass} /></label>
 
       <div className="grid grid-cols-2 gap-3">
         <label className={labelClass}>Delivery contact<input {...text("contact_name")} required maxLength={100} autoComplete="name" placeholder="Name" className={inputClass} /></label>
         <label className={labelClass}>Contact number<input {...text("contact_number")} required minLength={7} maxLength={20} inputMode="tel" autoComplete="tel" placeholder="Type your number" className={inputClass} /></label>
       </div>
 
-      <div className="rounded-xl border border-[#e1d5e8] bg-white p-3">
-        <div className="flex items-center justify-between gap-3"><p className="text-[11px] font-semibold text-[#624f6d]">Map location</p><button type="button" onClick={useCurrentLocation} disabled={locating} className="flex items-center gap-1.5 text-[11px] font-semibold text-[#6f359f] disabled:opacity-50">{locating ? <SpinnerGap size={14} className="animate-spin" /> : <Crosshair size={14} />} Use current location</button></div>
+      <div className="rounded-xl border border-zepto-border bg-white p-3">
+        <div className="flex items-center justify-between gap-3"><p className="text-[11px] font-semibold text-zepto-muted">Map location</p><button type="button" onClick={useCurrentLocation} disabled={locating} className="flex items-center gap-1.5 text-[11px] font-semibold text-zepto-strong disabled:opacity-50">{locating ? <SpinnerGap size={14} className="animate-spin" /> : <Crosshair size={14} />} Use current location</button></div>
         <div className="mt-2 grid grid-cols-2 gap-3">
           <label className={labelClass}>Latitude<input name="latitude" value={latitude} onChange={(event) => setLatitude(event.target.value)} required inputMode="decimal" placeholder="Set by location" className={inputClass} /></label>
           <label className={labelClass}>Longitude<input name="longitude" value={longitude} onChange={(event) => setLongitude(event.target.value)} required inputMode="decimal" placeholder="Set by location" className={inputClass} /></label>
         </div>
       </div>
 
-      {error && <p className="flex gap-2 rounded-xl bg-[#fcedea] px-3 py-2.5 text-xs leading-5 text-[#974237]" role="alert"><WarningCircle size={16} className="mt-0.5 shrink-0" weight="fill" />{error}</p>}
-      <p className="text-[10px] leading-4 text-[#8c7e91]">This saves the address and delivery contact to your connected Zepto account. If saving times out, refresh addresses before trying again—it may already have been saved.</p>
+      {error && <p className="flex gap-2 rounded-xl bg-danger-soft px-3 py-2.5 text-xs leading-5 text-danger-hover" role="alert"><WarningCircle size={16} className="mt-0.5 shrink-0" weight="fill" />{error}</p>}
+      <p className="text-[10px] leading-4 text-zepto-muted">This saves the address and delivery contact to your connected Zepto account. If saving times out, refresh addresses before trying again—it may already have been saved.</p>
     </form>
   );
 }

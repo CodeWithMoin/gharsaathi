@@ -202,12 +202,12 @@ function ZeptoCheckoutOutcome({ checkout }: { checkout: ZeptoCheckoutResult }) {
   const succeeded = checkout.status === "confirmed";
   const unknown = checkout.status === "outcome_unknown";
   const className = succeeded
-    ? "border-[#cce2d0] bg-[#eff8f0] text-[#2d6638]"
+    ? "border-success-border bg-success-soft text-success-strong"
     : unknown
-      ? "border-[#f0d8c5] bg-[#fff0df] text-[#8c5127]"
+      ? "border-warning-border bg-warning-soft text-warning"
       : checkout.status === "rejected"
-        ? "border-[#efcfc7] bg-[#fcedea] text-[#974237]"
-        : "border-[#e8cbb9] bg-[#fff5ee] text-[#80533c]";
+        ? "border-danger-border bg-danger-soft text-danger-hover"
+        : "border-accent-border bg-warning-soft text-warning";
 
   return (
     <div className={`rounded-2xl border px-3.5 py-3 text-sm leading-5 ${className}`} role="status" aria-live="polite">
@@ -531,52 +531,52 @@ export function BasketPanel({
   const visibleOffers = request ? visibleOfferOpportunities(request.quote.offers ?? []) as OfferOpportunity[] : [];
 
   return (
-    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`overflow-hidden rounded-[26px] border border-[#e6d7cb] bg-[#fffdf9] shadow-[0_18px_45px_-34px_rgba(74,43,27,.7)] ${className}`} aria-label="Your basket" aria-busy={locked}>
-      <header className="flex items-center gap-3 border-b border-[#efe4dc] px-5 py-4 sm:px-6">
-        <span className="grid size-10 place-items-center rounded-[14px] bg-[#f6e9df] text-[#c6531d]"><Basket size={20} weight="fill" /></span>
+    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`overflow-hidden rounded-[26px] border border-border-strong bg-surface shadow-[0_18px_45px_-34px_rgb(var(--shadow)/.7)] ${className}`} aria-label="Your basket" aria-busy={locked}>
+      <header className="flex items-center gap-3 border-b border-border px-5 py-4 sm:px-6">
+        <span className="grid size-10 place-items-center rounded-[14px] bg-accent-soft text-accent"><Basket size={20} weight="fill" /></span>
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#b07659]">Your basket</p>
-          <h2 className="font-display text-lg font-semibold tracking-[-.025em] text-[#35241c]">{lineCount ? `${lineCount} ${lineCount === 1 ? "item" : "items"} ready to review` : "Add the things you need"}</h2>
+          <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-accent">Your basket</p>
+          <h2 className="font-display text-lg font-semibold tracking-[-.025em] text-ink">{lineCount ? `${lineCount} ${lineCount === 1 ? "item" : "items"} ready to review` : "Add the things you need"}</h2>
         </div>
-        {action === "load" && <CircleNotch size={18} className="ml-auto animate-spin text-[#b17d60]" aria-label="Loading basket" />}
+        {action === "load" && <CircleNotch size={18} className="ml-auto animate-spin text-accent" aria-label="Loading basket" />}
       </header>
 
       {action === "load" && !basket ? (
         <div className="space-y-3 px-5 py-5 sm:px-6">
-          <div className="h-16 animate-pulse rounded-2xl bg-[#f4ebe5]" />
-          <div className="h-16 animate-pulse rounded-2xl bg-[#f4ebe5]" />
+          <div className="h-16 animate-pulse rounded-2xl bg-surface-muted" />
+          <div className="h-16 animate-pulse rounded-2xl bg-surface-muted" />
         </div>
       ) : lines.length === 0 ? (
         <div className="px-5 py-8 text-center sm:px-6">
-          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-[#f8eee7] text-[#bd7851]"><Receipt size={24} /></span>
-          <p className="mt-3 text-sm font-semibold text-[#453128]">Basket is empty</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-[#806f65]">Add a product from the options above. You&apos;ll see the exact bill before you approve anything.</p>
+          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-surface-muted text-accent"><Receipt size={24} /></span>
+          <p className="mt-3 text-sm font-semibold text-ink">Basket is empty</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted">Add a product from the options above. You&apos;ll see the exact bill before you approve anything.</p>
         </div>
       ) : (
         <div className="px-5 py-2 sm:px-6">
-          {basketFrozen && <div className="mt-4 flex gap-2 rounded-xl border border-[#f0d8c5] bg-[#fff0df] px-3 py-2.5 text-xs leading-5 text-[#8c5127]" role="status"><WarningCircle size={16} className="mt-0.5 shrink-0" weight="fill" /><p>{basket?.status === "ordered" ? "This basket was ordered and is locked." : "This checkout may already have reached Zepto. The basket is locked—do not recreate or submit it again. Check Zepto order history if the result is unclear."}</p></div>}
-          <ul className="divide-y divide-[#f0e5dd]">
+          {basketFrozen && <div className="mt-4 flex gap-2 rounded-xl border border-warning-border bg-warning-soft px-3 py-2.5 text-xs leading-5 text-warning" role="status"><WarningCircle size={16} className="mt-0.5 shrink-0" weight="fill" /><p>{basket?.status === "ordered" ? "This basket was ordered and is locked." : "This checkout may already have reached Zepto. The basket is locked—do not recreate or submit it again. Check Zepto order history if the result is unclear."}</p></div>}
+          <ul className="divide-y divide-border">
             {lines.map((line) => {
               const updating = action === `line-${line.ref.variant_id}`;
               return (
                 <li key={line.ref.variant_id} className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 py-4 ${line.available ? "" : "opacity-60"}`}>
                   <div className="min-w-0">
-                    {line.brand && <p className="truncate text-[9px] font-semibold uppercase tracking-[.12em] text-[#bd7047]">{line.brand}</p>}
-                    <h3 className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5 text-[#3b2a22]">{line.name}</h3>
-                    <p className="mt-0.5 truncate text-xs text-[#89766a]">{[line.pack_size, `${line.unit_price.display} each`].filter(Boolean).join(" · ")}</p>
-                    {!line.available && <p className="mt-1 text-[11px] font-medium text-[#a44739]">No longer available</p>}
+                    {line.brand && <p className="truncate text-[9px] font-semibold uppercase tracking-[.12em] text-accent">{line.brand}</p>}
+                    <h3 className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5 text-ink">{line.name}</h3>
+                    <p className="mt-0.5 truncate text-xs text-muted">{[line.pack_size, `${line.unit_price.display} each`].filter(Boolean).join(" · ")}</p>
+                    {!line.available && <p className="mt-1 text-[11px] font-medium text-danger">No longer available</p>}
                     <div className="mt-3 flex items-center gap-2">
-                      <div className="flex h-8 items-center rounded-full border border-[#e6d7cb] bg-white" role="group" aria-label={`Quantity of ${line.name}`}>
-                        <button type="button" onClick={() => void changeQuantity(line, line.quantity - 1)} disabled={locked || basketFrozen} className="grid size-8 place-items-center rounded-full text-[#725a4b] transition hover:bg-[#f6e9df] disabled:opacity-40" aria-label={`Decrease quantity of ${line.name}`}><Minus size={13} weight="bold" /></button>
+                      <div className="flex h-8 items-center rounded-full border border-border-strong bg-white" role="group" aria-label={`Quantity of ${line.name}`}>
+                        <button type="button" onClick={() => void changeQuantity(line, line.quantity - 1)} disabled={locked || basketFrozen} className="grid size-8 place-items-center rounded-full text-ink-secondary transition hover:bg-accent-soft disabled:opacity-40" aria-label={`Decrease quantity of ${line.name}`}><Minus size={13} weight="bold" /></button>
                         <span className="min-w-6 text-center text-xs font-semibold tabular-nums" aria-live="polite">{updating ? <CircleNotch size={13} className="mx-auto animate-spin" /> : line.quantity}</span>
-                        <button type="button" onClick={() => void changeQuantity(line, line.quantity + 1)} disabled={locked || basketFrozen || line.quantity >= MAX_QUANTITY || !line.available} className="grid size-8 place-items-center rounded-full text-[#725a4b] transition hover:bg-[#f6e9df] disabled:opacity-40" aria-label={`Increase quantity of ${line.name}`}><Plus size={13} weight="bold" /></button>
+                        <button type="button" onClick={() => void changeQuantity(line, line.quantity + 1)} disabled={locked || basketFrozen || line.quantity >= MAX_QUANTITY || !line.available} className="grid size-8 place-items-center rounded-full text-ink-secondary transition hover:bg-accent-soft disabled:opacity-40" aria-label={`Increase quantity of ${line.name}`}><Plus size={13} weight="bold" /></button>
                       </div>
-                      <button type="button" onClick={() => void changeQuantity(line, 0)} disabled={locked || basketFrozen} className="grid size-8 place-items-center rounded-full text-[#9d7764] transition hover:bg-[#f9e9e3] hover:text-[#a44739] disabled:opacity-40" aria-label={`Remove ${line.name}`}><Trash size={15} /></button>
+                      <button type="button" onClick={() => void changeQuantity(line, 0)} disabled={locked || basketFrozen} className="grid size-8 place-items-center rounded-full text-subtle transition hover:bg-danger-soft hover:text-danger disabled:opacity-40" aria-label={`Remove ${line.name}`}><Trash size={15} /></button>
                     </div>
                   </div>
                   <div className="flex flex-col items-end text-right">
-                    <strong className="text-sm tabular-nums text-[#3b2a22]">{line.line_total.display}</strong>
-                    {line.savings.paise > 0 && <span className="mt-1 rounded-full bg-[#e8f2e8] px-2 py-0.5 text-[9px] font-semibold text-[#397144]">Save {line.savings.display}</span>}
+                    <strong className="text-sm tabular-nums text-ink">{line.line_total.display}</strong>
+                    {line.savings.paise > 0 && <span className="mt-1 rounded-full bg-success-soft px-2 py-0.5 text-[9px] font-semibold text-success">Save {line.savings.display}</span>}
                   </div>
                 </li>
               );
@@ -584,12 +584,12 @@ export function BasketPanel({
           </ul>
 
           {!request && (
-            <div className="border-t border-[#efe4dc] py-4">
-              <div className="flex items-baseline justify-between gap-3 text-sm"><span className="text-[#806f65]">Items total</span><strong className="tabular-nums text-[#3b2a22]">{basket?.item_total.display}</strong></div>
-              {basket && basket.savings_vs_mrp.paise > 0 && <div className="mt-1 flex items-baseline justify-between gap-3 text-xs"><span className="text-[#806f65]">Savings vs MRP</span><strong className="tabular-nums text-[#397144]">{basket.savings_vs_mrp.display}</strong></div>}
-              {!addressId && <p className="mt-3 rounded-xl bg-[#f8eee7] px-3 py-2.5 text-xs leading-5 text-[#806f65]">Choose a delivery address to request the final bill.</p>}
-              {addressId && <div className="mt-3 flex gap-2 rounded-xl border border-[#f0d8c5] bg-[#fff4e9] px-3 py-2.5 text-[11px] leading-5 text-[#80533c]" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0 text-[#c6531d]" /><p>{commerceMode === "demo" ? <><strong className="font-semibold text-[#6a3d29]">Safe demo:</strong> this calculates a deterministic sample bill locally. It does not contact {providerLabel}, change a provider cart, check out, or place an order.</> : <><strong className="font-semibold text-[#6a3d29]">Before you continue:</strong> this syncs this basket to your current {providerLabel} cart to retrieve live availability, fees, and the exact bill. It may replace items already in that provider cart. It does <strong className="font-semibold">not</strong> check out or place an order.</>}</p></div>}
-              <button type="button" onClick={() => void requestQuote()} disabled={locked || basketFrozen || !addressId} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#3b2a22] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_-18px_rgba(53,36,28,.8)] transition hover:bg-[#4a352b] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">
+            <div className="border-t border-border py-4">
+              <div className="flex items-baseline justify-between gap-3 text-sm"><span className="text-muted">Items total</span><strong className="tabular-nums text-ink">{basket?.item_total.display}</strong></div>
+              {basket && basket.savings_vs_mrp.paise > 0 && <div className="mt-1 flex items-baseline justify-between gap-3 text-xs"><span className="text-muted">Savings vs MRP</span><strong className="tabular-nums text-success">{basket.savings_vs_mrp.display}</strong></div>}
+              {!addressId && <p className="mt-3 rounded-xl bg-surface-muted px-3 py-2.5 text-xs leading-5 text-muted">Choose a delivery address to request the final bill.</p>}
+              {addressId && <div className="mt-3 flex gap-2 rounded-xl border border-warning-border bg-warning-soft px-3 py-2.5 text-[11px] leading-5 text-warning" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0 text-accent" /><p>{commerceMode === "demo" ? <><strong className="font-semibold text-warning">Safe demo:</strong> this calculates a deterministic sample bill locally. It does not contact {providerLabel}, change a provider cart, check out, or place an order.</> : <><strong className="font-semibold text-warning">Before you continue:</strong> this syncs this basket to your current {providerLabel} cart to retrieve live availability, fees, and the exact bill. It may replace items already in that provider cart. It does <strong className="font-semibold">not</strong> check out or place an order.</>}</p></div>}
+              <button type="button" onClick={() => void requestQuote()} disabled={locked || basketFrozen || !addressId} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-inverse px-5 py-3 text-sm font-semibold text-on-inverse shadow-[0_12px_30px_-18px_rgb(var(--shadow)/.8)] transition hover:bg-inverse-hover active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">
                 {action === "quote" ? <><CircleNotch size={17} className="animate-spin" /> Getting final bill…</> : <><Receipt size={17} /> Get final bill</>}
               </button>
             </div>
@@ -599,59 +599,59 @@ export function BasketPanel({
 
       <AnimatePresence initial={false}>
         {request && approval && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-[#ead8ca] bg-[#fff8f2]">
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-warning-border bg-warning-soft">
             <div className="p-5 sm:p-6">
               <div className="flex items-start gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-[14px] bg-[#f5e2d5] text-[#c6531d]"><ShieldCheck size={21} weight="fill" /></span>
-                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#b07659]">Final bill · approval needed</p><h3 className="mt-0.5 text-base font-semibold text-[#35241c]">Review this exact bill</h3><p className="mt-1 text-xs leading-5 text-[#806f65]">Approval is bound to this exact basket, price, and expiry. Any material change needs a fresh approval.</p></div>
+                <span className="grid size-10 shrink-0 place-items-center rounded-[14px] bg-accent-soft text-accent"><ShieldCheck size={21} weight="fill" /></span>
+                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-accent">Final bill · approval needed</p><h3 className="mt-0.5 text-base font-semibold text-ink">Review this exact bill</h3><p className="mt-1 text-xs leading-5 text-muted">Approval is bound to this exact basket, price, and expiry. Any material change needs a fresh approval.</p></div>
               </div>
 
-              <ul className="mt-4 space-y-2 border-y border-[#eaded5] py-3 text-xs leading-5">
-                {request.basket.lines.map((line) => <li key={line.ref.variant_id} className="flex justify-between gap-4"><span className="min-w-0 text-[#69564b]"><b className="font-semibold text-[#47332a]">{line.quantity}×</b> {line.name}</span><span className="shrink-0 tabular-nums text-[#47332a]">{line.line_total.display}</span></li>)}
-                <li className="flex justify-between gap-4 pt-2 text-[#806f65]"><span>Store item total</span><span className="tabular-nums">{request.quote.item_total.display}</span></li>
-                {request.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`} className="flex justify-between gap-4 text-[#806f65]"><span>{charge.label}</span><span className="tabular-nums">{charge.amount.display}</span></li>)}
-                <li className="flex justify-between gap-4 pt-2 text-sm font-semibold text-[#35241c]"><span>Final payable</span><strong className="tabular-nums">{request.quote.payable.display}</strong></li>
+              <ul className="mt-4 space-y-2 border-y border-border py-3 text-xs leading-5">
+                {request.basket.lines.map((line) => <li key={line.ref.variant_id} className="flex justify-between gap-4"><span className="min-w-0 text-ink-secondary"><b className="font-semibold text-ink">{line.quantity}×</b> {line.name}</span><span className="shrink-0 tabular-nums text-ink">{line.line_total.display}</span></li>)}
+                <li className="flex justify-between gap-4 pt-2 text-muted"><span>Store item total</span><span className="tabular-nums">{request.quote.item_total.display}</span></li>
+                {request.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`} className="flex justify-between gap-4 text-muted"><span>{charge.label}</span><span className="tabular-nums">{charge.amount.display}</span></li>)}
+                <li className="flex justify-between gap-4 pt-2 text-sm font-semibold text-ink"><span>Final payable</span><strong className="tabular-nums">{request.quote.payable.display}</strong></li>
               </ul>
 
               {visibleOffers.length > 0 && (
-                <div className="mt-3 rounded-2xl border border-[#ded3ef] bg-[#f8f4ff] p-3.5" aria-label="Smart savings suggestions">
+                <div className="mt-3 rounded-2xl border border-zepto-border bg-zepto-soft p-3.5" aria-label="Smart savings suggestions">
                   <div className="flex items-start gap-2">
-                    <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-[#ebe1fa] text-[#6f359f]"><Receipt size={16} weight="fill" /></span>
+                    <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-zepto-soft text-zepto-strong"><Receipt size={16} weight="fill" /></span>
                     <div>
-                      <p className="text-xs font-semibold text-[#4d2b69]">Smart savings — only if it helps</p>
-                      <p className="mt-0.5 text-[10px] leading-4 text-[#766381]">We won&apos;t add anything automatically. Any change gets a fresh live bill and needs approval again.</p>
+                      <p className="text-xs font-semibold text-zepto-ink">Smart savings — only if it helps</p>
+                      <p className="mt-0.5 text-[10px] leading-4 text-zepto-muted">We won&apos;t add anything automatically. Any change gets a fresh live bill and needs approval again.</p>
                     </div>
                   </div>
                   <ul className="mt-3 space-y-2">
                     {visibleOffers.map((offer, index) => {
                       const copy = offerOpportunityCopy(offer);
-                      return <li key={`${offer.kind}-${offer.title}-${index}`} className="rounded-xl bg-white/80 px-3 py-2.5"><p className="text-xs font-semibold text-[#493354]">{copy.title}</p><p className="mt-0.5 text-[10px] leading-4 text-[#766381]">{copy.detail}</p></li>;
+                      return <li key={`${offer.kind}-${offer.title}-${index}`} className="rounded-xl bg-white/80 px-3 py-2.5"><p className="text-xs font-semibold text-zepto-ink">{copy.title}</p><p className="mt-0.5 text-[10px] leading-4 text-zepto-muted">{copy.detail}</p></li>;
                     })}
                   </ul>
                   {actionableFreeDelivery && provider === "zepto" && (
-                    <div className="mt-3 border-t border-[#e5dcef] pt-3">
-                      {usuals === null ? <button type="button" onClick={() => void loadUsefulUsuals()} disabled={locked} className="rounded-full border border-[#cdb8df] bg-white px-3.5 py-2 text-[11px] font-semibold text-[#65358b] disabled:opacity-45">{action === "offer-usuals" ? "Checking…" : "Check a useful usual item"}</button> : usuals.length > 0 && <div><p className="text-[10px] leading-4 text-[#766381]">You bought these before. That does not mean you need them—tap one only if it&apos;s useful now.</p><div className="mt-2 flex flex-wrap gap-2">{usuals.map((usual) => <button type="button" key={usual.product_id} onClick={() => void reviewUsefulUsual(usual)} disabled={locked} className="rounded-full border border-[#d8c9e5] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#5f4173] disabled:opacity-45">{action === `offer-usual-${usual.product_id}` ? "Checking live price…" : usual.product_name}</button>)}</div></div>}
-                      {usualCandidate && <div className="mt-3 rounded-xl border border-[#d5c4e3] bg-white p-3"><p className="text-xs font-semibold text-[#493354]">{usualCandidate.name} · {usualCandidate.price.display} live</p><p className="mt-1 text-[10px] leading-4 text-[#766381]">This item unlocks the threshold. After the confirmed {usualCandidate.confirmedSaving.display} delivery saving, {usualCandidate.netIncrementalCost.paise < 0 ? `your bill could be ${usualCandidate.netIncrementalCost.display} lower` : `the net extra is ${usualCandidate.netIncrementalCost.display}`}.</p><button type="button" onClick={() => void addUsefulUsual()} disabled={locked} className="mt-2 rounded-full bg-[#6f359f] px-3.5 py-2 text-[11px] font-semibold text-white disabled:opacity-45">{action === "offer-add" ? "Adding…" : `Add ${usualCandidate.name}`}</button><p className="mt-1.5 text-[9px] leading-4 text-[#83718d]">Adding it cancels this approval. Zepto must return a fresh bill before you can approve again.</p></div>}
-                      {usualNotice && <p className="mt-2 text-[10px] leading-4 text-[#805d46]">{usualNotice}</p>}
+                    <div className="mt-3 border-t border-zepto-border pt-3">
+                      {usuals === null ? <button type="button" onClick={() => void loadUsefulUsuals()} disabled={locked} className="rounded-full border border-zepto-border bg-white px-3.5 py-2 text-[11px] font-semibold text-zepto-strong disabled:opacity-45">{action === "offer-usuals" ? "Checking…" : "Check a useful usual item"}</button> : usuals.length > 0 && <div><p className="text-[10px] leading-4 text-zepto-muted">You bought these before. That does not mean you need them—tap one only if it&apos;s useful now.</p><div className="mt-2 flex flex-wrap gap-2">{usuals.map((usual) => <button type="button" key={usual.product_id} onClick={() => void reviewUsefulUsual(usual)} disabled={locked} className="rounded-full border border-zepto-border bg-white px-3 py-1.5 text-[10px] font-semibold text-zepto-ink disabled:opacity-45">{action === `offer-usual-${usual.product_id}` ? "Checking live price…" : usual.product_name}</button>)}</div></div>}
+                      {usualCandidate && <div className="mt-3 rounded-xl border border-zepto-border bg-white p-3"><p className="text-xs font-semibold text-zepto-ink">{usualCandidate.name} · {usualCandidate.price.display} live</p><p className="mt-1 text-[10px] leading-4 text-zepto-muted">This item unlocks the threshold. After the confirmed {usualCandidate.confirmedSaving.display} delivery saving, {usualCandidate.netIncrementalCost.paise < 0 ? `your bill could be ${usualCandidate.netIncrementalCost.display} lower` : `the net extra is ${usualCandidate.netIncrementalCost.display}`}.</p><button type="button" onClick={() => void addUsefulUsual()} disabled={locked} className="mt-2 rounded-full bg-zepto-strong px-3.5 py-2 text-[11px] font-semibold text-on-accent disabled:opacity-45">{action === "offer-add" ? "Adding…" : `Add ${usualCandidate.name}`}</button><p className="mt-1.5 text-[9px] leading-4 text-zepto-muted">Adding it cancels this approval. Zepto must return a fresh bill before you can approve again.</p></div>}
+                      {usualNotice && <p className="mt-2 text-[10px] leading-4 text-ink-secondary">{usualNotice}</p>}
                     </div>
                   )}
                 </div>
               )}
 
-              {!request.item_total_matches && <p className="mt-3 flex gap-2 rounded-xl bg-[#fff0df] px-3 py-2.5 text-xs leading-5 text-[#8c5127]"><WarningCircle size={16} className="mt-0.5 shrink-0" />Store item prices changed. The final bill above is the amount you would approve.</p>}
-              <p className="mt-3 text-[11px] leading-5 text-[#806f65]">{request.quote.eta_text ? `Delivery ${request.quote.eta_text} · ` : ""}Valid {expiryText(approval.expires_at)}.</p>
+              {!request.item_total_matches && <p className="mt-3 flex gap-2 rounded-xl bg-warning-soft px-3 py-2.5 text-xs leading-5 text-warning"><WarningCircle size={16} className="mt-0.5 shrink-0" />Store item prices changed. The final bill above is the amount you would approve.</p>}
+              <p className="mt-3 text-[11px] leading-5 text-muted">{request.quote.eta_text ? `Delivery ${request.quote.eta_text} · ` : ""}Valid {expiryText(approval.expires_at)}.</p>
 
-              {isApproved ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-2xl border border-[#cce2d0] bg-[#eff8f0] px-3.5 py-3 text-sm text-[#2d6638]"><CheckCircle size={20} weight="fill" /><span><strong>Bill approved.</strong> {canConfirmZeptoCod ? "Review the final COD action below." : "No order has been placed."}</span></div>{canConfirmZeptoCod ? (
-                checkout ? <ZeptoCheckoutOutcome checkout={checkout.result} /> : <div className="space-y-2 rounded-2xl border border-[#e8cbb9] bg-[#fff5ee] p-3.5"><p className="text-sm font-semibold text-[#5f3421]">One final step: place a Zepto cash-on-delivery order</p><p className="text-xs leading-5 text-[#80533c]">This submits the exact approved bill to Zepto. It cannot be undone here.</p><button type="button" onClick={() => void confirmZeptoCodOrder()} disabled={locked} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#9b3d17] px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_rgba(119,41,15,.8)] transition hover:bg-[#833212] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">{action === "checkout" ? <><CircleNotch size={17} className="animate-spin" /> Submitting COD order…</> : `Place Zepto COD order · ${request.quote.payable.display}`}</button></div>
-              ) : <div className="flex gap-2 rounded-xl bg-[#fff0df] px-3 py-2.5 text-[11px] leading-5 text-[#8c5127]" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0" /><p>A separate, explicit order confirmation would still be required before anything can be submitted to {providerLabel}. That final action is not enabled here.</p></div>}</div> : <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => void reject()} disabled={locked} className="rounded-full border border-[#d8c4b7] bg-white px-4 py-3 text-sm font-semibold text-[#684f42] transition hover:bg-[#fbf1eb] active:scale-[.98] disabled:opacity-45">{action === "reject" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : "Reject"}</button><button type="button" onClick={() => void approve()} disabled={locked} className="rounded-full bg-[#c6531d] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.98] disabled:opacity-45">{action === "approve" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : `Approve bill · ${request.quote.payable.display}`}</button></div>}
-              {!isApproved && <p className="mt-3 text-center text-[10px] leading-4 text-[#89766a]">This approves only the bill shown above—it doesn&apos;t check out. Placing the order needs a separate final confirmation.</p>}
+              {isApproved ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-2xl border border-success-border bg-success-soft px-3.5 py-3 text-sm text-success-strong"><CheckCircle size={20} weight="fill" /><span><strong>Bill approved.</strong> {canConfirmZeptoCod ? "Review the final COD action below." : "No order has been placed."}</span></div>{canConfirmZeptoCod ? (
+                checkout ? <ZeptoCheckoutOutcome checkout={checkout.result} /> : <div className="space-y-2 rounded-2xl border border-accent-border bg-accent-soft p-3.5"><p className="text-sm font-semibold text-ink-secondary">One final step: place a Zepto cash-on-delivery order</p><p className="text-xs leading-5 text-warning">This submits the exact approved bill to Zepto. It cannot be undone here.</p><button type="button" onClick={() => void confirmZeptoCodOrder()} disabled={locked} className="flex w-full items-center justify-center gap-2 rounded-full bg-accent-strong px-5 py-3 text-sm font-semibold text-on-accent shadow-[0_10px_24px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">{action === "checkout" ? <><CircleNotch size={17} className="animate-spin" /> Submitting COD order…</> : `Place Zepto COD order · ${request.quote.payable.display}`}</button></div>
+              ) : <div className="flex gap-2 rounded-xl bg-warning-soft px-3 py-2.5 text-[11px] leading-5 text-warning" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0" /><p>A separate, explicit order confirmation would still be required before anything can be submitted to {providerLabel}. That final action is not enabled here.</p></div>}</div> : <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => void reject()} disabled={locked} className="rounded-full border border-accent-border bg-white px-4 py-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-muted active:scale-[.98] disabled:opacity-45">{action === "reject" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : "Reject"}</button><button type="button" onClick={() => void approve()} disabled={locked} className="rounded-full bg-accent px-4 py-3 text-sm font-semibold text-on-accent shadow-[0_10px_24px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.98] disabled:opacity-45">{action === "approve" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : `Approve bill · ${request.quote.payable.display}`}</button></div>}
+              {!isApproved && <p className="mt-3 text-center text-[10px] leading-4 text-muted">This approves only the bill shown above—it doesn&apos;t check out. Placing the order needs a separate final confirmation.</p>}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence initial={false}>
-        {notice && <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className={`mx-5 mb-5 flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs leading-5 sm:mx-6 sm:mb-6 ${notice.error ? "bg-[#fcedea] text-[#974237]" : "bg-[#edf6ee] text-[#397144]"}`} role="status" aria-live="polite"><span className="mt-0.5">{notice.error ? <WarningCircle size={15} weight="fill" /> : <CheckCircle size={15} weight="fill" />}</span><span>{notice.text}</span><button type="button" onClick={() => setNotice(null)} className="ml-auto -mr-1 shrink-0 rounded-full p-0.5 opacity-70 transition hover:opacity-100" aria-label="Dismiss message"><X size={14} /></button></motion.div>}
+        {notice && <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className={`mx-5 mb-5 flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs leading-5 sm:mx-6 sm:mb-6 ${notice.error ? "bg-danger-soft text-danger-hover" : "bg-success-soft text-success"}`} role="status" aria-live="polite"><span className="mt-0.5">{notice.error ? <WarningCircle size={15} weight="fill" /> : <CheckCircle size={15} weight="fill" />}</span><span>{notice.text}</span><button type="button" onClick={() => setNotice(null)} className="ml-auto -mr-1 shrink-0 rounded-full p-0.5 opacity-70 transition hover:opacity-100" aria-label="Dismiss message"><X size={14} /></button></motion.div>}
       </AnimatePresence>
     </motion.section>
   );
