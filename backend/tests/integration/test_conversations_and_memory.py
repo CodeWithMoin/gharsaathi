@@ -185,20 +185,46 @@ def test_purchase_history_import_is_permission_gated_cached_and_purgeable(
     synced = api.post("/api/memory/purchase-history/sync", headers=alice)
     assert synced.status_code == 200, synced.text
     assert synced.json()["cached"] is False
-    assert history.calls == [("get_orders", {"count": 15})]
+    assert history.calls == [("get_orders", {"orderType": "INSTAMART", "count": 20})]
 
     cached = api.post("/api/memory/purchase-history/sync", headers=alice)
     assert cached.json()["cached"] is True
     assert len(history.calls) == 1
 
+    # "Re-import full history" skips the 10-minute cache, but only once per 24 h.
+    full = api.post("/api/memory/purchase-history/sync", headers=alice, params={"full": "true"})
+    assert full.status_code == 200 and full.json()["full"] is True
+    assert len(history.calls) == 2
+    again = api.post("/api/memory/purchase-history/sync", headers=alice, params={"full": "true"})
+    assert again.status_code == 409
+    assert len(history.calls) == 2
+    states = {item["provider"]: item for item in api.get(
+        "/api/memory/purchase-history/sync-state", headers=alice
+    ).json()}
+    assert states["swiggy"]["coverage"] == "last_15_days"
+    assert states["swiggy"]["full_resync_available_at"] is not None
+    assert states["zepto"]["last_success_at"] is None
+
+    # Weekly sync is opt-in: off by default, and not due right after a sync.
+    run = api.post("/api/memory/purchase-history/auto-sync/run", headers=alice)
+    assert run.json()["reason"] == "disabled"
+    enabled = api.put(
+        "/api/memory/purchase-history/auto-sync",
+        headers=alice,
+        json={"provider": "swiggy", "enabled": True},
+    )
+    assert enabled.status_code == 200 and enabled.json()["auto_sync_enabled"] is True
+    assert api.post("/api/memory/purchase-history/auto-sync/run", headers=alice).json()["reason"] == "not_due"
+    assert len(history.calls) == 2
+
     # Bob's consent is independent of Alice's.
     assert api.post("/api/memory/purchase-history/sync", headers=as_user("bob")).status_code == 403
-    assert len(history.calls) == 1
+    assert len(history.calls) == 2
 
     # Regression: this route used to be shadowed by DELETE /api/memory/{memory_id} (422).
     assert api.delete("/api/memory/purchase-history", headers=alice).status_code == 204
     # Purging also revokes consent, so the next import is refused before any provider read.
     assert api.post("/api/memory/purchase-history/sync", headers=alice).status_code == 403
-    assert len(history.calls) == 1
+    assert len(history.calls) == 2
     permissions = api.get("/api/memory/permissions", headers=alice).json()
     assert [item["allowed"] for item in permissions if item["data_category"] == "purchase_history"] == [False]
