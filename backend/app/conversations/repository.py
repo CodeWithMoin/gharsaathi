@@ -51,6 +51,49 @@ class ConversationRepository:
         )
         await self.session.commit()
 
+    async def get(self, subject_id: UUID, conversation_id: UUID) -> Conversation | None:
+        result = await self.session.execute(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.subject_id == subject_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_archived_since(
+        self, subject_id: UUID, since: datetime, limit: int = 20
+    ) -> list[Conversation]:
+        """The user's own archived chats updated since ``since``, newest first."""
+
+        result = await self.session.execute(
+            select(Conversation)
+            .where(
+                Conversation.subject_id == subject_id,
+                Conversation.archived_at.is_not(None),
+                Conversation.updated_at >= since,
+            )
+            .order_by(Conversation.updated_at.desc(), Conversation.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars())
+
+    async def store_summary(
+        self, subject_id: UUID, conversation_id: UUID, summary: dict[str, object]
+    ) -> bool:
+        """Write the summary only to this user's row; ``updated_at`` is unchanged."""
+
+        result = await self.session.execute(
+            update(Conversation)
+            .where(
+                Conversation.id == conversation_id,
+                Conversation.subject_id == subject_id,
+            )
+            .values(summary=summary, updated_at=Conversation.updated_at)
+            .execution_options(synchronize_session=False)
+        )
+        await self.session.commit()
+        return bool(getattr(result, "rowcount", 0))
+
     async def list_recent(self, subject_id: UUID, limit: int = 50) -> list[Conversation]:
         result = await self.session.execute(
             select(Conversation)
