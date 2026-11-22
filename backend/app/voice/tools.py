@@ -169,6 +169,39 @@ class SearchOption:
     usual_quantity: int | None = None
 
 
+class ShownGroups:
+    """What the screen shows per searched item: option ids in card order (position 1 first)."""
+
+    def __init__(self) -> None:
+        # None marks a card that cannot be referred to (its store cannot add it).
+        self.groups: dict[str, list[str | None]] = {}
+        self.labels: dict[str, str] = {}
+        self.latest: str | None = None
+
+    def record(self, key: str, label: str, option_ids: list[str | None]) -> None:
+        # Searching an item again replaces its group on screen, and here.
+        self.groups[key] = option_ids
+        self.labels[key] = label
+        self.latest = key
+
+    def record_results(self, model_output: dict[str, Any]) -> None:
+        """Records an ok search_products output (after any photo reordering) as shown."""
+
+        results = model_output.get("results")
+        key, label = model_output.get("item_key"), model_output.get("item_label")
+        if model_output.get("status") != "ok" or not isinstance(results, list) or not isinstance(key, str):
+            return
+        ordered = sorted(
+            (entry for entry in results if isinstance(entry, dict) and isinstance(entry.get("position"), int)),
+            key=lambda entry: entry["position"],
+        )
+        ids = [entry.get("option_id") if isinstance(entry.get("option_id"), str) else None for entry in ordered]
+        self.record(key, label if isinstance(label, str) else key, ids)
+
+    def group_of(self, option_id: str) -> str | None:
+        return next((key for key, ids in self.groups.items() if option_id in ids), None)
+
+
 class ToolOutcome(BaseModel):
     """What the model receives, plus an optional event for the browser UI."""
 
@@ -405,9 +438,11 @@ class MultiProviderShoppingToolExecutor:
         household_id: str = "",
         provider_timeout: float = PROVIDER_SEARCH_TIMEOUT_SECONDS,
         provider_hard_timeout: float = PROVIDER_SEARCH_HARD_TIMEOUT_SECONDS,
+        shown: ShownGroups | None = None,
     ) -> None:
         self.targets = targets
         self.options = options if options is not None else {}
+        self.shown = shown if shown is not None else ShownGroups()
         self.memory = memory
         self.household_id = household_id
         self.provider_timeout = provider_timeout
@@ -669,6 +704,7 @@ class MultiProviderShoppingToolExecutor:
             model_output["skipped_stores"] = skipped
         if filtered_count:
             model_output["hidden_by_household_rules"] = filtered_count
+        self.shown.record_results(model_output)
         ui_event: dict[str, Any] = {
             "type": "tool.results",
             "query": arguments.query,

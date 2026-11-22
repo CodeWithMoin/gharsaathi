@@ -3,6 +3,7 @@ import re
 
 import pytest
 
+from app.voice.compare_tools import CompareArguments
 from app.voice.saved_list_tools import SavedListArguments
 from app.shopping.money import format_rupees
 from app.voice.address_book_tools import ListArguments as AddressListArguments
@@ -397,7 +398,7 @@ def test_few_shot_examples_are_labelled_and_roman_except_explicit_hindi(
                 assert ratio >= 0.3, line
             else:
                 assert ratio == 0.0, line
-    assert 6 <= assistant_lines <= 28
+    assert 6 <= assistant_lines <= 29
     assert hindi_replies == 1
 
 
@@ -449,6 +450,7 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "get_order_status": StatusArguments,
         "list_recent_orders": RecentArguments,
         "add_saved_list": SavedListArguments,
+        "compare_options": CompareArguments,
     }
     assert set(validators) == set(definitions)
 

@@ -46,6 +46,8 @@ import { attachmentIdFor, canSend, photoBubbleText, photoMessageContent } from "
 import { HeaderOrderChip, QuickChips, QuickToastView, useQuickActions } from "./quick-chips";
 import { headerOrderChip, swapQuery } from "./quick-actions.mjs";
 import { SavedListsDialog } from "./saved-lists-dialog";
+import { ComparisonCard } from "./comparison-card-ui";
+import { withComparisonCard, type Comparison, type LiveComparisonCard } from "./comparison-card.mjs";
 
 const LEGACY_CHAT_STORAGE_KEY = "gharsaathi:conversation:v1";
 
@@ -84,6 +86,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   // The one-tap order card prepared by voice or typed chat; it is not saved with the chat.
   // Once its order is placed it becomes a live status card in the (saved) timeline.
   const [orderCard, setOrderCard] = useState<LiveOrderCard | null>(null);
+  // At most one live comparison card (compare_options); a new one replaces it. Not saved with the chat.
+  const [comparisonCard, setComparisonCard] = useState<LiveComparisonCard | null>(null);
   // In-app order updates (out for delivery, delivered, delayed, cancelled). Browser
   // notifications for the same updates are opt-in (Settings → Notifications).
   const [orderToast, setOrderToast] = useState<string | null>(null);
@@ -196,6 +200,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const handleVoiceApproval = useCallback((provider: ProviderName, request: ApprovalRequest) => {
     pendingBillStageRef.current = { ...pendingBillStageRef.current, [provider]: "bill_ready" };
     setVoiceApproval({ provider, request });
+  }, []);
+  const handleComparison = useCallback((comparison: Comparison) => {
+    followScrollRef.current = true;
+    setComparisonCard({ comparison, afterMessageId: latestMessageId(chatMessagesRef.current) });
   }, []);
   const handleOrderConfirmation = useCallback((confirmation: OrderConfirmation) => {
     followScrollRef.current = true;
@@ -413,6 +421,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     pendingBillStageRef.current = {};
     setVoiceApproval(null);
     setOrderCard(null);
+    setComparisonCard(null);
     followScrollRef.current = true;
   }, []);
 
@@ -827,6 +836,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     pendingBillStageRef.current = {};
     setVoiceApproval(null);
     setOrderCard(null);
+    setComparisonCard(null);
     swapRef.current = null;
     followScrollRef.current = true;
     setQuery("");
@@ -953,7 +963,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       chatMessagesRef.current = withReply;
       setChatMessages(withReply);
       for (const event of turn.ui_events) {
-        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onAddressRemoved: handleAddressRemoved, onOrderConfirmation: handleOrderConfirmation, onSupportOpen: openSupport, onPhotoRead: handlePhotoRead, onMemorySummary: openMemorySummary });
+        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onAddressRemoved: handleAddressRemoved, onOrderConfirmation: handleOrderConfirmation, onSupportOpen: openSupport, onPhotoRead: handlePhotoRead, onMemorySummary: openMemorySummary, onComparison: handleComparison });
         if (outcome?.kind === "not_connected") setSetupOpen(true);
         if (outcome?.ack && outcome.ackId) void outcome.ack.then((ack) => { pendingTypedAcksRef.current.push(ack); });
         if (outcome) setMessage(outcome.message);
@@ -1233,7 +1243,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         </motion.div>
 
         <AnimatePresence initial={false}>
-          {placeInboundCalls(placeRiderCalls(withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard), riderCalls.cards), inboundCalls.cards).map((item) => {
+          {placeInboundCalls(placeRiderCalls(withComparisonCard(withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard), comparisonCard), riderCalls.cards), inboundCalls.cards).map((item) => {
+            if (item.kind === "comparison") return <ComparisonCard key={item.card.comparison.id} comparison={item.card.comparison} commerceMode={commerceMode} addingSku={addingSku} baskets={baskets} onAdd={addProduct} onHide={() => setComparisonCard(null)} />;
             if (item.kind === "inbound-call") return <InboundCallCard key={`inbound-call-${item.card.id}`} call={item.card} onDismiss={inboundCalls.dismiss} />;
             if (item.kind === "rider-call") return <RiderCallCard key={`rider-call-${item.card.id}`} call={item.card} onDismiss={riderCalls.dismiss} />;
             if (item.kind === "order-card") {
@@ -1287,7 +1298,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
     <div ref={dockRef} style={{ bottom: insets.bottom }} className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <AnimatePresence mode="wait">
-        {voiceOpen ? <motion.div key="voice-composer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }} className="mx-auto max-w-3xl"><PhotoChip state={photo.state} onRemove={photo.remove} voice /><div className="flex items-end justify-center gap-2"><PhotoAttachButton compact onFile={(file) => void photo.attach(file)} disabled={photo.state.status === "uploading"} /><VoicePanel addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onAddressRemoved={handleAddressRemoved} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} onPhotoRead={handlePhotoRead} onMemorySummary={openMemorySummary} beforeSessionStart={flushConversationSave} /><span aria-hidden="true" className="size-11 shrink-0" /></div></motion.div> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
+        {voiceOpen ? <motion.div key="voice-composer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }} className="mx-auto max-w-3xl"><PhotoChip state={photo.state} onRemove={photo.remove} voice /><div className="flex items-end justify-center gap-2"><PhotoAttachButton compact onFile={(file) => void photo.attach(file)} disabled={photo.state.status === "uploading"} /><VoicePanel addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onAddressRemoved={handleAddressRemoved} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} onPhotoRead={handlePhotoRead} onMemorySummary={openMemorySummary} onComparison={handleComparison} beforeSessionStart={flushConversationSave} /><span aria-hidden="true" className="size-11 shrink-0" /></div></motion.div> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
           {hasChat && chips.length > 0 && <QuickChips chips={chips} busyKey={quick.busyKey} disabled={chipsLocked} onChip={(chip) => { followScrollRef.current = true; void quick.run(chip); }} className="-mx-1 mb-2" />}
           <PhotoChip state={photo.state} onRemove={photo.remove} />
           <div className="flex items-center gap-1 rounded-[26px] border border-border-strong bg-surface p-2 pl-2 shadow-[0_24px_60px_-28px_rgb(var(--shadow)/.55),inset_0_1px_0_rgba(255,255,255,.9)]"><PhotoAttachButton onFile={(file) => void photo.attach(file)} disabled={loading === "search" || loading === "assistant" || photo.state.status === "uploading"} /><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search" || loading === "assistant"} className="min-w-0 flex-1 bg-transparent py-2 pl-1 text-[15px] outline-none placeholder:text-subtle disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() || photo.state.status !== "idle" ? <button type="submit" aria-label={attachmentIdFor(photo.state) ? "Send photo" : "Send request"} disabled={loading === "search" || loading === "assistant" || !canSend(photo.state, query)} className="grid size-12 shrink-0 place-items-center rounded-full bg-inverse text-on-inverse transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} onPointerEnter={prewarmVoice} onPointerDown={prewarmVoice} onFocus={prewarmVoice} disabled={loading === "search" || loading === "assistant"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[0_12px_30px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-accent" /><Microphone size={23} /></button>}</div>
