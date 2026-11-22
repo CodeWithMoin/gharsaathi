@@ -10,14 +10,16 @@ import {
   MapPin,
   Package,
   Pause,
+  PhoneCall,
   Play,
+  ShieldCheck,
   Timer,
   Truck,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
+import { API_BASE_URL, useApiRequest, useAuthenticatedFetch } from "./authenticated-api";
 
 const POLL_INTERVAL_MS = 45_000;
 
@@ -89,7 +91,23 @@ export type OrderTrackingProps = {
   initialAddressId?: string;
   /** Open an existing monitor (e.g. the one started for a placed order) instead of the newest watch. */
   initialMonitorId?: string;
+  recipientName?: string;
+  deliveryAddresses?: Partial<Record<Provider, string>>;
   onClose?: () => void;
+};
+
+type InboundDeliveryConfig = {
+  enabled: boolean;
+  inbound_phone_number: string | null;
+  approved_caller_hint: string | null;
+};
+
+type DeliveryContextStatus = {
+  cohort_id: string;
+  status: "processing" | "completed" | "failed";
+  inbound_phone_number: string;
+  valid_records: number | null;
+  rejected_records: number | null;
 };
 
 const statusCopy: Record<string, string> = {
@@ -148,8 +166,17 @@ function StatusIcon({ status, active }: { status?: TrackingStatus; active: boole
   return active ? <CheckCircle size={17} weight="fill" className={className} /> : <Circle size={13} className={className} />;
 }
 
-export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId = "", initialAddressId, initialMonitorId, onClose }: OrderTrackingProps) {
+export function LiveOrderTracking({
+  initialProvider = "swiggy",
+  initialOrderId = "",
+  initialAddressId,
+  initialMonitorId,
+  recipientName = "",
+  deliveryAddresses,
+  onClose,
+}: OrderTrackingProps) {
   const authenticatedFetch = useAuthenticatedFetch();
+  const apiRequest = useApiRequest();
   const [provider, setProvider] = useState<Provider>(initialProvider);
   const [orderId, setOrderId] = useState(initialOrderId);
   const [monitorId, setMonitorId] = useState<string | null>(null);
@@ -159,8 +186,104 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [lastChange, setLastChange] = useState("");
+  const [deliveryConfig, setDeliveryConfig] = useState<InboundDeliveryConfig | null>(null);
+  const [deliveryConfigLoading, setDeliveryConfigLoading] = useState(true);
+  const [deliveryRecipient, setDeliveryRecipient] = useState(recipientName);
+  const [deliveryAddress, setDeliveryAddress] = useState(deliveryAddresses?.[initialProvider] ?? "");
+  const [landmark, setLandmark] = useState("");
+  const [deliveryConfirmed, setDeliveryConfirmed] = useState(false);
+  const [deliveryContext, setDeliveryContext] = useState<DeliveryContextStatus | null>(null);
+  const [deliveryContextLoading, setDeliveryContextLoading] = useState(false);
+  const [deliveryContextError, setDeliveryContextError] = useState("");
   const requestInFlight = useRef(false);
   const seenEventCount = useRef(0);
+  const providerDeliveryAddress = deliveryAddresses?.[provider] ?? "";
+
+  useEffect(() => {
+    let active = true;
+    void apiRequest<InboundDeliveryConfig>("/api/inbound-delivery/config")
+      .then((config) => {
+        if (active) setDeliveryConfig(config);
+      })
+      .catch(() => {
+        if (active) setDeliveryConfig({ enabled: false, inbound_phone_number: null, approved_caller_hint: null });
+      })
+      .finally(() => {
+        if (active) setDeliveryConfigLoading(false);
+      });
+    return () => { active = false; };
+  }, [apiRequest]);
+
+  useEffect(() => {
+    setDeliveryRecipient(recipientName);
+  }, [recipientName]);
+
+  useEffect(() => {
+    setDeliveryAddress(providerDeliveryAddress);
+    setDeliveryConfirmed(false);
+    setDeliveryContext(null);
+    setDeliveryContextError("");
+  }, [providerDeliveryAddress]);
+
+  useEffect(() => {
+    if (deliveryContext?.status !== "processing") return;
+    let active = true;
+    let attempts = 0;
+    const interval = window.setInterval(() => {
+      attempts += 1;
+      if (attempts > 15) {
+        window.clearInterval(interval);
+        if (active) setDeliveryContextError("Preparation is taking longer than expected. Check again before relying on the line.");
+        return;
+      }
+      void apiRequest<DeliveryContextStatus>(`/api/inbound-delivery/contexts/${encodeURIComponent(deliveryContext.cohort_id)}`)
+        .then((next) => {
+          if (!active) return;
+          setDeliveryContext(next);
+          if (next.status !== "processing") window.clearInterval(interval);
+        })
+        .catch((reason: unknown) => {
+          if (!active) return;
+          window.clearInterval(interval);
+          setDeliveryContextError(reason instanceof Error ? reason.message : "Could not confirm the delivery line.");
+        });
+    }, 2_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [apiRequest, deliveryContext?.cohort_id, deliveryContext?.status]);
+
+  const clearPreparedContext = () => {
+    setDeliveryContext(null);
+    setDeliveryContextError("");
+    setDeliveryConfirmed(false);
+  };
+
+  const prepareDeliveryLine = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!deliveryConfig?.enabled || !deliveryConfirmed || deliveryContextLoading) return;
+    setDeliveryContextLoading(true);
+    setDeliveryContextError("");
+    setDeliveryContext(null);
+    try {
+      const next = await apiRequest<DeliveryContextStatus>("/api/inbound-delivery/contexts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient_name: deliveryRecipient,
+          delivery_address: deliveryAddress,
+          landmark,
+          confirmed: true,
+        }),
+      });
+      setDeliveryContext(next);
+    } catch (reason) {
+      setDeliveryContextError(reason instanceof Error ? reason.message : "Could not prepare the delivery line.");
+    } finally {
+      setDeliveryContextLoading(false);
+    }
+  };
 
   const fetchUpdate = useCallback(async (force = false, nextMonitorId = monitorId) => {
     if (!nextMonitorId || requestInFlight.current) return;
@@ -340,6 +463,46 @@ export function LiveOrderTracking({ initialProvider = "swiggy", initialOrderId =
             {!tracking ? <button type="submit" disabled={loading} className="flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2.5 text-xs font-semibold text-on-accent shadow-[0_8px_22px_-12px_rgb(var(--accent-shadow)/.8)] transition active:scale-[.97] disabled:opacity-50"><Play size={13} weight="fill" />Start</button> : <button type="button" onClick={() => void stopTracking()} disabled={loading} className="flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-border-strong px-4 py-2.5 text-xs font-semibold text-ink-secondary transition active:scale-[.97] disabled:opacity-50"><Pause size={13} weight="fill" />Stop</button>}
           </div>
         </form>
+
+        <section className="mt-4 rounded-2xl border border-border bg-surface p-3.5" aria-labelledby="prepare-delivery-line-title">
+          <div className="flex items-start gap-2.5">
+            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-ink"><PhoneCall size={17} weight="fill" /></span>
+            <div className="min-w-0 flex-1">
+              <h3 id="prepare-delivery-line-title" className="text-xs font-semibold text-ink">Prepare delivery line</h3>
+              <p className="mt-0.5 text-[11px] leading-4 text-muted">Approve what the AI may tell the configured caller. This does not place a call.</p>
+            </div>
+          </div>
+
+          {deliveryConfigLoading ? (
+            <div className="mt-3 h-16 animate-pulse rounded-xl bg-surface-muted" aria-label="Checking delivery line" />
+          ) : !deliveryConfig?.enabled ? (
+            <p className="mt-3 rounded-xl bg-surface-muted px-3 py-2 text-[11px] leading-4 text-muted">Delivery-line preparation is not configured on this server.</p>
+          ) : (
+            <form onSubmit={prepareDeliveryLine} className="mt-3 space-y-2.5">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="text-[10px] font-semibold text-ink-secondary">Recipient
+                  <input value={deliveryRecipient} onChange={(event) => { setDeliveryRecipient(event.target.value); clearPreparedContext(); }} required minLength={2} maxLength={80} className="mt-1 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-xs font-normal text-ink outline-none focus:border-accent" />
+                </label>
+                <label className="text-[10px] font-semibold text-ink-secondary">Landmark or approach
+                  <input value={landmark} onChange={(event) => { setLandmark(event.target.value); clearPreparedContext(); }} required minLength={3} maxLength={180} placeholder="Gate, building, nearby landmark" className="mt-1 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-xs font-normal text-ink outline-none placeholder:text-subtle focus:border-accent" />
+                </label>
+              </div>
+              <label className="block text-[10px] font-semibold text-ink-secondary">Delivery address
+                <textarea value={deliveryAddress} onChange={(event) => { setDeliveryAddress(event.target.value); clearPreparedContext(); }} required minLength={8} maxLength={350} rows={2} className="mt-1 w-full resize-none rounded-xl border border-border-strong bg-white px-3 py-2 text-xs font-normal leading-5 text-ink outline-none focus:border-accent" />
+              </label>
+              <label className="flex items-start gap-2 rounded-xl bg-white px-2.5 py-2 text-[10px] leading-4 text-ink-secondary">
+                <input type="checkbox" checked={deliveryConfirmed} onChange={(event) => setDeliveryConfirmed(event.target.checked)} className="mt-0.5 accent-[rgb(var(--accent))]" />
+                <span>I approve this exact address and landmark for the configured caller {deliveryConfig.approved_caller_hint ?? ""} after they confirm the delivery.</span>
+              </label>
+              {deliveryContextError && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-[11px] leading-4 text-danger">{deliveryContextError}</p>}
+              {deliveryContext?.status === "processing" && <p role="status" className="rounded-xl bg-warning-soft px-3 py-2 text-[11px] leading-4 text-warning">Preparing the approved caller context…</p>}
+              {deliveryContext?.status === "failed" && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-[11px] leading-4 text-danger">Sarvam could not prepare this context. Do not rely on the delivery line yet.</p>}
+              {deliveryContext?.status === "completed" && deliveryContext.valid_records === 1 && <p role="status" className="flex items-start gap-1.5 rounded-xl bg-success-soft px-3 py-2 text-[11px] leading-4 text-success"><ShieldCheck size={14} weight="fill" className="mt-0.5 shrink-0" />Ready. The approved caller may now call {deliveryContext.inbound_phone_number} and say “Sir, {provider === "zepto" ? "Zepto" : "Swiggy"}.”</p>}
+              {deliveryContext?.status === "completed" && deliveryContext.valid_records !== 1 && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-[11px] leading-4 text-danger">The caller context was rejected. Do not rely on the delivery line.</p>}
+              <button type="submit" disabled={!deliveryConfirmed || !deliveryRecipient.trim() || !deliveryAddress.trim() || !landmark.trim() || deliveryContextLoading || deliveryContext?.status === "processing"} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-inverse px-4 py-2.5 text-xs font-semibold text-on-inverse transition active:scale-[.98] disabled:opacity-45"><PhoneCall size={14} />{deliveryContextLoading ? "Preparing…" : deliveryContext?.status === "completed" ? "Prepare updated details" : "Prepare delivery line"}</button>
+            </form>
+          )}
+        </section>
 
         {error && <div role="alert" className="mt-3 rounded-2xl border border-danger-border bg-danger-soft px-3 py-2.5 text-xs leading-5 text-danger"><div className="flex items-center gap-1.5 font-semibold"><WarningCircle size={15} weight="fill" />Couldn’t show this order</div><p className="mt-0.5">{error}</p></div>}
 

@@ -143,6 +143,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   // Set when the saved chat could not be loaded, so the first save starts a new chat instead of overwriting it.
   const startFreshConversationRef = useRef(false);
   const selectedAddress = useMemo(() => addresses.find((address) => address.id === addressId), [addresses, addressId]);
+  const selectedZeptoAddress = useMemo(() => zeptoAddresses.find((address) => address.id === zeptoAddressId), [zeptoAddresses, zeptoAddressId]);
   const closeVoice = useCallback(() => setVoiceOpen(false), []);
   // Shop from a photo: one pending attachment, sent with the next typed turn or read by voice.
   const photo = usePhotoAttachment();
@@ -1244,7 +1245,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         {chatFailure && loading !== "assistant" && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div role="alert" className="max-w-md rounded-[8px_22px_22px_22px] border border-border bg-surface px-5 py-4"><p className="text-sm leading-6 text-danger-hover">{chatFailure.message}</p>{chatFailure.query && <button type="button" onClick={() => { const failedQuery = chatFailure.query; setChatFailure(null); void runDirectSearch(failedQuery); }} className="mt-3 flex items-center gap-1.5 rounded-full bg-inverse px-4 py-2 text-xs font-semibold text-on-inverse transition active:scale-[.97]"><MagnifyingGlass size={14} /> Search directly</button>}</div></motion.div>}
         {chatSaveFailed && <p role="status" className="mt-6 text-center text-[11px] leading-4 text-danger-hover">This chat hasn&apos;t been saved yet. GharSaathi will try again with your next message.</p>}
 
-        <AnimatePresence>{trackingOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><LiveOrderTracking initialAddressId={addressId || undefined} onClose={() => setTrackingOpen(false)} /></motion.div>}</AnimatePresence>
+        <AnimatePresence>{trackingOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><LiveOrderTracking initialAddressId={addressId || undefined} recipientName={userName} deliveryAddresses={{ swiggy: selectedAddress?.address_line, zepto: selectedZeptoAddress?.address_line }} onClose={() => setTrackingOpen(false)} /></motion.div>}</AnimatePresence>
       </div>
     </section>
 

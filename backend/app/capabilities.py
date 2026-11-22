@@ -786,6 +786,27 @@ CAPABILITIES: tuple[Capability, ...] = (
         ),
     ),
     Capability(
+        id="prepare_inbound_delivery_line",
+        title="Prepare approved context for the inbound delivery line",
+        voice=S(
+            U,
+            "Not part of the browser voice session. A separately deployed Sarvam inbound "
+            "agent handles recognized Zepto/Swiggy callers.",
+        ),
+        typed_chat=S(U, "Preparation requires explicit review and confirmation in the UI."),
+        ui=S(W, "LiveOrderTracking includes recipient, address and landmark review."),
+        backend=S(
+            W,
+            "Streams one server-configured caller context to Sarvam; never initiates a call.",
+        ),
+        routes=(
+            "GET /api/inbound-delivery/config",
+            "POST /api/inbound-delivery/contexts",
+            "GET /api/inbound-delivery/contexts/{cohort_id}",
+        ),
+        ui_files=("frontend/app/order-tracking.tsx",),
+    ),
+    Capability(
         id="support_complaint",
         title="Prepare a support complaint with evidence",
         voice=S(

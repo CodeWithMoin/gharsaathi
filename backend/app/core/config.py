@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     database_user: str = "postgres"
     database_password: SecretStr = SecretStr("postgres")
     openai_api_key: SecretStr = SecretStr("")
+    sarvam_voice_agent_api_key: SecretStr = SecretStr("")
+    sarvam_voice_agent_org_id: str = "01a201ca-4fa4-789e-b667-569096863bc7"
+    sarvam_voice_agent_workspace_id: str = "01a201ca-4fb0-776b-8e43-e3a6383a24cf"
+    sarvam_inbound_deployment_id: str = "Moin-AI-Inb-711358d1-fb26"
+    sarvam_inbound_phone_number: str = "+918064264240"
+    # One consenting caller for the controlled stage demo. The browser cannot
+    # override this number; production must obtain provider-authorised routing.
+    sarvam_demo_recipient_number: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     live_model: str = "gpt-live-1.1"
     live_voice: str = "nira"

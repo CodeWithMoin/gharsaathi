@@ -23,6 +23,7 @@ from app.api.legal_consent import router as legal_consent_router
 from app.api.profile import router as profile_router
 from app.api.purchase_memory import router as purchase_memory_router
 from app.api.rider import router as rider_router
+from app.api.inbound_delivery import router as inbound_delivery_router
 from app.api.voice import router as voice_router
 from app.auth import PrivateDeploymentForbidden
 from app.core.config import get_settings
@@ -115,6 +116,11 @@ app.include_router(
 )
 app.include_router(voice_router, prefix="/api/voice", tags=["Voice"])
 app.include_router(chat_router, prefix="/api/chat", tags=["Typed chat"])
+app.include_router(
+    inbound_delivery_router,
+    prefix="/api/inbound-delivery",
+    tags=["Inbound Delivery"],
+)
 app.include_router(basket_router, prefix="/api/basket", tags=["Basket"])
 app.include_router(baskets_router, prefix="/api/baskets", tags=["Basket"])
 app.include_router(lists_router, prefix="/api/lists", tags=["Saved lists"])
