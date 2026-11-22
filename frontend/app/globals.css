@@ -5,39 +5,39 @@
 
 :root {
   /* Semantic colour tokens as RGB channels so Tailwind opacity modifiers work. See docs/ui-decisions.md. */
-  --color-bg: 251 245 237; /* #fbf5ed */
-  --color-surface: 255 253 249; /* #fffdf9 */
-  --color-surface-muted: 248 242 234; /* #f8f2ea */
-  --color-surface-strong: 241 229 220; /* #f1e5dc */
-  --color-border: 234 222 213; /* #eaded5 */
-  --color-border-strong: 223 208 197; /* #dfd0c5 */
-  --color-text: 53 36 28; /* #35241c */
-  --color-text-secondary: 95 74 63; /* #5f4a3f */
-  --color-text-muted: 128 111 101; /* #806f65 */
-  --color-text-subtle: 161 140 128; /* #a18c80 */
-  --color-accent: 198 83 29; /* #c6531d */
-  --color-accent-hover: 185 74 24; /* #b94a18 */
-  --color-accent-strong: 157 66 26; /* #9d421a */
-  --color-accent-soft: 247 232 222; /* #f7e8de */
-  --color-accent-border: 228 202 188; /* #e4cabc */
+  --color-bg: 250 248 245; /* #faf8f5 */
+  --color-surface: 255 255 255; /* #ffffff */
+  --color-surface-muted: 246 243 239; /* #f6f3ef */
+  --color-surface-strong: 238 233 227; /* #eee9e3 */
+  --color-border: 232 226 219; /* #e8e2db */
+  --color-border-strong: 217 209 200; /* #d9d1c8 */
+  --color-text: 31 28 26; /* #1f1c1a */
+  --color-text-secondary: 69 64 59; /* #45403b */
+  --color-text-muted: 107 100 93; /* #6b645d */
+  --color-text-subtle: 115 107 100; /* #736b64 */
+  --color-accent: 182 74 24; /* #b64a18 */
+  --color-accent-hover: 157 62 21; /* #9d3e15 */
+  --color-accent-strong: 143 56 18; /* #8f3812 */
+  --color-accent-soft: 251 238 230; /* #fbeee6 */
+  --color-accent-border: 240 211 194; /* #f0d3c2 */
   --color-on-accent: 255 255 255; /* #ffffff */
-  --color-user-bubble: 59 42 34; /* #3b2a22 */
-  --color-on-user-bubble: 255 250 245; /* #fffaf5 */
-  --color-inverse: 59 42 34; /* #3b2a22 */
-  --color-inverse-hover: 74 53 43; /* #4a352b */
+  --color-user-bubble: 251 233 222; /* #fbe9de */
+  --color-on-user-bubble: 31 28 26; /* #1f1c1a */
+  --color-inverse: 42 38 35; /* #2a2623 */
+  --color-inverse-hover: 58 53 49; /* #3a3531 */
   --color-on-inverse: 255 255 255; /* #ffffff */
-  --color-success: 57 113 68; /* #397144 */
-  --color-success-strong: 47 103 58; /* #2f673a */
-  --color-success-soft: 238 246 239; /* #eef6ef */
-  --color-success-border: 207 227 210; /* #cfe3d2 */
-  --color-warning: 140 81 39; /* #8c5127 */
-  --color-warning-soft: 255 240 223; /* #fff0df */
-  --color-warning-border: 240 216 197; /* #f0d8c5 */
-  --color-danger: 163 61 44; /* #a33d2c */
-  --color-danger-hover: 143 58 42; /* #8f3a2a */
-  --color-danger-soft: 252 237 234; /* #fcedea */
-  --color-danger-border: 239 207 199; /* #efcfc7 */
-  --color-focus: 198 83 29; /* #c6531d */
+  --color-success: 58 115 71; /* #3a7347 */
+  --color-success-strong: 47 96 64; /* #2f6040 */
+  --color-success-soft: 237 246 239; /* #edf6ef */
+  --color-success-border: 207 229 213; /* #cfe5d5 */
+  --color-warning: 138 90 28; /* #8a5a1c */
+  --color-warning-soft: 253 243 227; /* #fdf3e3 */
+  --color-warning-border: 241 220 184; /* #f1dcb8 */
+  --color-danger: 179 38 30; /* #b3261e */
+  --color-danger-hover: 143 31 25; /* #8f1f19 */
+  --color-danger-soft: 253 236 234; /* #fdecea */
+  --color-danger-border: 243 201 197; /* #f3c9c5 */
+  --color-focus: 182 74 24; /* #b64a18 */
   --color-zepto: 123 63 196; /* #7b3fc4 */
   --color-zepto-strong: 95 46 145; /* #5f2e91 */
   --color-zepto-hover: 81 39 124; /* #51277c */
@@ -45,12 +45,12 @@
   --color-zepto-muted: 118 99 129; /* #766381 */
   --color-zepto-soft: 248 244 255; /* #f8f4ff */
   --color-zepto-border: 222 211 239; /* #ded3ef */
-  --color-scrim: 42 27 20; /* #2a1b14 */
-  --color-meter-user: 59 42 34; /* #3b2a22 */
-  --color-meter-assistant: 198 83 29; /* #c6531d */
-  --color-meter-idle: 217 198 184; /* #d9c6b8 */
-  --shadow: 74 43 27;
-  --accent-shadow: 158 65 24;
+  --color-scrim: 31 28 26; /* #1f1c1a */
+  --color-meter-user: 42 38 35; /* #2a2623 */
+  --color-meter-assistant: 182 74 24; /* #b64a18 */
+  --color-meter-idle: 221 214 206; /* #ddd6ce */
+  --shadow: 56 44 36;
+  --accent-shadow: 182 74 24;
 }
 * { box-sizing: border-box; }
 html { background: rgb(var(--color-bg)); }

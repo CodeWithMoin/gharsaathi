@@ -1,7 +1,7 @@
 import { BAR_INTERVAL_MS, PILL_BAR_COUNT, createBarHistory, createSpeakerTracker, levelFromRms, rmsFromSamples, smoothLevel, type VoiceSpeaker } from "./voice-levels.mjs";
 
 // Fallbacks only; the live values come from the --color-meter-* tokens in globals.css.
-const FALLBACK_COLORS = { user: "rgb(59 42 34)", assistant: "rgb(198 83 29)", idle: "rgb(217 198 184)" } as const;
+const FALLBACK_COLORS = { user: "rgb(42 38 35)", assistant: "rgb(182 74 24)", idle: "rgb(221 214 206)" } as const;
 const COLOR_TOKENS = { user: "--color-meter-user", assistant: "--color-meter-assistant", idle: "--color-meter-idle" } as const;
 
 type MeterColors = Record<keyof typeof FALLBACK_COLORS, string>;
