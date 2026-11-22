@@ -8,9 +8,7 @@ import { createTranscriptTurnTracker } from "./voice-transcript-turns.mjs";
 import { createVoiceEventRecorder, voiceEventLogEnabled } from "./voice-event-recorder.mjs";
 import type { ApprovalRequest } from "./basket/BasketPanel";
 import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
-import { sanitizeAddressPrefill } from "./voice-address-prefill.mjs";
-import { voiceApprovalFromToolEvent } from "./voice-approval.mjs";
-import type { ZeptoAddressPrefill } from "./zepto-address-form";
+import { applyAssistantEvent, type AssistantAddressFormRequest } from "./assistant-events.mjs";
 import { SmartTurnController, loadSmartTurnModel } from "./smart-turn";
 
 type VoiceStatus = "connecting" | "live" | "closing" | "error";
@@ -18,24 +16,9 @@ type VoiceStore = "swiggy_instamart" | "zepto";
 type VoiceProduct = { provider?: VoiceStore; provider_label?: string; product_id: string; sku_id: string; spin_id?: string; name: string; brand?: string; pack_size?: string; price: { mrp: number; offer_price: number }; available: boolean; image_url?: string; rating_value?: string };
 type LiveEvent = { type: string; error?: { message?: string; client_event_id?: string }; [key: string]: unknown };
 export type VoiceTranscriptTurn = { id: string; role: "user" | "assistant"; content: string };
-type ToolEvent =
-  | { type: "tool.started"; name: string }
-  | { type: "tool.results"; query: string; store: string; products: VoiceProduct[] }
-  | { type: "tool.not_connected"; query: string }
-  | { type: "tool.error"; message: string }
-  | { type: "basket.updated"; provider?: VoiceStore; basket: { item_count: number; item_total: string; store?: string } }
-  | { type: "basket.approval_requested"; provider?: VoiceStore; store?: string; approval: { payable: string }; quote: { eta_text?: string | null }; request?: unknown }
-  | { type: "address_form.open"; provider: "zepto"; prefill: unknown }
-  | { type: "address_form.unavailable"; reason: string }
-  | { type: "session.finished" };
+type SessionEvent = { type?: unknown; name?: unknown };
 
-export type VoiceAddressFormRequest = { prefill: ZeptoAddressPrefill } | { unavailable: string };
-
-const ADDRESS_UNAVAILABLE_MESSAGES: Record<string, string> = {
-  zepto_not_connected: "Pehle Zepto connect kijiye, phir naya address add hoga.",
-  demo_mode: "Demo mode mein naya address add nahi hota.",
-  swiggy_unsupported: "Swiggy address Swiggy app mein add kijiye.",
-};
+export type VoiceAddressFormRequest = AssistantAddressFormRequest;
 
 const YIELD_EVENT_PREFIX = "smart_turn_yield_";
 const MIC_CONSTRAINTS: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
@@ -125,7 +108,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     eventsRef.current = source;
     source.addEventListener("message", ({ data }) => {
       try {
-        const event = JSON.parse(data) as ToolEvent;
+        const event = JSON.parse(data) as SessionEvent;
         eventRecorderRef.current?.record(event, "tools");
         if (event.type === "tool.started" && event.name === "search_products") {
           setSearching(true);
@@ -135,37 +118,15 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         } else if (event.type === "tool.started") {
           setBasketNotice("");
           setMessage("Basket update kar rahi hoon…");
-        } else if (event.type === "tool.results") {
-          setSearching(false);
-          setHasResults(true);
-          setMessage("Options mil gaye. Main best choices bata rahi hoon.");
-          onResults(event.query, event.products);
-        } else if (event.type === "tool.not_connected") {
-          setSearching(false);
-          setMessage("Ek store connect karke delivery address choose kijiye.");
-        } else if (event.type === "tool.error") {
-          setSearching(false);
-          setMessage(event.message);
-        } else if (event.type === "basket.updated") {
-          const items = event.basket.item_count;
-          const store = event.basket.store ? `${event.basket.store} · ` : "";
-          setBasketNotice(`${store}${items} ${items === 1 ? "item" : "items"} · ${event.basket.item_total}`);
-          setMessage(items ? "Basket update ho gaya." : "Basket ab khaali hai.");
-          onBasketTouched?.(event.provider);
-        } else if (event.type === "basket.approval_requested") {
-          setBasketNotice(`${event.store ? `${event.store} · ` : ""}Final bill · ${event.approval.payable}`);
-          setMessage("Final bill ready hai—screen par review kijiye.");
-          const voiceApproval = voiceApprovalFromToolEvent(event);
-          if (voiceApproval) onApprovalRequested?.(voiceApproval.provider, voiceApproval.request);
-          onBasketTouched?.(event.provider);
-        } else if (event.type === "address_form.open" && event.provider === "zepto") {
-          setMessage("Address form screen par hai—details check karke Save kijiye.");
-          onAddressForm?.({ prefill: sanitizeAddressPrefill(event.prefill) });
-        } else if (event.type === "address_form.unavailable") {
-          setMessage(ADDRESS_UNAVAILABLE_MESSAGES[event.reason] ?? "Naya address abhi add nahi ho sakta.");
-          onAddressForm?.({ unavailable: event.reason });
         } else if (event.type === "session.finished") {
           source.close();
+        } else {
+          const outcome = applyAssistantEvent<VoiceProduct>(event, { onResults, onBasketTouched, onApprovalRequested, onAddressForm });
+          if (!outcome) return;
+          if (outcome.kind === "results" || outcome.kind === "not_connected" || outcome.kind === "error") setSearching(false);
+          if (outcome.kind === "results") setHasResults(true);
+          if (outcome.notice) setBasketNotice(outcome.notice);
+          setMessage(outcome.message);
         }
       } catch {
         // Ignore malformed provider events.
