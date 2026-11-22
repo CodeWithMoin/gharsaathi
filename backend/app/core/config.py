@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     sarvam_voice_agent_workspace_id: str = "01a201ca-4fb0-776b-8e43-e3a6383a24cf"
     sarvam_inbound_deployment_id: str = "Moin-AI-Inb-711358d1-fb26"
     sarvam_inbound_phone_number: str = "+918064264240"
+    # Agent (app) ID of the inbound delivery agent: the Analytics API is agent-scoped.
+    sarvam_inbound_agent_id: str = "GharSaathi--cba37478-61ed"
+    # Read-only poll of Sarvam's List interactions while a user has an active order
+    # or a delivery context prepared in the last 2 h (docs/ARCHITECTURE.md).
+    sarvam_call_monitor_enabled: bool = True
     # One consenting caller for the controlled stage demo. The browser cannot
     # override this number; production must obtain provider-authorised routing.
     sarvam_demo_recipient_number: str = ""
