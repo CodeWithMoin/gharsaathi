@@ -28,6 +28,8 @@ never inline in whatever sheet happens to be open. Current users:
 | Take a photo (webcam) | `camera-dialog.tsx`, logic in `camera-capture.mjs` | Desktops/laptops only (`cameraPath()`: no mobile UA, not iPadOS, not touch-first, `getUserMedia` present). Live preview (video only, about 1600 px wide, front camera mirrored in the preview only), **Capture** (focused on open) → **Retake** / **Use photo**, **Cancel**, a switch-camera button when there is more than one camera. Permission, denied ("Allow camera access in your browser settings, or choose a photo from your files" + **Choose from files**), no camera and camera-in-use states are read out by a status line. Tracks stop on close, capture, unmount and when the tab is hidden. The frame goes through the same downscale/JPEG/upload pipeline as a picked photo |
 | Your photo (larger view) | `PhotoBubbleImage` in `photo-attachment-ui.tsx` | Tapping the photo in a user bubble. This session shows the local copy; reopened chats show the saved ≤320 px thumbnail. Chats saved before thumbnails show the "📷 Photo" text only |
 | Track order | `order-status-card.tsx` | Opens `LiveOrderTracking` on the placed order's monitor from the chat status card; read-only |
+| My lists | `saved-lists-dialog.tsx` (quick chip "My lists", basket card "Save as list") | The user's own lists: **Add to basket** per list, **New list** (by name), **Save basket as list**. **Edit list** (same popup): name, − / + / remove per item, **Add basket items**, **Delete list** (`ConfirmDialog`, destructive). Unsaved-changes guard. Logic in `quick-actions.mjs` (`listDraft`, `draftStep`, `draftPayload`, `listNameProblem`) |
+| Clear basket? | `basket/BasketPanel.tsx` | `ConfirmDialog`, destructive: "This removes all 3 items from your Zepto basket. Any bill or order card for it stops working." One request, `POST /api/baskets/{provider}/clear` with the revision the card shows; 409 closes the popup and says "This basket changed. Review it and try again." |
 
 `ConfirmDialog` (`frontend/app/ui/confirm-dialog.tsx`) is the yes/no variant:
 `title`, `message`, `confirmLabel`, `busyLabel`, `tone` (`"destructive"` paints
@@ -151,3 +153,37 @@ Key contrast ratios (all checked in the test): `ink` on `canvas` 15.99,
 `accent` on `accent-soft` 4.64, white on `accent` 5.27, user bubble text 14.37,
 `danger` on `danger-soft` 5.72. The two meter colours are 2.84:1 apart and differ
 in hue; the pill also names the speaker in text.
+
+## Quick chips, card edits and the live order chip
+
+- **Quick chips** (`quick-chips.tsx`, rules in `quick-actions.mjs` `quickChips`): one
+  horizontally scrolling row, at most 6, under the greeting on the empty home screen and
+  above the composer once the chat has turns (not in voice mode). Order: **Reorder last
+  order** (only when there is one), **Mera order kahan hai?** (only while an order in this
+  chat is moving), up to 3 recent products (the last distinct products this household
+  ordered), **My lists** (always). Nothing is predicted.
+- A chip tap is the user's own turn: it appears in the timeline as a user bubble
+  ("Reorder my last order", "Add Amul Milk 500 ml", "Add my “Weekly list” to the basket"),
+  then one plain-English assistant line ("Added 3 items from your last Zepto order to
+  your basket. Not added: Amul Curd (unavailable at Zepto right now). Tap “Get final
+  bill” on the basket below when you're ready."), then the basket card at that point.
+  "Mera order kahan hai?" sends a normal chat turn. A recent item also shows a toast with
+  **Undo** (6 s), which sets the line back to its earlier quantity.
+- Every item is re-checked at its store before it is added (same variant, available,
+  today's price); errors are named as errors, never "not found". Nothing is quoted or
+  ordered by a chip.
+- **Clear basket:** chosen as a confirm popup, not an Undo toast. Undo would have to
+  re-add every line (several requests, prices may have moved, and the bill/order card it
+  superseded cannot come back); a confirmation is one honest step. Disabled with the
+  reason shown while checkout is pending or its outcome is unknown, and on an ordered
+  basket.
+- **Basket card lines:** − / + / remove (as before) and **Swap**, which searches that item
+  and shows the usual option carousel; adding an option from it replaces the line (one
+  remove after the add). Every edit uses the basket line API and supersedes any open bill
+  or order card.
+- **Live order chip** in the header while an order in this chat is moving: "Zepto ·
+  arriving 8:26", "Out for delivery · 8:26", "Running late", "Zepto · Being packed" (the
+  accessible label always names the store). Only the store's own status and ETA (`headerOrderChip`). Tap scrolls to the
+  order's status card. It truncates on a 390 px header.
+- Reduced motion: chips and the toast keep only colour/opacity changes (no press scale or
+  slide); spinners stop. Every chip and action has a visible focus ring.

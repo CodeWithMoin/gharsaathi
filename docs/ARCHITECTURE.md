@@ -128,6 +128,24 @@ flowchart TD
 | Tap runs the existing approve + COD checkout: idempotency key `order-confirmation:<id>`, durable one-shot claim per approval, fresh re-quote must match, outcome-unknown never retried | `backend/app/shopping/checkout.py` | Double orders, price drift, blind retries |
 | The card binds the payment method; another method means a fresh card (`POST /api/orders/payment-method`). Prepaid methods are offered only with the flag on, allow-listed, covered by the verified response contract and listed by `get_payment_methods`; the tap re-quotes with that method's own unconfirmed preview, then makes one `create_*` call; only a provider-confirmed payment and order is placed | `backend/app/shopping/payments.py`, `backend/app/commerce/zepto/payments.py`, `checkout.py` | Paying an amount the user did not approve, guessed response fields, money claims without the provider |
 
+## Saved lists, repeat last order, recent items, clear
+
+`app/shopping/saved_lists.py`. Lists are only what the user saved and named
+(`saved_shopping_lists`, user-scoped, unique name per user, 20 lists × 40 items).
+"Repeat last order" and recent items read this household's own `ordered` baskets.
+Adding (`add_items`, shared by `POST /api/lists/{id}/add-to-basket`,
+`POST /api/quick-actions/repeat-last`, `POST /api/quick-actions/recent-item` and the
+`add_saved_list` voice/typed tool) searches each item's name at its store and adds
+only the same variant while available, at today's price, in one revision-checked
+`BasketService.add_lines` edit per store. Unavailable, not listed, store not ready,
+store error and locked basket are reported per item; a store that fails is not
+searched again in that run. Nothing quotes, approves or orders.
+
+`BasketService.clear(household, provider, expected_revision)` empties a basket in one
+revision-checked edit (`POST /api/baskets/{provider}/clear`; 409 when the basket
+changed since the user saw it, refused in checkout). It is the method a
+`clear_basket` voice/typed tool should call.
+
 ## Placing an order (one tap)
 
 ```mermaid
