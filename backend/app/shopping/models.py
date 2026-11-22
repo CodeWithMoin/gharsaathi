@@ -12,7 +12,9 @@ from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
+
+from app.shopping.money import format_rupees
 
 
 ProviderName = Literal["swiggy_instamart", "zepto"]
@@ -21,6 +23,33 @@ ProviderName = Literal["swiggy_instamart", "zepto"]
 def rupees_to_paise(value: float | int | str | Decimal) -> int:
     amount = Decimal(str(value)) * 100
     return int(amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+class DisplayedPrice(BaseModel):
+    """A provider item price in rupees, serialised with the ₹ strings a screen shows as-is.
+
+    ``mrp_display`` and ``saving_display`` are null unless the MRP is above the offer price.
+    """
+
+    mrp: float
+    offer_price: float
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def offer_display(self) -> str:
+        return format_rupees(rupees_to_paise(self.offer_price))
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def mrp_display(self) -> str | None:
+        mrp = rupees_to_paise(self.mrp)
+        return format_rupees(mrp) if mrp > rupees_to_paise(self.offer_price) else None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def saving_display(self) -> str | None:
+        saving = rupees_to_paise(self.mrp) - rupees_to_paise(self.offer_price)
+        return format_rupees(saving) if saving > 0 else None
 
 
 class ProductRef(BaseModel):

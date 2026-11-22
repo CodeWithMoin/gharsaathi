@@ -177,6 +177,9 @@ async def test_search_returns_normalized_product(client: AsyncClient) -> None:
     )
     assert response.status_code == 200
     assert response.json()["products"][0]["sku_id"] == "sku1"
+    # The browser shows these ₹ strings as-is; it never formats or subtracts prices.
+    price = response.json()["products"][0]["price"]
+    assert (price["offer_display"], price["mrp_display"], price["saving_display"]) == ("₹154", "₹180", "₹26")
 
 
 @pytest.mark.asyncio

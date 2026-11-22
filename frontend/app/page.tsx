@@ -5,11 +5,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Basket, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
-import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, type Approval, type ApprovalRequest, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
-import { groupProductsForComparison, INITIAL_COMPARISON_GROUPS, ProductComparison, type Product } from "./product-comparison";
+import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, useSetBasketLineQuantity, type Approval, type ApprovalRequest, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
+import { ProductOptions, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
 import { basketSummary, collapseBasketCard, dropResultGroup, emptyTimeline, finishResultGroup, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordResultGroup, restoreTimeline, summaryText, withResultGroups, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
-import { groupBadge, restoreResultGroups, resultGroupIdentity, resultsHeadline, type ResultGroup } from "./result-groups.mjs";
+import { restoreResultGroups, resultGroupIdentity, type ResultGroup } from "./result-groups.mjs";
 import { conversationTitle, relativeChatDate, searchConversations, visibleConversations, type ConversationSummary } from "./chat-list.mjs";
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
@@ -49,6 +49,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const { user } = useUser();
   const apiRequest = useApiRequest();
   const addBasketLine = useAddBasketLine();
+  const setBasketLineQuantity = useSetBasketLineQuantity();
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [timeline, setTimeline] = useState<ChatTimeline>(emptyTimeline);
   const [baskets, setBaskets] = useState<Partial<Record<ProviderName, ShoppingBasket>>>({});
@@ -743,6 +744,22 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     }
   }
 
+  // The option card's − / + use the same basket line endpoint as the basket card.
+  async function changeProductQuantity(product: Product, quantity: number) {
+    if (!product.spin_id) return false;
+    const provider = product.provider ?? "swiggy_instamart";
+    try {
+      const next = await setBasketLineQuantity(provider, product.spin_id, quantity);
+      handleBasketChange(next);
+      window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
+      setMessage(quantity > 0 ? `${product.name}: ${quantity} in basket.` : `${product.name} removed from basket.`);
+      return true;
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Could not update the quantity.");
+      return false;
+    }
+  }
+
   async function disconnect() {
     setLoading("disconnect");
     try {
@@ -799,8 +816,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const renderResultGroup = (group: ResultGroup<Product>) => {
     if (group.status === "searching") return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex items-center gap-1.5" aria-label={`GharSaathi is searching for ${group.label}`}>{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">{commerceMode === "demo" ? "Searching the demo catalogue" : zeptoSearchReady ? "Searching Swiggy and Zepto" : "Searching Swiggy Instamart"}</span></div></div></motion.div>;
     if (!group.products.length) return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 max-w-md rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex gap-3"><Basket size={20} className="mt-0.5 shrink-0 text-[#c6531d]" /><p className="text-sm leading-6"><strong className="font-semibold">{group.label}:</strong> nothing found at this address. Try a broader product or brand name.</p></div></div></motion.div>;
-    const optionCount = groupProductsForComparison(group.products).length;
-    return <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><div className="mb-2 w-fit max-w-full rounded-[18px] bg-[#fffdf9] px-4 py-3 shadow-[0_14px_34px_-32px_rgba(74,43,27,.65)]"><p className="text-[11px] font-bold uppercase tracking-[.12em] text-[#b65a2e]">{groupBadge(group.label, optionCount)}</p><p className="mt-1 text-[13px] leading-5"><strong>{resultsHeadline(optionCount, INITIAL_COMPARISON_GROUPS)}</strong> {optionCount > 1 ? (commerceMode === "demo" ? "Add one to open the next item." : `Compare options from ${zeptoSearchReady ? "Swiggy and Zepto" : "Swiggy Instamart"}.`) : "The best match is below."}</p></div><ProductComparison products={group.products} commerceMode={commerceMode} addingSku={addingSku} onAdd={addProduct} />{group.seq === newestGroupSeq && <p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p>}</motion.div>;
+    return <div className="mt-8 min-w-0"><ProductOptions label={group.label} products={group.products} commerceMode={commerceMode} addingSku={addingSku} baskets={baskets} onAdd={addProduct} onQuantity={changeProductQuantity} />{group.seq === newestGroupSeq && <p className="mt-2 flex items-start gap-2 px-1 text-[10px] leading-4 text-[#8e796d]"><ShieldCheck size={14} className="mt-0.5 shrink-0" /> Each store keeps its own basket and exact bill. Nothing is purchased without your approval.</p>}</div>;
   };
 
   return <main className="grain min-h-[100dvh] overflow-hidden bg-[#f8f2ea] text-[#35241c]">

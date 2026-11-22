@@ -177,6 +177,20 @@ export function useAddBasketLine() {
   }, [request]);
 }
 
+/**
+ * Sets one basket line's quantity; 0 removes the line. Shared by the basket
+ * card and the product option cards.
+ */
+export function useSetBasketLineQuantity() {
+  const request = useApiRequest();
+  return useCallback(async (provider: ProviderName, variantId: string, quantity: number): Promise<ShoppingBasket> => {
+    const path = `/api/basket/lines/${encodeURIComponent(variantId)}${providerQuery(provider)}`;
+    return quantity <= 0
+      ? request<ShoppingBasket>(path, { method: "DELETE" })
+      : request<ShoppingBasket>(path, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantity }) });
+  }, [request]);
+}
+
 function expiryText(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "for a limited time";
@@ -221,6 +235,7 @@ export function BasketPanel({
   className = "",
 }: BasketPanelProps) {
   const apiRequest = useApiRequest();
+  const setLineQuantity = useSetBasketLineQuantity();
   const basketRequest = useCallback(<T,>(path: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
     if (init?.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -309,10 +324,7 @@ export function BasketPanel({
   const changeQuantity = useCallback(async (line: BasketLine, quantity: number) => {
     setAction(`line-${line.ref.variant_id}`);
     try {
-      const path = `/lines/${encodeURIComponent(line.ref.variant_id)}${query}`;
-      const next = quantity <= 0
-        ? await basketRequest<ShoppingBasket>(path, { method: "DELETE" })
-        : await basketRequest<ShoppingBasket>(path, { method: "PATCH", body: JSON.stringify({ quantity }) });
+      const next = await setLineQuantity(provider, line.ref.variant_id, quantity);
       applyBasket(next);
       clearQuote();
       setNotice(quantity <= 0 ? { text: `${line.name} removed from your basket.`, error: false } : null);
@@ -321,7 +333,7 @@ export function BasketPanel({
     } finally {
       setAction(null);
     }
-  }, [applyBasket, basketRequest, clearQuote, query]);
+  }, [applyBasket, clearQuote, provider, setLineQuantity]);
 
   const requestQuote = useCallback(async () => {
     setAction("quote");
