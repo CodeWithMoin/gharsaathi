@@ -163,7 +163,7 @@ async def test_recall_is_scoped_to_the_verified_household(factory) -> None:
 async def test_unknown_household_gets_empty_result_without_creating_records(factory) -> None:
     output = await recall(MemoryToolExecutor(DatabasePreferenceRecaller(factory), "never-seen"), item="milk")
     assert output["status"] == "no_memory"
-    assert "brand aur size" in output["note"]
+    assert "kaunsa lena hai" in output["note"]
     async with factory() as session:
         assert await MemoryRepository(session).find_person("never-seen") is None
 

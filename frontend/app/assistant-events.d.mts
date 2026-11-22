@@ -4,7 +4,7 @@ import type { AddressPrefill } from "./voice-address-prefill.mjs";
 export type AssistantAddressFormRequest = { prefill: AddressPrefill } | { unavailable: string };
 
 export type AssistantEventHandlers<Product> = {
-  onResults?: (query: string, products: Product[]) => void;
+  onResults?: (query: string, products: Product[], item: { itemKey?: string; itemLabel?: string }) => void;
   onBasketTouched?: (provider?: ProviderName) => void;
   onApprovalRequested?: (provider: ProviderName, request: ApprovalRequest) => void;
   onAddressForm?: (request: AssistantAddressFormRequest) => void;

@@ -76,12 +76,12 @@ SCENARIOS: list[dict[str, Any]] = [
         ],
     },
     {
-        "id": "empty_memory_asks_brand_and_size",
+        "id": "empty_memory_searches_and_asks_once",
         "household": None,
         "turns": [
             {
                 "user": "deo order karna hai",
-                "expect": {"no_search": True, "asks_brand_and_size": True},
+                "expect": {"tools_required": ["search_products"], "asks_one_pick": True},
             }
         ],
     },
@@ -243,9 +243,8 @@ def check_turn(expect: dict[str, Any], reply: str, calls: list[dict[str, Any]]) 
     if expect.get("asks_wahi"):
         if "wahi" not in lowered or "axe" not in lowered or "?" not in reply:
             failures.append("Did not ask 'AXE ... wahi chahiye?'.")
-    if expect.get("asks_brand_and_size"):
-        if "brand" not in lowered or not re.search(r"size|ml|pack", lowered) or "?" not in reply:
-            failures.append("Did not ask for brand and size.")
+    if expect.get("asks_one_pick") and reply.count("?") != 1:
+        failures.append("Expected exactly one question after showing the options.")
     if expect.get("masculine_user_forms"):
         if not MASCULINE_USER.search(reply):
             failures.append("No masculine user-directed form such as 'aap kar sakte hain'.")

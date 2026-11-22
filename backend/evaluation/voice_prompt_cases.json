@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
+  "version": "1.9.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -273,6 +273,100 @@
       "user": "इतना तामझाम नहीं, सीधा Surf Excel 2 kg add करो।",
       "required_any": ["Surf Excel", "Instamart", "Swiggy"],
       "forbidden_any": ["kaunse store", "kaun se store", "kis store", "Instamart ya Zepto", "Zepto ya Instamart", "which store", "add ho gaya", "add kar diya", "added"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "branded_item_delegates_without_confirm",
+      "user": "Diet Coke chahiye.",
+      "required_any": ["dekh rahi", "check kar rahi", "dhoondh rahi", "Ek second", "Pichli baar", "330"],
+      "forbidden_any": ["chahiye kya", "chahiye na?", "Diet Coke chahiye?", "₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "promo_answered_from_bill_offers_no_drift",
+      "history": [
+        {"role": "user", "content": "Zepto ka bill bana do."},
+        {"role": "assistant", "content": "Zepto ka final bill screen par hai; Free Delivery aur ek discount bill mein lag chuke hain, wahin review kijiye."}
+      ],
+      "user": "कुछ promo code है क्या?",
+      "required_any": ["Free Delivery", "free delivery", "promo code", "discount"],
+      "forbidden_any": ["mil gaya", "poora mila", "deliver ho", "pahunch", "feedback", "order aa", "WELCOME", "code hai:", "₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "misheard_product_confirms_closest_grocery",
+      "user": "Bed cook chahiye.",
+      "required_any": ["Diet Coke", "Coke"],
+      "forbidden_any": ["mattress", "gadda", "bedsheet", "bed sheet", "bedding", "takiya"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "mixed_hinglish_numbers_and_verbs_stay_roman",
+      "history": [
+        {"role": "user", "content": "Diet Coke ke options batao."},
+        {"role": "assistant", "content": "Zepto par Diet Coke 330 ml can aur teen can ka pack hai."}
+      ],
+      "user": "तीन वाला कितने का है, और पिछली बार मैंने कौनसा लिया था?",
+      "required_any": ["rupaye", "pichli", "Pichli", "pichhli", "Pichhli", "liya", "li thi", "dekh"],
+      "forbidden_any": ["₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.0
+    },
+    {
+      "id": "show_only_after_dikha_do",
+      "history": [
+        {"role": "user", "content": "Dahi dikha dena, bas; batana mat, dikha dena."},
+        {"role": "assistant", "content": "Ek second, dekh rahi hoon."}
+      ],
+      "user": "[Backend result, already on screen: Desi Farms Malai Dahi 200 g ₹31; Amul Masti Dahi 400 g ₹35; Mother Dairy Classic Dahi 400 g ₹40. Zepto.]",
+      "required_any": ["screen"],
+      "forbidden_any": ["rupaye", "₹", "rupees"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "staples_delegate_without_brand_size_question",
+      "user": "Atta aur dahi chahiye.",
+      "required_any": ["dekh rahi", "dhoondh rahi", "check kar rahi", "Ek second", "screen"],
+      "forbidden_any": ["brand aur size", "kaunsa brand", "Kaunsa brand", "size chahiye"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "self_correction_drops_cancelled_item",
+      "user": "आटा चाहिए, और थोड़ा दूध चाहिए; छोड़ो, दूध मत करना, आटा और दही कर दो।",
+      "required_any": ["atta", "Atta", "aata"],
+      "forbidden_any": ["aur doodh", "doodh bhi", "milk", "Milk"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "vague_khaana_one_question_with_examples",
+      "user": "खाना चाहिए।",
+      "required_any": ["atta", "dal", "ready", "chawal", "sabzi"],
+      "forbidden_any": ["₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "named_request_never_bare_acknowledgement",
+      "user": "अमूल दही ढूँढना और आशिर्वाद आटा।",
+      "required_any": ["dekh rahi", "dhoondh rahi", "check kar rahi", "Ek second"],
+      "forbidden_any": ["Kis cheez", "kya chahiye"],
+      "forbidden_prefix": ["haan.", "haan,", "theek hai."],
       "max_questions": 0,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05

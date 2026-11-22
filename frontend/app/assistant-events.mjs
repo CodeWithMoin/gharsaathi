@@ -16,7 +16,7 @@ const ADDRESS_UNAVAILABLE_MESSAGES = {
  *
  * @param {unknown} raw
  * @param {{
- *   onResults?: (query: string, products: any[]) => void,
+ *   onResults?: (query: string, products: any[], item: { itemKey?: string, itemLabel?: string }) => void,
  *   onBasketTouched?: (provider?: "swiggy_instamart" | "zepto") => void,
  *   onApprovalRequested?: (provider: "swiggy_instamart" | "zepto", request: any) => void,
  *   onAddressForm?: (request: { prefill: Record<string, string> } | { unavailable: string }) => void,
@@ -29,7 +29,10 @@ export function applyAssistantEvent(raw, handlers) {
 
   if (event.type === "tool.results") {
     if (!Array.isArray(event.products)) return null;
-    handlers.onResults?.(typeof event.query === "string" ? event.query : "", event.products);
+    handlers.onResults?.(typeof event.query === "string" ? event.query : "", event.products, {
+      itemKey: typeof event.item_key === "string" && event.item_key ? event.item_key : undefined,
+      itemLabel: typeof event.item_label === "string" && event.item_label ? event.item_label : undefined,
+    });
     return { kind: "results", message: "Options mil gaye. Main best choices bata rahi hoon." };
   }
   if (event.type === "tool.not_connected") {

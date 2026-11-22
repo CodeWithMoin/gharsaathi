@@ -14,7 +14,7 @@ import logging
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -48,6 +48,20 @@ TOOL_FAILED_EVENT = {
     "message": "Search mein kuch gadbad ho gayi. Ek baar phir likhiye.",
 }
 EMPTY_REPLY = "Maaf kijiye, abhi jawab nahi bana paayi. Ek baar phir likhiye."
+# Appended to the voice backend instructions for this channel only. Voice gets
+# nothing, so live sessions keep the speech formatting rules unchanged.
+CHANNEL_CONTEXT = {
+    "voice": "",
+    "typed": (
+        "\n## Channel: typed\n"
+        "This turn was typed and your reply is shown as text, not spoken. Only the "
+        "speech-formatting rules change: write prices as the tool returned them, for "
+        "example \"₹172\", instead of in words, and when you list several items or "
+        "options you may use short bullet lines such as \"- AXE Dark Temptation 150 ml, "
+        "₹172, Zepto\". Every other rule stays the same, including the reply language, "
+        "address form, tool use and keeping replies short.\n"
+    ),
+}
 SEARCH_CONTEXT_HEADER = (
     "Search results already shown to the user earlier in this chat (tool output, "
     "newest last). Their option_id values are still valid for add_to_basket."
@@ -255,9 +269,7 @@ class ChatTurnService:
         saved_history: list[HistoryMessage],
         stats: dict[str, Any],
     ) -> ChatTurnResult:
-        delegation = build_session_config(
-            self.settings, self.voice.tool_definitions, await self.voice.profile(user_id)
-        )["delegation"]["responses"]
+        delegation = await self._delegation(user_id, "typed")
         allowed = {tool["name"] for tool in delegation["tools"]}
         request_input: list[dict[str, Any]] = [
             {"role": item.role, "content": item.content}
@@ -314,6 +326,21 @@ class ChatTurnService:
                     }
                 )
         raise AssertionError("unreachable: the final round always returns")
+
+    async def _delegation(self, user_id: str, channel: Literal["typed", "voice"]) -> dict[str, Any]:
+        """The voice backend config with the same profile and household memory blocks."""
+
+        household_memory = await self.voice.household_memory(user_id) if self.voice.basket_enabled else None
+        delegation = dict(
+            build_session_config(
+                self.settings,
+                self.voice.tool_definitions,
+                await self.voice.profile(user_id),
+                household_memory,
+            )["delegation"]["responses"]
+        )
+        delegation["instructions"] += CHANNEL_CONTEXT[channel]
+        return delegation
 
     async def _create(self, client: ResponsesClient, **kwargs: Any) -> Any:
         try:

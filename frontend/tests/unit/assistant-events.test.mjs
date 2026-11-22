@@ -7,7 +7,7 @@ function recorder() {
   return {
     calls,
     handlers: {
-      onResults: (query, products) => calls.push(["results", query, products.length]),
+      onResults: (query, products, item) => calls.push(["results", query, products.length, item]),
       onBasketTouched: (provider) => calls.push(["basket", provider]),
       onApprovalRequested: (provider, request) => calls.push(["approval", provider, request.approval.id]),
       onAddressForm: (request) => calls.push(["address", request]),
@@ -26,7 +26,17 @@ test("search results reach the results handler", () => {
   const { calls, handlers } = recorder();
   const outcome = applyAssistantEvent({ type: "tool.results", query: "AXE Dark", store: "Zepto", products: [{}, {}] }, handlers);
   assert.equal(outcome.kind, "results");
-  assert.deepEqual(calls, [["results", "AXE Dark", 2]]);
+  assert.deepEqual(calls, [["results", "AXE Dark", 2, { itemKey: undefined, itemLabel: undefined }]]);
+});
+
+test("search results carry the item key and label for per-item result groups", () => {
+  const { calls, handlers } = recorder();
+  applyAssistantEvent({ type: "tool.results", query: "atta 5 kg", store: "Zepto", products: [{}], item_key: "atta", item_label: "Atta" }, handlers);
+  applyAssistantEvent({ type: "tool.results", query: "dahi", store: "Zepto", products: [], item_key: 7, item_label: "" }, handlers);
+  assert.deepEqual(calls, [
+    ["results", "atta 5 kg", 1, { itemKey: "atta", itemLabel: "Atta" }],
+    ["results", "dahi", 0, { itemKey: undefined, itemLabel: undefined }],
+  ]);
 });
 
 test("basket updates name the provider and summarise the basket", () => {

@@ -8,6 +8,7 @@ import pytest
 from pydantic import SecretStr
 
 from app.chat.service import (
+    CHANNEL_CONTEXT,
     MAX_HISTORY_MESSAGES,
     MAX_TOOL_ROUNDS,
     ChatProviderError,
@@ -18,7 +19,9 @@ from app.chat.service import (
 )
 from app.commerce.swiggy.models import Price, Product, ProductSearchResult
 from app.core.config import Settings
+from app.memory.recall import HouseholdMemory, HouseholdRecall, RecallConsent, RememberedItem
 from app.user_profile import UserProfile
+from app.voice.profile_context import LANGUAGE_RULES
 from app.voice.prompts import BACKEND_INSTRUCTIONS
 from app.voice.service import LiveSessionService
 from app.voice.sideband import SidebandHub
@@ -64,6 +67,23 @@ class FakeProfiles:
         return self.profile
 
 
+class FakeMemory:
+    """Preference recall with a consented household memory summary."""
+
+    def __init__(self, items: list[RememberedItem]) -> None:
+        self.memory = HouseholdMemory(
+            consent=RecallConsent(saved_preferences="on", purchase_history="on"), items=items
+        )
+        self.reads: list[str] = []
+
+    async def recall(self, household_id: str, item: str) -> HouseholdRecall:
+        return HouseholdRecall(consent=self.memory.consent, candidates=[])
+
+    async def household_memory(self, household_id: str) -> HouseholdMemory:
+        self.reads.append(household_id)
+        return self.memory
+
+
 def call(name: str, call_id: str, **arguments: Any) -> SimpleNamespace:
     return SimpleNamespace(type="function_call", name=name, arguments=json.dumps(arguments), call_id=call_id)
 
@@ -97,6 +117,7 @@ def service(
     swiggy: FakeSearcher,
     zepto: FakeSearcher | None = None,
     profile: UserProfile | None = None,
+    memory: FakeMemory | None = None,
 ) -> ChatTurnService:
     config = settings()
     voice = LiveSessionService(
@@ -106,6 +127,7 @@ def service(
         baskets=world.baskets,
         approvals=world.approvals,
         zepto_searcher=zepto,
+        preference_recall=memory,  # type: ignore[arg-type]
         profile_reader=FakeProfiles(profile),
     )
     return ChatTurnService(config, voice, responses=responses)
@@ -139,7 +161,7 @@ async def test_search_then_add_runs_voice_tools_and_returns_voice_ui_events() ->
     basket = await world.baskets.active(USER, SWIGGY)
     assert [(line.pack_size, line.unit_price_paise) for line in basket.lines] == [("150 ml", 19900)]
     first = responses.requests[0]
-    assert first["instructions"] == BACKEND_INSTRUCTIONS
+    assert first["instructions"] == BACKEND_INSTRUCTIONS + CHANNEL_CONTEXT["typed"]
     assert first["tools"] == VOICE_TOOL_DEFINITIONS
     assert first["input"][-1] == {"role": "user", "content": "AXE Dark sabse chhota add karo"}
     assert responses.outputs(1)[0]["status"] == "ok"
@@ -304,6 +326,58 @@ async def test_session_profile_is_added_to_the_same_backend_instructions() -> No
     instructions = responses.requests[0]["instructions"]
     assert instructions.startswith(BACKEND_INSTRUCTIONS)
     assert "Address form for the user: masculine" in instructions
+
+
+@pytest.mark.parametrize(
+    ("language", "label", "absent"),
+    [
+        ("hinglish", "Hinglish", "overrides the default"),
+        ("english", "English", "Reply in Hindi"),
+        ("hindi", "Hindi", "Reply in plain English"),
+    ],
+)
+async def test_typed_turn_states_the_profile_reply_language(language: str, label: str, absent: str) -> None:
+    responses = FakeResponses(["ok"])
+    profile = UserProfile(address_form="neutral", language=language)  # type: ignore[arg-type]
+    chat = service(responses, World(), FakeSearcher(AXE), profile=profile)
+
+    await turn(chat, "hello")
+
+    instructions = responses.requests[0]["instructions"]
+    assert f"Preferred reply language: {label}" in instructions
+    assert f"Reply language rule: {LANGUAGE_RULES[language]}" in instructions
+    assert absent not in instructions
+    # The same profile block the voice session gets, before the typed channel note.
+    assert instructions.index("# Session user profile") < instructions.index("## Channel: typed")
+
+
+async def test_typed_turn_includes_the_household_memory_summary_like_voice() -> None:
+    memory = FakeMemory(
+        [RememberedItem(source="purchase_history", name="Diet Coke 330 ml can", store_id="zepto", times=3)]
+    )
+    responses = FakeResponses(["ok"])
+    chat = service(responses, World(), FakeSearcher(AXE), memory=memory)
+
+    await turn(chat, "coke chahiye")
+
+    instructions = responses.requests[0]["instructions"]
+    assert "## Household memory (consented)" in instructions
+    assert "- Bought: Diet Coke 330 ml can, Zepto, bought 3 times" in instructions
+    assert memory.reads == [USER]
+
+
+async def test_typed_channel_allows_rupee_prices_and_voice_config_is_unchanged() -> None:
+    responses = FakeResponses(["ok"])
+    chat = service(responses, World(), FakeSearcher(AXE))
+
+    await turn(chat, "hello")
+
+    instructions = responses.requests[0]["instructions"]
+    assert instructions.startswith(BACKEND_INSTRUCTIONS)
+    assert "## Channel: typed" in instructions and "₹172" in instructions
+    voice = (await chat._delegation(USER, "voice"))["instructions"]
+    assert voice == BACKEND_INSTRUCTIONS
+    assert "Channel" not in voice
 
 
 async def test_model_failure_and_timeout_are_typed_errors() -> None:

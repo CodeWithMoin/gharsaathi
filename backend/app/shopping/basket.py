@@ -10,6 +10,7 @@ from app.shopping.models import (
     BasketStatus,
     ProductRef,
     ProviderName,
+    Quote,
 )
 from app.shopping.ports import ApprovalRepository, BasketRepository
 
@@ -40,6 +41,27 @@ def line_savings_paise(line: BasketLine) -> int:
 
 def savings_vs_mrp_paise(basket: Basket) -> int:
     return sum(line_savings_paise(line) for line in basket.lines)
+
+
+def quote_item_total_matches(quote: Quote, basket: Basket) -> bool:
+    """Whether the store priced every item as the basket did.
+
+    A provider reports its item total either at selling price, or at MRP with
+    the MRP-to-selling gap as a separate item discount. Both must land on the
+    basket's selling-price total; at MRP the MRP total must agree too. A discount
+    that also folds in a coupon cannot be told apart from a price drop, so it is
+    reported as a mismatch.
+    """
+
+    selling = item_total_paise(basket)
+    if quote.item_total_paise == selling:
+        return True
+    if quote.item_discount_paise == 0:
+        return False
+    return (
+        quote.item_total_paise == selling + savings_vs_mrp_paise(basket)
+        and quote.item_total_paise - quote.item_discount_paise == selling
+    )
 
 
 def format_rupees(paise: int) -> str:

@@ -78,7 +78,7 @@ flowchart TD
 
   ADD --> RES
   ADD2 --> RES
-  RES["Tool results → backend model → short reply"] --> D5{"D5 · Another tool?<br/>(loop; cap 6 rounds, 2 searches<br/>⟨in progress⟩)"}
+  RES["Tool results → backend model → short reply"] --> D5{"D5 · Another tool?<br/>(loop; cap 6 rounds, 4 searches)"}
   D5 -- "yes" --> SEARCH
   D5 -- "no" --> SPEAK
 
@@ -97,7 +97,7 @@ flowchart TD
 | D2 | Is the request clear? Ask for more context? | Backend model (instructions) | No — rules: at most one question, never re-ask what was said |
 | D3 | Check memory first | Backend model calls `recall_household_preferences` | **Today: no** (model may skip it — the Diet Coke miss). **In progress:** memory summary at session start + memory-annotated search results, so remembered items are always in front of the model |
 | D4 | Add vs ask which variant/store | Backend model (instructions + few-shot examples) | Partly — store ambiguity on bills returns `needs_store` from code |
-| D5 | Call another tool or answer | Backend model | Typed chat: yes, hard cap of 6 rounds / 2 searches per turn (`app/chat/service.py`). Voice: **in progress** |
+| D5 | Call another tool or answer | Backend model | Hard cap in code: voice 6 rounds / 4 searches per turn (`sideband.py`); typed chat 6 rounds / 2 searches per turn (`app/chat/service.py`) |
 
 ### Deterministic checks (code, every call)
 
@@ -144,17 +144,25 @@ flowchart LR
   T(["User types"]) --> L{"Local intent?<br/>(conversation-intent.mjs:<br/>greeting, connection status)"}
   L -- yes --> R1["Local reply"]
   L -- no --> C["POST /api/chat/turn<br/>{conversation_id, message,<br/>selected address per store}"]
-  C --> B["Backend model, same delegation config as voice:<br/>BACKEND_INSTRUCTIONS + session profile,<br/>same 7 tools, same VoiceToolbox"]
+  C --> B["Backend model, same delegation config as voice:<br/>BACKEND_INSTRUCTIONS + session profile<br/>+ household memory summary + typed channel note,<br/>same tools, same VoiceToolbox"]
   B --> D5{"Tool loop<br/>cap 6 rounds · 2 searches · timeout"}
   D5 --> OUT["{reply, ui_events[]}"]
-  OUT --> UI["Assistant bubble + the event handler voice uses<br/>(assistant-events.mjs): results, basket, bill, address form"]
-  C -. "error" .-> FB["Hinglish error +<br/>'Seedha search karein' = old direct search"]
+  OUT --> UI["Assistant bubble in the chat timeline + the event handler voice uses<br/>(assistant-events.mjs): per-item result groups, basket card,<br/>bill shown at once, address form"]
+  C -. "error" .-> FB["Error bubble +<br/>'Seedha search karein' = one direct search,<br/>shown as its own result group"]
 ```
 
 - **Same decisions.** D2–D5 above apply unchanged: the request uses
-  `build_session_config(...)["delegation"]["responses"]`, so model, instructions,
-  profile block, tool definitions and `tool_choice` are the voice ones. There is no
-  typed-only prompt. D1 does not exist for typed text (there is no front model).
+  `build_session_config(...)["delegation"]["responses"]` with the same profile and
+  household memory summary a voice session gets, so model, instructions, tool
+  definitions and `tool_choice` are the voice ones. There is no typed-only prompt.
+  D1 does not exist for typed text (there is no front model).
+- **Reply language.** The profile block states the saved `language` (`hinglish`
+  default, `english`, `hindi`) as an explicit rule for voice and typed chat alike.
+  Typed replies are shown as the model wrote them; the caption romaniser runs only on
+  voice transcripts and stays off for `hindi` (`assistant_transcript_script`).
+- **Channel note.** `app/chat/service.py` appends a short "Channel: typed" block to
+  the instructions: prices may be written as "₹172" and lists may be short bullet
+  lines. Voice sessions get no such block, so spoken replies keep prices in words.
 - **Context per turn.** The last 12 messages of the user's own conversation (at most
   about 6,000 characters), plus this server's last turns if the browser has not saved
   them yet, plus the last 2 search results of this chat as a developer message, so
@@ -174,8 +182,6 @@ flowchart LR
 - **Persistence.** The browser appends the typed message and the reply to the open
   conversation and saves it with `PUT /api/conversations/current`, exactly like
   voice transcripts.
-- **Known gap.** The backend prompt is written for speech, so typed replies also
-  spell prices in words ("ek sau ninyanve rupaye").
 
 ## Where to look
 

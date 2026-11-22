@@ -95,6 +95,61 @@
           "offer_price": 565
         }
       ]
+    },
+    "coke_fixture": {
+      "description": "Harness-only Diet Coke fixture (DEMO_PRODUCTS has no soft drinks). Single cans, a 3-pack, a 6-pack and a 300 ml can, like the live Zepto session. Prices are made up. No delivery ETA on purpose.",
+      "swiggy_instamart": [
+        {
+          "product_id": "fx-dc-330",
+          "name": "Diet Coke Soft Drink Can",
+          "brand": "Coca-Cola",
+          "pack_size": "330 ml",
+          "mrp": 50,
+          "offer_price": 48
+        },
+        {
+          "product_id": "fx-dc-330x6",
+          "name": "Diet Coke Soft Drink Can",
+          "brand": "Coca-Cola",
+          "pack_size": "6 x 330 ml",
+          "mrp": 300,
+          "offer_price": 282
+        }
+      ],
+      "zepto": [
+        {
+          "product_id": "fx-dc-330",
+          "name": "Diet Coke Soft Drink Can",
+          "brand": "Coca-Cola",
+          "pack_size": "330 ml",
+          "mrp": 50,
+          "offer_price": 45
+        },
+        {
+          "product_id": "fx-dc-330x3",
+          "name": "Diet Coke Soft Drink Can",
+          "brand": "Coca-Cola",
+          "pack_size": "3 x 330 ml",
+          "mrp": 150,
+          "offer_price": 135
+        },
+        {
+          "product_id": "fx-dc-330x6",
+          "name": "Diet Coke Soft Drink Can",
+          "brand": "Coca-Cola",
+          "pack_size": "6 x 330 ml",
+          "mrp": 300,
+          "offer_price": 270
+        },
+        {
+          "product_id": "fx-dc-300",
+          "name": "Diet Coke Soft Drink Can",
+          "brand": "Coca-Cola",
+          "pack_size": "300 ml",
+          "mrp": 45,
+          "offer_price": 40
+        }
+      ]
     }
   },
   "scenarios": [
@@ -378,6 +433,260 @@
             ],
             "add_count": 0,
             "record_script": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "s8-branded-recall-remembered-size",
+      "title": "Brand-only 'Diet Coke' with memory: recall first, offer remembered 330 ml, add it on yes.",
+      "catalogue": "coke_fixture",
+      "memory": [
+        {
+          "source": "purchase_history",
+          "name": "Diet Coke Soft Drink Can 330 ml",
+          "store_id": "zepto",
+          "last_bought": "2026-11-02",
+          "times": 4
+        },
+        {
+          "source": "purchase_history",
+          "name": "Diet Coke Soft Drink Can 300 ml",
+          "store_id": "zepto",
+          "last_bought": "2026-08-14",
+          "times": 1
+        }
+      ],
+      "turns": [
+        {
+          "user": "Diet Coke chahiye",
+          "expect": {
+            "recall_before_search": true,
+            "add_count": 0,
+            "reply_mentions_any": [
+              "330"
+            ],
+            "max_questions": 1,
+            "roman_only": true
+          }
+        },
+        {
+          "user": "haan wahi",
+          "expect": {
+            "tools_required": [
+              "add_to_basket"
+            ],
+            "add_count": 1,
+            "add_product_contains": "Diet Coke",
+            "add_pack_size": "330 ml",
+            "max_sentences": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "s9-annotated-search-without-recall",
+      "title": "Recall tool withheld and no memory summary: the 'remembered' search annotation alone makes the model offer 330 ml.",
+      "catalogue": "coke_fixture",
+      "memory": [
+        {
+          "source": "purchase_history",
+          "name": "Diet Coke Soft Drink Can 330 ml",
+          "store_id": "zepto",
+          "last_bought": "2026-11-02",
+          "times": 4
+        },
+        {
+          "source": "purchase_history",
+          "name": "Diet Coke Soft Drink Can 300 ml",
+          "store_id": "zepto",
+          "last_bought": "2026-08-14",
+          "times": 1
+        }
+      ],
+      "withhold_tools": [
+        "recall_household_preferences"
+      ],
+      "memory_summary": false,
+      "turns": [
+        {
+          "user": "Diet Coke chahiye",
+          "expect": {
+            "tools_required": [
+              "search_products"
+            ],
+            "add_count": 0,
+            "reply_mentions_any": [
+              "330"
+            ],
+            "reply_forbids_any": [
+              "kaunsa add",
+              "kaunsa chahiye",
+              "3 x",
+              "6 x"
+            ],
+            "max_questions": 1
+          }
+        },
+        {
+          "user": "haan",
+          "expect": {
+            "add_count": 1,
+            "add_pack_size": "330 ml"
+          }
+        }
+      ]
+    },
+    {
+      "id": "s10-promo-after-bill-no-drift",
+      "title": "Promo question after a Zepto bill is answered from provider-confirmed bill offers, with no invented codes or support drift.",
+      "catalogue": "demo",
+      "quote_offers": true,
+      "turns": [
+        {
+          "user": "Zepto se Tata Tea Gold 500 g add kar do",
+          "expect": {
+            "tools_required": [
+              "add_to_basket"
+            ],
+            "add_count": 1
+          }
+        },
+        {
+          "user": "bill bana do",
+          "expect": {
+            "tools_required": [
+              "request_approval"
+            ],
+            "approval_store": "zepto"
+          }
+        },
+        {
+          "user": "कुछ promo code है क्या",
+          "expect": {
+            "no_approval_requested": true,
+            "add_count": 0,
+            "reply_mentions_any": [
+              "Free Delivery",
+              "free delivery",
+              "Welcome Saver"
+            ],
+            "reply_forbids_any": [
+              "mil gaya",
+              "poora mila",
+              "deliver ho",
+              "pahunch",
+              "feedback",
+              "order aa",
+              "satisf",
+              "HDFC",
+              "WELCOME10"
+            ],
+            "max_questions": 1,
+            "roman_only": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "s11-misheard-bed-cook",
+      "title": "ASR 'Bed cook' with Diet Coke in memory: ask 'Diet Coke?', never bedding.",
+      "catalogue": "coke_fixture",
+      "memory": [
+        {
+          "source": "purchase_history",
+          "name": "Diet Coke Soft Drink Can 330 ml",
+          "store_id": "zepto",
+          "last_bought": "2026-11-02",
+          "times": 4
+        },
+        {
+          "source": "purchase_history",
+          "name": "Diet Coke Soft Drink Can 300 ml",
+          "store_id": "zepto",
+          "last_bought": "2026-08-14",
+          "times": 1
+        }
+      ],
+      "turns": [
+        {
+          "user": "Bed cook chahiye",
+          "expect": {
+            "add_count": 0,
+            "reply_mentions_any": [
+              "Diet Coke",
+              "Coke"
+            ],
+            "reply_forbids_any": [
+              "mattress",
+              "gadda",
+              "bedsheet",
+              "bed sheet",
+              "bedding",
+              "takiya"
+            ],
+            "max_questions": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "s12-staples-show-only-one-question",
+      "title": "Staples without brand or size and no memory: search both, show only, one combined question.",
+      "catalogue": "demo",
+      "turns": [
+        {
+          "user": "atta aur dahi chahiye, bas dikha do, batana mat",
+          "expect": {
+            "min_searches": 2,
+            "add_count": 0,
+            "max_questions": 1,
+            "reply_forbids_any": [
+              "rupaye",
+              "brand aur size",
+              "kaunsa brand"
+            ],
+            "roman_only": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "s13-self-correction-drops-milk",
+      "title": "Self-correction: 'chhodo, doodh mat karna' drops milk; only atta and dahi are searched.",
+      "catalogue": "demo",
+      "turns": [
+        {
+          "user": "आटा चाहिए, और थोड़ा दूध चाहिए; छोड़ो, दूध मत करना, आटा और दही कर दो",
+          "expect": {
+            "min_searches": 2,
+            "search_queries_forbid": [
+              "milk",
+              "doodh"
+            ],
+            "add_count": 0,
+            "max_questions": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "s14-named-request-is-searched",
+      "title": "Brand + product request is searched in the same turn, never a bare acknowledgement.",
+      "catalogue": "demo",
+      "turns": [
+        {
+          "user": "अमूल दही ढूँढना और आशिर्वाद आटा",
+          "expect": {
+            "min_searches": 2,
+            "add_count": 0,
+            "max_questions": 1,
+            "reply_mentions_any": [
+              "Amul",
+              "Aashirvaad",
+              "atta",
+              "dahi"
+            ]
           }
         }
       ]
