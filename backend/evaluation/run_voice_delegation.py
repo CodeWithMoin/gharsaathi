@@ -629,7 +629,9 @@ def check_turn(
         failures.append(f"Delivery minutes not returned by any tool: {facts['invented_eta_minutes']}.")
     if facts["unconfirmed_add_claim"]:
         failures.append("Reply claims an add/change but no basket tool confirmed one this turn.")
-    if facts["order_claims"]:
+    # A store-confirmed order (order history / tracking) in this turn makes "order ho gaya" true.
+    facts["order_confirmed_by_tool"] = any(call["model_output"].get("order_confirmed") is True for call in calls)
+    if facts["order_claims"] and not facts["order_confirmed_by_tool"]:
         failures.append(f"Reply claims an order/approval: {facts['order_claims']}.")
 
     if "min_searches" in expect:
@@ -760,6 +762,9 @@ def check_turn(
         failures.append(f"Reply mentions forbidden {forbidden}.")
     if expect.get("roman_only") and facts["script"]["devanagari_ratio"] > 0:
         failures.append("Reply contains Devanagari in a Roman Hinglish turn.")
+    missing = [word for word in expect.get("reply_mentions_all", []) if word.lower() not in reply.lower()]
+    if missing:
+        failures.append(f"Reply does not mention {missing}.")
     mentions = expect.get("reply_mentions_any")
     if mentions and not any(word.lower() in reply.lower() for word in mentions):
         failures.append(f"Reply does not mention any of {mentions}.")

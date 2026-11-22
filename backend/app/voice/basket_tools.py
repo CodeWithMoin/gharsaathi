@@ -219,9 +219,45 @@ def offers_for_model(quote: Quote) -> list[dict[str, Any]]:
     return offers
 
 
+MAX_SUMMARY_ITEMS = 3
+
+
+def item_summary(lines: list[BasketLine]) -> str:
+    """'Amul Sweet Lassi 200 ml × 1, …' for up to three lines, then '+N more'."""
+
+    parts = []
+    for line in lines:
+        size = line.pack_size if line.pack_size and line.pack_size.lower() not in line.name.lower() else ""
+        parts.append(f"{' '.join(filter(None, [line.name, size]))} × {line.quantity}")
+    extra = len(parts) - MAX_SUMMARY_ITEMS
+    return ", ".join(parts[:MAX_SUMMARY_ITEMS]) + (f" +{extra} more" if extra > 0 else "")
+
+
+def bill_breakdown(quote: Quote) -> dict[str, Any]:
+    """Item total, fees and discounts as exact strings; the sum line only when it adds up."""
+
+    fees = sum(charge.amount_paise for charge in quote.charges if charge.amount_paise > 0)
+    discount = -sum(charge.amount_paise for charge in quote.charges if charge.amount_paise < 0)
+    fields: dict[str, Any] = {
+        **money_fields("item_total", quote.item_total_paise),
+        **money_fields("fees_total", fees),
+    }
+    if discount:
+        fields.update(money_fields("discount_total", discount))
+    if (fees or discount) and quote.item_total_paise + fees - discount == quote.payable_paise:
+        text = f"{format_rupees(quote.item_total_paise)} items"
+        if fees:
+            text += f" + {format_rupees(fees)} fees"
+        if discount:
+            text += f" − {format_rupees(discount)} discount"
+        fields["bill_breakdown"] = f"{text} = {format_rupees(quote.payable_paise)}"
+    return fields
+
+
 def bill_for_model(quote: Quote) -> dict[str, Any]:
     return {
         **money_fields("payable", quote.payable_paise),
+        **bill_breakdown(quote),
         "charges": [
             {"label": charge.label, **money_fields("amount", charge.amount_paise)}
             for charge in quote.charges
@@ -483,9 +519,12 @@ class BasketToolExecutor:
                 "store": store.label,
                 "store_id": store.provider,
                 **address_for_model(await self._address(store)),
+                "item_summary": item_summary(result.basket.lines),
                 **bill_for_model(quote),
                 "note": (
-                    "The exact bill is on screen. Ask the user to review it and choose an action there. "
+                    "The exact bill is on screen. In one or two short lines name the items "
+                    "(item_summary, never only a count) and bill_breakdown when present, else "
+                    "payable, exactly as given; then ask the user to review it on screen. "
                     f"No order has been approved or placed. {OFFERS_NOTE}"
                 ),
             },

@@ -766,6 +766,9 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
     {
         # Bill/order failure status (codex/voice-reliability).
         "bill_failed",
+        "item_summary",
+        "bill_breakdown",
+        "fees_total",
         # read_attached_photo item fields and photo kinds.
         "printed_name",
         "search_query",

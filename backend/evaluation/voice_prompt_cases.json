@@ -195,6 +195,30 @@
       "max_devanagari_ratio": 0.05
     },
     {
+      "id": "order_card_names_items_not_count",
+      "history": [
+        {"role": "user", "content": "(Photo attached) order karo"}
+      ],
+      "user": "[Backend: photo showed Amul Sweet Lassi 200 ml; order card on screen; Zepto; item_summary \"Amul Sweet Lassi 200 ml × 1\"; bill_breakdown \"₹20 items + ₹43 fees = ₹63\"; cash on delivery; delivery address Hackathon.]",
+      "required_any": ["Amul Sweet Lassi"],
+      "forbidden_any": ["ek item", "1 item", "one item", "order ho gaya", "order place ho gaya", "order place kar diya"],
+      "max_questions": 1,
+      "max_sentences": 3,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "bill_total_explains_fees",
+      "history": [
+        {"role": "user", "content": "Zepto ka bill bana do."}
+      ],
+      "user": "[Backend: Zepto bill on screen; item_summary \"Tata Tea Gold 500 g × 2\"; bill_breakdown \"₹570 items + ₹30 fees = ₹600\".] Itna zyada kyun hai?",
+      "required_any": ["₹30"],
+      "forbidden_any": ["₹540", "₹630", "₹35", "order ho gaya"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
       "id": "approve_request_prepares_card",
       "history": [
         {"role": "user", "content": "Zepto ka bill bana do."},

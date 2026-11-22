@@ -189,6 +189,29 @@
           "offer_price": 69
         }
       ]
+    },
+    "lassi_fixture": {
+      "description": "Harness-only Amul Sweet Lassi, as in the live photo session (DEMO_PRODUCTS has no lassi). Prices are made up; the demo bill adds ₹5 handling and ₹25 delivery.",
+      "swiggy_instamart": [
+        {
+          "product_id": "fx-lassi-200",
+          "name": "Amul Sweet Lassi",
+          "brand": "Amul",
+          "pack_size": "200 ml",
+          "mrp": 25,
+          "offer_price": 25
+        }
+      ],
+      "zepto": [
+        {
+          "product_id": "fx-lassi-200",
+          "name": "Amul Sweet Lassi",
+          "brand": "Amul",
+          "pack_size": "200 ml",
+          "mrp": 20,
+          "offer_price": 20
+        }
+      ]
     }
   },
   "scenarios": [
@@ -1492,6 +1515,94 @@
         }
       ]
     },
-    {"id": "s-zepto-unreachable", "title": "Only Zepto is ready and it cannot be reached: say it is not responding, never 'not found'", "catalogue": "demo", "zepto_unreachable": true, "turns": [{"user": "Amul lassi 200 ml dikhao", "expect": {"tools_required": ["search_products"], "add_count": 0, "max_sentences": 2, "reply_forbids_any": ["nahi mila", "nahin mila", "not found", "nahi hai", "available nahi", "stock mein nahi"], "reply_mentions_any": ["connect", "respond", "dobara", "try", "baad mein", "thodi der"]}}]}
+    {
+      "id": "s-zepto-unreachable",
+      "title": "Only Zepto is ready and it cannot be reached: say it is not responding, never 'not found'",
+      "catalogue": "demo",
+      "zepto_unreachable": true,
+      "turns": [
+        {
+          "user": "Amul lassi 200 ml dikhao",
+          "expect": {
+            "tools_required": [
+              "search_products"
+            ],
+            "add_count": 0,
+            "max_sentences": 2,
+            "reply_forbids_any": [
+              "nahi mila",
+              "nahin mila",
+              "not found",
+              "nahi hai",
+              "available nahi",
+              "stock mein nahi"
+            ],
+            "reply_mentions_any": [
+              "connect",
+              "respond",
+              "dobara",
+              "try",
+              "baad mein",
+              "thodi der"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "p3-photo-order-summary-names-items-and-fees",
+      "title": "Photo of an Amul Lassi pack + 'order karo': the order summary names the item and explains the fees from the backend breakdown (never just 'ek item').",
+      "catalogue": "lassi_fixture",
+      "photo": {
+        "kind": "product_photo",
+        "items": [
+          {
+            "product": "lassi",
+            "printed_name": "Amul Sweet Lassi",
+            "brand": "Amul",
+            "variant": "Sweet",
+            "pack_size": "200 ml",
+            "quantity": null,
+            "search_query": "Amul Sweet Lassi 200 ml",
+            "identified_from": "both",
+            "confidence": "high",
+            "evidence": "Amul Sweet Lassi 200 ml"
+          }
+        ],
+        "notes": ""
+      },
+      "turns": [
+        {
+          "user": "(Photo attached) order karo",
+          "expect": {
+            "tools_required": [
+              "read_attached_photo",
+              "search_products",
+              "add_to_basket",
+              "prepare_order"
+            ],
+            "add_count": 1,
+            "add_store": "zepto",
+            "add_product_contains": "Lassi",
+            "prepared_order": true,
+            "reply_mentions_all": [
+              "Amul Sweet Lassi",
+              "₹30",
+              "₹50",
+              "Place order"
+            ],
+            "reply_forbids_any": [
+              "ek item",
+              "1 item",
+              "one item",
+              "order ho gaya"
+            ],
+            "max_questions": 1,
+            "max_sentences": 3,
+            "roman_only": true
+          }
+        }
+      ]
+    }
   ]
 }
