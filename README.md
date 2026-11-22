@@ -440,6 +440,14 @@ or id values.
   and returns the same numbers to the browser (`source: "server"`). An offline
   benchmark of the backend stages with fakes:
   `cd backend && PYTHONPATH=. uv run --with-requirements requirements.txt python scripts/bench_voice_start.py`.
+- Turn latency: with `VOICE_EVENT_LOG=true` the backend also logs, per shopping
+  turn, `event=voice_delegation_timing` (first function call, tool wait,
+  continuation to next backend event, first text, total, rounds),
+  `event=voice_tool_timing` / `event=chat_tool_timing` per tool (memory,
+  `swiggy_instamart_ms`, `zepto_ms`, `post_ms`) and `event=chat_turn_timing` for
+  typed turns. Benchmark (offline fakes by default; `--live` uses OpenAI with the
+  demo catalogues only):
+  `cd backend && PYTHONPATH=. uv run --with-requirements requirements.txt python -m evaluation.run_turn_latency [--live --runs 5 --effort low]`.
 
 ## Verification
 

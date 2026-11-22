@@ -60,6 +60,16 @@ class Settings(BaseSettings):
     live_model: str = "gpt-live-1.1"
     live_voice: str = "nira"
     live_backend_model: str = "gpt-6-luna"
+    # Reasoning effort for the delegated backend model (voice and typed chat).
+    # gpt-6-luna supports none|low|medium|high|xhigh|max and defaults to medium:
+    # https://developers.openai.com/api/docs/models/gpt-6-luna
+    # Empty omits the setting. low/none measured no faster per round than medium
+    # (reasoning was already ~0-80 tokens) and dropped search-then-add turns in
+    # the delegation eval, so the default stays medium.
+    live_backend_reasoning_effort: Literal["", "none", "low", "medium", "high"] = "medium"
+    # Responses service tier for the backend model: "" omits it (project default);
+    # "priority" measured ~0.2 s faster per model round at a higher price.
+    live_backend_service_tier: Literal["", "auto", "default", "flex", "priority"] = ""
     # Typed chat runs the same backend model and tools as voice, one bounded turn per request.
     chat_turn_timeout_seconds: float = Field(default=60.0, ge=5.0, le=180.0)
     # Shop from a photo: vision model for reading attached photos (Responses API, image input).

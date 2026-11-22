@@ -297,6 +297,21 @@ class ZeptoService:
             return await self.reranker.rerank(normalized, result)
         return result
 
+    async def prewarm(self, address_id: str) -> None:
+        """Open the MCP session and select the address before the first search needs them.
+
+        Read-only setup that voice session start runs in the background. No retry:
+        a failure here leaves recovery to the first search.
+        """
+
+        if address_id in self._removed_addresses:
+            return
+        async with self._search_lock:
+            generation = await self.client.prepare_session()
+            if self._selected_address != (generation, address_id):
+                await self._select_address(address_id)
+                self._selected_address = (self.client.session_generation, address_id)
+
 
 def _split_queries(query: str) -> list[str]:
     parts = [part.strip() for part in re.split(r"\s*(?:,|\band\b|\baur\b)\s*", query, flags=re.IGNORECASE)]
