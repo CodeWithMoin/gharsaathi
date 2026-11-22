@@ -191,8 +191,9 @@ class FakeVoiceService:
         swiggy_address_id: str | None = None,
         zepto_address_id: str | None = None,
         household_id: str = "",
+        data_channel_id: int | None = None,
     ) -> LiveSession:
-        del offer_sdp, swiggy_address_id, zepto_address_id, household_id
+        del offer_sdp, swiggy_address_id, zepto_address_id, household_id, data_channel_id
         return LiveSession(session_id="live_fake", sdp="answer", events_token="token-fake")
 
 

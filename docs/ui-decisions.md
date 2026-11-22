@@ -53,3 +53,21 @@ Behaviour: portal to `document.body` above everything (including the voice panel
 dimmed backdrop, focus trapped and restored on close, body scroll locked, bottom
 sheet under 640 px and centered above, reduced-motion respected. Pure logic
 (`input-dialog-logic.mjs`) is unit-tested.
+
+## Voice pill
+
+While voice is on, the composer is replaced by a compact pill
+(`frontend/app/voice-panel.tsx`): state icon, a live level meter, one state word
+(`Connecting`, `Listening`, `Thinking`, `Speaking`, `Voice off`) and a stop button.
+
+- The meter is driven by the real audio: a Web Audio analyser on the mic
+  (`You`, ink bars) and one on GharSaathi's remote audio (orange bars),
+  drawn to a canvas on `requestAnimationFrame` at up to 60 fps and paused while the
+  tab is hidden (`voice-meter.ts`). Level math (RMS, decibel mapping, attack/release
+  smoothing, speaker hysteresis) is pure and unit-tested (`voice-levels.mjs`).
+- Reduced motion: the scrolling bars become one static level bar updated about
+  8 times a second, and pill/notice transitions keep only their fades.
+- Tapping the pill opens details (status text, legend, privacy line); errors and a
+  blocked autoplay open them automatically with **Try again** / **Turn on sound**.
+  Escape closes them. Basket, bill, order and results notices show as a short toast
+  above the pill (3.6 s) and are also announced through the polite status region.

@@ -77,5 +77,22 @@ export function createVoiceEventRecorder(options) {
       if (sink.length > MAX_RECORDS) sink.splice(0, sink.length - MAX_RECORDS);
       options.log?.(entry);
     },
+    /**
+     * Stage durations for one voice start: stage names and whole milliseconds only.
+     * @param {Record<string, unknown> | null | undefined} stages
+     * @param {string} source
+     */
+    recordTiming(stages, source) {
+      if (!options.enabled || !stages || typeof stages !== "object") return;
+      /** @type {Record<string, number>} */
+      const timing = {};
+      for (const [stage, value] of Object.entries(stages)) {
+        if (/^[a-z_]{1,40}$/.test(stage) && typeof value === "number" && Number.isFinite(value)) timing[stage] = Math.round(value);
+      }
+      const entry = { at: now(), source, type: "voice.start_timing", ids: [], timing };
+      sink.push(entry);
+      if (sink.length > MAX_RECORDS) sink.splice(0, sink.length - MAX_RECORDS);
+      options.log?.(entry);
+    },
   };
 }
