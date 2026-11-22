@@ -21,6 +21,8 @@ class ScriptedModel:
     async def create(self, **kwargs: Any) -> SimpleNamespace:
         self.requests.append(kwargs)
         step = self.script.pop(0)
+        if isinstance(step, BaseException):
+            raise step
         if isinstance(step, str):
             return SimpleNamespace(id=f"r{len(self.requests)}", output=[], output_text=step)
         calls = [
@@ -63,6 +65,29 @@ def test_typed_turn_searches_adds_and_persists_the_basket(api: TestClient, model
     basket = api.get("/api/basket", headers=alice, params={"provider": "swiggy_instamart"}).json()
     assert [(line["name"], line["quantity"]) for line in basket["lines"]] == [("Fortune Sunflower Oil", 2)]
     assert api.get("/api/basket", headers=as_user("bob"), params={"provider": "swiggy_instamart"}).json()["lines"] == []
+
+
+def test_model_failure_after_a_basket_change_returns_the_saved_change_not_502(api: TestClient, model: ScriptedModel) -> None:
+    alice = as_user("alice")
+    model.script = [
+        [("search_products", {"query": "Fortune sunflower oil 1 litre"})],
+        [("add_to_basket", {"option_id": "opt1", "quantity": 1, "store_id": None})],
+        RuntimeError("upstream 500"),
+    ]
+
+    response = api.post(
+        "/api/chat/turn",
+        headers=alice,
+        json={"message": "Fortune tel add karo", "swiggy_address_id": DEMO_ADDRESS_ID},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["incomplete"] is True
+    assert "basket" in body["reply"]
+    assert [event["type"] for event in body["ui_events"]] == ["tool.results", "basket.updated"]
+    basket = api.get("/api/basket", headers=alice, params={"provider": "swiggy_instamart"}).json()
+    assert [(line["name"], line["quantity"]) for line in basket["lines"]] == [("Fortune Sunflower Oil", 1)]
 
 
 def test_saved_conversation_turns_are_sent_as_context(api: TestClient, model: ScriptedModel) -> None:

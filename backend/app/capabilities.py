@@ -903,9 +903,11 @@ API_CONTRACTS: dict[str, tuple[str, ...]] = {
         'Response 200: {"conversation_id": "<uuid>" | null, "reply": "Roman-script Hinglish text", '
         '"ui_events": [{"type": "tool.results" | "basket.updated" | "basket.approval_requested" | '
         '"order.confirmation_requested" | "photo.read" | "address_form.open" | "address_form.unavailable" | "address.selected" | "tool.not_connected" | "tool.error" | '
-        '"memory.changed", ...}]}',
+        '"memory.changed", ...}], "incomplete": false}',
         "ui_events use the voice sideband shapes. Caps per turn: 6 tool rounds, 2 searches. "
-        "Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS).",
+        "Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS). "
+        "A model failure or timeout after a tool saved a basket change is 200 with incomplete: true, the "
+        "saved change's ui_events and a short fixed reply in the profile language; tools are never re-run.",
     ),
     "POST /api/chat/attachments": (
         "Auth: Clerk bearer token and accepted current terms. multipart/form-data with one `file` field.",

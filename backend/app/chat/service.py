@@ -52,6 +52,14 @@ TOOL_FAILED_EVENT = {
     "message": "Search mein kuch gadbad ho gayi. Ek baar phir likhiye.",
 }
 EMPTY_REPLY = "Maaf kijiye, abhi jawab nahi bana paayi. Ek baar phir likhiye."
+# UI events of changes the server has already saved. When the model fails after
+# one of these, the turn still returns them (tools are never re-run).
+SAVED_CHANGE_EVENTS = frozenset({"basket.updated", "basket.approval_requested", "order.confirmation_requested"})
+INCOMPLETE_REPLY = {
+    "english": "Something went wrong finishing that reply — your basket changes are saved.",
+    "hinglish": "Jawab poora karte waqt kuch gadbad ho gayi — basket ke badlav save ho gaye hain.",
+    "hindi": "जवाब पूरा करते समय कुछ गड़बड़ हो गई — बास्केट के बदलाव सेव हो गए हैं।",
+}
 # Appended to the voice backend instructions for this channel only. Voice gets
 # nothing, so live sessions keep the speech formatting rules unchanged.
 CHANNEL_CONTEXT = {
@@ -117,6 +125,8 @@ class ResponsesClient(Protocol):
 class ChatTurnResult(BaseModel):
     reply: str
     ui_events: list[dict[str, Any]]
+    # The model failed after tools had already saved changes; ``reply`` is a fixed line.
+    incomplete: bool = False
 
 
 @dataclass
@@ -198,6 +208,16 @@ async def _none() -> None:
     return None
 
 
+def _incomplete_result(ui_events: list[dict[str, Any]], stats: dict[str, Any]) -> ChatTurnResult | None:
+    """The saved changes of a turn whose model call failed after its tools ran."""
+
+    if not any(event.get("type") in SAVED_CHANGE_EVENTS for event in ui_events):
+        return None
+    stats["outcome"] = f"{stats['outcome']}_after_changes"
+    reply = INCOMPLETE_REPLY.get(stats.get("language", "hinglish"), INCOMPLETE_REPLY["hinglish"])
+    return ChatTurnResult(reply=reply, ui_events=list(ui_events), incomplete=True)
+
+
 class ChatTurnService:
     def __init__(
         self,
@@ -260,7 +280,8 @@ class ChatTurnService:
         session = self._session(user_id, conversation_id, swiggy_address_id, zepto_address_id)
         async with session.lock:
             started = time.monotonic()
-            stats: dict[str, Any] = {"rounds": 0, "tools": [], "outcome": "ok"}
+            stats: dict[str, Any] = {"rounds": 0, "tools": [], "outcome": "ok", "language": "hinglish"}
+            ui_events: list[dict[str, Any]] = []
             try:
                 async with asyncio.timeout(self.settings.chat_turn_timeout_seconds):
                     result = await self._loop(
@@ -272,10 +293,20 @@ class ChatTurnService:
                         stats,
                         ui_acks or [],
                         attachment_id,
+                        ui_events,
                     )
             except TimeoutError as exc:
                 stats["outcome"] = "timeout"
+                partial = _incomplete_result(ui_events, stats)
+                if partial is not None:
+                    return partial
                 raise ChatTimeout("Jawab mein bahut der ho gayi. Ek baar phir likhiye.") from exc
+            except ChatProviderError:
+                stats["outcome"] = "provider_error"
+                partial = _incomplete_result(ui_events, stats)
+                if partial is not None:
+                    return partial
+                raise
             except ChatError:
                 stats["outcome"] = "provider_error"
                 raise
@@ -300,14 +331,16 @@ class ChatTurnService:
         stats: dict[str, Any],
         ui_acks: list[UiAck] | None = None,
         attachment_id: str | None = None,
+        ui_events: list[dict[str, Any]] | None = None,
     ) -> ChatTurnResult:
         message = message or (PHOTO_ONLY_MESSAGE if attachment_id else "")
         words = getattr(session.toolbox, "user_words", None)
         if words is not None and message != PHOTO_ONLY_MESSAGE:
             words.add(message)
-        ui_events: list[dict[str, Any]] = []
+        if ui_events is None:
+            ui_events = []
         photo_block = await self._read_photo(session, attachment_id, ui_events, stats)
-        delegation = await self._delegation(user_id, "typed", message, current_chat)
+        delegation = await self._delegation(user_id, "typed", message, current_chat, stats)
         allowed = {tool["name"] for tool in delegation["tools"]}
         request_input: list[dict[str, Any]] = []
         if session.search_contexts:
@@ -415,6 +448,7 @@ class ChatTurnService:
         channel: Literal["typed", "voice"],
         message: str = "",
         current_chat: bool = True,
+        stats: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """The voice backend config with the same profile, memory and chat context blocks."""
 
@@ -423,6 +457,8 @@ class ChatTurnService:
             self.voice.household_memory(user_id) if self.voice.basket_enabled else _none(),
             self.voice.conversation_context(user_id),
         )
+        if stats is not None and profile is not None:
+            stats["language"] = profile.language
         delegation = dict(
             build_session_config(
                 self.settings,

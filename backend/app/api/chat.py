@@ -70,6 +70,8 @@ class ChatTurnResponse(BaseModel):
     conversation_id: UUID | None
     reply: str
     ui_events: list[dict[str, Any]]
+    # The assistant failed after saving changes; reply is a short fixed line.
+    incomplete: bool = False
 
 
 async def _resolve_conversation(user_id: str, conversation_id: UUID | None) -> tuple[UUID | None, bool]:
@@ -134,6 +136,7 @@ async def chat_turn(
         conversation_id=conversation_id,
         reply=result.reply,
         ui_events=removed_events + result.ui_events,
+        incomplete=result.incomplete,
     )
 
 

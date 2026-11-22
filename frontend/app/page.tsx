@@ -44,7 +44,8 @@ type CommerceMode = "demo" | "live";
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string; photo_thumbnail?: string | null; photo_preview?: string | null };
 type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; timeline?: unknown; result_groups?: unknown; updated_at: string };
 type LegacyConversation = { submittedQuery?: string; products?: Product[]; searched?: boolean };
-type ChatTurnResponse = { conversation_id: string | null; reply: string; ui_events: unknown[] };
+// incomplete: the assistant failed after saving a basket change; reply is a short fixed line.
+type ChatTurnResponse = { conversation_id: string | null; reply: string; ui_events: unknown[]; incomplete?: boolean };
 let swiggyConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
 let zeptoConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
 
