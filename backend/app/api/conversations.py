@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.conversations.repository import ConversationRepository
 from app.conversations.summary import (
@@ -17,11 +18,16 @@ from app.conversations.schemas import (
 )
 from app.memory.dependencies import DbSessionDependency, MemoryActorDependency
 from app.database.models import Conversation
-from app.database.session import get_session_factory
 from app.memory.choice_signals import run_choice_check
 
 
 router = APIRouter()
+
+
+def _same_database(session: AsyncSession) -> async_sessionmaker[AsyncSession]:
+    """Sessions on the request's own engine, for work that runs after the response."""
+
+    return async_sessionmaker(session.bind, class_=AsyncSession, expire_on_commit=False)
 
 
 def _summary(conversation: Conversation) -> ConversationSummary:
@@ -100,7 +106,7 @@ async def save_current_conversation(
     )
     summaries.after_save(actor.id, conversation.id, conversation.state, conversation.summary)
     # Repeated basket choices may become a pending memory suggestion (never active).
-    background.add_task(run_choice_check, get_session_factory(), actor.id)
+    background.add_task(run_choice_check, _same_database(session), actor.id)
     return ConversationStateResponse(
         id=conversation.id,
         updated_at=conversation.updated_at,
@@ -120,7 +126,7 @@ async def start_new_conversation(
     await repository.archive_current(actor.id)
     if current is not None:
         summaries.after_archive(actor.id, [current.id])
-    background.add_task(run_choice_check, get_session_factory(), actor.id)
+    background.add_task(run_choice_check, _same_database(session), actor.id)
 
 
 @router.post("/{conversation_id}/open", response_model=ConversationStateResponse)

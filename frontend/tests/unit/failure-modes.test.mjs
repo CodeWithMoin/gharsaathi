@@ -58,6 +58,18 @@ test("FM-P10 a malformed results event is ignored, not drawn as an empty card", 
   assert.deepEqual(calls, []);
 });
 
+test("FM-V06 the direct-search fallback shows the store error, never an empty group, when every store fails", async () => {
+  const { directSearchOutcome } = await import("../../app/result-groups.mjs");
+  const down = new Error("Zepto isn't responding—try again.");
+  assert.deepEqual(directSearchOutcome([{ status: "rejected", reason: down }, { status: "rejected", reason: new Error("Swiggy failed") }]), { status: "failed", message: "Zepto isn't responding—try again." });
+  assert.deepEqual(directSearchOutcome([{ status: "rejected", reason: "not an error" }]), { status: "failed", message: "Store search failed." });
+  // One store failed, the other found nothing: still an error, not "no results".
+  assert.equal(directSearchOutcome([{ status: "fulfilled", value: [] }, { status: "rejected", reason: down }]).status, "failed");
+  // A real empty answer from every store stays "no results"; any product is shown.
+  assert.deepEqual(directSearchOutcome([{ status: "fulfilled", value: [] }]), { status: "empty" });
+  assert.deepEqual(directSearchOutcome([{ status: "fulfilled", value: [{ name: "Milk" }] }, { status: "rejected", reason: down }]), { status: "results", products: [{ name: "Milk" }], failures: 1 });
+});
+
 test("FM-P02 partial results keep the other store's cards and show the unreachable-store notice", () => {
   const { calls, handlers } = recorder();
   const outcome = applyAssistantEvent({ type: "tool.results", query: "milk", products: [{}], notice: "Zepto isn't responding—try again." }, handlers);

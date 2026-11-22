@@ -2,6 +2,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/local-env.sh
+source "${REPO_ROOT}/scripts/local-env.sh"
 RUN_DIR="${REPO_ROOT}/.run"
 
 ensure_local_postgres() {
@@ -50,7 +52,7 @@ resolve_env_file() {
 
 ENV_PATH="$(resolve_env_file)"
 ensure_local_postgres
-export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://${USER}@127.0.0.1:5432/equal_ai}"
+export_local_database_url
 export COMMERCE_MODE="${COMMERCE_MODE:-demo}"
 
 # Clerk's Next.js setup keeps the development instance keys in the frontend

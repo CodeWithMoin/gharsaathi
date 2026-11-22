@@ -379,11 +379,6 @@ async def test_fm_p10_an_empty_but_wellformed_search_is_zero_results() -> None:
     ],
     ids=["text_envelope", "unknown_envelope", "unrecognised_items"],
 )
-@pytest.mark.xfail(
-    strict=True,
-    reason="FM-P10: parse_products returns [] for an unrecognised Zepto search payload, so a "
-    "broken response is shown and spoken as 'no results' instead of a provider error.",
-)
 async def test_fm_p10_unrecognised_search_payload_is_an_error_not_zero_results(payload: dict) -> None:
     world = FaultWorld()
     client = FaultyMcpClient({"search_products": [Payload(payload)]})
@@ -392,6 +387,32 @@ async def test_fm_p10_unrecognised_search_payload_is_an_error_not_zero_results(p
     output, event = await call(toolbox, "search_products", query="Amul Taaza milk")
 
     assert_error_not_empty_results(output, event)
+    assert output["unreachable_stores"][0]["reason"] == "unavailable"
+
+
+async def test_fm_p10_empty_groups_from_a_multi_search_are_zero_results() -> None:
+    client = FaultyMcpClient({"search_multiple_products": [Payload({"data": {"groups": [{"products": []}, {"products": []}]}})]})
+    zepto = ZeptoService(object(), client)  # type: ignore[arg-type]
+
+    result = await zepto.search("milk, bread", ZEPTO_ADDRESS)
+
+    assert result.products == []
+
+
+async def test_fm_p10_unrecognised_search_logs_only_the_shape(caplog: pytest.LogCaptureFixture) -> None:
+    payload = {"content_text": "Amul Taaza secret-address 27 rupees", "items": [{"title": "Amul Taaza", "cost": 2700}]}
+    client = FaultyMcpClient({"search_products": [Payload(payload)]})
+    zepto = ZeptoService(object(), client)  # type: ignore[arg-type]
+
+    with caplog.at_level("WARNING"), pytest.raises(ZeptoProviderError) as raised:
+        await zepto.search("Amul Taaza milk", ZEPTO_ADDRESS)
+
+    assert raised.value.reason == "unavailable"
+    records = [record.getMessage() for record in caplog.records if "zepto_search_unrecognised" in record.getMessage()]
+    assert records, "a shape diagnostic is logged"
+    for message in records:
+        assert "items[].title" in message and "content_text" in message
+        assert "Amul" not in message and "secret-address" not in message and "2700" not in message
 
 
 # ---------------------------------------------------------------- FM-A01

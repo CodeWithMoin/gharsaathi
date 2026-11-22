@@ -2,6 +2,7 @@ import { sanitizeAddressPrefill } from "./voice-address-prefill.mjs";
 import { voiceApprovalFromToolEvent } from "./voice-approval.mjs";
 import { orderConfirmationFromEvent } from "./order-confirmation.mjs";
 import { settleAddressFormAck } from "./address-form-merge.mjs";
+import { basketFromEvent } from "./card-lifecycle.mjs";
 
 const ACK_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -23,7 +24,7 @@ const ADDRESS_UNAVAILABLE_MESSAGES = {
  * @param {unknown} raw
  * @param {{
  *   onResults?: (query: string, products: any[], item: { itemKey?: string, itemLabel?: string }) => void,
- *   onBasketTouched?: (provider?: "swiggy_instamart" | "zepto") => void,
+ *   onBasketTouched?: (provider?: "swiggy_instamart" | "zepto", basket?: import("./card-lifecycle.mjs").BasketLike) => void,
  *   onApprovalRequested?: (provider: "swiggy_instamart" | "zepto", request: any) => void,
  *   onAddressForm?: (request: { prefill: Record<string, string> } | { unavailable: string }) => void,
  *   onOrderConfirmation?: (confirmation: import("./order-confirmation.mjs").OrderConfirmation) => void,
@@ -68,7 +69,11 @@ export function applyAssistantEvent(raw, handlers) {
     const items = Number.isInteger(basket.item_count) ? basket.item_count : 0;
     const store = typeof basket.store === "string" && basket.store ? `${basket.store} · ` : "";
     const total = typeof basket.item_total === "string" ? basket.item_total : "";
-    handlers.onBasketTouched?.(provider);
+    // The new revision travels with the event, so an open order card for an older
+    // one can go out of date at once, even when no basket panel is mounted to re-read it.
+    const current = basketFromEvent(event.basket, provider);
+    if (current) handlers.onBasketTouched?.(provider, current);
+    else handlers.onBasketTouched?.(provider);
     return {
       kind: "basket",
       message: items ? "Basket updated." : "Basket is now empty.",

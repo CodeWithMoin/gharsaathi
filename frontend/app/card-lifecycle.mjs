@@ -94,6 +94,27 @@ export function supersedeOrderCard(card, basket) {
   return { ...card, superseded: true };
 }
 
+/**
+ * The store's basket as a `basket.updated` assistant event reports it, or null
+ * when the event lacks the fields a revision check needs. Untrusted input.
+ *
+ * @param {unknown} raw the event's `basket` object
+ * @param {Store | undefined} provider the event's store
+ * @returns {BasketLike | null}
+ */
+export function basketFromEvent(raw, provider) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const basket = /** @type {Record<string, any>} */ (raw);
+  const store = basket.provider ?? provider;
+  if (store !== "swiggy_instamart" && store !== "zepto") return null;
+  if (provider !== undefined && store !== provider) return null;
+  if (typeof basket.id !== "string" || !basket.id || !Number.isInteger(basket.revision) || basket.revision < 0) return null;
+  const lines = Array.isArray(basket.lines)
+    ? basket.lines.filter((line) => line && Number.isInteger(line.quantity)).map((line) => ({ quantity: line.quantity }))
+    : [];
+  return { id: basket.id, provider: store, revision: basket.revision, status: typeof basket.status === "string" ? basket.status : "draft", lines };
+}
+
 /** @param {LiveOrderCard} card */
 export function orderCardInteractive(card) {
   return !card.superseded && (card.result === null || card.result === "open");

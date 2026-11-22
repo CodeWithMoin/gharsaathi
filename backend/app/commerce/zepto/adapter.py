@@ -9,7 +9,7 @@ from app.commerce.swiggy.models import (
     Product,
     ProductSearchResult,
 )
-from app.commerce.zepto.errors import ZeptoSchemaError
+from app.commerce.zepto.errors import ZeptoSchemaError, ZeptoUnrecognisedResponse
 
 
 def _payload(value: dict[str, Any]) -> dict[str, Any]:
@@ -71,10 +71,35 @@ def _product_nodes(value: object) -> list[dict[str, Any]]:
     return found
 
 
+def _is_empty_result(payload: dict[str, Any]) -> bool:
+    """A well-formed answer with no products: ``products: []`` or groups of them."""
+
+    products = payload.get("products")
+    if isinstance(products, list):
+        return not products
+    groups = payload.get("groups")
+    if isinstance(groups, list):
+        return all(
+            isinstance(group, dict)
+            and isinstance(group.get("products"), list)
+            and not group["products"]
+            for group in groups
+        )
+    return False
+
+
 def parse_products(value: dict[str, Any]) -> ProductSearchResult:
+    """Parse a Zepto search answer.
+
+    Raises ``ZeptoUnrecognisedResponse`` when no product could be read and the
+    answer is not a well-formed empty result (a text envelope, unknown keys,
+    items without the expected ids or prices).
+    """
+
+    payload = _payload(value)
     products: list[Product] = []
     seen: set[tuple[str, str]] = set()
-    for raw in _product_nodes(_payload(value)):
+    for raw in _product_nodes(payload):
         product_variant_id = raw.get("productVariantId")
         store_product_id = raw.get("storeProductId")
         name = raw.get("name")
@@ -108,4 +133,6 @@ def parse_products(value: dict[str, Any]) -> ProductSearchResult:
                 image_url=raw.get("imageUrl") if isinstance(raw.get("imageUrl"), str) else None,
             )
         )
+    if not products and not _is_empty_result(payload):
+        raise ZeptoUnrecognisedResponse("Zepto returned a search answer GharSaathi could not read.")
     return ProductSearchResult(products=products)

@@ -10,7 +10,7 @@ import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, useSetBasketLineQu
 import { ProductOptions, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
 import { basketSummary, collapseBasketCard, dropResultGroup, emptyTimeline, finishResultGroup, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordOrderCard, recordResultGroup, restoreTimeline, summaryText, updateOrderCard, withResultGroups, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
-import { restoreResultGroups, resultGroupIdentity, type ResultGroup } from "./result-groups.mjs";
+import { directSearchOutcome, restoreResultGroups, resultGroupIdentity, type ResultGroup } from "./result-groups.mjs";
 import { conversationTitle, relativeChatDate, searchConversations, visibleConversations, type ConversationSummary } from "./chat-list.mjs";
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
@@ -30,7 +30,7 @@ import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
 import { ADDRESS_REMOVED_MESSAGE, applyAssistantEvent } from "./assistant-events.mjs";
 import { zeptoAddressSelection } from "./zepto-address-refresh.mjs";
 import { OrderConfirmationCard } from "./order-confirmation-card";
-import { cartBadgeCount, newOrderCard, orderCardKey, orderedSummary, supersedeOrderCard, supersededOrderText, withOrderResult, type LiveOrderCard } from "./card-lifecycle.mjs";
+import { cartBadgeCount, newOrderCard, orderCardKey, orderedSummary, supersedeOrderCard, supersededOrderText, withOrderResult, type BasketLike, type LiveOrderCard } from "./card-lifecycle.mjs";
 import { orderCardIndex, type OrderCardState, type OrderConfirmation } from "./order-confirmation.mjs";
 import { OrderStatusCard } from "./order-status-card";
 import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
@@ -44,7 +44,8 @@ type CommerceMode = "demo" | "live";
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; modality: "text" | "voice"; created_at: string; photo_thumbnail?: string | null; photo_preview?: string | null };
 type PersistedConversation = { id: string; submitted_query: string; products: Product[]; searched: boolean; messages: ChatMessage[]; results_after_message_id?: string | null; timeline?: unknown; result_groups?: unknown; updated_at: string };
 type LegacyConversation = { submittedQuery?: string; products?: Product[]; searched?: boolean };
-type ChatTurnResponse = { conversation_id: string | null; reply: string; ui_events: unknown[] };
+// incomplete: the assistant failed after saving a basket change; reply is a short fixed line.
+type ChatTurnResponse = { conversation_id: string | null; reply: string; ui_events: unknown[]; incomplete?: boolean };
 let swiggyConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
 let zeptoConnectionRequest: Promise<{ connected: boolean; mode?: CommerceMode }> | null = null;
 
@@ -150,8 +151,11 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     billStageRef.current = { ...billStageRef.current, [provider]: stage };
     setBasketProvider(provider);
   }, []);
-  const handleBasketTouched = useCallback((provider?: ProviderName) => {
+  const handleBasketTouched = useCallback((provider?: ProviderName, basket?: BasketLike) => {
     const store = provider ?? basketProviderRef.current;
+    // An assistant edit changes the revision: an open order card for the old one is out of date now,
+    // not only after the basket panel re-reads the basket.
+    if (basket) setOrderCard((current) => supersedeOrderCard(current, basket));
     window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
     const stage = pendingBillStageRef.current[store] ?? "updated";
     pendingBillStageRef.current = { ...pendingBillStageRef.current, [store]: undefined };
@@ -890,13 +894,18 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
           apiRequest<{ products: Product[] }>("/api/zepto/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: clean, address_id: zeptoAddressId, page_number: 0 }) })
             .then((data) => data.products.map((product) => ({ ...product, provider: "zepto" as const, provider_label: "Zepto" }))),
         );
-        const outcomes = await Promise.allSettled(searches);
-        const combined = outcomes.flatMap((outcome) => outcome.status === "fulfilled" ? outcome.value : []);
-        const failures = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
-        setTimeline((current) => finishResultGroup(current, identity.key, { products: combined, status: "done" }));
-        if (combined.length) setMessage(`${combined.length} ${commerceMode === "demo" ? "demo" : "live"} options found across ready stores.`);
-        else if (failures.length) setMessage(failures[0].reason instanceof Error ? failures[0].reason.message : "Store search failed.");
-        else setMessage("No matching products found at the selected addresses.");
+        const outcome = directSearchOutcome(await Promise.allSettled(searches));
+        if (outcome.status === "failed") {
+          // A store error is not "no results": show the error with its retry, not an empty group.
+          setTimeline((current) => dropResultGroup(current, identity.key));
+          setChatFailure({ query: clean, message: outcome.message });
+          setMessage(outcome.message);
+        } else {
+          const combined = outcome.status === "results" ? outcome.products : [];
+          setTimeline((current) => finishResultGroup(current, identity.key, { products: combined, status: "done" }));
+          if (combined.length) setMessage(`${combined.length} ${commerceMode === "demo" ? "demo" : "live"} options found across ready stores.`);
+          else setMessage("No matching products found at the selected addresses.");
+        }
       } catch (cause) {
         setTimeline((current) => dropResultGroup(current, identity.key));
         setMessage(cause instanceof Error ? cause.message : "Search failed.");
