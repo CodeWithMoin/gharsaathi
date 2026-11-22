@@ -213,3 +213,36 @@ class InMemoryCheckoutAttempts:
             await self.approvals.save(approval)
             await self.baskets.save(basket)
         return attempt.model_copy(deep=True)
+
+    async def unknown_attempts(
+        self, household_id: str | None = None, *, since: datetime | None = None
+    ) -> list[CheckoutAttempt]:
+        found = [
+            item.model_copy(deep=True)
+            for item in self.by_approval.values()
+            if item.status == CheckoutStatus.OUTCOME_UNKNOWN
+            and (household_id is None or item.household_id == household_id)
+            and (since is None or item.created_at >= since)
+        ]
+        return sorted(found, key=lambda item: item.created_at, reverse=True)
+
+    async def reconcile(
+        self, attempt_id: str, *, provider_order_id: str, at: datetime
+    ) -> CheckoutAttempt:
+        attempt = self._by_id(attempt_id)
+        if attempt.status != CheckoutStatus.OUTCOME_UNKNOWN:
+            return attempt.model_copy(deep=True)
+        attempt.provider_order_id = provider_order_id
+        attempt.provider_status = "reconciled_from_history"
+        if attempt.payment_method != "cod":
+            attempt.status = CheckoutStatus.AWAITING_PAYMENT
+            return attempt.model_copy(deep=True)
+        attempt.status = CheckoutStatus.CONFIRMED
+        approval = await self.approvals.get(attempt.approval_id)
+        basket = await self.baskets.get(attempt.basket_id)
+        assert approval is not None and basket is not None
+        approval.status = ApprovalStatus.CONSUMED
+        basket.status = BasketStatus.ORDERED
+        await self.approvals.save(approval)
+        await self.baskets.save(basket)
+        return attempt.model_copy(deep=True)

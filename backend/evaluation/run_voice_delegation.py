@@ -47,7 +47,8 @@ from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.shopping.memory import InMemoryApprovalRepository, InMemoryBasketRepository
 from app.shopping.order_confirmation import OrderConfirmations
-from app.shopping.models import Basket, Charge, OfferOpportunity, Quote
+from app.shopping.models import Basket, Charge, CheckoutAttempt, CheckoutStatus, OfferOpportunity, Quote
+from app.shopping.reconciliation import ReconcileOutcome
 from app.memory.remembered import memory_summary_block
 from app.voice.prompts import BACKEND_INSTRUCTIONS, VOICE_PROMPT_VERSION
 from app.voice.service import build_session_config
@@ -289,12 +290,66 @@ async def scenario_tracking(spec: dict[str, Any] | None) -> OrderTrackingService
         OrderTrackingStore(Path(tempfile.mkdtemp(prefix="qa-tracking-"))),
         {TrackingProvider.ZEPTO: FakeTrackingAdapter(spec or {})},
     )
-    if spec:
+    if spec and spec.get("watch", True):
         await service.ensure(
             HOUSEHOLD_ID,
             StartTrackingRequest(provider=TrackingProvider.ZEPTO, order_id=spec.get("order_id", "ZEP-QA-1")),
         )
     return service
+
+
+class ScriptedReconciler:
+    """An unknown-outcome checkout that Zepto's (fake) history confirms on a later check.
+
+    Stands in for CheckoutReconciler: no order history, provider or order call.
+    The first ``settle_on_check - 1`` checks find nothing; the next one finds the
+    order, which is then tracked through the scenario's fake tracking adapter.
+    """
+
+    def __init__(self, spec: dict[str, Any], tracking: OrderTrackingService | None) -> None:
+        now = datetime.now(UTC)
+        self.spec = spec
+        self.tracking = tracking
+        self.checks = 0
+        self.attempt = CheckoutAttempt(
+            id="qa-unknown-attempt",
+            approval_id="qa-approval",
+            basket_id="qa-basket",
+            household_id=HOUSEHOLD_ID,
+            idempotency_key_hash="0" * 64,
+            payable_paise=spec.get("payable_paise", 5500),
+            status=CheckoutStatus.OUTCOME_UNKNOWN,
+            created_at=now - timedelta(minutes=1),
+            completed_at=now - timedelta(minutes=1),
+        )
+
+    async def pending(self, household_id: str) -> list[CheckoutAttempt]:
+        return [self.attempt] if self.attempt.status == CheckoutStatus.OUTCOME_UNKNOWN else []
+
+    async def reconcile(self, attempt_id: str, *, household_id: str | None = None, apply: bool = True) -> ReconcileOutcome:
+        self.checks += 1
+        if self.attempt.status == CheckoutStatus.OUTCOME_UNKNOWN and self.checks < self.spec.get("settle_on_check", 2):
+            return ReconcileOutcome("not_found", self.attempt.model_copy())
+        newly = self.attempt.status == CheckoutStatus.OUTCOME_UNKNOWN
+        self.attempt = self.attempt.model_copy(
+            update={
+                "status": CheckoutStatus.CONFIRMED,
+                "provider_order_id": self.spec.get("order_id", "ZEP-QA-1"),
+                "provider_status": "reconciled_from_history",
+            }
+        )
+        if self.tracking is not None:
+            await self.tracking.ensure(
+                HOUSEHOLD_ID,
+                StartTrackingRequest(provider=TrackingProvider.ZEPTO, order_id=self.attempt.provider_order_id or ""),
+            )
+        return ReconcileOutcome(
+            "matched",
+            self.attempt.model_copy(),
+            order_id=self.attempt.provider_order_id,
+            order_code=self.spec.get("order_code"),
+            newly_reconciled=newly,
+        )
 
 
 class LiveZeptoConnection:
@@ -363,7 +418,13 @@ def build_toolbox(
         HOUSEHOLD_ID,
         zepto_connection=LiveZeptoConnection() if scenario.get("address_form_screen") else DemoZeptoService(),
         preference_recall=memory,
-        order_confirmations=OrderConfirmations(basket_repo, approvals),
+        order_confirmations=OrderConfirmations(
+            basket_repo,
+            approvals,
+            reconciler=ScriptedReconciler(scenario["unknown_checkout"], order_tracking)  # type: ignore[arg-type]
+            if scenario.get("unknown_checkout")
+            else None,
+        ),
         address_book=HomeOfficeAddressBook() if scenario.get("address_book") == "home_office" else None,
         # Demo Zepto history is empty and its catalogue has no tools: nothing leaves the process.
         order_tracking=order_tracking,

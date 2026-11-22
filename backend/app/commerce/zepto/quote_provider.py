@@ -22,7 +22,7 @@ from app.commerce.zepto.checkout import (
     ZeptoPreviewRefused,
     quote_from_preview,
 )
-from app.commerce.zepto.diagnostics import log_preview_failure
+from app.commerce.zepto.diagnostics import log_confirm_failure, log_preview_failure
 from app.commerce.zepto.errors import ZeptoSchemaError
 from app.shopping.errors import ApprovalRefused, ProviderUnavailable
 from app.shopping.models import Basket, BasketLine, Quote
@@ -213,6 +213,8 @@ class ZeptoCodCheckoutGateway:
         """Confirm while the exact-preview coordinator remains held."""
 
         _require_zepto_basket(basket)
+        correlation_id = uuid.uuid4().hex
+        payload: object | None = None
         try:
             payload = await self.client.call_tool(
                 "create_order",
@@ -221,10 +223,23 @@ class ZeptoCodCheckoutGateway:
             )
             return parse_confirmed_cod_order(payload)
         except ZeptoSchemaError as exc:
+            log_confirm_failure(
+                correlation_id=correlation_id,
+                step=getattr(exc, "step", "response"),
+                outcome="unparsed",
+                payload=payload,
+                facts=getattr(exc, "facts", None),
+            )
             raise ProviderUnavailable(
                 "Zepto returned an ambiguous order confirmation. Check order history before retrying."
             ) from exc
         except Exception as exc:
+            log_confirm_failure(
+                correlation_id=correlation_id,
+                step="provider_error" if payload is None else "parse_error",
+                outcome=type(exc).__name__,
+                payload=payload,
+            )
             raise ProviderUnavailable(
                 "Zepto could not confirm the order. Check order history before retrying."
             ) from exc

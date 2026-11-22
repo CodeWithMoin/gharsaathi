@@ -18,14 +18,15 @@ from __future__ import annotations
 import json
 import logging
 import math
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.commerce.zepto.errors import ZeptoAuthenticationRequired, ZeptoConfigurationError
-from app.shopping.money import format_rupees
+from app.shopping.money import format_rupees, money_fields
+from app.shopping.reconciliation import CheckoutReconciler, ReconcileOutcome
 from app.tracking.adapters import normalise_status
 from app.tracking.cancellation import order_cancel_tool
 from app.tracking.errors import TrackingError
@@ -163,11 +164,16 @@ class OrderStatusToolExecutor:
         household_id: str,
         *,
         now: Callable[[], datetime] = utc_now,
+        checkouts: CheckoutReconciler | None = None,
+        on_reconciled: Callable[[ReconcileOutcome], Awaitable[None]] | None = None,
     ) -> None:
         self.tracking = tracking
         self.history = history
         self.household_id = household_id
         self.now = now
+        # Unknown-outcome checkouts are settled from read-only order history first.
+        self.checkouts = checkouts
+        self.on_reconciled = on_reconciled
 
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
         try:
@@ -186,10 +192,38 @@ class OrderStatusToolExecutor:
         return _error(f"Unknown tool {name}.")
 
     async def _status(self, arguments: StatusArguments) -> ToolOutcome:
-        watch = self.tracking.find(self.household_id, arguments.order_ref) if self.tracking else None
+        reconciled: ReconcileOutcome | None = None
+        if self.checkouts is not None and arguments.order_ref.strip().lstrip("#").strip().casefold() in {"", "latest"}:
+            pending = await self.checkouts.pending(self.household_id)
+            if pending:
+                reconciled = await self.checkouts.reconcile(pending[0].id, household_id=self.household_id)
+                if not reconciled.placed:
+                    return ToolOutcome(model_output=_not_confirmed(reconciled))
+                if reconciled.newly_reconciled and self.on_reconciled is not None:
+                    try:
+                        await self.on_reconciled(reconciled)
+                    except Exception as exc:  # noqa: BLE001 - the answer still stands
+                        logger.info("event=order_reconciled_notify_failed error=%s", type(exc).__name__)
+        reference = (
+            reconciled.order_id
+            if reconciled is not None and reconciled.order_id
+            else arguments.order_ref
+        )
+        watch = self.tracking.find(self.household_id, reference) if self.tracking else None
         if watch is not None:
-            return ToolOutcome(model_output=await self._from_watch(watch))
-        return await self._from_history(arguments.order_ref)
+            output = await self._from_watch(watch)
+            if reconciled is not None:
+                output["confirmed_via"] = "order_history"
+                if reconciled.order_code and "order_code" not in output:
+                    output["order_code"] = reconciled.order_code
+                code = output.get("order_code") or watch.order_id
+                output["note"] = (
+                    "Zepto's order history now confirms this order (earlier it was unconfirmed). "
+                    f"First say it is placed, with order code #{code}; then the status. "
+                    + output["note"]
+                )
+            return ToolOutcome(model_output=output)
+        return await self._from_history(reference)
 
     async def _from_watch(self, watch: OrderWatch) -> dict[str, Any]:
         assert self.tracking is not None
@@ -215,6 +249,8 @@ class OrderStatusToolExecutor:
             "source": "live_tracking",
             "store": STORE_LABELS[watch.provider],
             "order_ref": watch.order_id,
+            # Only provider-confirmed orders are ever tracked.
+            "order_confirmed": True,
         }
         if snapshot and snapshot.order_code:
             output["order_code"] = snapshot.order_code
@@ -351,6 +387,39 @@ class OrderStatusToolExecutor:
                 ),
             }
         )
+
+
+NOT_CONFIRMED_NOTE = (
+    "This order is NOT confirmed. Say exactly that in one line: the store has not confirmed "
+    "it yet, and offer 'Check with Zepto' on the order card or the Zepto app. Never say it "
+    "was placed, confirmed, paid or on its way, and do not prepare it again."
+)
+
+
+def _not_confirmed(outcome: ReconcileOutcome) -> dict[str, Any]:
+    attempt = outcome.attempt
+    output: dict[str, Any] = {
+        "status": "not_confirmed",
+        "store": "Zepto",
+        "order_confirmed": False,
+        "check": outcome.check,
+        "note": NOT_CONFIRMED_NOTE,
+    }
+    if attempt is not None:
+        output.update(money_fields("payable", attempt.payable_paise))
+        if attempt.status.value == "awaiting_payment":
+            output["message"] = (
+                "Zepto's order history shows this order, but its payment is not confirmed; "
+                "ask the user to tap \"I've paid, check status\" on the card."
+            )
+    if outcome.check == "not_found":
+        output["message"] = "Zepto's order history shows no matching order yet."
+    elif outcome.check == "ambiguous":
+        output["candidates"] = [f"#{code}" for code in outcome.candidates[:3]]
+        output["message"] = "Several Zepto orders could match; GharSaathi will not guess which."
+    elif outcome.check == "unavailable":
+        output["message"] = "Zepto's order history could not be read right now."
+    return output
 
 
 def _no_order() -> ToolOutcome:

@@ -108,3 +108,40 @@ def log_preview_failure(
             separators=(",", ":"),
         ),
     )
+
+
+CONFIRM_FAILURE_EVENT = "zepto_cod_confirm_unparsed"
+
+
+def log_confirm_failure(
+    *,
+    correlation_id: str,
+    step: str,
+    outcome: str,
+    payload: object | None,
+    facts: dict[str, Any] | None = None,
+) -> None:
+    """Log one structured, content-free record for an unreadable order confirmation.
+
+    The order may have been placed, so the attempt stays ``outcome_unknown``;
+    this record only shows which part of Zepto's response the parser did not
+    recognise (key paths and types, never values or text).
+    """
+
+    text = payload.get("content_text") if isinstance(payload, dict) else None
+    derived = dict(facts or {})
+    if isinstance(text, str):
+        derived["text_chars"] = len(text)
+    logger.warning(
+        "event=%s correlation_id=%s stage=confirm step=%s outcome=%s facts=%s shape=%s",
+        CONFIRM_FAILURE_EVENT,
+        correlation_id,
+        step,
+        outcome,
+        json.dumps(derived, sort_keys=True, separators=(",", ":")),
+        json.dumps(
+            payload_shape(payload) if payload is not None else {},
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    )
