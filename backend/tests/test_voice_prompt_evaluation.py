@@ -64,6 +64,7 @@ REGRESSION_CASE_IDS = {
     "named_request_never_bare_acknowledgement",
     "order_request_prepares_card",
     "approve_request_prepares_card",
+    "unconfirmed_order_not_claimed_placed",
 }
 
 
@@ -180,6 +181,11 @@ def test_build_input_appends_latest_turn_after_history() -> None:
             "order_request_prepares_card",
             "Zepto, do items, ₹222, cash on delivery, Home par. Screen par 'Place order' dabaiye.",
             "Order ho gaya, Zepto ne confirm kar diya.",
+        ),
+        (
+            "unconfirmed_order_not_claimed_placed",
+            "Zepto ne abhi confirm nahi kiya hai; card par 'Check with Zepto' dabaiye.",
+            "Haan, order ho gaya, Zepto ne confirm kar diya.",
         ),
         (
             "approve_request_prepares_card",

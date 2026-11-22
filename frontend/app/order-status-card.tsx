@@ -5,7 +5,7 @@ import { CheckCircle, Circle, DeviceMobile, MapPin, Package, Truck, XCircle } fr
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApiRequest } from "./authenticated-api";
 import { LiveOrderTracking } from "./order-tracking";
-import { applyTrackingRead, etaText, isFinal, orderHeadline, orderSteps, pollDelayMs, updatedText, type OrderStatusCard as Card } from "./order-status.mjs";
+import { applyTrackingRead, etaText, finishedOrderSummary, isFinal, orderHeadline, orderSteps, pollDelayMs, updatedText, type OrderStatusCard as Card } from "./order-status.mjs";
 import { InputDialog } from "./ui/input-dialog";
 
 /**
@@ -23,6 +23,8 @@ export function OrderStatusCard({ card, onChange, onUpdate }: {
   const apiRequest = useApiRequest();
   const [live, setLive] = useState(card);
   const [trackOpen, setTrackOpen] = useState(false);
+  // A delivered or store-cancelled order collapses to one line; a tap shows the details.
+  const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const cardRef = useRef(card);
   const callbacks = useRef({ onChange, onUpdate });
@@ -86,11 +88,21 @@ export function OrderStatusCard({ card, onChange, onUpdate }: {
   const stopped = !live.active && !isFinal(live);
   const summary = [live.itemCount !== null ? `${live.itemCount} ${live.itemCount === 1 ? "item" : "items"}` : null, live.payable, "Cash on delivery"].filter(Boolean).join(" · ");
 
-  return <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
+  const finished = finishedOrderSummary(live);
+  if (finished && !expanded) {
+    return <motion.div id={`order-status-${live.orderId}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12">
+      <button type="button" onClick={() => setExpanded(true)} aria-expanded={false} aria-label={`${finished}. Show order details`} className={`flex max-w-full items-center gap-2 truncate rounded-full px-3 py-1.5 text-[11px] font-medium transition hover:bg-surface-strong ${cancelled ? "bg-surface-strong text-danger-hover" : "bg-success-soft text-success-strong"}`}>
+        {cancelled ? <XCircle size={13} weight="fill" className="shrink-0" /> : <CheckCircle size={13} weight="fill" className="shrink-0" />}
+        <span className="truncate">{finished}</span>
+      </button>
+    </motion.div>;
+  }
+
+  return <motion.div id={`order-status-${live.orderId}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
     <section aria-label={`${live.store} order status`} className="max-w-[620px] rounded-[8px_22px_22px_22px] border border-accent-border bg-surface p-4 shadow-[0_18px_45px_-34px_rgb(var(--shadow)/.7)] sm:p-5">
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold text-ink">{live.store} order · #{live.orderId}</h3>
-        {updated && <span className="shrink-0 text-[11px] font-medium text-muted">{updated}</span>}
+        {finished ? <button type="button" onClick={() => setExpanded(false)} className="shrink-0 text-[11px] font-semibold text-muted hover:text-ink">Collapse</button> : updated && <span className="shrink-0 text-[11px] font-medium text-muted">{updated}</span>}
       </div>
       {summary && <p className="mt-1 text-xs text-muted">{summary}</p>}
       <p role="status" aria-live="polite" className={`mt-3 flex items-center gap-2 text-base font-semibold ${cancelled ? "text-danger-hover" : delivered ? "text-success-strong" : "text-ink"}`}>

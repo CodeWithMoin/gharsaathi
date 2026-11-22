@@ -345,18 +345,23 @@ CAPABILITIES: tuple[Capability, ...] = (
             W,
             "Single-use, 5-minute confirmation bound to user, basket revision, approval, quote "
             "and address (app/shopping/order_confirmation.py), then the existing approve + "
-            "idempotent COD checkout.",
+            "idempotent COD checkout. An unknown outcome is settled only from read-only Zepto "
+            "order history (app/shopping/reconciliation.py): after the tap, on 'Check with "
+            "Zepto', on app load and from get_order_status; never by repeating the order call.",
         ),
         voice_tools=("prepare_order",),
         routes=(
             "POST /api/zepto/checkout/cod",
             "POST /api/orders/confirm",
             "POST /api/orders/cancel",
+            "POST /api/orders/check",
+            "POST /api/orders/reconcile-pending",
         ),
         ui_files=(
             "frontend/app/basket/BasketPanel.tsx",
             "frontend/app/basket/zepto-checkout-state.mjs",
             "frontend/app/order-confirmation-card.tsx",
+            "frontend/app/card-lifecycle.mjs",
         ),
     ),
     Capability(
@@ -761,6 +766,8 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "eta_minutes",
         "last_updated_minutes_ago",
         "no_order",
+        # Unknown-outcome reconciliation status (codex/order-confirm-reconcile).
+        "not_confirmed",
         "cancel_supported",
         "cancel_here",
         "option_id",
