@@ -141,6 +141,21 @@ test("a long pause by the same speaker starts a new bubble", () => {
   assert.deepEqual(roles(bubbles), [["user", "रुको एक मिनट"], ["user", "प्रोमो कुछ है क्या"]]);
 });
 
+test("a tool-call pause inside the assistant's reply keeps one bubble", () => {
+  const { bubbles } = replay([
+    liveUser("कितना देर लगेगा आने के लिए", 1000, 2500),
+    liveAssistant("Ek second, main check karti hoon.", 3000, 4500),
+    liveAssistant(" Bill mein abhi delivery ka exact time nahi dikh raha.", 9000, 11500),
+    liveAssistant(" Agla kya karna chahenge?", 14500, 15500),
+    liveUser("तो approximate क्या होगा", 17000, 18500),
+  ]);
+  assert.deepEqual(roles(bubbles), [
+    ["user", "कितना देर लगेगा आने के लिए"],
+    ["assistant", "Ek second, main check karti hoon. Bill mein abhi delivery ka exact time nahi dikh raha. Agla kya karna chahenge?"],
+    ["user", "तो approximate क्या होगा"],
+  ]);
+});
+
 test("Realtime boundary events split turns even without done events, ids or timing", () => {
   let clock = 0;
   const at = (ms) => () => { clock = ms; };

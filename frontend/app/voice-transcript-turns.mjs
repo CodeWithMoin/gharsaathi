@@ -22,9 +22,12 @@
 export const TURN_GAP_MS = 1800;
 export const ARRIVAL_GAP_MS = 2500;
 export const INTERJECTION_MS = 900;
+/** The assistant often pauses mid-reply while a tool runs; only the user speaking (or a boundary) ends her bubble. */
+export const ASSISTANT_GAP_MS = 60000;
+export const TURN_TAKE_MS = 700;
 
 /**
- * @param {{ makeId?: (sequence: number) => string, now?: () => number, gapMs?: number, arrivalGapMs?: number, interjectionMs?: number }} [options]
+ * @param {{ makeId?: (sequence: number) => string, now?: () => number, gapMs?: number, arrivalGapMs?: number, interjectionMs?: number, assistantGapMs?: number }} [options]
  */
 export function createTranscriptTurnTracker(options = {}) {
   const makeId = options.makeId ?? ((sequence) => `voice-${Date.now().toString(36)}-${sequence}`);
@@ -32,6 +35,7 @@ export function createTranscriptTurnTracker(options = {}) {
   const gapMs = options.gapMs ?? TURN_GAP_MS;
   const arrivalGapMs = options.arrivalGapMs ?? ARRIVAL_GAP_MS;
   const interjectionMs = options.interjectionMs ?? INTERJECTION_MS;
+  const assistantGapMs = options.assistantGapMs ?? ASSISTANT_GAP_MS;
   /** @type {Map<string, TranscriptTurn>} */
   const turns = new Map();
   /** @type {Map<string, string>} provider source key -> turn key */
@@ -67,14 +71,14 @@ export function createTranscriptTurnTracker(options = {}) {
   function shouldSplit(role, at, clock) {
     const span = spans[role];
     if (!active[role] || !span || span.clock !== clock) return false;
-    if (at - span.end >= (clock === "timeline" ? gapMs : arrivalGapMs)) return true;
+    const silenceLimit = role === "assistant" ? assistantGapMs : clock === "timeline" ? gapMs : arrivalGapMs;
+    if (at - span.end >= silenceLimit) return true;
     const otherSpan = spans[other(role)];
-    return Boolean(
-      otherSpan
-      && otherSpan.clock === clock
-      && otherSpan.start >= span.end
-      && otherSpan.end - otherSpan.start >= interjectionMs,
-    );
+    if (!otherSpan || otherSpan.clock !== clock || otherSpan.start < span.end) return false;
+    if (otherSpan.end - otherSpan.start >= interjectionMs) return true;
+    // A short reply that starts after the assistant went quiet is a real turn ("sabse chhota"),
+    // unlike a backchannel spoken while she is still talking.
+    return role === "assistant" && otherSpan.start - span.end >= TURN_TAKE_MS;
   }
 
   /** @param {TranscriptRole} role @param {string | undefined} sourceId */
