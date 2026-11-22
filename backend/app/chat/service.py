@@ -2,8 +2,11 @@
 
 One HTTP request runs one bounded turn: the voice delegation instructions
 (``build_session_config``), the voice tool definitions and a ``VoiceToolbox``
-built exactly as a voice session builds it. Tool results the browser needs are
-returned as the same UI events the voice sideband publishes.
+built exactly as a voice session builds it. Earlier turns, the chat summary,
+on-screen state and previous chats come from the shared conversation context
+loader, read server-side exactly as a voice session start reads them. Tool
+results the browser needs are returned as the same UI events the voice
+sideband publishes.
 """
 
 from __future__ import annotations
@@ -13,12 +16,13 @@ import json
 import logging
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.conversations.context import RecentConversationContext
 from app.core.config import Settings
 from app.voice.service import LiveSessionService, build_session_config
 from app.voice.toolbox import ToolExecutor
@@ -28,9 +32,6 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 6
 MAX_SEARCHES_PER_TURN = 2
-MAX_HISTORY_MESSAGES = 12
-# Rough token budget for prior turns (~4 characters per token).
-MAX_HISTORY_CHARS = 6_000
 MAX_SEARCH_CONTEXTS = 2
 MAX_SESSIONS = 200
 SESSION_IDLE_SECONDS = 60 * 60
@@ -90,12 +91,6 @@ class ResponsesClient(Protocol):
     async def create(self, **kwargs: Any) -> Any: ...
 
 
-@dataclass(frozen=True)
-class HistoryMessage:
-    role: str
-    content: str
-
-
 class ChatTurnResult(BaseModel):
     reply: str
     ui_events: list[dict[str, Any]]
@@ -112,7 +107,6 @@ class ChatSession:
     toolbox: ToolExecutor
     addresses: tuple[str | None, str | None]
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    recent: list[HistoryMessage] = field(default_factory=list)
     search_contexts: list[str] = field(default_factory=list)
     last_used: float = field(default_factory=time.monotonic)
 
@@ -153,26 +147,31 @@ class ChatSessionStore:
             self._sessions.pop(key, None)
 
 
-def merge_history(
-    saved: list[HistoryMessage], recent: list[HistoryMessage], message: str
-) -> list[HistoryMessage]:
-    """Saved conversation turns plus this server's recent turns, bounded.
+def turn_context(
+    context: RecentConversationContext | None, message: str, *, current_chat: bool = True
+) -> RecentConversationContext | None:
+    """The shared context for this typed turn.
 
-    The browser saves the conversation shortly after each turn, so the last
-    exchange may be missing from ``saved``; ``recent`` fills that gap. The
-    current message is dropped from the tail if the browser already saved it.
+    The browser may already have saved the message being answered; it is the
+    turn's input, so a trailing identical user turn is dropped. When the turn
+    belongs to a chat other than the user's current one, only previous chats
+    and baskets are kept, because the current-chat part describes another chat.
     """
 
-    current = HistoryMessage("user", message)
-    if saved and saved[-1] == current:
-        saved = saved[:-1]
-    history = saved[-MAX_HISTORY_MESSAGES:]
-    known = set(history)
-    history += [item for item in recent if item not in known]
-    history = history[-MAX_HISTORY_MESSAGES:]
-    while history and sum(len(item.content) for item in history) > MAX_HISTORY_CHARS:
-        history.pop(0)
-    return history
+    if context is None:
+        return None
+    turns = context.turns
+    if turns and turns[-1].role == "user" and turns[-1].text.strip() == message.strip():
+        turns = turns[:-1]
+    if not current_chat:
+        return replace(context, summary="", turns=(), on_screen=tuple(
+            line for line in context.on_screen if not line.startswith("Results ")
+        ))
+    return replace(context, turns=turns)
+
+
+async def _none() -> None:
+    return None
 
 
 class ChatTurnService:
@@ -215,7 +214,6 @@ class ChatTurnService:
         )
         if session is not None:
             # A different delivery address invalidates earlier search options.
-            fresh.recent = session.recent
             fresh.lock = session.lock
         self.sessions.put(user_id, conversation_id, fresh)
         return fresh
@@ -225,9 +223,10 @@ class ChatTurnService:
         user_id: str,
         conversation_id: UUID | None,
         message: str,
-        saved_history: list[HistoryMessage],
         swiggy_address_id: str | None = None,
         zepto_address_id: str | None = None,
+        *,
+        current_chat: bool = True,
     ) -> ChatTurnResult:
         if not user_id:
             raise ValueError("A verified user is required for typed chat.")
@@ -238,7 +237,7 @@ class ChatTurnService:
             stats: dict[str, Any] = {"rounds": 0, "tools": [], "outcome": "ok"}
             try:
                 async with asyncio.timeout(self.settings.chat_turn_timeout_seconds):
-                    result = await self._loop(client, session, user_id, message, saved_history, stats)
+                    result = await self._loop(client, session, user_id, message, current_chat, stats)
             except TimeoutError as exc:
                 stats["outcome"] = "timeout"
                 raise ChatTimeout("Jawab mein bahut der ho gayi. Ek baar phir likhiye.") from exc
@@ -254,10 +253,6 @@ class ChatTurnService:
                     ",".join(stats["tools"]) or "-",
                     int((time.monotonic() - started) * 1000),
                 )
-            session.recent = (
-                session.recent
-                + [HistoryMessage("user", message), HistoryMessage("assistant", result.reply)]
-            )[-MAX_HISTORY_MESSAGES:]
             return result
 
     async def _loop(
@@ -266,15 +261,12 @@ class ChatTurnService:
         session: ChatSession,
         user_id: str,
         message: str,
-        saved_history: list[HistoryMessage],
+        current_chat: bool,
         stats: dict[str, Any],
     ) -> ChatTurnResult:
-        delegation = await self._delegation(user_id, "typed")
+        delegation = await self._delegation(user_id, "typed", message, current_chat)
         allowed = {tool["name"] for tool in delegation["tools"]}
-        request_input: list[dict[str, Any]] = [
-            {"role": item.role, "content": item.content}
-            for item in merge_history(saved_history, session.recent, message)
-        ]
+        request_input: list[dict[str, Any]] = []
         if session.search_contexts:
             request_input.append(
                 {
@@ -327,16 +319,27 @@ class ChatTurnService:
                 )
         raise AssertionError("unreachable: the final round always returns")
 
-    async def _delegation(self, user_id: str, channel: Literal["typed", "voice"]) -> dict[str, Any]:
-        """The voice backend config with the same profile and household memory blocks."""
+    async def _delegation(
+        self,
+        user_id: str,
+        channel: Literal["typed", "voice"],
+        message: str = "",
+        current_chat: bool = True,
+    ) -> dict[str, Any]:
+        """The voice backend config with the same profile, memory and chat context blocks."""
 
-        household_memory = await self.voice.household_memory(user_id) if self.voice.basket_enabled else None
+        profile, household_memory, context = await asyncio.gather(
+            self.voice.profile(user_id),
+            self.voice.household_memory(user_id) if self.voice.basket_enabled else _none(),
+            self.voice.conversation_context(user_id),
+        )
         delegation = dict(
             build_session_config(
                 self.settings,
                 self.voice.tool_definitions,
-                await self.voice.profile(user_id),
+                profile,
                 household_memory,
+                context=turn_context(context, message, current_chat=current_chat),
             )["delegation"]["responses"]
         )
         delegation["instructions"] += CHANNEL_CONTEXT[channel]

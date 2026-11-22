@@ -134,6 +134,39 @@ Largest backend sections: examples 1,327 · household memory 325 · basket 267 �
 task 256 · decisive selection 227 · return the result 214. Largest live sections:
 examples 589 · decisive replies 499 · delegation 336 · language 312.
 
+## Chat context at session start
+
+Each voice session (and, via the same builder, each typed chat turn) starts with
+the verified user's own saved chats, read server-side by
+`ConversationContextLoader.load(user_id)` in `backend/app/conversations/context.py`.
+Nothing is taken from the browser.
+
+| Part | Source | Cap (o200k) |
+|---|---|---|
+| Current chat summary | `conversations.summary`, written in the background | 110 |
+| Last 6 turns, verbatim | saved messages | 170 |
+| On screen: results per item; each store's basket; its latest pending/approved bill (item total, payable, store-confirmed offers, expiry), however it was opened | saved `result_groups` + basket/approval tables (`shopping_approvals.quote`) | 140 |
+| Previous chats (≤3, last 30 days): summary or first request, items searched, furthest basket step per store | archived conversations | 110 |
+
+The whole block is ≤ ~600 tokens (measured in `tests/unit/test_conversation_context.py`).
+GPT-Live gets the turns as `session.input` startup history
+([docs](https://developers.openai.com/api/docs/guides/live-conversations#seed-a-session-with-prior-conversation))
+and the rest in its instructions. The backend model gets the whole block in its
+instructions. All of it is quoted as untrusted data. Prices, baskets, bills and
+orders come only from saved state. Voice `view_basket` also reads the persisted
+bill (`Approval.quote`) when the session did not request it, e.g. after the
+on-screen "Get final bill" button; it never re-quotes. "Order confirmed" appears only when a chat's
+saved timeline reached the `ordered` stage.
+
+Rolling summaries (`backend/app/conversations/summarizer.py`) run off the request
+path. They start after a save once 6 new turns have built up, and when a chat is
+archived (New chat or opening another chat). The model is set by
+`CONVERSATION_SUMMARY_MODEL` (default `gpt-6-luna`), with strict JSON output and a
+200-token output cap. A summary records only what the user wanted, preferences
+they stated, and open items; prices are stripped. Chats without messages are
+never summarised. When there is no summary yet, the deterministic description is
+used.
+
 ## Typed chat
 
 Typed text goes through the same backend model as voice (branch
@@ -163,10 +196,14 @@ flowchart LR
 - **Channel note.** `app/chat/service.py` appends a short "Channel: typed" block to
   the instructions: prices may be written as "₹172" and lists may be short bullet
   lines. Voice sessions get no such block, so spoken replies keep prices in words.
-- **Context per turn.** The last 12 messages of the user's own conversation (at most
-  about 6,000 characters), plus this server's last turns if the browser has not saved
-  them yet, plus the last 2 search results of this chat as a developer message, so
-  "Dark" or "haan wahi" can add an `option_id` the user already saw.
+- **Context per turn.** The same `ConversationContextLoader` block a voice session
+  gets (see "Chat context at session start"): current chat summary, last 6 turns,
+  on-screen state and previous chats, in the instructions. The message being answered
+  is the only `user` input; if the browser already saved it, the trailing copy is
+  dropped from the quoted turns. For a chat that is not the user's current one, only
+  baskets/bills and previous chats are kept. The last 2 search results of this chat
+  are added as a developer message, so "Dark" or "haan wahi" can add an `option_id`
+  the user already saw.
 - **Per-conversation state.** `backend/app/chat/service.py` keeps one `VoiceToolbox`
   per (verified user, conversation) in memory (200 sessions, 1 h idle), with turns
   serialised by a lock. A different selected address rebuilds it. After a backend
@@ -181,7 +218,9 @@ flowchart LR
   latency only, never message text.
 - **Persistence.** The browser appends the typed message and the reply to the open
   conversation and saves it with `PUT /api/conversations/current`, exactly like
-  voice transcripts.
+  voice transcripts. Saves are debounced 250 ms; the page flushes a pending save
+  before `POST /api/chat/turn` and before `POST /api/voice/session`, so the
+  server-side context includes the latest turn.
 
 ## Where to look
 

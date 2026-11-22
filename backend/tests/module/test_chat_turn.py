@@ -9,15 +9,14 @@ from pydantic import SecretStr
 
 from app.chat.service import (
     CHANNEL_CONTEXT,
-    MAX_HISTORY_MESSAGES,
     MAX_TOOL_ROUNDS,
     ChatProviderError,
     ChatTimeout,
     ChatTurnService,
-    HistoryMessage,
-    merge_history,
+    turn_context,
 )
 from app.commerce.swiggy.models import Price, Product, ProductSearchResult
+from app.conversations.context import ContextTurn, RecentConversationContext
 from app.core.config import Settings
 from app.memory.recall import HouseholdMemory, HouseholdRecall, RecallConsent, RememberedItem
 from app.user_profile import UserProfile
@@ -84,6 +83,18 @@ class FakeMemory:
         return self.memory
 
 
+class FakeContext:
+    """The shared conversation context loader, returning a fixed context."""
+
+    def __init__(self, context: RecentConversationContext | None) -> None:
+        self.context = context
+        self.loads: list[str] = []
+
+    async def load(self, external_user_id: str) -> RecentConversationContext | None:
+        self.loads.append(external_user_id)
+        return self.context
+
+
 def call(name: str, call_id: str, **arguments: Any) -> SimpleNamespace:
     return SimpleNamespace(type="function_call", name=name, arguments=json.dumps(arguments), call_id=call_id)
 
@@ -118,6 +129,7 @@ def service(
     zepto: FakeSearcher | None = None,
     profile: UserProfile | None = None,
     memory: FakeMemory | None = None,
+    context: FakeContext | None = None,
 ) -> ChatTurnService:
     config = settings()
     voice = LiveSessionService(
@@ -129,13 +141,14 @@ def service(
         zepto_searcher=zepto,
         preference_recall=memory,  # type: ignore[arg-type]
         profile_reader=FakeProfiles(profile),
+        context_reader=context,
     )
     return ChatTurnService(config, voice, responses=responses)
 
 
-async def turn(chat: ChatTurnService, message: str, history: list[HistoryMessage] | None = None, **kwargs: Any):
+async def turn(chat: ChatTurnService, message: str, **kwargs: Any):
     kwargs.setdefault("swiggy_address_id", "addr_home")
-    return await chat.run_turn(USER, None, message, history or [], **kwargs)
+    return await chat.run_turn(USER, None, message, **kwargs)
 
 
 async def test_search_then_add_runs_voice_tools_and_returns_voice_ui_events() -> None:
@@ -186,11 +199,8 @@ async def test_option_ids_from_an_earlier_message_can_be_added_in_the_next() -> 
 
     assert [event["type"] for event in second.ui_events] == ["basket.updated"]
     context = responses.requests[2]["input"]
-    assert context[:2] == [
-        {"role": "user", "content": "AXE Dark chahiye"},
-        {"role": "assistant", "content": "150 ml ya 215 ml?"},
-    ]
-    assert context[2]["role"] == "developer" and '"option_id": "opt1"' in context[2]["content"]
+    assert context[0]["role"] == "developer" and '"option_id": "opt1"' in context[0]["content"]
+    assert context[1:] == [{"role": "user", "content": "sabse chhota"}]
     assert searcher.queries == ["AXE Dark Temptation deodorant"]
 
 
@@ -423,18 +433,70 @@ async def test_diagnostic_log_is_content_free(caplog: pytest.LogCaptureFixture) 
     assert "masala" not in logged and "Mil gaya" not in logged
 
 
-def test_history_is_bounded_merged_and_drops_the_current_message() -> None:
-    saved = [HistoryMessage("user" if index % 2 == 0 else "assistant", f"m{index}") for index in range(20)]
-    recent = [HistoryMessage("user", "m19-new"), HistoryMessage("assistant", "reply")]
+CHAT = RecentConversationContext(
+    summary="User wants deodorant; AXE Dark chosen.",
+    turns=(
+        ContextTurn("user", "deo chahiye"),
+        ContextTurn("assistant", "Kaunsa brand aur size?"),
+        ContextTurn("user", "AXE Dark"),
+    ),
+    on_screen=("Zepto basket: 1 x AXE Dark Temptation 150 ml; items ₹199", 'Results "AXE Dark": AXE Dark Temptation (150 ml, ₹199, Zepto)'),
+    previous_chats=('20 Nov; asked "atta 5 kg"; searched atta',),
+)
 
-    merged = merge_history(saved + [HistoryMessage("user", "now")], recent, "now")
 
-    assert len(merged) == MAX_HISTORY_MESSAGES
-    assert merged[-2:] == recent
-    assert HistoryMessage("user", "now") not in merged
+async def test_typed_turn_uses_the_shared_conversation_context_like_voice() -> None:
+    loader = FakeContext(CHAT)
+    responses = FakeResponses(["Kaunsa size chahiye?"])
+    chat = service(responses, World(), FakeSearcher(AXE), context=loader)
+
+    await turn(chat, "AXE Dark")
+
+    request = responses.requests[0]
+    instructions = request["instructions"]
+    assert loader.loads == [USER]
+    # The same block a voice session's backend model gets, before the typed note.
+    assert 'Summary: "User wants deodorant; AXE Dark chosen."' in instructions
+    assert '- User: "deo chahiye"' in instructions
+    assert '- Assistant: "Kaunsa brand aur size?"' in instructions
+    assert "On screen now:" in instructions and "Zepto basket: 1 x AXE Dark" in instructions
+    assert '- 20 Nov; asked "atta 5 kg"; searched atta' in instructions
+    assert instructions.index("# This chat so far") < instructions.index("## Channel: typed")
+    # The message being answered is the input, not a repeated quoted turn.
+    assert '- User: "AXE Dark"' not in instructions
+    assert request["input"] == [{"role": "user", "content": "AXE Dark"}]
 
 
-def test_history_respects_the_character_budget() -> None:
-    saved = [HistoryMessage("user", "x" * 4_000), HistoryMessage("assistant", "y" * 4_000)]
+async def test_a_turn_for_a_non_current_chat_keeps_only_previous_chats_and_baskets() -> None:
+    responses = FakeResponses(["ok"])
+    chat = service(responses, World(), FakeSearcher(AXE), context=FakeContext(CHAT))
 
-    assert merge_history(saved, [], "next") == [HistoryMessage("assistant", "y" * 4_000)]
+    await turn(chat, "hello", current_chat=False)
+
+    instructions = responses.requests[0]["instructions"]
+    assert "deo chahiye" not in instructions and "Summary:" not in instructions
+    assert 'Results "AXE Dark"' not in instructions
+    assert "Zepto basket: 1 x AXE Dark" in instructions
+    assert "20 Nov; asked" in instructions
+
+
+def test_turn_context_drops_only_a_trailing_copy_of_the_current_message() -> None:
+    kept = turn_context(CHAT, "something else")
+    assert kept is not None and kept.turns == CHAT.turns
+    dropped = turn_context(CHAT, "  AXE Dark ")
+    assert dropped is not None and dropped.turns == CHAT.turns[:2]
+    assert turn_context(None, "hi") is None
+
+
+async def test_a_failing_context_loader_does_not_block_the_turn() -> None:
+    class Broken(FakeContext):
+        async def load(self, external_user_id: str) -> RecentConversationContext | None:
+            raise RuntimeError("db down")
+
+    responses = FakeResponses(["ok"])
+    chat = service(responses, World(), FakeSearcher(AXE), context=Broken(None))
+
+    result = await turn(chat, "hello")
+
+    assert result.reply == "ok"
+    assert "# This chat so far" not in responses.requests[0]["instructions"]

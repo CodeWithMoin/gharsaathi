@@ -238,7 +238,7 @@ async def run_scenario(scenario: dict[str, Any], workdir: Path) -> dict[str, Any
     chat.voice.tool_executor = recording_executor  # type: ignore[method-assign]
     started = datetime.now(UTC)
     try:
-        result = await chat.run_turn(household_id, None, scenario["user"], [], DEMO_ADDRESS_ID, DEMO_ADDRESS_ID)
+        result = await chat.run_turn(household_id, None, scenario["user"], DEMO_ADDRESS_ID, DEMO_ADDRESS_ID)
     except Exception as exc:  # noqa: BLE001 - a live failure is a reported result
         return {"id": scenario["id"], "user": scenario["user"], "passed": False, "error": f"{type(exc).__name__}: {exc}"}
     calls = recorders[0].calls if recorders else []

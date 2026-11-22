@@ -58,8 +58,14 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   });
 }
 
-export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[], item: { itemKey?: string; itemLabel?: string }) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void; onApprovalRequested?: (provider: VoiceStore, request: ApprovalRequest) => void; onAddressForm?: (request: VoiceAddressFormRequest) => void }) {
+export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, beforeSessionStart }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[], item: { itemKey?: string; itemLabel?: string }) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void; onApprovalRequested?: (provider: VoiceStore, request: ApprovalRequest) => void; onAddressForm?: (request: VoiceAddressFormRequest) => void; beforeSessionStart?: () => Promise<void> }) {
   const authenticatedFetch = useAuthenticatedFetch();
+  // Parent callbacks change identity on unrelated re-renders (e.g. commerceMode);
+  // reading them through a ref keeps the live session from restarting.
+  const callbacksRef = useRef({ onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, beforeSessionStart, authenticatedFetch });
+  useEffect(() => {
+    callbacksRef.current = { onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, beforeSessionStart, authenticatedFetch };
+  });
   const [status, setStatus] = useState<VoiceStatus>("connecting");
   const [message, setMessage] = useState("Voice connect ho raha hai…");
   const [searching, setSearching] = useState(false);
@@ -100,9 +106,9 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     const transcript = mapRealtimeTranscriptEvent(event);
     if (!transcript) return false;
     const turn = transcriptTurnsRef.current.apply(transcript);
-    if (turn) onTranscriptTurn({ ...turn, captionScript: assistantScriptRef.current });
+    if (turn) callbacksRef.current.onTranscriptTurn({ ...turn, captionScript: assistantScriptRef.current });
     return true;
-  }, [onTranscriptTurn]);
+  }, []);
 
   const listenForToolEvents = useCallback((sessionId: string, eventsToken: string) => {
     const source = new EventSource(`${API_BASE_URL}/api/voice/sessions/${encodeURIComponent(sessionId)}/events?token=${encodeURIComponent(eventsToken)}`);
@@ -122,7 +128,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         } else if (event.type === "session.finished") {
           source.close();
         } else {
-          const outcome = applyAssistantEvent<VoiceProduct>(event, { onResults, onBasketTouched, onApprovalRequested, onAddressForm });
+          const outcome = applyAssistantEvent<VoiceProduct>(event, callbacksRef.current);
           if (!outcome) return;
           if (outcome.kind === "results" || outcome.kind === "not_connected" || outcome.kind === "error") setSearching(false);
           if (outcome.kind === "results") setHasResults(true);
@@ -133,7 +139,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         // Ignore malformed provider events.
       }
     });
-  }, [onAddressForm, onApprovalRequested, onBasketTouched, onResults]);
+  }, []);
 
   const startSmartTurn = useCallback(async (attempt: number, mic: MediaStream, yieldInstruction: string) => {
     try {
@@ -214,7 +220,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
             setStatus("error");
             setMessage("Voice session ruk gaya. Phir se try kijiye.");
             console.warn("[voice] session error", event.error?.message);
-          } else if (event.type === "session.closed") onClose();
+          } else if (event.type === "session.closed") callbacksRef.current.onClose();
         } catch {
           // Ignore malformed realtime events.
         }
@@ -225,7 +231,10 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       if (attempt !== attemptRef.current) return;
       const sdp = peer.localDescription?.sdp;
       if (!sdp) throw new Error("Mic connection taiyaar nahi ho paya. Phir se try kijiye.");
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/voice/session`, {
+      // The server reads this chat's context at session start; save the latest turn first.
+      await callbacksRef.current.beforeSessionStart?.().catch(() => undefined);
+      if (attempt !== attemptRef.current) return;
+      const response = await callbacksRef.current.authenticatedFetch(`${API_BASE_URL}/api/voice/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -250,7 +259,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       setMessage(denied ? "Voice shopping ke liye mic permission chahiye." : error instanceof Error ? error.message : "Voice shuru nahi ho paya. Phir se try kijiye.");
       cleanup();
     }
-  }, [addressId, authenticatedFetch, cleanup, handleTranscriptEvent, listenForToolEvents, onClose, startSmartTurn, zeptoAddressId]);
+  }, [addressId, cleanup, handleTranscriptEvent, listenForToolEvents, startSmartTurn, zeptoAddressId]);
 
   useEffect(() => {
     void start();

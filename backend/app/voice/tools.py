@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -61,6 +62,27 @@ SEARCH_PRODUCTS_TOOL: dict[str, Any] = {
 }
 
 TOOL_DEFINITIONS: list[dict[str, Any]] = [SEARCH_PRODUCTS_TOOL]
+
+
+def item_key(query: str) -> str:
+    """Stable key for one searched item: same words, any case/spacing/punctuation.
+
+    The browser groups search results by this key, so searching the same item
+    again replaces its group instead of adding another.
+    """
+
+    normalised = unicodedata.normalize("NFKC", query).casefold()
+    # Keep letters, combining marks (Devanagari matras) and digits.
+    kept = "".join(
+        char if unicodedata.category(char)[0] in {"L", "M", "N"} else " " for char in normalised
+    )
+    return " ".join(kept.split())[:120] or "item"
+
+
+def item_fields(query: str) -> dict[str, str]:
+    """``item_key`` and ``item_label`` carried by every search event and result."""
+
+    return {"item_key": item_key(query), "item_label": " ".join(query.split())[:120]}
 
 
 class SearchProductsArguments(BaseModel):
@@ -171,7 +193,7 @@ class ShoppingToolExecutor:
                         "Swiggy and choose a saved address on screen, then start voice again."
                     ),
                 },
-                ui_event={"type": "tool.not_connected", "query": query},
+                ui_event={"type": "tool.not_connected", "query": query, **item_fields(query)},
             )
         try:
             result = await self.searcher.search(query, self.address_id, 0)
@@ -181,7 +203,7 @@ class ShoppingToolExecutor:
                     "status": "not_connected",
                     "message": "Swiggy is not connected or the session has expired. Ask the user to connect Swiggy on screen.",
                 },
-                ui_event={"type": "tool.not_connected", "query": query},
+                ui_event={"type": "tool.not_connected", "query": query, **item_fields(query)},
             )
         except SwiggyRateLimited as exc:
             return ToolOutcome(
@@ -197,6 +219,7 @@ class ShoppingToolExecutor:
                 ui_event={
                     "type": "tool.error",
                     "query": query,
+                    **item_fields(query),
                     "message": "Swiggy is temporarily rate-limiting search.",
                 },
             )
@@ -206,7 +229,12 @@ class ShoppingToolExecutor:
                     "status": "error",
                     "message": "Swiggy Instamart search failed. No results are available right now.",
                 },
-                ui_event={"type": "tool.error", "query": query, "message": "Swiggy search failed."},
+                ui_event={
+                    "type": "tool.error",
+                    "query": query,
+                    **item_fields(query),
+                    "message": "Swiggy search failed.",
+                },
             )
 
         products = result.products
@@ -215,6 +243,7 @@ class ShoppingToolExecutor:
                 "status": "ok",
                 "store": "Swiggy Instamart",
                 "query": query,
+                **item_fields(query),
                 "total_variants": len(products),
                 "results": [
                     {"option_id": self._remember(product), **_product_for_model(product)}
@@ -228,6 +257,7 @@ class ShoppingToolExecutor:
             ui_event={
                 "type": "tool.results",
                 "query": query,
+                **item_fields(query),
                 "store": "Swiggy Instamart",
                 "products": [p.model_dump() for p in products],
             },
@@ -290,7 +320,7 @@ class MultiProviderShoppingToolExecutor:
                     "status": "not_connected",
                     "message": "Connect at least one store and choose its saved delivery address on screen.",
                 },
-                ui_event={"type": "tool.not_connected", "query": arguments.query},
+                ui_event={"type": "tool.not_connected", "query": arguments.query, **item_fields(arguments.query)},
             )
 
         memory_task = asyncio.create_task(self._household_memory())
@@ -306,6 +336,7 @@ class MultiProviderShoppingToolExecutor:
                 model_output={
                     "status": status,
                     "query": arguments.query,
+                    **item_fields(arguments.query),
                     "providers": [
                         {key: value for key, value in outcome.items() if key not in {"target", "products"}}
                         for outcome in outcomes
@@ -315,6 +346,7 @@ class MultiProviderShoppingToolExecutor:
                 ui_event={
                     "type": "tool.not_connected" if status == "not_connected" else "tool.error",
                     "query": arguments.query,
+                    **item_fields(arguments.query),
                     "message": "Connected stores could not be searched right now.",
                 },
             )
@@ -362,6 +394,7 @@ class MultiProviderShoppingToolExecutor:
                 "status": "ok",
                 "stores_checked": stores,
                 "query": arguments.query,
+                **item_fields(arguments.query),
                 "total_variants": len(ui_products),
                 "results": model_results,
                 "provider_statuses": [
@@ -377,6 +410,7 @@ class MultiProviderShoppingToolExecutor:
             ui_event={
                 "type": "tool.results",
                 "query": arguments.query,
+                **item_fields(arguments.query),
                 "store": " + ".join(stores),
                 "products": ui_products,
             },

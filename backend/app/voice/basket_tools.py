@@ -8,13 +8,14 @@ derived only from the corresponding stored search result.
 import json
 import logging
 from dataclasses import dataclass
+from datetime import UTC
 from typing import Any, Protocol, get_args
 
 from pydantic import BaseModel, Field, ValidationError
 
 from app.commerce.provider_state import SavedAddressSummary
 from app.commerce.swiggy.models import Product
-from app.shopping.approval import ApprovalService
+from app.shopping.approval import ApprovalService, latest_open_approval
 from app.shopping.basket import BasketService, format_rupees, item_total_paise
 from app.shopping.errors import ShoppingError
 from app.shopping.models import (
@@ -316,20 +317,48 @@ class BasketToolExecutor:
                 return None
         return self._address_cache[key]
 
-    def _current_bill(self, basket: Basket) -> dict[str, Any]:
+    async def _current_bill(self, basket: Basket) -> dict[str, Any]:
+        """The bill on screen for this basket, without re-quoting.
+
+        Prefers the quote this session requested; otherwise reads the persisted
+        approval, e.g. a bill opened with the on-screen "Get final bill" button.
+        """
+
         quote = self._quotes.get(basket.provider)
         if (
-            quote is None
-            or quote.basket_id != basket.id
-            or quote.basket_revision != basket.revision
-            or basket.status != BasketStatus.AWAITING_APPROVAL
+            quote is not None
+            and quote.basket_id == basket.id
+            and quote.basket_revision == basket.revision
+            and basket.status == BasketStatus.AWAITING_APPROVAL
         ):
+            return {"current_bill": bill_for_model(quote)}
+        if basket.status not in {BasketStatus.AWAITING_APPROVAL, BasketStatus.APPROVED}:
             return {}
-        return {"current_bill": bill_for_model(quote)}
+        try:
+            approval = latest_open_approval(
+                await self.approvals.approvals.for_basket(basket.id), basket
+            )
+        except Exception:  # noqa: BLE001 - a missing bill must not break view_basket
+            logger.warning("event=voice_bill_lookup_failed provider=%s", basket.provider)
+            return {}
+        if approval is None or approval.quote is None:
+            return {}
+        expires_at = approval.expires_at
+        if expires_at.tzinfo is None:  # SQLite returns naive UTC timestamps
+            expires_at = expires_at.replace(tzinfo=UTC)
+        expired = self.approvals.clock() >= expires_at
+        return {
+            "current_bill": {
+                **bill_for_model(approval.quote),
+                "item_total": format_rupees(approval.quote.item_total_paise),
+                "approval_status": "expired" if expired else approval.status.value,
+                "expires_at": expires_at.isoformat(),
+            }
+        }
 
     async def _outcome(self, basket: Basket, store: BasketStore, status: str) -> ToolOutcome:
         return _basket_outcome(
-            basket, store, status, await self._address(store), self._current_bill(basket)
+            basket, store, status, await self._address(store), await self._current_bill(basket)
         )
 
     async def _add(self, arguments: AddArguments) -> ToolOutcome:
@@ -382,19 +411,20 @@ class BasketToolExecutor:
             return await self._view_one(next(iter(self.stores.values())))
         views = [(store, await self._active(store)) for store in self.stores.values()]
         filled = [(store, basket) for store, basket in views if basket.lines]
+        bills = [await self._current_bill(basket) for _, basket in views]
         return ToolOutcome(
             model_output={
                 "status": "ok",
                 "baskets": [
                     {
                         **basket_for_model(basket, store, await self._address(store)),
-                        **self._current_bill(basket),
+                        **bill,
                     }
-                    for store, basket in views
+                    for (store, basket), bill in zip(views, bills)
                 ],
                 "note": BASKET_NOTE
                 + " Each store has its own basket and bill."
-                + (f" {OFFERS_NOTE}" if any(self._current_bill(b) for _, b in views) else ""),
+                + (f" {OFFERS_NOTE}" if any(bills) else ""),
             },
             ui_event=(
                 {

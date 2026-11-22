@@ -84,11 +84,34 @@ def test_saved_conversation_turns_are_sent_as_context(api: TestClient, model: Sc
 
     assert response.status_code == 200, response.text
     assert response.json()["conversation_id"] == saved["id"]
-    assert model.requests[0]["input"] == [
-        {"role": "user", "content": "deo chahiye"},
-        {"role": "assistant", "content": "Kaunsa brand aur size?"},
-        {"role": "user", "content": "AXE Dark"},
-    ]
+    # The shared loader (the one voice uses) puts the saved turns in the instructions;
+    # the already-saved current message is the input, not a repeated turn.
+    instructions = model.requests[0]["instructions"]
+    assert '- User: "deo chahiye"' in instructions
+    assert '- Assistant: "Kaunsa brand aur size?"' in instructions
+    assert '- User: "AXE Dark"' not in instructions
+    assert model.requests[0]["input"] == [{"role": "user", "content": "AXE Dark"}]
+
+
+def test_an_older_chat_does_not_get_the_current_chats_turns(api: TestClient, model: ScriptedModel) -> None:
+    alice = as_user("alice")
+    first = api.put(
+        "/api/conversations/current",
+        headers=alice,
+        json={"messages": [{"id": "u1", "role": "user", "content": "atta chahiye", "modality": "text", "created_at": "2026-11-21T10:00:00Z"}]},
+    ).json()
+    assert api.post("/api/conversations/new", headers=alice).status_code in {200, 204}
+    api.put(
+        "/api/conversations/current",
+        headers=alice,
+        json={"messages": [{"id": "u2", "role": "user", "content": "makhana pack zaroori", "modality": "text", "created_at": "2026-11-21T11:00:00Z"}]},
+    )
+    model.script = ["ok"]
+
+    response = api.post("/api/chat/turn", headers=alice, json={"conversation_id": first["id"], "message": "hello"})
+
+    assert response.status_code == 200, response.text
+    assert "makhana pack zaroori" not in model.requests[0]["instructions"].split("# Recent chats")[0]
 
 
 def test_another_users_conversation_is_not_found(api: TestClient, model: ScriptedModel) -> None:

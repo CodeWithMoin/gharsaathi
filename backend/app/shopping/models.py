@@ -145,6 +145,9 @@ class Approval(BaseModel):
     created_at: datetime
     expires_at: datetime
     decided_at: datetime | None = None
+    # The exact bill shown for this approval, so later readers (voice, chat
+    # context) can describe it without re-quoting. None for older approvals.
+    quote: Quote | None = None
 
 
 class CheckoutStatus(StrEnum):

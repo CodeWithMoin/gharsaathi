@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     # Dev diagnostic: log content-free sideband event summaries (type, id field names, timing).
     voice_event_log: bool = False
     memory_extraction_model: str = "gpt-4o-mini"
+    # Background rolling chat summaries (app/conversations/summarizer.py).
+    conversation_summary_model: str = "gpt-6-luna"
     jev_api_key: SecretStr = SecretStr("")
     jev_base_url: str = "https://api.typesafe.ai/v1"
     jev_model: str = "jev-1.14.0"

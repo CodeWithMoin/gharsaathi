@@ -47,6 +47,13 @@ from app.tracking.adapters import (
 from app.tracking.models import TrackingProvider
 from app.tracking.service import OrderTrackingService
 from app.tracking.store import OrderTrackingStore
+from app.conversations.context import ConversationContextLoader
+from app.conversations.summarizer import (
+    BackgroundConversationSummaries,
+    ConversationSummaries,
+    DisabledConversationSummaries,
+    OpenAIConversationSummarizer,
+)
 from app.memory.recall import DatabasePreferenceRecaller
 from app.user_profile import DatabaseProfileReader
 from app.chat.service import ChatTurnService
@@ -185,6 +192,34 @@ def get_zepto_quote_provider() -> QuoteProvider:
 
 
 @lru_cache
+def get_conversation_context_loader() -> ConversationContextLoader:
+    """Shared by voice session start and typed chat turns."""
+
+    return ConversationContextLoader(
+        get_session_factory(), get_basket_repository(), get_approval_repository()
+    )
+
+
+@lru_cache
+def get_conversation_summaries() -> ConversationSummaries:
+    settings = get_settings()
+    api_key = settings.openai_api_key.get_secret_value().strip()
+    if not api_key:
+        return DisabledConversationSummaries()
+    return BackgroundConversationSummaries(
+        get_session_factory(),
+        OpenAIConversationSummarizer(
+            api_key, settings.openai_base_url, settings.conversation_summary_model
+        ),
+    )
+
+
+ConversationSummariesDependency = Annotated[
+    ConversationSummaries, Depends(get_conversation_summaries)
+]
+
+
+@lru_cache
 def get_sideband_hub() -> SidebandHub:
     return SidebandHub(get_settings())
 
@@ -202,6 +237,7 @@ def get_voice_service() -> LiveSessionService:
         preference_recall=DatabasePreferenceRecaller(get_session_factory()),
         profile_reader=DatabaseProfileReader(get_session_factory()),
         addresses=SavedAddressDirectory(get_session_factory()),
+        context_reader=get_conversation_context_loader(),
     )
 
 
