@@ -10,7 +10,7 @@ import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, useSetBasketLineQu
 import { ProductOptions, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
 import { basketSummary, collapseBasketCard, dropResultGroup, emptyTimeline, finishResultGroup, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordOrderCard, recordResultGroup, restoreTimeline, summaryText, updateOrderCard, withResultGroups, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
-import { restoreResultGroups, resultGroupIdentity, type ResultGroup } from "./result-groups.mjs";
+import { directSearchOutcome, restoreResultGroups, resultGroupIdentity, type ResultGroup } from "./result-groups.mjs";
 import { conversationTitle, relativeChatDate, searchConversations, visibleConversations, type ConversationSummary } from "./chat-list.mjs";
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
@@ -894,13 +894,18 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
           apiRequest<{ products: Product[] }>("/api/zepto/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: clean, address_id: zeptoAddressId, page_number: 0 }) })
             .then((data) => data.products.map((product) => ({ ...product, provider: "zepto" as const, provider_label: "Zepto" }))),
         );
-        const outcomes = await Promise.allSettled(searches);
-        const combined = outcomes.flatMap((outcome) => outcome.status === "fulfilled" ? outcome.value : []);
-        const failures = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
-        setTimeline((current) => finishResultGroup(current, identity.key, { products: combined, status: "done" }));
-        if (combined.length) setMessage(`${combined.length} ${commerceMode === "demo" ? "demo" : "live"} options found across ready stores.`);
-        else if (failures.length) setMessage(failures[0].reason instanceof Error ? failures[0].reason.message : "Store search failed.");
-        else setMessage("No matching products found at the selected addresses.");
+        const outcome = directSearchOutcome(await Promise.allSettled(searches));
+        if (outcome.status === "failed") {
+          // A store error is not "no results": show the error with its retry, not an empty group.
+          setTimeline((current) => dropResultGroup(current, identity.key));
+          setChatFailure({ query: clean, message: outcome.message });
+          setMessage(outcome.message);
+        } else {
+          const combined = outcome.status === "results" ? outcome.products : [];
+          setTimeline((current) => finishResultGroup(current, identity.key, { products: combined, status: "done" }));
+          if (combined.length) setMessage(`${combined.length} ${commerceMode === "demo" ? "demo" : "live"} options found across ready stores.`);
+          else setMessage("No matching products found at the selected addresses.");
+        }
       } catch (cause) {
         setTimeline((current) => dropResultGroup(current, identity.key));
         setMessage(cause instanceof Error ? cause.message : "Search failed.");
