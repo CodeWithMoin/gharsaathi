@@ -5,8 +5,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 import hashlib
 import json
+import logging
 import re
-from typing import Literal, Protocol
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -27,6 +28,12 @@ from app.database.models import (
     ReorderSuggestionFeedback,
 )
 from app.memory.errors import MemoryNotFoundError, MemoryPermissionError
+from app.memory.history_reading import (
+    Coverage,
+    HistoryRead,
+    HistoryReader,
+    HistoryReadPlan,
+)
 from app.memory.purchase_patterns import (
     PatternEvidence,
     PurchaseObservation,
@@ -46,10 +53,36 @@ from app.memory.recommender import (
 DATA_CATEGORY = "purchase_history"
 PURPOSE = "proactive_reorder"
 DELIVERED_STATUSES = {"delivered", "completed"}
+SYNC_CACHE = timedelta(minutes=10)
+FULL_RESYNC_INTERVAL = timedelta(hours=24)
+AUTO_SYNC_INTERVAL = timedelta(days=7)
+DEFAULT_LOOKBACK_DAYS = 365
+# A rate limit without a provider hint blocks automatic syncs for an hour.
+DEFAULT_RATE_LIMIT_BLOCK = timedelta(hours=1)
+COVERAGE: dict[str, Coverage] = {"swiggy": "last_15_days", "zepto": "full_history"}
+PROVIDERS = ("swiggy", "zepto")
+
+logger = logging.getLogger(__name__)
 
 
-class OrderHistoryReader(Protocol):
-    async def orders(self, count: int, active_only: bool) -> OrderList: ...
+class FullResyncUnavailable(Exception):
+    def __init__(self, available_at: datetime) -> None:
+        self.available_at = available_at
+        super().__init__(
+            "A full re-import ran for this store in the last 24 hours. "
+            f"It is available again after {available_at.isoformat()}."
+        )
+
+
+class HistoryCooldown(Exception):
+    """A rate limit is recorded for this store; no provider call is made."""
+
+    def __init__(self, until: datetime) -> None:
+        self.until = until
+        super().__init__(
+            "The store asked us to slow down. Order history can be checked again "
+            f"after {until.isoformat()}."
+        )
 
 
 class PurchaseImportResult(BaseModel):
@@ -58,6 +91,50 @@ class PurchaseImportResult(BaseModel):
     imported_occurrences: int = Field(ge=0)
     pruned_orders: int = Field(ge=0)
     cached: bool = False
+    provider: str | None = None
+    full: bool = False
+    coverage: Coverage | None = None
+    fetched_orders: int = Field(default=0, ge=0)
+    skipped_known: int = Field(default=0, ge=0)
+    detail_failures: int = Field(default=0, ge=0)
+    list_calls: int = Field(default=0, ge=0)
+    detail_calls: int = Field(default=0, ge=0)
+    stopped_reason: str | None = None
+    # False while older orders remain for a later sync to read.
+    complete: bool = True
+    error_code: str | None = None
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+
+
+class PurchaseSyncStatus(BaseModel):
+    provider: str
+    coverage: Coverage
+    last_attempt_at: datetime | None = None
+    last_success_at: datetime | None = None
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+    fetched_orders: int = 0
+    imported_orders: int = 0
+    skipped_known: int = 0
+    detail_failures: int = 0
+    stopped_reason: str | None = None
+    complete: bool = False
+    last_error_code: str | None = None
+    rate_limited_until: datetime | None = None
+    full_resync_available_at: datetime | None = None
+    auto_sync_enabled: bool = False
+    next_auto_sync_at: datetime | None = None
+
+
+class AutoSyncOutcome(BaseModel):
+    provider: str
+    ran: bool
+    reason: Literal[
+        "synced", "disabled", "no_permission", "not_due", "cooldown", "error"
+    ]
+    result: PurchaseImportResult | None = None
+    error_code: str | None = None
 
 
 class ReorderSuggestion(BaseModel):
@@ -89,23 +166,40 @@ class RecalledPurchase(BaseModel):
 
 
 class PurchaseGraphService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self.session = session
         self.memory_repository = MemoryRepository(session)
+        self.clock = clock
 
     async def sync(
         self,
         actor: MemorySubject,
-        reader: OrderHistoryReader,
+        reader: HistoryReader,
         provider: str = "swiggy",
-        count: int = 15,
+        *,
+        full: bool = False,
+        lookback_days: int = DEFAULT_LOOKBACK_DAYS,
     ) -> PurchaseImportResult:
+        """One explicit, conservative read. Never retried; partial reads are kept."""
         permission = await self._permission(actor)
         sync_state = await self._sync_state(actor.id, provider)
-        now = datetime.now(UTC)
+        now = self.clock()
         if (
+            sync_state.rate_limited_until is not None
+            and self._as_utc(sync_state.rate_limited_until) > now
+        ):
+            raise HistoryCooldown(self._as_utc(sync_state.rate_limited_until))
+        if full:
+            last_full = sync_state.last_full_resync_at
+            if last_full is not None and now - self._as_utc(last_full) < FULL_RESYNC_INTERVAL:
+                raise FullResyncUnavailable(self._as_utc(last_full) + FULL_RESYNC_INTERVAL)
+        elif (
             sync_state.last_success_at is not None
-            and now - self._as_utc(sync_state.last_success_at) < timedelta(minutes=10)
+            and now - self._as_utc(sync_state.last_success_at) < SYNC_CACHE
         ):
             return PurchaseImportResult(
                 imported_orders=0,
@@ -113,23 +207,234 @@ class PurchaseGraphService:
                 imported_occurrences=0,
                 pruned_orders=0,
                 cached=True,
+                provider=provider,
+                coverage=COVERAGE.get(provider),
+                complete=bool(sync_state.backfill_complete),
+                window_start=self._maybe_utc(sync_state.window_start),
+                window_end=self._maybe_utc(sync_state.window_end),
             )
         sync_state.last_attempt_at = now
+        lookback_cutoff = now - timedelta(days=lookback_days)
+        retention_cutoff = now - timedelta(days=permission.retention_days or 0)
+        if retention_cutoff >= lookback_cutoff:
+            cutoff, cutoff_reason = retention_cutoff, "retention"
+        else:
+            cutoff, cutoff_reason = lookback_cutoff, "lookback"
+        if full:
+            start_page, incremental = 1, False
+        elif sync_state.backfill_complete:
+            start_page, incremental = 1, True
+        else:
+            start_page, incremental = sync_state.resume_page or 1, False
+        plan = HistoryReadPlan(
+            known_ids=await self._known_order_ids(actor.id, provider),
+            cutoff=cutoff,
+            cutoff_reason=cutoff_reason,  # type: ignore[arg-type]
+            start_page=start_page,
+            incremental=incremental,
+        )
         try:
-            orders = await reader.orders(count=count, active_only=False)
+            read = await reader.read_history(plan)
         except Exception as exc:
-            sync_state.last_error_code = type(exc).__name__[:80]
+            read = HistoryRead(
+                coverage=COVERAGE.get(provider, "full_history"),
+                stopped_reason="provider_error",
+                next_page=start_page,
+                error=exc,
+            )
+        logger.info(
+            "event=purchase_history_sync provider=%s list_calls=%d detail_calls=%d "
+            "stopped_reason=%s fetched=%d skipped_known=%d detail_failures=%d full=%s",
+            provider,
+            read.list_calls,
+            read.detail_calls,
+            read.stopped_reason,
+            len(read.orders),
+            read.skipped_known,
+            read.detail_failures,
+            full,
+        )
+        error_code = type(read.error).__name__[:80] if read.error is not None else None
+        sync_state.stopped_reason = read.stopped_reason[:32]
+        sync_state.last_error_code = error_code
+        sync_state.skipped_known_count = read.skipped_known
+        sync_state.detail_failure_count = read.detail_failures
+        if read.error is not None and read.stopped_reason == "rate_limited":
+            retry_after = getattr(read.error, "retry_after_seconds", None)
+            block = (
+                timedelta(seconds=retry_after)
+                if isinstance(retry_after, int) and retry_after > 0
+                else DEFAULT_RATE_LIMIT_BLOCK
+            )
+            sync_state.rate_limited_until = now + block
+        if full:
+            sync_state.last_full_resync_at = now
+        if read.next_page is None:
+            sync_state.backfill_complete = True
+            sync_state.resume_page = None
+        else:
+            sync_state.backfill_complete = False
+            sync_state.resume_page = read.next_page
+
+        orders = [order for order in read.orders if order.created_at >= cutoff]
+        if read.error is not None and not orders:
+            sync_state.fetched_order_count = 0
+            sync_state.imported_order_count = 0
             await self.session.commit()
-            raise
-        result = await self.import_orders(actor, orders, provider, permission)
-        sync_state.last_success_at = datetime.now(UTC)
-        sync_state.last_error_code = None
-        sync_state.fetched_order_count = len(orders.orders)
-        if orders.orders:
-            sync_state.window_start = min(item.created_at for item in orders.orders)
-            sync_state.window_end = max(item.created_at for item in orders.orders)
+            raise read.error
+
+        result = await self.import_orders(
+            actor, OrderList(orders=orders), provider, permission
+        )
+        sync_state.last_success_at = now
+        sync_state.fetched_order_count = len(orders)
+        sync_state.imported_order_count = result.imported_orders
+        if orders:
+            fetched_start = min(item.created_at for item in orders)
+            fetched_end = max(item.created_at for item in orders)
+            if full or sync_state.window_start is None:
+                sync_state.window_start = fetched_start
+            else:
+                sync_state.window_start = min(
+                    self._as_utc(sync_state.window_start), fetched_start
+                )
+            if full or sync_state.window_end is None:
+                sync_state.window_end = fetched_end
+            else:
+                sync_state.window_end = max(
+                    self._as_utc(sync_state.window_end), fetched_end
+                )
         await self.session.commit()
-        return result
+        return result.model_copy(
+            update={
+                "provider": provider,
+                "full": full,
+                "coverage": read.coverage,
+                "fetched_orders": len(orders),
+                "skipped_known": read.skipped_known,
+                "detail_failures": read.detail_failures,
+                "list_calls": read.list_calls,
+                "detail_calls": read.detail_calls,
+                "stopped_reason": read.stopped_reason,
+                "complete": read.next_page is None,
+                "error_code": error_code,
+                "window_start": self._maybe_utc(sync_state.window_start),
+                "window_end": self._maybe_utc(sync_state.window_end),
+            }
+        )
+
+    async def auto_sync(
+        self,
+        actor: MemorySubject,
+        reader: HistoryReader,
+        provider: str,
+        *,
+        provider_cooldown_seconds: int = 0,
+        lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    ) -> AutoSyncOutcome:
+        """The opt-in weekly sync, run lazily when the user opens the app."""
+        try:
+            await self._permission(actor)
+        except MemoryPermissionError:
+            return AutoSyncOutcome(provider=provider, ran=False, reason="no_permission")
+        state = await self._existing_sync_state(actor.id, provider)
+        if state is None or not state.auto_sync_enabled:
+            return AutoSyncOutcome(provider=provider, ran=False, reason="disabled")
+        now = self.clock()
+        if provider_cooldown_seconds > 0 or (
+            state.rate_limited_until is not None
+            and self._as_utc(state.rate_limited_until) > now
+        ):
+            return AutoSyncOutcome(provider=provider, ran=False, reason="cooldown")
+        if (
+            state.last_attempt_at is not None
+            and now - self._as_utc(state.last_attempt_at) < AUTO_SYNC_INTERVAL
+        ):
+            return AutoSyncOutcome(provider=provider, ran=False, reason="not_due")
+        try:
+            result = await self.sync(
+                actor, reader, provider, lookback_days=lookback_days
+            )
+        except Exception as exc:  # noqa: BLE001 - recorded in the sync state
+            return AutoSyncOutcome(
+                provider=provider,
+                ran=True,
+                reason="error",
+                error_code=type(exc).__name__[:80],
+            )
+        return AutoSyncOutcome(provider=provider, ran=True, reason="synced", result=result)
+
+    async def set_auto_sync(
+        self, actor: MemorySubject, provider: str, enabled: bool
+    ) -> PurchaseSyncStatus:
+        if enabled:
+            await self._permission(actor)
+        state = await self._sync_state(actor.id, provider)
+        state.auto_sync_enabled = enabled
+        await self.session.commit()
+        return self._status(provider, state)
+
+    async def sync_statuses(self, actor: MemorySubject) -> list[PurchaseSyncStatus]:
+        statuses: list[PurchaseSyncStatus] = []
+        for provider in PROVIDERS:
+            state = await self._existing_sync_state(actor.id, provider)
+            statuses.append(
+                self._status(provider, state)
+                if state is not None
+                else PurchaseSyncStatus(provider=provider, coverage=COVERAGE[provider])
+            )
+        return statuses
+
+    def _status(
+        self, provider: str, state: PurchaseHistorySyncState
+    ) -> PurchaseSyncStatus:
+        now = self.clock()
+        full_at = (
+            self._as_utc(state.last_full_resync_at) + FULL_RESYNC_INTERVAL
+            if state.last_full_resync_at is not None
+            else None
+        )
+        next_auto = (
+            self._as_utc(state.last_attempt_at) + AUTO_SYNC_INTERVAL
+            if state.auto_sync_enabled and state.last_attempt_at is not None
+            else None
+        )
+        limited = self._maybe_utc(state.rate_limited_until)
+        return PurchaseSyncStatus(
+            provider=provider,
+            coverage=COVERAGE[provider],
+            last_attempt_at=self._maybe_utc(state.last_attempt_at),
+            last_success_at=self._maybe_utc(state.last_success_at),
+            window_start=self._maybe_utc(state.window_start),
+            window_end=self._maybe_utc(state.window_end),
+            fetched_orders=state.fetched_order_count or 0,
+            imported_orders=state.imported_order_count or 0,
+            skipped_known=state.skipped_known_count or 0,
+            detail_failures=state.detail_failure_count or 0,
+            stopped_reason=state.stopped_reason,
+            complete=bool(state.backfill_complete),
+            last_error_code=state.last_error_code,
+            rate_limited_until=limited if limited and limited > now else None,
+            full_resync_available_at=full_at if full_at and full_at > now else None,
+            auto_sync_enabled=bool(state.auto_sync_enabled),
+            next_auto_sync_at=next_auto,
+        )
+
+    async def _known_order_ids(self, subject_id: UUID, provider: str) -> frozenset[str]:
+        rows = (
+            await self.session.execute(
+                select(
+                    PurchaseOrderNode.provider_order_id,
+                    PurchaseOrderNode.provider_lookup_id,
+                ).where(
+                    PurchaseOrderNode.subject_id == subject_id,
+                    PurchaseOrderNode.provider == provider,
+                )
+            )
+        ).all()
+        return frozenset(
+            value for row in rows for value in row if isinstance(value, str) and value
+        )
 
     async def import_orders(
         self,
@@ -512,10 +817,10 @@ class PurchaseGraphService:
             )
         return permission
 
-    async def _sync_state(
+    async def _existing_sync_state(
         self, subject_id: UUID, provider: str
-    ) -> PurchaseHistorySyncState:
-        state = (
+    ) -> PurchaseHistorySyncState | None:
+        return (
             await self.session.execute(
                 select(PurchaseHistorySyncState).where(
                     PurchaseHistorySyncState.subject_id == subject_id,
@@ -523,6 +828,11 @@ class PurchaseGraphService:
                 )
             )
         ).scalar_one_or_none()
+
+    async def _sync_state(
+        self, subject_id: UUID, provider: str
+    ) -> PurchaseHistorySyncState:
+        state = await self._existing_sync_state(subject_id, provider)
         if state is None:
             state = PurchaseHistorySyncState(subject_id=subject_id, provider=provider)
             self.session.add(state)
@@ -575,6 +885,7 @@ class PurchaseGraphService:
                 subject_id=subject_id,
                 provider=provider,
                 provider_order_id=source.order_id,
+                provider_lookup_id=source.lookup_id,
                 status=source.status,
                 occurred_at=source.created_at,
                 provider_updated_at=source.updated_at,
@@ -589,6 +900,7 @@ class PurchaseGraphService:
             self.session.add(order)
             await self.session.flush()
         else:
+            order.provider_lookup_id = source.lookup_id or order.provider_lookup_id
             order.status = source.status
             order.occurred_at = source.created_at
             order.provider_updated_at = source.updated_at
@@ -706,6 +1018,10 @@ class PurchaseGraphService:
     @staticmethod
     def _normalize_name(name: str) -> str:
         return re.sub(r"\s+", " ", name.casefold()).strip()
+
+    @classmethod
+    def _maybe_utc(cls, value: datetime | None) -> datetime | None:
+        return cls._as_utc(value) if value is not None else None
 
     @staticmethod
     def _as_utc(value: datetime) -> datetime:

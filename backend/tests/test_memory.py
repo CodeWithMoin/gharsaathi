@@ -224,14 +224,23 @@ async def test_purchase_history_sync_is_explicit_and_consent_gated(
             headers=headers("history-user"),
         )
         assert synced.status_code == 200
-        assert synced.json() == {
+        body = synced.json()
+        assert {key: body[key] for key in (
+            "imported_orders", "imported_products", "imported_occurrences",
+            "pruned_orders", "cached", "coverage", "list_calls", "detail_calls",
+        )} == {
             "imported_orders": 0,
             "imported_products": 0,
             "imported_occurrences": 0,
             "pruned_orders": 0,
             "cached": False,
+            "coverage": "last_15_days",
+            "list_calls": 1,
+            "detail_calls": 0,
         }
-        assert history_client.calls == [("get_orders", {"count": 15})]
+        assert history_client.calls == [
+            ("get_orders", {"orderType": "INSTAMART", "count": 20})
+        ]
 
         cached = await memory_client.post(
             "/api/memory/purchase-history/sync",
@@ -239,7 +248,9 @@ async def test_purchase_history_sync_is_explicit_and_consent_gated(
         )
         assert cached.status_code == 200
         assert cached.json()["cached"] is True
-        assert history_client.calls == [("get_orders", {"count": 15})]
+        assert history_client.calls == [
+            ("get_orders", {"orderType": "INSTAMART", "count": 20})
+        ]
     finally:
         app.dependency_overrides.pop(get_swiggy_service, None)
 

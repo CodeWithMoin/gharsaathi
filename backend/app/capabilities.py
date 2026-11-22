@@ -487,12 +487,19 @@ CAPABILITIES: tuple[Capability, ...] = (
         title="Import purchase history and personalise search (consented)",
         voice=S(M, "Permissions and import are on-screen only."),
         typed_chat=S(M, TYPED_NO_TOOL),
-        ui=S(W, "PersonalizationOnboarding in the setup sheet."),
+        ui=S(
+            W,
+            "PersonalizationOnboarding in the setup sheet: import, 'Re-import full history' "
+            "(once per 24 h per store), opt-in weekly sync on app open.",
+        ),
         backend=S(W),
         routes=(
             "GET /api/memory/permissions",
             "PUT /api/memory/permissions/{data_category}/{purpose}",
             "POST /api/memory/purchase-history/sync",
+            "GET /api/memory/purchase-history/sync-state",
+            "PUT /api/memory/purchase-history/auto-sync",
+            "POST /api/memory/purchase-history/auto-sync/run",
             "DELETE /api/memory/purchase-history",
         ),
         ui_files=("frontend/app/personalization-onboarding.tsx",),
