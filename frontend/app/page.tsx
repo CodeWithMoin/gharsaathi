@@ -32,7 +32,7 @@ import { OrderConfirmationCard } from "./order-confirmation-card";
 import { orderCardIndex, type OrderCardState, type OrderConfirmation } from "./order-confirmation.mjs";
 import { OrderStatusCard } from "./order-status-card";
 import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
-import { PhotoAttachButton, PhotoChip, usePhotoAttachment } from "./photo-attachment";
+import { PhotoAttachButton, PhotoChip, usePhotoAttachment } from "./photo-attachment-ui";
 import { attachmentIdFor, canSend, photoMessageContent } from "./photo-attachment.mjs";
 
 const LEGACY_CHAT_STORAGE_KEY = "gharsaathi:conversation:v1";
