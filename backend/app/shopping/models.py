@@ -18,6 +18,8 @@ from app.shopping.money import format_rupees
 
 
 ProviderName = Literal["swiggy_instamart", "zepto"]
+# How a tap-confirmed order is paid; see app/shopping/payments.py.
+PaymentMethod = Literal["cod", "upi_reserve", "wallet", "online"]
 
 
 def rupees_to_paise(value: float | int | str | Decimal) -> int:
@@ -183,8 +185,16 @@ class CheckoutStatus(StrEnum):
     """Durable outcome of the single consequential call for an approval."""
 
     DISPATCHING = "dispatching"
+    # Placed: the provider confirmed the order (and, when prepaid, the payment).
     CONFIRMED = "confirmed"
+    # The order call's result is unknown; never retried.
     OUTCOME_UNKNOWN = "outcome_unknown"
+    # Prepaid methods only (app/shopping/payments.py).
+    AWAITING_PAYMENT = "awaiting_payment"
+    PAYMENT_SUCCEEDED = "payment_succeeded"
+    PAYMENT_FAILED = "payment_failed"
+    PAID_ORDER_FAILED = "paid_order_failed"
+    PAYMENT_UNKNOWN = "payment_unknown"
 
 
 class CheckoutAttempt(BaseModel):
@@ -205,6 +215,12 @@ class CheckoutAttempt(BaseModel):
     provider_status: str | None = None
     created_at: datetime
     completed_at: datetime | None = None
+    payment_method: PaymentMethod = "cod"
+    # Provider-issued payment link (https or upi intent) while awaiting payment.
+    payment_url: str | None = None
+    payment_checked_at: datetime | None = None
+    # A previous check_payment_status response explicitly asked for poll=true.
+    payment_poll_allowed: bool = False
 
 
 def basket_fingerprint(basket: Basket, payable_paise: int) -> str:

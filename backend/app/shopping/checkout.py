@@ -1,8 +1,10 @@
-"""One-shot, approval-bound Zepto COD checkout orchestration.
+"""One-shot, approval-bound Zepto checkout orchestration (COD and prepaid).
 
 The provider order call is deliberately surrounded by a durable claim.  Once a
 claim exists, no code path in this service can call the provider a second time,
-including after a timeout or malformed response.
+including after a timeout or malformed response.  Prepaid methods use the same
+claim; afterwards only single ``check_payment_status`` reads move the attempt
+through the payment states in ``app/shopping/payments.py``.
 """
 
 from __future__ import annotations
@@ -10,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol, runtime_checkable
 
 from sqlalchemy import select
@@ -33,10 +35,21 @@ from app.shopping.models import (
     BasketStatus,
     CheckoutAttempt,
     CheckoutStatus,
+    PaymentMethod,
     Quote,
     basket_fingerprint,
 )
+from app.shopping.payments import (
+    CHECKABLE_STATUSES,
+    PREPAID_METHODS,
+    PrepaidGateway,
+    next_checkout_status,
+)
 from app.shopping.ports import ApprovalRepository, BasketRepository, QuoteProvider
+
+
+# One status check per attempt per this interval; earlier taps reuse the last answer.
+MIN_STATUS_CHECK_INTERVAL = timedelta(seconds=5)
 
 
 @runtime_checkable
@@ -65,6 +78,44 @@ class CheckoutAttemptRepository(Protocol):
         provider_status: str,
         completed_at: datetime,
     ) -> CheckoutAttempt: ...
+
+    async def get(self, attempt_id: str) -> CheckoutAttempt | None: ...
+
+    async def await_payment(
+        self,
+        attempt_id: str,
+        *,
+        provider_order_id: str,
+        payment_url: str | None,
+        at: datetime,
+    ) -> CheckoutAttempt:
+        """``dispatching`` → ``awaiting_payment`` with the provider order id."""
+
+    async def begin_status_check(
+        self, attempt_id: str, *, previous: datetime | None, at: datetime
+    ) -> bool:
+        """Compare-and-set ``payment_checked_at``; False if another check won."""
+
+    async def record_payment_status(
+        self,
+        attempt_id: str,
+        *,
+        from_status: CheckoutStatus,
+        to_status: CheckoutStatus,
+        poll_allowed: bool,
+        at: datetime,
+    ) -> CheckoutAttempt:
+        """Apply one status-check transition if the attempt is still ``from_status``.
+
+        ``confirmed`` also consumes the approval and marks the basket ordered.
+        """
+
+
+_PAYMENT_TERMINAL = {
+    CheckoutStatus.CONFIRMED,
+    CheckoutStatus.PAYMENT_FAILED,
+    CheckoutStatus.PAID_ORDER_FAILED,
+}
 
 
 def idempotency_key_hash(value: str) -> str:
@@ -203,6 +254,91 @@ class DatabaseCheckoutAttemptRepository:
             await session.flush()
             return _attempt(record)
 
+    async def get(self, attempt_id: str) -> CheckoutAttempt | None:
+        async with self.sessions() as session:
+            record = await session.get(ZeptoCheckoutAttemptRecord, attempt_id)
+            return _attempt(record) if record else None
+
+    async def await_payment(
+        self,
+        attempt_id: str,
+        *,
+        provider_order_id: str,
+        payment_url: str | None,
+        at: datetime,
+    ) -> CheckoutAttempt:
+        async with self.sessions() as session, session.begin():
+            record = await session.get(
+                ZeptoCheckoutAttemptRecord, attempt_id, with_for_update=True
+            )
+            if record is None:
+                raise NotFound("Checkout attempt not found.")
+            if record.status == CheckoutStatus.DISPATCHING.value:
+                record.status = CheckoutStatus.AWAITING_PAYMENT.value
+                record.provider_order_id = provider_order_id
+                record.provider_status = "awaiting_payment"
+                record.payment_url = payment_url
+            await session.flush()
+            return _attempt(record)
+
+    async def begin_status_check(
+        self, attempt_id: str, *, previous: datetime | None, at: datetime
+    ) -> bool:
+        async with self.sessions() as session, session.begin():
+            record = await session.get(
+                ZeptoCheckoutAttemptRecord, attempt_id, with_for_update=True
+            )
+            if record is None:
+                raise NotFound("Checkout attempt not found.")
+            stored = record.payment_checked_at
+            if (stored is None) != (previous is None) or (
+                stored is not None and previous is not None and _utc(stored) != _utc(previous)
+            ):
+                return False
+            record.payment_checked_at = at
+            return True
+
+    async def record_payment_status(
+        self,
+        attempt_id: str,
+        *,
+        from_status: CheckoutStatus,
+        to_status: CheckoutStatus,
+        poll_allowed: bool,
+        at: datetime,
+    ) -> CheckoutAttempt:
+        async with self.sessions() as session, session.begin():
+            record = await session.get(
+                ZeptoCheckoutAttemptRecord, attempt_id, with_for_update=True
+            )
+            if record is None:
+                raise NotFound("Checkout attempt not found.")
+            if record.status != from_status.value:
+                return _attempt(record)
+            record.status = to_status.value
+            record.provider_status = to_status.value
+            record.payment_poll_allowed = poll_allowed
+            if to_status != CheckoutStatus.AWAITING_PAYMENT:
+                record.payment_url = None
+            if to_status in _PAYMENT_TERMINAL:
+                record.completed_at = at
+                record.payment_poll_allowed = False
+            if to_status == CheckoutStatus.CONFIRMED:
+                basket = await session.get(
+                    ShoppingBasketRecord, record.basket_id, with_for_update=True
+                )
+                approval = await session.get(
+                    ShoppingApprovalRecord, record.approval_id, with_for_update=True
+                )
+                if approval is None or basket is None:
+                    raise RuntimeError("Claimed checkout lost its approval or basket.")
+                approval.status = ApprovalStatus.CONSUMED.value
+                approval.decided_at = at
+                basket.status = BasketStatus.ORDERED.value
+                basket.updated_at = at
+            await session.flush()
+            return _attempt(record)
+
 
 class CheckoutService:
     def __init__(
@@ -214,6 +350,7 @@ class CheckoutService:
         gateway: ZeptoCodGateway,
         clock: Clock = utc_now,
         checkout_lock: asyncio.Lock | None = None,
+        payments: PrepaidGateway | None = None,
     ) -> None:
         self.baskets = baskets
         self.approvals = approvals
@@ -222,6 +359,7 @@ class CheckoutService:
         self.gateway = gateway
         self.clock = clock
         self.checkout_lock = checkout_lock
+        self.payments = payments
 
     async def checkout_cod(
         self,
@@ -231,6 +369,31 @@ class CheckoutService:
         *,
         expected_fingerprint: str | None = None,
     ) -> CheckoutAttempt:
+        return await self.checkout(
+            approval_id,
+            household_id,
+            idempotency_key,
+            expected_fingerprint=expected_fingerprint,
+            payment_method="cod",
+        )
+
+    async def checkout(
+        self,
+        approval_id: str,
+        household_id: str,
+        idempotency_key: str,
+        *,
+        expected_fingerprint: str | None = None,
+        payment_method: PaymentMethod = "cod",
+    ) -> CheckoutAttempt:
+        """Place the approved bill once with ``payment_method``.
+
+        Prepaid methods end in ``awaiting_payment`` (or ``confirmed`` when the
+        provider confirms payment and order at once); nothing here retries.
+        """
+
+        if payment_method != "cod":
+            self._require_prepaid(payment_method)
         key = idempotency_key.strip()
         if not key or len(key) > 200:
             raise ApprovalRefused("Provide a valid Idempotency-Key header.")
@@ -238,27 +401,39 @@ class CheckoutService:
 
         if self.checkout_lock is not None:
             async with self.checkout_lock:
-                return await self._checkout_cod_serialized(
+                return await self._checkout_serialized(
                     approval_id,
                     household_id,
                     key_hash,
                     expected_fingerprint,
+                    payment_method,
                     coordinated=True,
                 )
-        return await self._checkout_cod_serialized(
+        return await self._checkout_serialized(
             approval_id,
             household_id,
             key_hash,
             expected_fingerprint,
+            payment_method,
             coordinated=False,
         )
 
-    async def _checkout_cod_serialized(
+    def _require_prepaid(self, method: PaymentMethod) -> PrepaidGateway:
+        if (
+            method not in PREPAID_METHODS
+            or self.payments is None
+            or method not in self.payments.offered()
+        ):
+            raise ApprovalRefused("This payment method is not available. Nothing was ordered.")
+        return self.payments
+
+    async def _checkout_serialized(
         self,
         approval_id: str,
         household_id: str,
         key_hash: str,
         expected_fingerprint: str | None,
+        payment_method: PaymentMethod,
         *,
         coordinated: bool,
     ) -> CheckoutAttempt:
@@ -270,14 +445,19 @@ class CheckoutService:
             )
         existing = await self.attempts.for_approval(approval_id)
         if existing is not None:
-            if existing.idempotency_key_hash != key_hash:
+            if (
+                existing.idempotency_key_hash != key_hash
+                or existing.payment_method != payment_method
+            ):
                 raise ApprovalRefused(
                     "This approval already has a checkout attempt with another idempotency key."
                 )
             return existing
 
         self._validate_approved(approval, basket)
-        quote = await self._fresh_quote(basket, coordinated=coordinated)
+        quote = await self._fresh_quote(
+            basket, coordinated=coordinated, payment_method=payment_method
+        )
         if quote.payable_paise != approval.payable_paise:
             raise ApprovalRefused(
                 "The payable amount changed. Please review and approve the new bill."
@@ -306,6 +486,7 @@ class CheckoutService:
             payable_paise=approval.payable_paise,
             status=CheckoutStatus.DISPATCHING,
             created_at=self.clock(),
+            payment_method=payment_method,
         )
         claimed, created = await self.attempts.claim(
             attempt, basket_revision=basket.revision
@@ -321,6 +502,8 @@ class CheckoutService:
                 )
             return claimed
 
+        if payment_method != "cod":
+            return await self._start_prepaid(attempt, basket, payment_method, coordinated)
         try:
             if coordinated:
                 confirm_unlocked = getattr(self.gateway, "confirm_cod_unlocked", None)
@@ -344,7 +527,96 @@ class CheckoutService:
             # never retry the consequential call for this approval.
             return await self.attempts.mark_unknown(attempt.id, self.clock())
 
-    async def _fresh_quote(self, basket: Basket, *, coordinated: bool = False) -> Quote:
+    async def _start_prepaid(
+        self,
+        attempt: CheckoutAttempt,
+        basket: Basket,
+        method: PaymentMethod,
+        coordinated: bool,
+    ) -> CheckoutAttempt:
+        """The single prepaid order request. Any doubt is outcome_unknown, never a retry."""
+
+        payments = self._require_prepaid(method)
+        try:
+            if coordinated:
+                start_unlocked = getattr(payments, "start_unlocked", None)
+                if not callable(start_unlocked):
+                    raise RuntimeError("The payment gateway cannot participate in coordinated checkout.")
+                start = await start_unlocked(basket, method, attempt.payable_paise)
+            else:
+                start = await payments.start(basket, method, attempt.payable_paise)
+            if start.payable_paise is not None and start.payable_paise != attempt.payable_paise:
+                raise ValueError("Zepto asked for an unexpected amount.")
+            if not isinstance(start.provider_order_id, str) or not start.provider_order_id.strip():
+                raise ValueError("Zepto did not return an order id.")
+            order_id = start.provider_order_id.strip()
+            if start.placed:
+                return await self.attempts.confirm(
+                    attempt.id,
+                    provider_order_id=order_id,
+                    provider_status="paid",
+                    completed_at=self.clock(),
+                )
+            return await self.attempts.await_payment(
+                attempt.id,
+                provider_order_id=order_id,
+                payment_url=start.payment_url,
+                at=self.clock(),
+            )
+        except asyncio.CancelledError:
+            await self.attempts.mark_unknown(attempt.id, self.clock())
+            raise
+        except Exception:
+            return await self.attempts.mark_unknown(attempt.id, self.clock())
+
+    async def check_payment(self, attempt_id: str, household_id: str) -> CheckoutAttempt:
+        """One ``check_payment_status`` read for a prepaid attempt the user owns.
+
+        Never repeats the order call. Rate-limited per attempt; terminal or
+        not-yet-dispatched attempts are returned without any provider call.
+        """
+
+        attempt = await self.attempts.get(attempt_id)
+        if attempt is None or attempt.household_id != household_id:
+            raise NotFound("Checkout not found.")
+        if (
+            attempt.payment_method == "cod"
+            or attempt.status not in CHECKABLE_STATUSES
+            or not attempt.provider_order_id
+        ):
+            return attempt
+        payments = self.payments
+        if payments is None:
+            raise ProviderUnavailable(
+                "Payment checks are unavailable right now. Check the Zepto app."
+            )
+        now = self.clock()
+        previous = attempt.payment_checked_at
+        if previous is not None and _utc(now) - _utc(previous) < MIN_STATUS_CHECK_INTERVAL:
+            return attempt
+        if not await self.attempts.begin_status_check(attempt.id, previous=previous, at=now):
+            current = await self.attempts.get(attempt.id)
+            return current or attempt
+        report = await payments.check_status(
+            attempt.provider_order_id, poll=attempt.payment_poll_allowed
+        )
+        return await self.attempts.record_payment_status(
+            attempt.id,
+            from_status=attempt.status,
+            to_status=next_checkout_status(attempt.status, report),
+            poll_allowed=report.poll_instructed,
+            at=self.clock(),
+        )
+
+    async def _fresh_quote(
+        self,
+        basket: Basket,
+        *,
+        coordinated: bool = False,
+        payment_method: PaymentMethod = "cod",
+    ) -> Quote:
+        if payment_method != "cod":
+            return await self._fresh_prepaid_quote(basket, payment_method, coordinated)
         try:
             if coordinated:
                 quote_unlocked = getattr(self.quote_provider, "quote_unlocked", None)
@@ -353,6 +625,27 @@ class CheckoutService:
                 quote = await quote_unlocked(basket)
             else:
                 quote = await self.quote_provider.quote(basket)
+        except ShoppingError:
+            raise
+        except Exception as exc:
+            raise ProviderUnavailable(
+                "Zepto could not refresh this bill. No order was placed."
+            ) from exc
+        check_quote(basket, quote)
+        return quote
+
+    async def _fresh_prepaid_quote(
+        self, basket: Basket, method: PaymentMethod, coordinated: bool
+    ) -> Quote:
+        payments = self._require_prepaid(method)
+        try:
+            if coordinated:
+                quote_unlocked = getattr(payments, "quote_unlocked", None)
+                if not callable(quote_unlocked):
+                    raise RuntimeError("The payment gateway cannot participate in coordinated checkout.")
+                quote = await quote_unlocked(basket, method)
+            else:
+                quote = await payments.quote(basket, method)
         except ShoppingError:
             raise
         except Exception as exc:
@@ -425,6 +718,10 @@ def _attempt(record: ZeptoCheckoutAttemptRecord) -> CheckoutAttempt:
             "provider_status": record.provider_status,
             "created_at": record.created_at,
             "completed_at": record.completed_at,
+            "payment_method": record.payment_method or "cod",
+            "payment_url": record.payment_url,
+            "payment_checked_at": record.payment_checked_at,
+            "payment_poll_allowed": bool(record.payment_poll_allowed),
         }
     )
 

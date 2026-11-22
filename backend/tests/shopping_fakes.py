@@ -152,3 +152,64 @@ class InMemoryCheckoutAttempts:
         await self.approvals.save(approval)
         await self.baskets.save(basket)
         return attempt.model_copy(deep=True)
+
+    def _by_id(self, attempt_id: str) -> CheckoutAttempt:
+        return next(item for item in self.by_approval.values() if item.id == attempt_id)
+
+    async def get(self, attempt_id: str) -> CheckoutAttempt | None:
+        value = next((item for item in self.by_approval.values() if item.id == attempt_id), None)
+        return value.model_copy(deep=True) if value else None
+
+    async def await_payment(
+        self, attempt_id: str, *, provider_order_id: str, payment_url: str | None, at: datetime
+    ) -> CheckoutAttempt:
+        attempt = self._by_id(attempt_id)
+        if attempt.status == CheckoutStatus.DISPATCHING:
+            attempt.status = CheckoutStatus.AWAITING_PAYMENT
+            attempt.provider_order_id = provider_order_id
+            attempt.provider_status = "awaiting_payment"
+            attempt.payment_url = payment_url
+        return attempt.model_copy(deep=True)
+
+    async def begin_status_check(
+        self, attempt_id: str, *, previous: datetime | None, at: datetime
+    ) -> bool:
+        attempt = self._by_id(attempt_id)
+        if attempt.payment_checked_at != previous:
+            return False
+        attempt.payment_checked_at = at
+        return True
+
+    async def record_payment_status(
+        self,
+        attempt_id: str,
+        *,
+        from_status: CheckoutStatus,
+        to_status: CheckoutStatus,
+        poll_allowed: bool,
+        at: datetime,
+    ) -> CheckoutAttempt:
+        attempt = self._by_id(attempt_id)
+        if attempt.status != from_status:
+            return attempt.model_copy(deep=True)
+        attempt.status = to_status
+        attempt.provider_status = to_status.value
+        attempt.payment_poll_allowed = poll_allowed
+        if to_status != CheckoutStatus.AWAITING_PAYMENT:
+            attempt.payment_url = None
+        if to_status in {
+            CheckoutStatus.CONFIRMED,
+            CheckoutStatus.PAYMENT_FAILED,
+            CheckoutStatus.PAID_ORDER_FAILED,
+        }:
+            attempt.completed_at = at
+            attempt.payment_poll_allowed = False
+        if to_status == CheckoutStatus.CONFIRMED:
+            approval = await self.approvals.get(attempt.approval_id)
+            basket = await self.baskets.get(attempt.basket_id)
+            assert approval is not None and basket is not None
+            approval.status = ApprovalStatus.CONSUMED
+            basket.status = BasketStatus.ORDERED
+            await self.approvals.save(approval)
+            await self.baskets.save(basket)
+        return attempt.model_copy(deep=True)

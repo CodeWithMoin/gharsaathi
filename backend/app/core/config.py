@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     zepto_mcp_url: str = "https://mcp.zepto.co.in/mcp"
     zepto_oauth_redirect_uri: str = "http://localhost/callback"
     zepto_oauth_scope: str = "tools:read"
+    # Prepaid Zepto orders (UPI, Zepto Cash, pay online). Off by default; even
+    # when on, a method is offered only if it is allow-listed here, covered by
+    # the verified response contract (app/commerce/zepto/payments.py) and listed
+    # by Zepto's get_payment_methods. Cash on delivery is always offered.
+    zepto_online_payments_enabled: bool = False
+    zepto_payment_methods_allowed: str = "upi_reserve,wallet,online"
     frontend_url: str = "http://localhost:3003"
     cors_origins: str = "http://localhost:3003,http://127.0.0.1:3003"
     app_encryption_key: str = ""

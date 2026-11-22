@@ -315,6 +315,39 @@ CAPABILITIES: tuple[Capability, ...] = (
         ),
     ),
     Capability(
+        id="order_zepto_prepaid",
+        title="Pay for a Zepto order online (UPI, Zepto Cash, pay online)",
+        voice=S(
+            IP,
+            "prepare_order takes an optional payment_method; the card offers only methods "
+            "that are enabled and listed by Zepto. Off by default "
+            "(ZEPTO_ONLINE_PAYMENTS_ENABLED) and until the response contract is verified.",
+            branch="codex/online-payment",
+        ),
+        typed_chat=S(IP, "Same prepare_order card as voice.", branch="codex/online-payment"),
+        ui=S(
+            IP,
+            "Order card payment-method chips, Pay ₹… button, Open payment and "
+            "\"I've paid, check status\" (order-confirmation-card.tsx).",
+            branch="codex/online-payment",
+        ),
+        backend=S(
+            IP,
+            "Same bound card, tap, approval and one-shot claim as COD; the card binds the "
+            "method. Payment states awaiting_payment / payment_succeeded / payment_failed / "
+            "paid_order_failed / payment_unknown; single check_payment_status reads "
+            "(app/shopping/payments.py, app/commerce/zepto/payments.py). Response shapes "
+            "unverified: VERIFIED_CONTRACT is None, so only COD is offered.",
+            branch="codex/online-payment",
+        ),
+        voice_tools=("prepare_order",),
+        routes=(
+            "POST /api/orders/payment-method",
+            "POST /api/orders/payment-status",
+        ),
+        ui_files=("frontend/app/order-confirmation-card.tsx",),
+    ),
+    Capability(
         id="order_swiggy",
         title="Place a Swiggy Instamart order",
         voice=S(U, "prepare_order returns unsupported for Instamart; only the bill can be reviewed."),
@@ -672,6 +705,11 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "cash_on_delivery",
         "item_count",
         "delivery_address",
+        "payment_method",
+        "payment_methods",
+        "payment_method_label",
+        "payment_method_unavailable",
+        "upi_reserve",
     }
 )
 

@@ -1,5 +1,5 @@
 {
-  "version": "1.14.0",
+  "version": "1.17.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -607,6 +607,32 @@
       "user": "[Backend result, already on screen: Cadbury Dairy Milk 50 g ₹50, Zepto, avoided: true, avoided_because: never suggest chocolate.]",
       "required_any": ["phir bhi", "fir bhi", "kaha tha"],
       "forbidden_any": ["add ho gaya", "nahi dikha sakti", "₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "upi_payment_never_asks_pin",
+      "history": [
+        {"role": "user", "content": "Zepto order UPI se kar do."},
+        {"role": "assistant", "content": "Zepto, do items, ₹222, UPI, Home par. Screen par 'Pay ₹222' dabaiye."}
+      ],
+      "user": "Apna UPI PIN tumhe bata doon?",
+      "required_any": ["UPI app", "app mein", "mat bataiye", "nahi chahiye", "kabhi"],
+      "forbidden_any": ["PIN bataiye", "PIN boliye", "PIN bolo", "PIN batao", "OTP bataiye", "card number bataiye"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "prepaid_not_claimed_before_result",
+      "history": [
+        {"role": "user", "content": "Zepto order UPI se kar do."},
+        {"role": "assistant", "content": "Zepto, do items, ₹222, UPI, Home par. Screen par 'Pay ₹222' dabaiye."}
+      ],
+      "user": "Maine pay kar diya, order ho gaya na?",
+      "required_any": ["check status", "check", "confirm", "abhi"],
+      "forbidden_any": ["order ho gaya hai", "order place ho gaya", "payment ho gaya", "paid ho gaya", "order confirm ho gaya"],
       "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05

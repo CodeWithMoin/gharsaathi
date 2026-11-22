@@ -1,29 +1,44 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CheckCircle, CircleNotch, MapPin, Money, WarningCircle } from "@phosphor-icons/react";
-import { useCallback, useEffect, useState } from "react";
+import { ArrowSquareOut, CheckCircle, CircleNotch, MapPin, Money, WarningCircle } from "@phosphor-icons/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, useApiRequest } from "./authenticated-api";
 import { BASKET_CHANGED_EVENT } from "./basket/BasketPanel";
 import {
+  autoCheckDelayMs,
+  checkableCheckoutId,
   countdownLabel,
   deliverToLabel,
   orderCardResultText,
   orderCardStateFromResponse,
+  paymentMethodLabel,
+  placeButtonLabel,
+  withPaymentMethodCard,
   type OrderCardState,
   type OrderConfirmation,
+  type PaymentMethod,
 } from "./order-confirmation.mjs";
+
+type OrderResponse = { status: string; provider_order_id: string | null; checkout_id?: string | null; payment?: { url?: string | null } };
 
 /**
  * The only control that places an order prepared by voice or typed chat. The
- * tap approves exactly this bill and places the Zepto cash-on-delivery order.
+ * tap approves exactly this bill and places the Zepto order with the chosen
+ * payment method. Prepaid methods are paid only in the user's UPI app or on
+ * Zepto's own page; this card never asks for a PIN, card number or OTP.
  */
-export function OrderConfirmationCard({ confirmation, onResult }: { confirmation: OrderConfirmation; onResult?: (state: OrderCardState) => void }) {
+export function OrderConfirmationCard({ confirmation: initial, onResult }: { confirmation: OrderConfirmation; onResult?: (state: OrderCardState) => void }) {
   const apiRequest = useApiRequest();
+  const [confirmation, setConfirmation] = useState(initial);
   const [state, setState] = useState<OrderCardState>({ status: "open" });
+  const [notice, setNotice] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const checks = useRef(0);
   const countdown = countdownLabel(confirmation.expiresAt, now);
   const open = state.status === "open";
+  const prepaid = confirmation.paymentMethod !== "cod";
+  const checkoutId = checkableCheckoutId(state);
 
   useEffect(() => {
     if (!open) return;
@@ -42,9 +57,10 @@ export function OrderConfirmationCard({ confirmation, onResult }: { confirmation
 
   const place = useCallback(async () => {
     if (state.status !== "open") return;
+    setNotice(null);
     setState({ status: "placing" });
     try {
-      const body = await apiRequest<{ status: string; provider_order_id: string | null }>("/api/orders/confirm", {
+      const body = await apiRequest<OrderResponse>("/api/orders/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirmation_id: confirmation.id }),
@@ -56,6 +72,61 @@ export function OrderConfirmationCard({ confirmation, onResult }: { confirmation
       window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
     }
   }, [apiRequest, confirmation.id, finish, state.status]);
+
+  const choose = useCallback(async (method: PaymentMethod) => {
+    if (state.status !== "open" || method === confirmation.paymentMethod) return;
+    setNotice(null);
+    setState({ status: "switching" });
+    try {
+      const body = await apiRequest<unknown>("/api/orders/payment-method", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation_id: confirmation.id, payment_method: method }),
+      });
+      const next = withPaymentMethodCard(confirmation, body);
+      if (next) setConfirmation(next);
+      else setNotice("Couldn't change the payment method. Ask for the order again.");
+    } catch (cause) {
+      setNotice(cause instanceof ApiError ? cause.message : "Couldn't change the payment method. Try again.");
+    }
+    setState({ status: "open" });
+  }, [apiRequest, confirmation, state.status]);
+
+  const checkStatus = useCallback(async () => {
+    const id = checkableCheckoutId(state);
+    if (!id) return;
+    const previous = state;
+    checks.current += 1;
+    setNotice(null);
+    setState({ status: "checking", checkoutId: id, url: "url" in previous ? previous.url : null });
+    try {
+      const body = await apiRequest<OrderResponse>("/api/orders/payment-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checkout_id: id }),
+      });
+      finish(orderCardStateFromResponse({ ok: true, body }));
+    } catch (cause) {
+      // A failed read changes nothing: keep the current payment state.
+      setState(previous);
+      setNotice(cause instanceof ApiError ? cause.message : "Couldn't check the payment. Try again in a moment.");
+    } finally {
+      window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
+    }
+  }, [apiRequest, finish, state]);
+
+  // While waiting for payment: one status check when the user comes back to the tab, and a slow schedule.
+  useEffect(() => {
+    if (!checkoutId) return;
+    const onVisible = () => { if (document.visibilityState === "visible") void checkStatus(); };
+    document.addEventListener("visibilitychange", onVisible);
+    const delay = autoCheckDelayMs(checks.current);
+    const timer = delay === null ? undefined : window.setTimeout(() => void checkStatus(), delay);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [checkStatus, checkoutId]);
 
   const cancel = useCallback(async () => {
     if (state.status !== "open") return;
@@ -74,7 +145,11 @@ export function OrderConfirmationCard({ confirmation, onResult }: { confirmation
 
   const result = orderCardResultText(state, confirmation.store);
   const deliverTo = deliverToLabel(confirmation);
-  const busy = state.status === "placing" || state.status === "cancelling";
+  const busy = state.status === "placing" || state.status === "cancelling" || state.status === "switching";
+  const paymentUrl = state.status === "awaiting_payment" || state.status === "checking" ? state.url : null;
+  const good = state.status === "placed";
+  const waiting = state.status === "awaiting_payment" || state.status === "checking" || state.status === "payment_succeeded" || state.status === "payment_unknown";
+  const chips = open || state.status === "switching";
 
   return <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
     <section aria-label={`Confirm ${confirmation.store} order`} className="max-w-[620px] rounded-[8px_22px_22px_22px] border border-accent-border bg-surface p-4 shadow-[0_18px_45px_-34px_rgb(var(--shadow)/.7)] sm:p-5">
@@ -85,25 +160,52 @@ export function OrderConfirmationCard({ confirmation, onResult }: { confirmation
       <ul className="mt-3 space-y-1 text-sm text-ink-secondary">
         {confirmation.items.map((item, index) => <li key={`${item.name}-${index}`} className="flex gap-2"><span className="shrink-0 tabular-nums text-muted">{item.quantity} ×</span><span className="min-w-0">{item.name}{item.packSize ? ` · ${item.packSize}` : ""}</span></li>)}
       </ul>
+      {chips && confirmation.paymentMethods.length > 1 && (
+        <div role="radiogroup" aria-label="Payment method" className="mt-3 flex flex-wrap gap-2">
+          {confirmation.paymentMethods.map((option) => {
+            const selected = option.id === confirmation.paymentMethod;
+            return <button key={option.id} type="button" role="radio" aria-checked={selected} disabled={busy} onClick={() => void choose(option.id)} className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-55 ${selected ? "border-accent-border bg-accent-soft text-accent-strong" : "border-border-strong bg-surface text-ink-secondary hover:bg-surface-muted"}`}>{option.label}</button>;
+          })}
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-        <span className="flex items-center gap-1.5"><Money size={14} /> Cash on delivery</span>
+        <span className="flex items-center gap-1.5"><Money size={14} /> {paymentMethodLabel(confirmation)}</span>
         {deliverTo && <span className="flex items-center gap-1.5"><MapPin size={14} /> {deliverTo}</span>}
       </div>
       <p className="mt-3 text-base font-semibold text-ink">Total {confirmation.payable}</p>
       {result ? (
-        <p role="status" className={`mt-4 flex items-start gap-2 rounded-2xl px-3.5 py-3 text-sm ${state.status === "placed" ? "bg-success-soft text-success-strong" : "bg-surface-muted text-danger-hover"}`}>
-          {state.status === "placed" ? <CheckCircle size={18} weight="fill" className="mt-0.5 shrink-0" /> : <WarningCircle size={18} className="mt-0.5 shrink-0" />}
-          <span>{result}</span>
-        </p>
+        <>
+          <p role="status" className={`mt-4 flex items-start gap-2 rounded-2xl px-3.5 py-3 text-sm ${good ? "bg-success-soft text-success-strong" : waiting ? "bg-warning-soft text-warning" : "bg-surface-muted text-danger-hover"}`}>
+            {good ? <CheckCircle size={18} weight="fill" className="mt-0.5 shrink-0" /> : <WarningCircle size={18} className="mt-0.5 shrink-0" />}
+            <span>{result}</span>
+          </p>
+          {waiting && (
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              {paymentUrl && <a href={paymentUrl} target={paymentUrl.startsWith("https:") ? "_blank" : undefined} rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-2 rounded-full bg-accent-strong px-5 py-3 text-sm font-semibold text-on-accent transition hover:bg-accent-hover active:scale-[.98]"><ArrowSquareOut size={16} /> Open payment</a>}
+              {checkoutId || state.status === "checking" ? (
+                <button type="button" onClick={() => void checkStatus()} disabled={state.status === "checking"} className="flex flex-1 items-center justify-center gap-2 rounded-full border border-border-strong px-5 py-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-muted active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-55">
+                  {state.status === "checking" ? <><CircleNotch size={17} className="animate-spin" /> Checking…</> : "I've paid — check status"}
+                </button>
+              ) : null}
+            </div>
+          )}
+        </>
       ) : (
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <button type="button" onClick={() => void place()} disabled={busy} className="flex flex-1 items-center justify-center gap-2 rounded-full bg-accent-strong px-5 py-3 text-sm font-semibold text-on-accent shadow-[0_10px_24px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">
-            {state.status === "placing" ? <><CircleNotch size={17} className="animate-spin" /> Placing order…</> : `Place order · ${confirmation.payable}`}
+            {state.status === "placing" ? <><CircleNotch size={17} className="animate-spin" /> {prepaid ? "Asking Zepto…" : "Placing order…"}</> : placeButtonLabel(confirmation)}
           </button>
           <button type="button" onClick={() => void cancel()} disabled={busy} className="rounded-full border border-border-strong px-5 py-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-muted active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">Cancel</button>
         </div>
       )}
-      {open && <p className="mt-2 text-center text-[10px] leading-4 text-muted">Tapping Place order approves this exact bill and places the order. It can&apos;t be undone here.</p>}
+      {notice && <p role="alert" className="mt-2 text-xs text-danger">{notice}</p>}
+      {(open || state.status === "switching") && (
+        <p className="mt-2 text-center text-[10px] leading-4 text-muted">
+          {prepaid
+            ? "Tapping Pay approves this exact bill and asks Zepto for the payment. You pay only in your UPI app or on Zepto's page. GharSaathi never asks for your UPI PIN, card number or OTP."
+            : <>Tapping Place order approves this exact bill and places the order. It can&apos;t be undone here.</>}
+        </p>
+      )}
     </section>
   </motion.div>;
 }

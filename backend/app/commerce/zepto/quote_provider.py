@@ -20,12 +20,23 @@ from app.commerce.zepto.checkout import (
     ZeptoConfirmedOrder,
     parse_confirmed_cod_order,
     ZeptoPreviewRefused,
-    quote_from_cod_preview,
+    quote_from_preview,
 )
 from app.commerce.zepto.diagnostics import log_preview_failure
 from app.commerce.zepto.errors import ZeptoSchemaError
 from app.shopping.errors import ApprovalRefused, ProviderUnavailable
 from app.shopping.models import Basket, BasketLine, Quote
+
+
+# Zepto's order tools. Each takes ``confirmOrder``; false returns a preview.
+PREVIEW_TOOLS = frozenset(
+    {
+        "create_order",
+        "create_online_payment_order",
+        "create_wallet_order",
+        "create_upi_reserve_pay_order",
+    }
+)
 
 
 class ZeptoToolClient(Protocol):
@@ -59,8 +70,21 @@ class ZeptoQuoteProvider:
         async with self.checkout_lock:
             return await self.quote_unlocked(basket)
 
-    async def quote_unlocked(self, basket: Basket) -> Quote:
-        """Prepare a quote while the shared checkout coordinator is held."""
+    async def quote_unlocked(
+        self,
+        basket: Basket,
+        *,
+        preview_tool: str = "create_order",
+        payment_method_value: str = "COD",
+    ) -> Quote:
+        """Prepare a quote while the shared checkout coordinator is held.
+
+        ``preview_tool`` is one of Zepto's ``create_*`` order tools; it is only
+        ever called with ``confirmOrder: false`` here.
+        """
+
+        if preview_tool not in PREVIEW_TOOLS:
+            raise ApprovalRefused("This payment method cannot be previewed.")
 
         _require_zepto_basket(basket)
         correlation_id = uuid.uuid4().hex
@@ -82,14 +106,16 @@ class ZeptoQuoteProvider:
                 },
                 retry_on_auth=False,
             )
-            stage = "create_order"
+            stage = preview_tool
             preview = await self.client.call_tool(
-                "create_order",
+                preview_tool,
                 {"confirmOrder": False, "userAddressId": basket.address_id},
                 retry_on_auth=False,
             )
             stage = "parse_preview"
-            return quote_from_cod_preview(basket, preview, self.clock())
+            return quote_from_preview(
+                basket, preview, self.clock(), payment_method_value=payment_method_value
+            )
         except ApprovalRefused as exc:
             if isinstance(exc, ZeptoPreviewRefused):
                 log_preview_failure(
