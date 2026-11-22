@@ -182,6 +182,17 @@ class SwiggyMcpClient:
             source,
         )
 
+    async def cooldown_remaining(self) -> int:
+        """Seconds left in a known rate-limit cooldown; no network call."""
+
+        return math.ceil(
+            max(
+                self._rate_limited_until - time.monotonic(),
+                await self._persisted_rate_limit_remaining(),
+                0,
+            )
+        )
+
     async def _persisted_rate_limit_remaining(self) -> int:
         remaining = getattr(self.oauth, "rate_limit_remaining", None)
         return await remaining() if remaining is not None else 0

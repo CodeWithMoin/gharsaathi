@@ -14,6 +14,7 @@ from websockets.exceptions import WebSocketException
 
 from app.core.config import Settings
 from app.voice.address_prefill import RecentUserWords
+from app.voice.timing import collect, log_timing, ms_since
 from app.voice.tools import ShoppingToolExecutor
 from app.voice.ui_ack import UiAckRegistry, apply_ack
 
@@ -140,6 +141,8 @@ class SidebandRunner:
         self._delegation_rounds: dict[str, int] = {}
         self._delegation_searches: dict[str, int] = {}
         self._send_lock = asyncio.Lock()
+        # Content-free per-delegation stage marks (perf_counter), VOICE_EVENT_LOG only.
+        self._timeline: dict[str, dict[str, Any]] = {}
         # Order results from the user's tap on the order card are spoken by
         # GPT-Live through session.commentary.append (application-authored text).
         attach = getattr(getattr(executor, "order", None), "attach_sender", None)
@@ -210,6 +213,8 @@ class SidebandRunner:
         if not isinstance(delegation_id, str) or not isinstance(inner, dict):
             return False
         inner_type = inner.get("type")
+        if self.log_event_types:
+            self._mark(delegation_id, inner_type, inner)
 
         if inner_type == "response.output_item.done":
             item = inner.get("item")
@@ -217,6 +222,8 @@ class SidebandRunner:
                 self._start_call(delegation_id, item)
         elif inner_type in {"response.completed", "response.incomplete", "response.failed"}:
             tasks = self._pending.pop(delegation_id, [])
+            if not tasks and self.log_event_types:
+                self._log_turn(delegation_id, str(inner_type))
             if tasks and self._delegation_rounds.get(delegation_id, 0) >= MAX_CONTINUATION_ROUNDS:
                 logger.warning("event=voice_delegation_round_cap rounds=%s", MAX_CONTINUATION_ROUNDS)
             elif tasks:
@@ -256,7 +263,11 @@ class SidebandRunner:
     async def _run_call(self, call_id: str, name: str, arguments: str) -> None:
         self.publish({"type": "tool.started", "name": name})
         try:
-            outcome = await self.executor.execute(name, arguments)
+            with collect(self.log_event_types) as stages:
+                started = time.perf_counter()
+                outcome = await self.executor.execute(name, arguments)
+            if self.log_event_types:
+                log_timing("voice_tool_timing", {"name": name[:64], "total_ms": ms_since(started), **stages})
             model_output = outcome.model_output
             if outcome.ui_event is not None:
                 self.publish(outcome.ui_event)
@@ -286,9 +297,52 @@ class SidebandRunner:
     async def _continue_after(
         self, delegation_id: str, tasks: list[asyncio.Task[None]]
     ) -> None:
+        waited = time.perf_counter()
         await asyncio.gather(*tasks, return_exceptions=True)
         self._round += 1
         await self.send({"type": "response.create", "event_id": f"continue_{delegation_id}_{self._round}"})
+        timeline = self._timeline.get(delegation_id)
+        if timeline is not None:
+            # Tool time the model actually waited for after its response completed.
+            timeline["tool_wait_ms"] = timeline.get("tool_wait_ms", 0.0) + ms_since(waited)
+            timeline["continued_at"] = time.perf_counter()
+
+    def _mark(self, delegation_id: str, inner_type: Any, inner: dict[str, Any]) -> None:
+        now = time.perf_counter()
+        timeline = self._timeline.setdefault(
+            delegation_id, {"start": now, "rounds": 0, "continuation_ms": []}
+        )
+        if "continued_at" in timeline:
+            timeline["continuation_ms"].append(round((now - timeline.pop("continued_at")) * 1000, 1))
+            timeline["rounds"] += 1
+        item = inner.get("item")
+        if (
+            inner_type == "response.output_item.done"
+            and isinstance(item, dict)
+            and item.get("type") == "function_call"
+            and "first_call_ms" not in timeline
+        ):
+            timeline["first_call_ms"] = round((now - timeline["start"]) * 1000, 1)
+        if (
+            isinstance(inner_type, str)
+            and inner_type.startswith("response.output_text")
+            and "first_text_ms" not in timeline
+        ):
+            timeline["first_text_ms"] = round((now - timeline["start"]) * 1000, 1)
+
+    def _log_turn(self, delegation_id: str, outcome: str) -> None:
+        timeline = self._timeline.pop(delegation_id, None)
+        if timeline is None:
+            return
+        fields: dict[str, Any] = {"outcome": outcome.removeprefix("response."), "rounds": timeline["rounds"] + 1}
+        for key in ("first_call_ms", "tool_wait_ms", "first_text_ms"):
+            if key in timeline:
+                fields[key] = float(timeline[key])
+        if timeline["continuation_ms"]:
+            # Continuation response.create -> first backend event of the next round.
+            fields["continuation_first_event_ms"] = float(sum(timeline["continuation_ms"]))
+        fields["total_ms"] = ms_since(timeline["start"])
+        log_timing("voice_delegation_timing", fields)
 
 
 class SidebandHub:
