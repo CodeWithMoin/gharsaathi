@@ -1,12 +1,13 @@
 import logging
 import secrets
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from pydantic import BaseModel, Field
 
 from app.core.config import Settings
-from app.memory.recall import PreferenceRecaller
+from app.memory.recall import HouseholdMemory, PreferenceRecaller
+from app.memory.remembered import memory_summary_block
 from app.user_profile import ProfileReader, UserProfile
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
@@ -51,12 +52,17 @@ class LiveSession(BaseModel):
     # user. EventSource cannot send Authorization headers, so it is passed as
     # the ``token`` query parameter (redacted from access logs).
     events_token: str
+    # GPT-Live output transcripts transcribe the spoken audio, so Hindi words can
+    # arrive in Devanagari. "roman" lets the client show them in Roman Hinglish;
+    # "native" (Hindi chosen in the profile) leaves captions untouched.
+    assistant_transcript_script: Literal["roman", "native"] = "roman"
 
 
 def build_session_config(
     settings: Settings,
     tool_definitions: list[dict[str, Any]] | None = None,
     profile: UserProfile | None = None,
+    household_memory: HouseholdMemory | None = None,
 ) -> dict[str, Any]:
     return {
         "model": settings.live_model,
@@ -68,7 +74,8 @@ def build_session_config(
             "type": "responses",
             "responses": {
                 "model": settings.live_backend_model,
-                "instructions": with_profile(BACKEND_INSTRUCTIONS, profile),
+                "instructions": with_profile(BACKEND_INSTRUCTIONS, profile)
+                + memory_summary_block(household_memory),
                 "tools": tool_definitions if tool_definitions is not None else TOOL_DEFINITIONS,
                 "tool_choice": "auto",
                 "parallel_tool_calls": True,
@@ -146,6 +153,16 @@ class LiveSessionService:
             logger.warning("Voice profile read failed: %s", type(exc).__name__)
             return None
 
+    async def _household_memory(self, household_id: str) -> HouseholdMemory | None:
+        reader = getattr(self.preference_recall, "household_memory", None)
+        if not callable(reader) or not household_id:
+            return None
+        try:
+            return await reader(household_id)
+        except Exception as exc:  # noqa: BLE001 - memory must not block voice
+            logger.warning("Voice memory summary failed: %s", type(exc).__name__)
+            return None
+
     async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
         if self._http_client is not None:
             return await self._http_client.post(url, **kwargs)
@@ -163,6 +180,7 @@ class LiveSessionService:
         if not api_key:
             raise VoiceConfigurationError("Set OPENAI_API_KEY in .env to enable voice.")
         profile = await self._profile(household_id)
+        household_memory = await self._household_memory(household_id)
         try:
             response = await self._post(
                 f"{self.settings.openai_base_url.rstrip('/')}/live/sessions",
@@ -171,6 +189,7 @@ class LiveSessionService:
                         self.settings,
                         VOICE_TOOL_DEFINITIONS if self.basket_enabled else TOOL_DEFINITIONS,
                         profile,
+                        household_memory if self.basket_enabled else None,
                     ),
                     "transport": {"type": "webrtc", "sdp": offer_sdp},
                 },
@@ -203,6 +222,9 @@ class LiveSessionService:
             sdp=answer_sdp,
             turn_taking=client_turn_taking(self.settings.voice_turn_taking),
             events_token=events_token,
+            assistant_transcript_script=(
+                "native" if profile is not None and profile.language == "hindi" else "roman"
+            ),
         )
 
 

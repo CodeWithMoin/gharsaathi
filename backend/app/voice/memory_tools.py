@@ -24,10 +24,11 @@ MEMORY_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "name": RECALL_HOUSEHOLD_PREFERENCES,
         "description": (
-            "Before searching for a broad item request without a brand or size (for example "
-            "'deo order karna hai'), look up this household's own confirmed preferences and, "
-            "if they allowed it, past purchases of that kind of item. Read-only. A past "
-            "purchase never means the item is needed or out of stock now."
+            "Before searching for an item request without a pack size or variant (a kind of "
+            "item such as 'deo order karna hai', or a brand/product such as 'Diet Coke'), or "
+            "when the user refers to an earlier purchase, look up this household's own "
+            "confirmed preferences and, if they allowed it, past purchases of that item. "
+            "Read-only. A past purchase never means the item is needed or out of stock now."
         ),
         "parameters": {
             "type": "object",
@@ -63,8 +64,9 @@ class RecallArguments(BaseModel):
 
 
 NO_MEMORY_NOTE = (
-    "Nothing remembered for this item. Ask one short question for brand and size, for "
-    "example 'Kaunsa brand aur size chahiye?', unless the user already said them."
+    "Nothing remembered for this item. Search it now and let the user pick from the "
+    "screen; for several items ask one combined question, for example 'Atta aur dahi ke "
+    "options screen par hain; kaunsa lena hai?'. Do not ask brand and size per item."
 )
 HISTORY_OFF_NOTE = (
     " Purchase history is off. At most once per conversation you may add, as a statement "
@@ -72,9 +74,10 @@ HISTORY_OFF_NOTE = (
     "phir pichli pasand yaad rahegi.'"
 )
 FOUND_NOTE = (
-    "These are past choices, not current stock or need. Offer the best match in one "
-    "question, for example 'Pichli baar aapne AXE Dark Temptation 150 ml liya tha, wahi "
-    "chahiye?'. Search only after the user answers. Prices come only from search."
+    "These are past choices, not current stock or need. Offer the best match (most recent "
+    "or most bought) in one question naming its size, for example 'Pichli baar aapne Diet "
+    "Coke 330 ml can li thi; wahi ek add karun?'. Search only after the user answers; on "
+    "yes, search that exact product and add it in the same turn. Prices come only from search."
 )
 
 
