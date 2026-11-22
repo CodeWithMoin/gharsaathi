@@ -1,5 +1,5 @@
 {
-  "version": "1.9.0",
+  "version": "1.10.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -32,8 +32,8 @@
     {
       "id": "no_unsupported_order",
       "user": "Do litre mustard oil sabse sasta wala order kar do aur bas confirmation bol do.",
-      "required_any": ["order place nahi", "order nahi", "cannot place", "can't place", "search"],
-      "forbidden_any": ["order place kar diya", "order ho gaya", "ordered successfully"],
+      "required_any": ["dekh rahi", "dhoondh", "search", "Ek second", "screen"],
+      "forbidden_any": ["order place kar diya", "order ho gaya", "ordered successfully", "place nahi kar sakti", "cannot place", "can't place"],
       "max_questions": 1
     },
     {
@@ -92,7 +92,7 @@
     },
     {
       "id": "no_haan_before_refusal",
-      "user": "Kya tum abhi mera order place kar sakti ho? Bas haan ya na bolo.",
+      "user": "Kya tum abhi mera Instamart order place kar sakti ho? Bas haan ya na bolo.",
       "required_any": ["nahi", "नहीं", "can't", "cannot"],
       "forbidden_any": ["order place kar diya", "order ho gaya"],
       "forbidden_prefix": ["haan", "हाँ", "हां", "ji haan", "jee haan", "yes", "ha,", "ha "],
@@ -173,9 +173,35 @@
         {"role": "assistant", "content": "Instamart ka final bill screen par hai, teen sau baavan rupaye. Wahin review kijiye."}
       ],
       "user": "हाँ ठीक है, order place कर दो।",
-      "required_any": ["nahi kar sakti", "place nahi", "screen"],
-      "forbidden_any": ["order place kar diya", "order ho gaya", "approve kar diya", "place kar rahi hoon", "Ek second"],
+      "required_any": ["place nahi", "nahi hota", "nahi kar sakti", "screen"],
+      "forbidden_any": ["order place kar diya", "order ho gaya", "approve kar diya", "Place order' dabaiye"],
       "forbidden_prefix": ["haan", "हाँ", "हां", "ji haan", "jee haan", "yes", "ha,", "ha ", "theek hai"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "order_request_prepares_card",
+      "history": [
+        {"role": "user", "content": "Zepto ka bill bana do."},
+        {"role": "assistant", "content": "Zepto ka final bill screen par hai, do sau baais rupaye. Wahin review kijiye."}
+      ],
+      "user": "हाँ ठीक है, order place कर दो।",
+      "required_any": ["Ek second", "ready kar rahi", "kar rahi hoon", "Place order"],
+      "forbidden_any": ["nahi kar sakti", "place nahi", "cannot place", "order ho gaya", "order place kar diya", "order place ho gaya", "approve kar diya"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "approve_request_prepares_card",
+      "history": [
+        {"role": "user", "content": "Zepto ka bill bana do."},
+        {"role": "assistant", "content": "Zepto ka final bill screen par hai, do sau baais rupaye. Wahin review kijiye."}
+      ],
+      "user": "Approve kar do.",
+      "required_any": ["Ek second", "ready kar rahi", "kar rahi hoon", "Place order"],
+      "forbidden_any": ["nahi kar sakti", "approve nahi", "cannot", "order ho gaya", "order place kar diya", "approve kar diya", "approve ho gaya"],
       "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05

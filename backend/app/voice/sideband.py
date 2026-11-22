@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import time
+import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -129,6 +130,22 @@ class SidebandRunner:
         self._delegation_rounds: dict[str, int] = {}
         self._delegation_searches: dict[str, int] = {}
         self._send_lock = asyncio.Lock()
+        # Order results from the user's tap on the order card are spoken by
+        # GPT-Live through session.commentary.append (application-authored text).
+        attach = getattr(getattr(executor, "order", None), "attach_sender", None)
+        self._detach_order = attach if callable(attach) else None
+        if self._detach_order is not None:
+            self._detach_order(self.send_order_result)
+
+    async def send_order_result(self, note: str) -> None:
+        await self.send(
+            {
+                "type": "session.commentary.append",
+                "event_id": f"order_result_{uuid.uuid4().hex[:16]}",
+                "delegation_id": None,
+                "content": note,
+            }
+        )
 
     async def send(self, event: dict[str, Any]) -> None:
         async with self._send_lock:
@@ -144,6 +161,8 @@ class SidebandRunner:
                 continue
             if await self.handle(event):
                 break
+        if self._detach_order is not None:
+            self._detach_order(None)
         for task in [*self._continuations, *(t for ts in self._pending.values() for t in ts)]:
             task.cancel()
 

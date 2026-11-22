@@ -67,6 +67,10 @@ SEARCH_CONTEXT_HEADER = (
     "Search results already shown to the user earlier in this chat (tool output, "
     "newest last). Their option_id values are still valid for add_to_basket."
 )
+ORDER_UPDATES_HEADER = (
+    "Order card results since the last message (from the server, after the user's tap "
+    "or Cancel on the order card). Only these confirm whether an order was placed."
+)
 
 
 class ChatError(Exception):
@@ -273,6 +277,12 @@ class ChatTurnService:
                     "role": "developer",
                     "content": SEARCH_CONTEXT_HEADER + "\n" + "\n".join(session.search_contexts),
                 }
+            )
+        take_updates = getattr(getattr(session.toolbox, "order", None), "take_updates", None)
+        order_updates = take_updates() if callable(take_updates) else []
+        if order_updates:
+            request_input.append(
+                {"role": "developer", "content": ORDER_UPDATES_HEADER + "\n" + "\n".join(order_updates)}
             )
         request_input.append({"role": "user", "content": message})
 

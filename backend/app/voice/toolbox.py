@@ -19,6 +19,8 @@ from app.voice.basket_tools import (
 )
 from app.memory.recall import PreferenceRecaller
 from app.voice.memory_tools import MEMORY_TOOL_DEFINITIONS, MEMORY_TOOL_NAMES, MemoryToolExecutor
+from app.shopping.order_confirmation import OrderConfirmations
+from app.voice.order_tools import ORDER_TOOL_DEFINITIONS, ORDER_TOOL_NAMES, OrderToolExecutor
 from app.voice.tools import TOOL_DEFINITIONS as SEARCH_TOOL_DEFINITIONS
 from app.voice.tools import (
     MultiProviderShoppingToolExecutor,
@@ -34,6 +36,7 @@ VOICE_TOOL_DEFINITIONS = [
     *BASKET_TOOL_DEFINITIONS,
     *ADDRESS_TOOL_DEFINITIONS,
     *MEMORY_TOOL_DEFINITIONS,
+    *ORDER_TOOL_DEFINITIONS,
 ]
 
 
@@ -57,6 +60,7 @@ class VoiceToolbox:
         zepto_connection: ZeptoConnectionChecker | None = None,
         preference_recall: PreferenceRecaller | None = None,
         addresses: AddressDescriber | None = None,
+        order_confirmations: OrderConfirmations | None = None,
     ) -> None:
         options: dict[str, SearchOption] = {}
         targets = [
@@ -93,12 +97,15 @@ class VoiceToolbox:
         )
         self.address_form = AddressFormToolExecutor(zepto_connection)
         self.memory = MemoryToolExecutor(preference_recall, household_id)
+        self.order = OrderToolExecutor(self.basket, order_confirmations)
 
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
         if name in ADDRESS_TOOL_NAMES:
             return await self.address_form.execute(name, raw_arguments)
         if name in MEMORY_TOOL_NAMES:
             return await self.memory.execute(name, raw_arguments)
+        if name in ORDER_TOOL_NAMES:
+            return await self.order.execute(name, raw_arguments)
         if name in BASKET_TOOL_NAMES:
             return await self.basket.execute(name, raw_arguments)
         return await self.search.execute(name, raw_arguments)
