@@ -42,6 +42,14 @@ test("one drawer width on every page, and the page is pushed by exactly that wid
   assert.equal(pushOffset("chats", 390), 292.5);
 });
 
+test("only Stores gets the solid square drawer rail", () => {
+  const sheet = source("account-settings-sheet.tsx");
+  const page = source("page.tsx");
+  assert.ok(sheet.includes('open && section === "stores"'));
+  assert.ok(sheet.includes('section === "stores" ? "" : "rounded-l-[28px]"'));
+  assert.ok(page.includes('className="fixed inset-0 z-40 bg-scrim/20"'));
+});
+
 test("nothing in Settings opens the legacy setup sheet or onboarding", () => {
   const page = source("page.tsx");
   const start = page.indexOf("<AccountSettingsSheet");
