@@ -3,6 +3,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.conversations.repository import ConversationRepository
+from app.conversations.summary import conversation_title, is_empty_conversation
+from app.dependencies import ConversationSummariesDependency
 from app.conversations.schemas import (
     ConversationStateResponse,
     ConversationStateUpsert,
@@ -18,22 +20,16 @@ router = APIRouter()
 def _summary(conversation: Conversation) -> ConversationSummary:
     state = conversation.state
     messages = state.get("messages") if isinstance(state, dict) else None
-    user_messages = [
-        item.get("content", "").strip()
-        for item in messages or []
-        if isinstance(item, dict) and item.get("role") == "user"
-    ]
     all_messages = [
-        item.get("content", "").strip()
+        " ".join(str(item.get("content", "")).split())
         for item in messages or []
         if isinstance(item, dict)
     ]
-    fallback = str(state.get("submitted_query", "")).strip() if isinstance(state, dict) else ""
-    title_source = next((text for text in user_messages if text), fallback or "Shopping chat")
-    preview_source = next((text for text in reversed(all_messages) if text), title_source)
+    title = conversation_title(state)
+    preview_source = next((text for text in reversed(all_messages) if text), title)
     return ConversationSummary(
         id=conversation.id,
-        title=title_source[:80],
+        title=title,
         preview=preview_source[:160],
         updated_at=conversation.updated_at,
         is_active=conversation.archived_at is None,
@@ -46,9 +42,17 @@ async def recent_conversations(
     actor: MemoryActorDependency,
     query: str = Query(default="", max_length=120),
     limit: int = Query(default=30, ge=1, le=50),
+    exclude_empty: bool = Query(
+        default=False,
+        description="Hide chats with no message, search result or basket card.",
+    ),
 ) -> list[ConversationSummary]:
-    conversations = await ConversationRepository(session).list_recent(actor.id, limit=50)
-    summaries = [_summary(conversation) for conversation in conversations]
+    conversations = await ConversationRepository(session).list_recent(actor.id, limit=100)
+    summaries = [
+        _summary(conversation)
+        for conversation in conversations
+        if not (exclude_empty and is_empty_conversation(conversation.state))
+    ]
     clean_query = query.strip().casefold()
     if clean_query:
         summaries = [
@@ -78,11 +82,13 @@ async def save_current_conversation(
     body: ConversationStateUpsert,
     session: DbSessionDependency,
     actor: MemoryActorDependency,
+    summaries: ConversationSummariesDependency,
 ) -> ConversationStateResponse:
     conversation = await ConversationRepository(session).upsert(
         actor.id,
         body.model_dump(mode="json"),
     )
+    summaries.after_save(actor.id, conversation.id, conversation.state, conversation.summary)
     return ConversationStateResponse(
         id=conversation.id,
         updated_at=conversation.updated_at,
@@ -94,8 +100,13 @@ async def save_current_conversation(
 async def start_new_conversation(
     session: DbSessionDependency,
     actor: MemoryActorDependency,
+    summaries: ConversationSummariesDependency,
 ) -> None:
-    await ConversationRepository(session).archive_current(actor.id)
+    repository = ConversationRepository(session)
+    current = await repository.current(actor.id)
+    await repository.archive_current(actor.id)
+    if current is not None:
+        summaries.after_archive(actor.id, [current.id])
 
 
 @router.post("/{conversation_id}/open", response_model=ConversationStateResponse)
@@ -103,10 +114,16 @@ async def open_conversation(
     conversation_id: UUID,
     session: DbSessionDependency,
     actor: MemoryActorDependency,
+    summaries: ConversationSummariesDependency,
 ) -> ConversationStateResponse:
-    conversation = await ConversationRepository(session).open(actor.id, conversation_id)
+    repository = ConversationRepository(session)
+    previous = await repository.current(actor.id)
+    previous_id = previous.id if previous is not None else None
+    conversation = await repository.open(actor.id, conversation_id)
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    if previous_id is not None and previous_id != conversation.id:
+        summaries.after_archive(actor.id, [previous_id])
     return ConversationStateResponse(
         id=conversation.id,
         updated_at=conversation.updated_at,

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import secrets
 from typing import Any
@@ -5,6 +6,12 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, Field
 
+from app.conversations.context import (
+    ConversationContextReader,
+    RecentConversationContext,
+    context_instructions_block,
+    live_input_items,
+)
 from app.core.config import Settings
 from app.memory.recall import PreferenceRecaller
 from app.user_profile import ProfileReader, UserProfile
@@ -27,6 +34,9 @@ from app.voice.tools import (
 
 
 logger = logging.getLogger(__name__)
+
+# Voice start never waits long for chat context; without it the session starts blank.
+CONTEXT_TIMEOUT_SECONDS = 2.0
 
 
 class VoiceError(Exception):
@@ -57,24 +67,39 @@ def build_session_config(
     settings: Settings,
     tool_definitions: list[dict[str, Any]] | None = None,
     profile: UserProfile | None = None,
+    context: RecentConversationContext | None = None,
 ) -> dict[str, Any]:
-    return {
+    """GPT-Live session config.
+
+    Earlier turns of this chat seed GPT-Live through ``input`` (startup history,
+    https://developers.openai.com/api/docs/guides/live-conversations#seed-a-session-with-prior-conversation);
+    the summary, on-screen state and previous chats go in its instructions as
+    quoted reference data. The backend model gets the whole context block.
+    """
+
+    session: dict[str, Any] = {
         "model": settings.live_model,
         "instructions": with_profile(
             live_instructions(LIVE_INSTRUCTIONS, settings.voice_turn_taking), profile
-        ),
+        )
+        + context_instructions_block(context, include_turns=False),
         "audio": {"output": {"voice": settings.live_voice}},
         "delegation": {
             "type": "responses",
             "responses": {
                 "model": settings.live_backend_model,
-                "instructions": with_profile(BACKEND_INSTRUCTIONS, profile),
+                "instructions": with_profile(BACKEND_INSTRUCTIONS, profile)
+                + context_instructions_block(context),
                 "tools": tool_definitions if tool_definitions is not None else TOOL_DEFINITIONS,
                 "tool_choice": "auto",
                 "parallel_tool_calls": True,
             },
         },
     }
+    history = live_input_items(context)
+    if history:
+        session["input"] = history
+    return session
 
 
 class LiveSessionService:
@@ -92,6 +117,7 @@ class LiveSessionService:
         preference_recall: PreferenceRecaller | None = None,
         profile_reader: ProfileReader | None = None,
         addresses: AddressDescriber | None = None,
+        context_reader: ConversationContextReader | None = None,
     ) -> None:
         self.settings = settings
         self.searcher = searcher
@@ -103,6 +129,7 @@ class LiveSessionService:
         self.preference_recall = preference_recall
         self.profile_reader = profile_reader
         self.addresses = addresses
+        self.context_reader = context_reader
         self._http_client = http_client
 
     @property
@@ -146,6 +173,17 @@ class LiveSessionService:
             logger.warning("Voice profile read failed: %s", type(exc).__name__)
             return None
 
+    async def _context(self, household_id: str) -> RecentConversationContext | None:
+        if self.context_reader is None or not household_id:
+            return None
+        try:
+            return await asyncio.wait_for(
+                self.context_reader.load(household_id), CONTEXT_TIMEOUT_SECONDS
+            )
+        except Exception as exc:  # noqa: BLE001 - missing context must not block voice
+            logger.warning("Voice chat context read failed: %s", type(exc).__name__)
+            return None
+
     async def _post(self, url: str, **kwargs: Any) -> httpx.Response:
         if self._http_client is not None:
             return await self._http_client.post(url, **kwargs)
@@ -162,7 +200,9 @@ class LiveSessionService:
         api_key = self.settings.openai_api_key.get_secret_value().strip()
         if not api_key:
             raise VoiceConfigurationError("Set OPENAI_API_KEY in .env to enable voice.")
-        profile = await self._profile(household_id)
+        profile, context = await asyncio.gather(
+            self._profile(household_id), self._context(household_id)
+        )
         try:
             response = await self._post(
                 f"{self.settings.openai_base_url.rstrip('/')}/live/sessions",
@@ -171,6 +211,7 @@ class LiveSessionService:
                         self.settings,
                         VOICE_TOOL_DEFINITIONS if self.basket_enabled else TOOL_DEFINITIONS,
                         profile,
+                        context,
                     ),
                     "transport": {"type": "webrtc", "sdp": offer_sdp},
                 },

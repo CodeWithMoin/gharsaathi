@@ -85,6 +85,20 @@ class ChatTimelineSnapshot(BaseModel):
         return value
 
 
+MAX_RESULT_GROUPS = 12
+MAX_PRODUCTS_PER_GROUP = 40
+
+
+class ResultGroupSnapshot(BaseModel):
+    """One searched item's results, placed after a chat message by ``seq``."""
+
+    key: str = Field(min_length=1, max_length=120)
+    query: str = Field(min_length=1, max_length=120)
+    products: list[ProductSnapshot] = Field(default_factory=list, max_length=MAX_PRODUCTS_PER_GROUP)
+    after_message_id: str | None = Field(default=None, max_length=128)
+    seq: int = Field(default=0, ge=0)
+
+
 class ConversationStateUpsert(BaseModel):
     submitted_query: str = Field(default="", max_length=120)
     products: list[ProductSnapshot] = Field(default_factory=list, max_length=100)
@@ -92,6 +106,15 @@ class ConversationStateUpsert(BaseModel):
     messages: list[ChatMessageSnapshot] = Field(default_factory=list, max_length=MAX_CHAT_MESSAGES)
     results_after_message_id: str | None = Field(default=None, max_length=128)
     timeline: ChatTimelineSnapshot = Field(default_factory=ChatTimelineSnapshot)
+    # One entry per searched item; chats saved before this field load with [].
+    result_groups: list[ResultGroupSnapshot] = Field(default_factory=list, max_length=MAX_RESULT_GROUPS)
+
+    @field_validator("result_groups")
+    @classmethod
+    def unique_group_keys(cls, value: list[ResultGroupSnapshot]) -> list[ResultGroupSnapshot]:
+        if len({group.key for group in value}) != len(value):
+            raise ValueError("result group keys must be unique")
+        return value
 
     @field_validator("submitted_query")
     @classmethod

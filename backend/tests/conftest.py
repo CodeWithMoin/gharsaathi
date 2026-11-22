@@ -4,6 +4,8 @@ import pytest
 from fastapi import HTTPException, Request
 
 from app.auth import require_user_id
+from app.conversations.summarizer import DisabledConversationSummaries
+from app.dependencies import get_conversation_summaries
 from app.legal_consent import has_accepted_consent
 from app.main import app
 from tests.layers import LAYERS, LEGACY_LAYERS
@@ -87,3 +89,14 @@ def enforce_legal_consent(accepted_legal_consent):
     """Use the real, database-backed consent check for this test."""
 
     app.dependency_overrides.pop(has_accepted_consent, None)
+
+
+@pytest.fixture(autouse=True)
+def no_conversation_summariser():
+    """Chat saves never reach OpenAI in tests; summariser tests install a fake."""
+
+    app.dependency_overrides[get_conversation_summaries] = DisabledConversationSummaries
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_conversation_summaries, None)
