@@ -81,6 +81,40 @@ class PreferenceRecaller(Protocol):
     async def recall(self, household_id: str, item: str) -> HouseholdRecall: ...
 
 
+class RememberedItem(BaseModel):
+    """One consented remembered choice, for search annotation and the session summary.
+
+    Text fields come from the user's own memories and provider order history:
+    data, never instructions.
+    """
+
+    source: Literal["confirmed_preference", "purchase_history"]
+    name: str
+    preference: str | None = None
+    brand: str | None = None
+    pack_size: str | None = None
+    store_id: Literal["swiggy_instamart", "zepto"] | None = None
+    provider_item_id: str | None = None
+    last_bought: str | None = None
+    times: int | None = None
+
+
+class HouseholdMemory(BaseModel):
+    consent: RecallConsent
+    items: list[RememberedItem]
+
+
+class HouseholdMemoryReader(Protocol):
+    async def household_memory(self, household_id: str) -> HouseholdMemory: ...
+
+
+NO_HOUSEHOLD_MEMORY = HouseholdMemory(
+    consent=RecallConsent(saved_preferences="off", purchase_history="off"), items=[]
+)
+STORE_IDS = {"swiggy": "swiggy_instamart", "zepto": "zepto"}
+MAX_REMEMBERED_PURCHASES = 200
+
+
 def item_terms(item: str) -> set[str]:
     """Searchable terms for a free-text item, with small Hinglish/English aliases."""
     words = [word for word in re.split(r"[^a-z0-9]+", item.casefold()) if word]
@@ -141,6 +175,10 @@ class DatabasePreferenceRecaller:
         async with self.session_factory() as session:
             return await recall_for_person(session, household_id, item)
 
+    async def household_memory(self, household_id: str) -> HouseholdMemory:
+        async with self.session_factory() as session:
+            return await household_memory_for_person(session, household_id)
+
 
 async def recall_for_person(
     session: AsyncSession, external_id: str, item: str, now: datetime | None = None
@@ -200,3 +238,70 @@ async def _preferences_allowed(repository: MemoryRepository, actor: MemorySubjec
         if permission is not None and permission.allowed and permission.revoked_at is None:
             return True
     return False
+
+
+async def household_memory_for_person(
+    session: AsyncSession, external_id: str, now: datetime | None = None
+) -> HouseholdMemory:
+    """Every consented remembered choice of one person, under the same consent as recall.
+
+    Confirmed preferences need the personalise-search permission; purchases need
+    purchase-history consent and are delivered, retained orders only.
+    """
+    repository = MemoryRepository(session)
+    actor = await repository.find_person(external_id)
+    if actor is None:
+        return NO_HOUSEHOLD_MEMORY
+    preferences_on = await _preferences_allowed(repository, actor)
+    items: list[RememberedItem] = []
+    if preferences_on:
+        memories = await MemoryService(session).retrieve(
+            actor,
+            MemoryRetrieveRequest(
+                purpose=PREFERENCE_PURPOSE, memory_types=list(PREFERENCE_TYPES), limit=100
+            ),
+        )
+        for memory in memories:
+            candidate = _preference_candidate(memory)
+            name = " ".join(
+                part
+                for part in (candidate.brand, candidate.product or candidate.product_category)
+                if part
+            ) or (candidate.summary or "")
+            if name.strip():
+                items.append(
+                    RememberedItem(
+                        source="confirmed_preference",
+                        name=name,
+                        preference=candidate.preference,
+                        brand=candidate.brand,
+                        pack_size=candidate.pack_size,
+                    )
+                )
+    graph = PurchaseGraphService(session)
+    history_on = await graph.has_history_permission(actor)
+    if history_on:
+        purchases = await graph.recent_purchases(
+            actor,
+            lambda _name: True,
+            limit=MAX_REMEMBERED_PURCHASES,
+            now=now or datetime.now(UTC),
+        )
+        items.extend(
+            RememberedItem(
+                source="purchase_history",
+                name=purchase.product_name,
+                store_id=STORE_IDS.get(purchase.provider),  # type: ignore[arg-type]
+                provider_item_id=purchase.provider_item_id,
+                last_bought=purchase.last_purchased_at.date().isoformat(),
+                times=purchase.purchase_count,
+            )
+            for purchase in purchases
+        )
+    return HouseholdMemory(
+        consent=RecallConsent(
+            saved_preferences="on" if preferences_on else "off",
+            purchase_history="on" if history_on else "off",
+        ),
+        items=items,
+    )

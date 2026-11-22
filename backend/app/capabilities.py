@@ -269,7 +269,12 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="offers",
         title="Free-delivery / offer threshold suggestions",
-        voice=S(M, "No voice tool."),
+        voice=S(
+            P,
+            "Read-only: request_approval and view_basket report the store-confirmed offers "
+            "on the current bill; no promo-code entry and no threshold suggestions by voice.",
+        ),
+        voice_tools=("request_approval", "view_basket"),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
         ui=S(P, "Zepto basket only (BasketPanel), using consented usual items."),
         backend=S(P, "Zepto only."),
@@ -281,8 +286,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         title="Suggest the household's usual items from purchase history",
         voice=S(
             P,
-            "Only on request: recall_household_preferences returns consented past purchases "
-            "of the item the user asked for; no proactive suggestions by voice.",
+            "On request only: recall_household_preferences and search_products results "
+            "marked 'remembered' use consented past purchases of the item the user asked "
+            "for; a short consented summary is in the session context. No proactive "
+            "suggestions by voice.",
         ),
         voice_tools=("recall_household_preferences",),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
@@ -330,10 +337,14 @@ CAPABILITIES: tuple[Capability, ...] = (
             "codex/memory-write-manage",
         ),
         ui=S(
-            IP,
-            "Settings 'Yaad rakhi baatein' (list by group, edit, delete, undo, pending "
-            "proposals, forget-all, permission toggle) is being built on codex/memory-settings-ui.",
-            "codex/memory-settings-ui",
+            W,
+            "Settings 'Yaad rakhi baatein': grouped list, inline edit (correct), delete, undo "
+            "for 'abhi seekha', pending suggestions confirm/reject, forget-all, permission toggle.",
+        ),
+        ui_files=(
+            "frontend/app/memory-settings.tsx",
+            "frontend/app/memory-api.ts",
+            "frontend/app/account-settings-sheet.tsx",
         ),
         backend=S(
             W,
@@ -345,13 +356,10 @@ CAPABILITIES: tuple[Capability, ...] = (
             "POST /api/memory/extract",
             "POST /api/memory/proposals",
             "POST /api/memory/retrieve",
-            "GET /api/memory/household-preferences/permission",
-            "PUT /api/memory/household-preferences/permission",
-            "POST /api/memory/forget-all/confirmation",
+            "POST /api/memory/forget-all/token",
             "POST /api/memory/forget-all",
             "POST /api/memory/{memory_id}/confirm",
             "POST /api/memory/{memory_id}/correct",
-            "POST /api/memory/{memory_id}/update",
             "POST /api/memory/{memory_id}/undo",
             "POST /api/memory/{memory_id}/reject",
             "DELETE /api/memory/{memory_id}",
@@ -558,6 +566,17 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "building_name",
         "formatted_address",
         "contact_name",
+        # Bill offers, memory annotations and recall result fields.
+        "bill_offers",
+        "current_bill",
+        "promo_code_entry",
+        "not_available",
+        "free_delivery",
+        "bought_on",
+        "product_name",
+        "last_purchased_on",
+        "purchase_count",
+        "saved_preferences",
     }
 )
 
@@ -565,54 +584,42 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
 API_CONTRACTS: dict[str, tuple[str, ...]] = {
     "GET /api/memory": (
         "Auth: Clerk bearer token; only the verified person's memories. Query: status=proposed|confirmed|superseded|rejected (optional), include_deleted=false.",
-        "Response 200: MemoryResponse[] newest first. Settings shows status confirmed (active) and proposed (pending).",
-        "MemoryResponse adds derived read-only fields: kind (prefer_brand|prefer_pack_size|prefer_store|avoid_store|avoid_product|avoid_brand|rule|null), "
-        "group (pasand|kabhi_nahi|niyam|null), origin (explicit|stated|inferred), learned_at (confirmed_at or created_at), item, display_value, user_words.",
-        '{"id": "uuid", "memory_type": "brand_preference", "kind": "prefer_brand", "group": "pasand", "origin": "stated", '
-        '"item": "milk", "display_value": "Amul Taaza", "user_words": "hum hamesha Amul Taaza lete hain", "text": "milk: hamesha Amul Taaza", '
-        '"status": "confirmed", "learned_at": "2026-11-22T10:00:00Z", "supersedes_memory_id": null, "value": {...}, "...": "other MemoryResponse fields"}',
-        "UI 'abhi seekha' badge: origin == stated (learned without a read-back); offer Undo. origin == inferred appears only as status proposed until confirmed.",
-        "prefer_store/avoid_store display_value is a store id (swiggy_instamart|zepto); rule display_value is one of prefer_cheapest, prefer_fastest_delivery, prefer_larger_packs, prefer_smaller_packs, ask_before_substitute.",
-    ),
-    "GET /api/memory/household-preferences/permission": (
-        "Auth: Clerk bearer token. The single 'remember my preferences' switch.",
-        '{"allowed": true}',
-    ),
-    "PUT /api/memory/household-preferences/permission": (
-        'Auth: Clerk bearer token. Request: {"allowed": true | false}. Sets personalize_search for every household preference type. '
-        "Off stops new saves and stops memories shaping search; it does not delete them (use forget-all).",
-        '{"allowed": false}',
+        "Response 200: MemoryResponse[] newest first. Settings shows status confirmed (active) and proposed (pending suggestions).",
+        "MemoryResponse adds derived read-only fields: origin (explicit|stated|inferred), learned_at (ISO; confirmed_at or created_at), "
+        "kind (prefer_brand|prefer_pack_size|prefer_store|avoid_store|avoid_product|avoid_brand|rule|null), group (pasand|kabhi_nahi|niyam|null), item, display_value, user_words.",
+        '{"id": "uuid", "memory_type": "brand_preference", "value": {"kind": "prefer_brand", "product_category": "milk", "brand": "Amul Taaza", "origin": "stated", "user_words": "hum hamesha Amul Taaza lete hain"}, '
+        '"text": "milk: hamesha Amul Taaza", "source_type": "explicit_statement", "status": "confirmed", "origin": "stated", "learned_at": "2026-11-22T10:00:00Z", "supersedes_memory_id": null, "...": "other fields"}',
+        "origin stated = learned in passing without a read-back (undo-able for 24 h); inferred = a repeated-choice suggestion (status proposed until confirmed); explicit = everything else.",
+        "Store values are store ids (swiggy_instamart|zepto); rule values are prefer_cheapest, prefer_fastest_delivery, prefer_larger_packs, prefer_smaller_packs, ask_before_substitute.",
     ),
     "POST /api/memory/{memory_id}/confirm": (
-        "Auth: Clerk bearer token. Pending (proposed) -> active. If the proposal has supersedes_memory_id, that active memory becomes superseded.",
+        "Auth: Clerk bearer token. Pending (proposed) -> confirmed. If the proposal has supersedes_memory_id, that confirmed memory becomes superseded.",
         "Response 200: MemoryResponse. 404 not this person's; 409 not proposed.",
     ),
     "POST /api/memory/{memory_id}/reject": (
-        'Auth: Clerk bearer token. Request: {"reason": null | "text <= 500"}. Pending -> rejected (never re-proposed from repeats).',
+        'Auth: Clerk bearer token. Request: {"reason": null | "text <= 500"}. Pending -> rejected; a rejected suggestion is never re-proposed from repeated choices.',
         "Response 200: MemoryResponse. 409 not proposed.",
     ),
-    "POST /api/memory/{memory_id}/update": (
-        'Auth: Clerk bearer token. Inline edit of an active memory. Request: {"value": "Mother Dairy"} (2-80 chars); optional "item": "milk" | null (omit to keep the item).',
-        "Creates the replacement (status confirmed, origin explicit, supersedes_memory_id = old id); the old one becomes superseded and is kept for audit.",
-        "Response 201: MemoryResponse (the new one). 403 preference permission off; 409 not active or not editable (legacy type); 422 invalid value, unknown store/rule, or sensitive category.",
+    "POST /api/memory/{memory_id}/correct": (
+        "Auth: Clerk bearer token. Settings inline edit. Request: MemoryProposal fields + reason, normally source_type correction with the full edited value object.",
+        "Creates the replacement (confirmed; supersedes_memory_id = old id; value.origin stated becomes explicit); the old one becomes superseded and is kept for audit.",
+        "Response 201: MemoryResponse. 409 the memory is not confirmed; 422 the text or a value falls under the sensitive-data policy.",
     ),
     "POST /api/memory/{memory_id}/undo": (
-        "Auth: Clerk bearer token. Undo a just-learned memory (active or pending): it is deleted; if it replaced another memory, that one is restored to active.",
-        '{"undone_id": "uuid", "restored": null | MemoryResponse}',
-        "409 already deleted/superseded/rejected.",
+        "Auth: Clerk bearer token. Reverts a memory learned in passing (origin stated, status confirmed, learned_at within 24 h): it is deleted, and the memory it superseded, if any, is restored to confirmed.",
+        "Response 200: the restored MemoryResponse, or null. 404 memory not found for this person; 409 outside the undo window or not undo-able.",
     ),
     "DELETE /api/memory/{memory_id}": (
         "Auth: Clerk bearer token. Forget one memory (status deleted; excluded from every list and from search). Response 204; idempotent.",
     ),
-    "POST /api/memory/forget-all/confirmation": (
-        "Auth: Clerk bearer token. Step 1 of 'Sab bhool jao': issues a 5-minute token bound to this person. Nothing is deleted.",
+    "POST /api/memory/forget-all/token": (
+        "Auth: Clerk bearer token. Step 1 of 'Sab bhool jao': issues a 5-minute, single-use token bound to this person. Nothing is deleted.",
         '{"confirm_token": "1764000000.abc...", "count": 4, "expires_at": "2026-11-22T10:05:00Z"}',
     ),
     "POST /api/memory/forget-all": (
-        'Auth: Clerk bearer token. Step 2, after the user confirms on screen. Request: {"confirm_token": "..."}. '
-        "Deletes every remembered preference, rule and pending proposal (purchase history has its own DELETE /api/memory/purchase-history).",
-        '{"deleted": 4}',
-        "409 invalid, expired or another person's token (request a new one).",
+        'Auth: Clerk bearer token. Step 2, after the user confirms. Request: {"confirm_token": "..."}. Deletes every memory and pending suggestion of this person; permissions are kept. '
+        "Purchase history has its own DELETE /api/memory/purchase-history.",
+        "Response 204. 400 invalid, expired, already used, or another person's token.",
     ),
     "GET /api/profile": (
         "Auth: Clerk bearer token; the record belongs to the verified user only.",

@@ -1,8 +1,35 @@
-"""Settings memory management (confirm / update / undo / forget / forget-all) on PostgreSQL."""
+"""Settings memory management (confirm / correct / undo / forget / forget-all) on PostgreSQL."""
 
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
+
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import update
 
+from app.database.models import MemoryItem
+from app.memory.household import PreferenceSpec
+from app.memory.household_service import HouseholdPreferenceService
+from app.memory.service import MemoryService
 from tests.integration.helpers import as_user
+
+PREFERENCE_CATEGORIES = (
+    "brand_preference",
+    "pack_size_preference",
+    "quantity_preference",
+    "product_avoidance",
+)
+
+
+def _allow(api: TestClient, headers: dict[str, str], allowed: bool = True) -> None:
+    # Mirrors the Settings toggle in frontend/app/memory-api.ts.
+    for category in PREFERENCE_CATEGORIES:
+        response = api.put(
+            f"/api/memory/permissions/{category}/personalize_search",
+            headers=headers,
+            json={"allowed": allowed, "granularity": "explicit_preferences" if allowed else "disabled"},
+        )
+        assert response.status_code == 200, response.text
 
 
 def _propose(api: TestClient, headers: dict[str, str], brand: str = "Amul Taaza") -> dict:
@@ -21,104 +48,153 @@ def _propose(api: TestClient, headers: dict[str, str], brand: str = "Amul Taaza"
     return response.json()
 
 
+def _correction(memory: dict, brand: str) -> dict:
+    """The body memory-groups.mjs correctionPayload builds for an inline edit."""
+    return {
+        "memory_type": memory["memory_type"],
+        "value": {**memory["value"], "brand": brand},
+        "text": f"Doodh: hamesha {brand}",
+        "source_type": "correction",
+        "source_conversation_id": None,
+        "sensitivity": "low",
+        "confidence": 1,
+        "allowed_purposes": ["personalize_search"],
+        "reason": "Edited in settings",
+    }
+
+
 def _active(api: TestClient, headers: dict[str, str]) -> list[dict]:
     return api.get("/api/memory?status=confirmed", headers=headers).json()
 
 
-def test_confirm_update_undo_and_forget_flow(api: TestClient) -> None:
-    alice = as_user("alice-memory")
-    assert api.get("/api/memory/household-preferences/permission", headers=alice).json() == {
-        "allowed": False
-    }
-    assert api.put(
-        "/api/memory/household-preferences/permission", headers=alice, json={"allowed": True}
-    ).json() == {"allowed": True}
+async def _save_stated(session_factory, user_id: str, brand: str) -> UUID:
+    async with session_factory() as session:
+        actor = await MemoryService(session).actor_for_external_id(user_id)
+        memory, _ = await HouseholdPreferenceService(session).save_stated(
+            actor,
+            PreferenceSpec(
+                kind="prefer_brand", item="milk", value=brand,
+                user_words=f"hum hamesha {brand} lete hain",
+            ),
+        )
+        return memory.id
 
+
+def test_confirm_correct_and_forget_flow(api: TestClient) -> None:
+    alice = as_user("alice-memory")
+    _allow(api, alice)
     proposal = _propose(api, alice)
-    assert proposal["status"] == "proposed"
-    assert (proposal["kind"], proposal["group"], proposal["origin"]) == (
-        "prefer_brand", "pasand", "explicit",
-    )
+    assert (proposal["status"], proposal["origin"]) == ("proposed", "explicit")
+    assert proposal["learned_at"]
     assert _active(api, alice) == []
 
     confirmed = api.post(f"/api/memory/{proposal['id']}/confirm", headers=alice).json()
     assert confirmed["status"] == "confirmed"
-    assert confirmed["display_value"] == "Amul Taaza"
-    assert confirmed["item"] == "milk"
 
-    updated = api.post(
-        f"/api/memory/{proposal['id']}/update", headers=alice, json={"value": "Mother Dairy"}
+    corrected = api.post(
+        f"/api/memory/{proposal['id']}/correct", headers=alice, json=_correction(confirmed, "Mother Dairy")
     )
-    assert updated.status_code == 201, updated.text
-    replacement = updated.json()
+    assert corrected.status_code == 201, corrected.text
+    replacement = corrected.json()
     assert replacement["supersedes_memory_id"] == proposal["id"]
-    assert replacement["display_value"] == "Mother Dairy"
-    assert replacement["item"] == "milk"
+    assert replacement["value"]["brand"] == "Mother Dairy"
     assert [item["id"] for item in _active(api, alice)] == [replacement["id"]]
-    superseded = api.get("/api/memory?status=superseded", headers=alice).json()
-    assert [item["id"] for item in superseded] == [proposal["id"]]
 
-    undone = api.post(f"/api/memory/{replacement['id']}/undo", headers=alice).json()
-    assert undone["restored"]["id"] == proposal["id"]
-    assert [item["id"] for item in _active(api, alice)] == [proposal["id"]]
+    # An explicit (not learned-in-passing) memory is outside the undo window.
+    assert api.post(f"/api/memory/{replacement['id']}/undo", headers=alice).status_code == 409
 
-    assert api.delete(f"/api/memory/{proposal['id']}", headers=alice).status_code == 204
+    assert api.delete(f"/api/memory/{replacement['id']}", headers=alice).status_code == 204
     assert _active(api, alice) == []
 
 
-def test_update_rejects_sensitive_values_and_needs_consent(api: TestClient) -> None:
+def test_correct_rejects_sensitive_values(api: TestClient) -> None:
     carol = as_user("carol-memory")
-    api.put("/api/memory/household-preferences/permission", headers=carol, json={"allowed": True})
+    _allow(api, carol)
     memory = _propose(api, carol)
-    api.post(f"/api/memory/{memory['id']}/confirm", headers=carol)
-
-    sensitive = api.post(
-        f"/api/memory/{memory['id']}/update", headers=carol, json={"value": "diabetes wala"}
+    confirmed = api.post(f"/api/memory/{memory['id']}/confirm", headers=carol).json()
+    response = api.post(
+        f"/api/memory/{memory['id']}/correct", headers=carol, json=_correction(confirmed, "diabetes wala")
     )
-    assert sensitive.status_code == 422
-
-    api.put("/api/memory/household-preferences/permission", headers=carol, json={"allowed": False})
-    blocked = api.post(
-        f"/api/memory/{memory['id']}/update", headers=carol, json={"value": "Mother Dairy"}
-    )
-    assert blocked.status_code == 403
+    assert response.status_code == 422
 
 
-def test_reject_and_household_scoping(api: TestClient) -> None:
+@pytest.mark.asyncio
+async def test_undo_reverts_a_stated_memory_and_restores_what_it_replaced(
+    api: TestClient, session_factory
+) -> None:
+    dana = as_user("dana-memory")
+    _allow(api, dana)
+    first = await _save_stated(session_factory, "dana-memory", "Amul Taaza")
+    second = await _save_stated(session_factory, "dana-memory", "Mother Dairy")
+
+    active = _active(api, dana)
+    assert [(item["id"], item["origin"]) for item in active] == [(str(second), "stated")]
+    assert active[0]["supersedes_memory_id"] == str(first)
+
+    undone = api.post(f"/api/memory/{second}/undo", headers=dana)
+    assert undone.status_code == 200, undone.text
+    assert undone.json()["id"] == str(first)
+    assert [item["id"] for item in _active(api, dana)] == [str(first)]
+
+    # Undo of the restored, first memory is still allowed; afterwards nothing restores.
+    assert api.post(f"/api/memory/{first}/undo", headers=dana).json() is None
+    assert _active(api, dana) == []
+
+    missing = api.post("/api/memory/00000000-0000-0000-0000-000000000000/undo", headers=dana)
+    assert missing.status_code == 404
+    assert missing.json()["detail"] != "Not Found"
+
+
+@pytest.mark.asyncio
+async def test_undo_window_is_24_hours(api: TestClient, session_factory) -> None:
+    erin = as_user("erin-memory")
+    _allow(api, erin)
+    memory_id = await _save_stated(session_factory, "erin-memory", "Nandini")
+    async with session_factory() as session:
+        await session.execute(
+            update(MemoryItem)
+            .where(MemoryItem.id == memory_id)
+            .values(confirmed_at=datetime.now(UTC) - timedelta(hours=25))
+        )
+        await session.commit()
+    assert api.post(f"/api/memory/{memory_id}/undo", headers=erin).status_code == 409
+
+
+def test_household_scoping(api: TestClient) -> None:
     alice, bob = as_user("alice-scope"), as_user("bob-scope")
-    api.put("/api/memory/household-preferences/permission", headers=alice, json={"allowed": True})
+    _allow(api, alice)
     memory = _propose(api, alice)
-
     assert api.post(f"/api/memory/{memory['id']}/confirm", headers=bob).status_code == 404
     assert api.post(f"/api/memory/{memory['id']}/undo", headers=bob).status_code == 404
-    assert api.post(
-        f"/api/memory/{memory['id']}/update", headers=bob, json={"value": "Nandini"}
-    ).status_code == 404
-
     rejected = api.post(f"/api/memory/{memory['id']}/reject", headers=alice, json={"reason": None})
     assert rejected.json()["status"] == "rejected"
 
 
-def test_forget_all_needs_a_valid_token_for_the_same_person(api: TestClient) -> None:
+def test_forget_all_needs_a_single_use_token_for_the_same_person(api: TestClient) -> None:
     alice, bob = as_user("alice-forget"), as_user("bob-forget")
-    api.put("/api/memory/household-preferences/permission", headers=alice, json={"allowed": True})
+    _allow(api, alice)
     first = _propose(api, alice)
     api.post(f"/api/memory/{first['id']}/confirm", headers=alice)
     _propose(api, alice, brand="Nandini")
 
     assert api.post(
         "/api/memory/forget-all", headers=alice, json={"confirm_token": "12345.invalid"}
-    ).status_code == 409
-    confirmation = api.post("/api/memory/forget-all/confirmation", headers=alice).json()
-    assert confirmation["count"] == 2
-    # Another person's token never deletes alice's memories, or their own.
+    ).status_code == 400
+    issued = api.post("/api/memory/forget-all/token", headers=alice)
+    assert issued.status_code == 200
+    token = issued.json()
+    assert token["count"] == 2 and token["confirm_token"]
     assert api.post(
-        "/api/memory/forget-all", headers=bob, json={"confirm_token": confirmation["confirm_token"]}
-    ).status_code == 409
+        "/api/memory/forget-all", headers=bob, json={"confirm_token": token["confirm_token"]}
+    ).status_code == 400
     assert len(api.get("/api/memory", headers=alice).json()) == 2
 
-    done = api.post(
-        "/api/memory/forget-all", headers=alice, json={"confirm_token": confirmation["confirm_token"]}
-    )
-    assert done.json() == {"deleted": 2}
+    done = api.post("/api/memory/forget-all", headers=alice, json={"confirm_token": token["confirm_token"]})
+    assert done.status_code == 204
     assert api.get("/api/memory", headers=alice).json() == []
+    # Permissions are kept; the token cannot be replayed.
+    permissions = api.get("/api/memory/permissions", headers=alice).json()
+    assert any(item["allowed"] for item in permissions)
+    assert api.post(
+        "/api/memory/forget-all", headers=alice, json={"confirm_token": token["confirm_token"]}
+    ).status_code == 400

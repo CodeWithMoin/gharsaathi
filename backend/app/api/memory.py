@@ -15,6 +15,7 @@ from app.memory.errors import (
     MemoryProhibitedUseError,
     MemoryTransitionError,
 )
+from app.memory.household import sensitive_category
 from app.memory.household_service import (
     ForgetAllTokenError,
     HouseholdPreferenceService,
@@ -23,10 +24,6 @@ from app.memory.household_service import (
 from app.memory.schemas import (
     ForgetAllConfirmationResponse,
     ForgetAllRequest,
-    ForgetAllResponse,
-    MemoryUndoResponse,
-    MemoryValueUpdate,
-    PreferenceConsent,
     MemoryCorrection,
     MemoryDecision,
     MemoryExtractionRequest,
@@ -53,7 +50,7 @@ def _raise_http(exc: Exception) -> None:
     if isinstance(exc, MemoryPolicyError):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     if isinstance(exc, ForgetAllTokenError):
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     if isinstance(exc, ValueError):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     if isinstance(exc, MemoryNotFoundError):
@@ -98,26 +95,7 @@ async def list_permissions(
     return [MemoryPermissionResponse.model_validate(item) for item in permissions]
 
 
-@router.get("/household-preferences/permission", response_model=PreferenceConsent)
-async def preference_consent(
-    session: DbSessionDependency,
-    actor: MemoryActorDependency,
-) -> PreferenceConsent:
-    allowed = await HouseholdPreferenceService(session).consent_on(actor)
-    return PreferenceConsent(allowed=allowed)
-
-
-@router.put("/household-preferences/permission", response_model=PreferenceConsent)
-async def set_preference_consent(
-    body: PreferenceConsent,
-    session: DbSessionDependency,
-    actor: MemoryActorDependency,
-) -> PreferenceConsent:
-    allowed = await HouseholdPreferenceService(session).set_consent(actor, body.allowed)
-    return PreferenceConsent(allowed=allowed)
-
-
-@router.post("/forget-all/confirmation", response_model=ForgetAllConfirmationResponse)
+@router.post("/forget-all/token", response_model=ForgetAllConfirmationResponse)
 async def forget_all_confirmation(
     session: DbSessionDependency,
     actor: MemoryActorDependency,
@@ -130,20 +108,16 @@ async def forget_all_confirmation(
     )
 
 
-@router.post("/forget-all", response_model=ForgetAllResponse)
+@router.post("/forget-all", status_code=status.HTTP_204_NO_CONTENT)
 async def forget_all(
     body: ForgetAllRequest,
     session: DbSessionDependency,
     actor: MemoryActorDependency,
-) -> ForgetAllResponse:
+) -> None:
     try:
-        deleted = await HouseholdPreferenceService(session).forget_all_confirmed(
-            actor, body.confirm_token
-        )
-        return ForgetAllResponse(deleted=deleted)
-    except Exception as exc:
-        _raise_http(exc)
-        raise AssertionError("unreachable")
+        await HouseholdPreferenceService(session).forget_all_confirmed(actor, body.confirm_token)
+    except ForgetAllTokenError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @router.post(
@@ -287,6 +261,14 @@ async def correct_memory(
     session: DbSessionDependency,
     actor: MemoryActorDependency,
 ) -> MemoryResponse:
+    category = sensitive_category(
+        body.text, *(str(value) for value in body.value.values() if isinstance(value, str))
+    )
+    if category is not None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(MemoryPolicyError(category)))
+    if body.value.get("origin") == "stated":
+        # An on-screen edit is an explicit statement, not something learned in passing.
+        body = body.model_copy(update={"value": {**body.value, "origin": "explicit"}})
     try:
         memory = await MemoryService(session).correct(actor, memory_id, body)
         return MemoryResponse.model_validate(memory)
@@ -295,39 +277,19 @@ async def correct_memory(
         raise AssertionError("unreachable")
 
 
-@router.post("/{memory_id}/update", response_model=MemoryResponse, status_code=status.HTTP_201_CREATED)
-async def update_memory_value(
-    memory_id: UUID,
-    body: MemoryValueUpdate,
-    session: DbSessionDependency,
-    actor: MemoryActorDependency,
-) -> MemoryResponse:
-    try:
-        memory = await HouseholdPreferenceService(session).update_value(
-            actor,
-            memory_id,
-            body.value,
-            body.item,
-            keep_item="item" not in body.model_fields_set,
-        )
-        return MemoryResponse.model_validate(memory)
-    except Exception as exc:
-        _raise_http(exc)
-        raise AssertionError("unreachable")
-
-
-@router.post("/{memory_id}/undo", response_model=MemoryUndoResponse)
+@router.post("/{memory_id}/undo", response_model=MemoryResponse | None)
 async def undo_memory(
     memory_id: UUID,
     session: DbSessionDependency,
     actor: MemoryActorDependency,
-) -> MemoryUndoResponse:
+) -> MemoryResponse | None:
+    """Revert a memory learned in passing (origin stated) within 24 hours.
+
+    Returns the memory it had replaced, now active again, or null.
+    """
     try:
         restored = await HouseholdPreferenceService(session).undo(actor, memory_id)
-        return MemoryUndoResponse(
-            undone_id=memory_id,
-            restored=MemoryResponse.model_validate(restored) if restored else None,
-        )
+        return MemoryResponse.model_validate(restored) if restored else None
     except Exception as exc:
         _raise_http(exc)
         raise AssertionError("unreachable")

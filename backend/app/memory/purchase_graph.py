@@ -83,6 +83,7 @@ class ReorderSuggestion(BaseModel):
 class RecalledPurchase(BaseModel):
     product_name: str
     provider: str
+    provider_item_id: str | None = None
     last_purchased_at: datetime
     purchase_count: int = Field(ge=1)
 
@@ -370,6 +371,7 @@ class PurchaseGraphService:
                 found[product.id] = RecalledPurchase(
                     product_name=product.name,
                     provider=product.provider,
+                    provider_item_id=product.provider_item_id,
                     last_purchased_at=observed,
                     purchase_count=1,
                 )
@@ -377,6 +379,7 @@ class PurchaseGraphService:
                 found[product.id] = RecalledPurchase(
                     product_name=current.product_name,
                     provider=current.provider,
+                    provider_item_id=current.provider_item_id,
                     last_purchased_at=max(current.last_purchased_at, observed),
                     purchase_count=current.purchase_count + 1,
                 )

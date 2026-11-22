@@ -86,6 +86,15 @@ HOUSEHOLD_PREFERENCE_TYPES: tuple[str, ...] = (
     "quantity_preference",
 )
 PREFERENCE_PURPOSE = "personalize_search"
+# The Settings switch toggles these categories (frontend memory-api.ts
+# PREFERENCE_CATEGORIES mirrors app.memory.recall.PREFERENCE_TYPES); preference
+# memory counts as "on" while any of them is allowed.
+CONSENT_TYPES: tuple[str, ...] = (
+    "brand_preference",
+    "pack_size_preference",
+    "quantity_preference",
+    "product_avoidance",
+)
 
 STORE_LABELS: dict[str, str] = {"swiggy_instamart": "Swiggy Instamart", "zepto": "Zepto"}
 _STORE_ALIASES: dict[str, str] = {

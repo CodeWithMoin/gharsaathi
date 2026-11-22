@@ -9,7 +9,7 @@ import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, type Approval, typ
 import { groupProductsForComparison, INITIAL_COMPARISON_GROUPS, ProductComparison, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
 import { basketSummary, collapseBasketCard, emptyTimeline, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordResults, restoreTimeline, summaryText, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
-import { stripNonSpeechAnnotations } from "./transcript-annotations.mjs";
+import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
 import { PersonalizationOnboarding } from "./personalization-onboarding";
 import { SupportPanel } from "./support-panel";
@@ -172,12 +172,12 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     setMessage(`${foundProducts.length} ${commerceMode === "demo" ? "demo" : "live"} options found.`);
   }, [commerceMode]);
   const handleVoiceTranscript = useCallback((turn: VoiceTranscriptTurn) => {
-    const content = stripNonSpeechAnnotations(turn.content);
+    const content = voiceTurnDisplayText(turn);
     setChatMessages((current) => {
       const index = current.findIndex((item) => item.id === turn.id);
       if (!content) return current;
       if (index === -1) {
-        const next = [...current, { ...turn, content, modality: "voice" as const, created_at: new Date().toISOString() }];
+        const next = [...current, { id: turn.id, role: turn.role, content, modality: "voice" as const, created_at: new Date().toISOString() }];
         chatMessagesRef.current = next;
         return next;
       }

@@ -14,7 +14,7 @@ import hmac
 import secrets
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,11 +33,12 @@ from app.memory.errors import (
     MemoryTransitionError,
 )
 from app.memory.household import (
+    CONSENT_TYPES,
     HOUSEHOLD_PREFERENCE_TYPES,
     PREFERENCE_PURPOSE,
     MemoryOrigin,
     PreferenceSpec,
-    kind_of,
+    origin_of,
     sensitive_category,
     spec_of,
 )
@@ -46,6 +47,7 @@ from app.memory.schemas import MemoryCorrection, MemoryPermissionUpsert, MemoryP
 from app.memory.service import MemoryService
 
 FORGET_ALL_TTL_SECONDS = 300
+UNDO_WINDOW = timedelta(hours=24)
 # Process-local signing key: a forget-all confirmation token is valid only on the
 # server process that issued it, for five minutes.
 _TOKEN_KEY = secrets.token_bytes(32)
@@ -101,7 +103,8 @@ class HouseholdPreferenceService:
 
     # Consent -----------------------------------------------------------------
     async def consent_on(self, actor: MemorySubject) -> bool:
-        for memory_type in HOUSEHOLD_PREFERENCE_TYPES:
+        """The Settings switch: any of the saved-preference categories allowed."""
+        for memory_type in CONSENT_TYPES:
             permission = await self.repository.get_permission(
                 actor.id, memory_type, PREFERENCE_PURPOSE
             )
@@ -285,37 +288,15 @@ class HouseholdPreferenceService:
             MemoryCorrection(**base.model_dump(), reason=reason),
         )
 
-    async def update_value(
-        self,
-        actor: MemorySubject,
-        memory_id: UUID,
-        value: str,
-        item: str | None,
-        *,
-        keep_item: bool,
-    ) -> MemoryItem:
-        """Settings edit: same kind, new value (and optionally a new item)."""
-        previous = await self._owned(actor, memory_id)
-        if previous.status != MemoryStatus.CONFIRMED:
-            raise MemoryTransitionError("Only an active memory can be edited.")
-        current = spec_of(previous)
-        kind = current.kind if current is not None else kind_of(previous)
-        if kind is None:
-            raise MemoryTransitionError("This memory cannot be edited; delete it instead.")
-        spec = PreferenceSpec(
-            kind=kind,  # type: ignore[arg-type]
-            item=(current.item if current is not None else None) if keep_item else item,
-            value=value,
-        )
-        return await self.replace(actor, previous, spec, origin="explicit", reason="Edited in Settings.")
-
     async def undo(self, actor: MemorySubject, memory_id: UUID) -> MemoryItem | None:
         """Remove a just-learned memory; restore the one it replaced, if any."""
         memory = await self._owned(actor, memory_id)
-        if memory.status not in {MemoryStatus.CONFIRMED, MemoryStatus.PROPOSED}:
-            raise MemoryTransitionError("Only an active or pending memory can be undone.")
+        if not self.undoable(memory):
+            raise MemoryTransitionError(
+                "Only a preference learned in passing in the last 24 hours can be undone."
+            )
         restored: MemoryItem | None = None
-        if memory.supersedes_memory_id is not None and memory.status == MemoryStatus.CONFIRMED:
+        if memory.supersedes_memory_id is not None:
             previous = await self.repository.get_memory(memory.supersedes_memory_id, actor.id)
             if previous is not None and previous.status == MemoryStatus.SUPERSEDED:
                 previous.status = MemoryStatus.CONFIRMED
@@ -327,6 +308,15 @@ class HouseholdPreferenceService:
         if restored is not None:
             await self.session.refresh(restored)
         return restored
+
+    @staticmethod
+    def undoable(memory: MemoryItem, now: datetime | None = None) -> bool:
+        if memory.status != MemoryStatus.CONFIRMED or origin_of(memory) != "stated":
+            return False
+        learned = memory.confirmed_at or memory.created_at
+        if learned.tzinfo is None:
+            learned = learned.replace(tzinfo=UTC)
+        return (now or datetime.now(UTC)) - learned < UNDO_WINDOW
 
     async def forget(self, actor: MemorySubject, memory_id: UUID) -> None:
         await self.memory.forget(actor, memory_id)
@@ -368,7 +358,11 @@ def issue_forget_all_token(subject_id: UUID, expires: int) -> str:
     return f"{expires}.{_signature(subject_id, expires)}"
 
 
+_USED_TOKENS: dict[str, int] = {}
+
+
 def verify_forget_all_token(subject_id: UUID, token: str, now: float | None = None) -> None:
+    """Check signature, owner and expiry, then burn the token (single use)."""
     try:
         raw_expires, signature = token.split(".", 1)
         expires = int(raw_expires)
@@ -376,5 +370,12 @@ def verify_forget_all_token(subject_id: UUID, token: str, now: float | None = No
         raise ForgetAllTokenError("Invalid confirmation token.") from exc
     if not hmac.compare_digest(signature, _signature(subject_id, expires)):
         raise ForgetAllTokenError("Invalid confirmation token.")
-    if expires < (now if now is not None else time.time()):
+    current = now if now is not None else time.time()
+    if expires < current:
         raise ForgetAllTokenError("Confirmation expired; ask again.")
+    for used, used_expires in list(_USED_TOKENS.items()):
+        if used_expires < current:
+            del _USED_TOKENS[used]
+    if token in _USED_TOKENS:
+        raise ForgetAllTokenError("Confirmation already used; ask again.")
+    _USED_TOKENS[token] = expires

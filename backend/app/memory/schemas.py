@@ -250,23 +250,6 @@ class MemoryExtractionResponse(BaseModel):
     proposals: list[MemoryResponse]
 
 
-class PreferenceConsent(BaseModel):
-    allowed: bool
-
-
-class MemoryValueUpdate(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    value: str = Field(min_length=2, max_length=80)
-    # Omit to keep the current item; send null to clear it.
-    item: str | None = Field(default=None, max_length=60)
-
-
-class MemoryUndoResponse(BaseModel):
-    undone_id: UUID
-    restored: MemoryResponse | None
-
-
 class ForgetAllConfirmationResponse(BaseModel):
     confirm_token: str
     count: int
@@ -275,7 +258,3 @@ class ForgetAllConfirmationResponse(BaseModel):
 
 class ForgetAllRequest(BaseModel):
     confirm_token: str = Field(min_length=8, max_length=200)
-
-
-class ForgetAllResponse(BaseModel):
-    deleted: int

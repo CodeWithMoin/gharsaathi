@@ -27,7 +27,7 @@ def detected_capabilities() -> set[str]:
     capabilities: set[str] = set()
     if "search_products" in tool_names:
         capabilities.update({"provider_price_fields", "product_search"})
-    if "search_products" in tool_names and "For several items, search each one separately." in BACKEND_INSTRUCTIONS:
+    if "search_products" in tool_names and "For several items, search each one separately" in BACKEND_INSTRUCTIONS:
         capabilities.add("multi_item_search")
     if "add_to_basket" in tool_names:
         capabilities.add("basket_add")
