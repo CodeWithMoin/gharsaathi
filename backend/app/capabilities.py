@@ -277,9 +277,13 @@ CAPABILITIES: tuple[Capability, ...] = (
     ),
     Capability(
         id="clear_basket",
-        title="Clear a store's basket",
-        voice=S(M, "No voice tool on this branch; a clear_basket tool over BasketService.clear is planned.", "codex/express-order"),
-        typed_chat=S(M, "Same as voice.", "codex/express-order"),
+        title="Empty the basket in one step",
+        voice=S(
+            W,
+            "clear_basket empties one store or every store in one revision-checked edit; the open "
+            "bill and order card are cancelled; refused while an order outcome is unknown.",
+        ),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
         ui=S(
             W,
             "Basket card 'Clear basket' opens a ConfirmDialog (destructive) naming the item "
@@ -288,9 +292,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         ),
         backend=S(
             W,
-            "BasketService.clear: one revision-checked edit (expected_revision = the basket the "
-            "user saw; 409 if it changed), supersedes any open bill and order card.",
+            "BasketService.clear (one revision-checked edit, supersedes the open bill and order "
+            "card); the route passes expected_revision = the basket the user saw (409 if it changed).",
         ),
+        voice_tools=("clear_basket",),
         routes=("POST /api/baskets/{provider}/clear",),
         ui_files=("frontend/app/basket/BasketPanel.tsx",),
     ),
@@ -349,6 +354,21 @@ CAPABILITIES: tuple[Capability, ...] = (
             "POST /api/quick-actions/recent-item",
         ),
         ui_files=("frontend/app/quick-chips.tsx", "frontend/app/quick-actions.mjs", "frontend/app/page.tsx"),
+    ),
+    Capability(
+        id="express_order",
+        title="Ask → tap: order or add named items in one turn",
+        voice=S(
+            W,
+            "express_order searches, picks a confident match (remembered, or the single product of "
+            "the named brand and size), adds and shows the order card in one call; quick_add does "
+            "the same for plain adds. Ambiguous items return needs_choice (one question).",
+        ),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
+        ui=S(W, "Same order card and basket card as prepare_order and add_to_basket."),
+        backend=S(W, "app/voice/express_tools.py; never approves or orders."),
+        voice_tools=("express_order", "quick_add"),
+        ui_files=("frontend/app/page.tsx",),
     ),
     Capability(
         id="view_basket",
@@ -926,6 +946,14 @@ UNMOUNTED_ROUTERS: dict[str, str] = {
 # be a defined voice tool.
 PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
     {
+        # express_order / quick_add / clear_basket result fields and statuses.
+        "also_in_basket",
+        "bill_breakdown",
+        "items_removed",
+        "named_brand_and_size",
+        "needs_choice",
+        "picked_because",
+        "several_matches",
         # read_attached_photo item fields and photo kinds.
         "printed_name",
         "search_query",

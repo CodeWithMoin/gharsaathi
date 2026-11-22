@@ -358,7 +358,7 @@ async def clear_basket(
     user_id: ConsentedUserIdDependency,
 ) -> BasketOut:
     try:
-        return basket_out(await service.clear(user_id, provider, body.expected_revision))
+        return basket_out(await service.clear(user_id, provider, expected_revision=body.expected_revision))
     except BasketConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     except ShoppingError as exc:

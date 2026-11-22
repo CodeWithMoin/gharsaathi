@@ -160,6 +160,8 @@ class ToolOutcome(BaseModel):
 
     model_output: dict[str, Any]
     ui_event: dict[str, Any] | None = None
+    # Events a multi-step tool (express order, clear basket) shows before ``ui_event``.
+    extra_ui_events: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def _product_for_model(product: Product) -> dict[str, Any]:

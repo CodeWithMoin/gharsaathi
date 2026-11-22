@@ -219,7 +219,7 @@ export function useQuickActions({ ready, addresses, onUserAction, onAssistantNot
 export function QuickToastView({ toast, onDismiss }: { toast: QuickToast; onDismiss: () => void }) {
   const [undoing, setUndoing] = useState(false);
   return (
-    <div role="status" aria-live="polite" className="pointer-events-auto flex min-w-0 max-w-full items-center gap-3 rounded-full sm:max-w-sm bg-inverse py-2 pl-4 pr-2 text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">
+    <div role="status" aria-live="polite" className="pointer-events-auto flex min-w-0 max-w-[calc(100vw_-_2rem)] items-center gap-3 rounded-full sm:max-w-sm bg-inverse py-2 pl-4 pr-2 text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">
       <span className="min-w-0 truncate">{toast.text}</span>
       {toast.undo && <button type="button" disabled={undoing} onClick={() => { setUndoing(true); void toast.undo?.().finally(() => { setUndoing(false); onDismiss(); }); }} className="shrink-0 rounded-full bg-inverse-hover px-3 py-1.5 text-xs font-semibold text-on-inverse transition-[transform,background-color] duration-150 ease-out hover:bg-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-on-inverse active:scale-[.97] disabled:opacity-60 motion-reduce:active:scale-100">{undoing ? "Undoing…" : "Undo"}</button>}
     </div>

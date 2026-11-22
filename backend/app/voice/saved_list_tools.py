@@ -128,6 +128,11 @@ class SavedListToolExecutor:
                     "(request_approval) for the store. Nothing was ordered."
                 ),
             },
+            # The store with most items added shows last (newest); any other store first.
+            extra_ui_events=[
+                {"type": "basket.updated", "provider": provider, "basket": _basket_ui(basket)}
+                for provider, basket in reversed(touched[1:])
+            ],
             ui_event=(
                 {
                     "type": "basket.updated",

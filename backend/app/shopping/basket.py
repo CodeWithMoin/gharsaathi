@@ -165,32 +165,6 @@ class BasketService:
 
         return await self._edit(household_id, provider, change)
 
-    async def clear(
-        self,
-        household_id: str,
-        provider: ProviderName,
-        expected_revision: int | None = None,
-    ) -> Basket:
-        """Remove every line of the store's open basket in one revision-checked edit.
-
-        With ``expected_revision`` the clear applies only to the basket the user
-        saw: if anyone changed it since, ``BasketConflict`` is raised and nothing
-        is removed. Like every edit it supersedes any open bill (and so any order
-        card bound to it). A basket in checkout or already ordered is refused.
-        Shared by ``POST /api/baskets/{provider}/clear`` and the voice/typed
-        ``clear_basket`` tool.
-        """
-
-        def change(basket: Basket) -> bool:
-            if expected_revision is not None and basket.revision != expected_revision:
-                raise BasketConflict("This basket changed. Review it and try again.")
-            if not basket.lines:
-                return False
-            basket.lines = []
-            return True
-
-        return await self._edit(household_id, provider, change)
-
     async def set_quantity(
         self, household_id: str, provider: ProviderName, variant_id: str, quantity: int
     ) -> Basket:
@@ -214,6 +188,31 @@ class BasketService:
     ) -> Basket:
         def change(basket: Basket) -> bool:
             del basket.lines[self._index(basket, variant_id)]
+            return True
+
+        return await self._edit(household_id, provider, change)
+
+    async def clear(
+        self,
+        household_id: str,
+        provider: ProviderName,
+        *,
+        expected_revision: int | None = None,
+    ) -> Basket:
+        """Empty the open basket in one revision-checked edit (supersedes its bill).
+
+        Refused like every edit while checkout is pending or its outcome is unknown.
+        With ``expected_revision`` (the on-screen "Clear basket") only the basket
+        the user saw is cleared: if anyone changed it since, ``BasketConflict`` is
+        raised and nothing is removed.
+        """
+
+        def change(basket: Basket) -> bool:
+            if expected_revision is not None and basket.revision != expected_revision:
+                raise BasketConflict("This basket changed. Review it and try again.")
+            if not basket.lines:
+                return False
+            basket.lines.clear()
             return True
 
         return await self._edit(household_id, provider, change)

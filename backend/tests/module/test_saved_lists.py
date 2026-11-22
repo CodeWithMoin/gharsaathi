@@ -223,12 +223,12 @@ async def test_recent_items_are_the_last_three_distinct_products(baskets: Basket
 async def test_clear_is_revision_checked(baskets: BasketService) -> None:
     basket = await baskets.add_lines(USER, "zepto", [line_of(item("v1", "Milk")), line_of(item("v2", "Curd"))])
     with pytest.raises(BasketConflict):
-        await baskets.clear(USER, "zepto", basket.revision - 1)
+        await baskets.clear(USER, "zepto", expected_revision=basket.revision - 1)
     assert len((await baskets.active(USER, "zepto")).lines) == 2
-    cleared = await baskets.clear(USER, "zepto", basket.revision)
+    cleared = await baskets.clear(USER, "zepto", expected_revision=basket.revision)
     assert cleared.lines == [] and cleared.revision == basket.revision + 1
     # Clearing an empty basket changes nothing.
-    assert (await baskets.clear(USER, "zepto", cleared.revision)).revision == cleared.revision
+    assert (await baskets.clear(USER, "zepto", expected_revision=cleared.revision)).revision == cleared.revision
 
 
 # --- API -----------------------------------------------------------------------

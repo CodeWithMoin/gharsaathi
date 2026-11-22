@@ -8,7 +8,8 @@ from app.shopping.money import format_rupees
 from app.voice.address_book_tools import ListArguments as AddressListArguments
 from app.voice.address_book_tools import SelectArguments as AddressSelectArguments
 from app.voice.address_tools import OpenAddressFormArguments
-from app.voice.basket_tools import AddArguments, QuantityArguments, StoreArguments
+from app.voice.basket_tools import AddArguments, ClearArguments, QuantityArguments, StoreArguments
+from app.voice.express_tools import ExpressArguments
 from app.voice.memory_tools import RecallArguments
 from app.voice.photo_tools import PhotoArguments
 from app.voice.order_status_tools import RecentArguments, StatusArguments
@@ -66,6 +67,10 @@ REGRESSION_CASE_IDS = {
     "order_request_prepares_card",
     "approve_request_prepares_card",
     "unconfirmed_order_not_claimed_placed",
+    "express_order_delegates_without_question",
+    "usual_milk_order_delegates_without_question",
+    "plain_add_delegates_without_asking_first",
+    "clear_cart_delegates_one_line",
 }
 
 
@@ -392,7 +397,7 @@ def test_few_shot_examples_are_labelled_and_roman_except_explicit_hindi(
                 assert ratio >= 0.3, line
             else:
                 assert ratio == 0.0, line
-    assert 6 <= assistant_lines <= 24
+    assert 6 <= assistant_lines <= 28
     assert hindi_replies == 1
 
 
@@ -434,6 +439,9 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "list_preferences": ListArguments,
         "confirm_memory": DecisionArguments,
         "prepare_order": StoreArguments,
+        "clear_basket": ClearArguments,
+        "express_order": ExpressArguments,
+        "quick_add": ExpressArguments,
         "list_delivery_addresses": AddressListArguments,
         "select_delivery_address": AddressSelectArguments,
         "read_attached_photo": PhotoArguments,
@@ -467,7 +475,8 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
     for index, line in enumerate(lines_text):
         if line.startswith("Assistant:") and "Place order" in line:
             result = json.loads(lines_text[index - 1].removeprefix("Tool result:"))
-            assert result["status"] == "awaiting_tap", line
+            # prepare_order's awaiting_tap, or express_order's ready (same order card).
+            assert result["status"] in {"awaiting_tap", "ready"}, line
         if line.startswith("Assistant:"):
             assert "order ho gaya" not in line.casefold(), line
     lines = _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n")
