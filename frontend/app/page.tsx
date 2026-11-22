@@ -1,10 +1,11 @@
 "use client";
 
 import { useClerk, useUser } from "@clerk/nextjs";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Basket, ChatCircleDots, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
+import { DRAWER_SPRING, pushOffset, restoreScrollTarget, viewportInsets, type DrawerName } from "./drawer-push.mjs";
 import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, useSetBasketLineQuantity, type Approval, type ApprovalRequest, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
 import { ProductOptions, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
@@ -14,7 +15,7 @@ import { conversationTitle, relativeChatDate, searchConversations, visibleConver
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
 import { PersonalizationOnboarding } from "./personalization-onboarding";
-import { SupportPanel } from "./support-panel";
+import { SupportDialog } from "./support-panel";
 import { VoicePanel, useVoicePrewarm, type VoiceAddressFormRequest, type VoiceTranscriptTurn } from "./voice-panel";
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
 import { FirstRunOnboarding } from "./first-run-onboarding";
@@ -493,9 +494,72 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     await conversationSaveQueueRef.current.catch(() => undefined);
   }, []);
 
+  // While a drawer is open the page is frozen into a viewport-sized card (fixed, scrolled by
+  // translateY) so the push transform never re-anchors the fixed header/composer to the
+  // document; once closed the card has transform: none and the window scroll is restored.
+  const drawer: DrawerName | null = chatDrawerOpen ? "chats" : accountSettingsOpen ? "settings" : null;
+  const reducedMotion = useReducedMotion() ?? false;
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [insets, setInsets] = useState({ top: 0, bottom: 0 });
+  const [push, setPush] = useState<{ side: DrawerName; scrollY: number } | null>(null);
+  const pushRef = useRef<{ side: DrawerName; scrollY: number } | null>(null);
+  const restoreScrollRef = useRef<number | null>(null);
+  const openDrawer = (next: DrawerName) => {
+    setChatDrawerOpen(next === "chats");
+    setAccountSettingsOpen(next === "settings");
+  };
+  // Order help is a popup; the settings drawer row (and later a `support.open` UI event) opens it.
+  const openSupport = useCallback(() => {
+    setChatDrawerOpen(false);
+    setAccountSettingsOpen(false);
+    setSupportOpen(true);
+  }, []);
+  const releasePush = useCallback(() => {
+    if (!pushRef.current) return;
+    restoreScrollRef.current = pushRef.current.scrollY;
+    pushRef.current = null;
+    setPush(null);
+  }, []);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const update = () => {
+      setViewportWidth(window.innerWidth);
+      const next = viewport ? viewportInsets({ layoutHeight: window.innerHeight, visualHeight: viewport.height, visualOffsetTop: viewport.offsetTop, scale: viewport.scale }) : { top: 0, bottom: 0 };
+      setInsets((current) => current.top === next.top && current.bottom === next.bottom ? current : next);
+    };
+    update();
+    window.addEventListener("resize", update);
+    viewport?.addEventListener("resize", update);
+    viewport?.addEventListener("scroll", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      viewport?.removeEventListener("resize", update);
+      viewport?.removeEventListener("scroll", update);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (drawer) {
+      if (pushRef.current?.side === drawer) return;
+      scrollAnimatingRef.current = false;
+      pushRef.current = { side: drawer, scrollY: pushRef.current?.scrollY ?? window.scrollY };
+      setPush(pushRef.current);
+    } else if (reducedMotion) {
+      releasePush();
+    }
+  }, [drawer, reducedMotion, releasePush]);
+
+  useLayoutEffect(() => {
+    if (push || restoreScrollRef.current === null) return;
+    const savedScrollY = restoreScrollRef.current;
+    restoreScrollRef.current = null;
+    window.scrollTo(0, restoreScrollTarget({ savedScrollY, follow: followScrollRef.current, scrollHeight: document.documentElement.scrollHeight, viewportHeight: window.innerHeight }));
+  }, [push]);
+
   useEffect(() => {
     const updateFollow = () => {
-      if (scrollAnimatingRef.current) return;
+      if (scrollAnimatingRef.current || pushRef.current) return;
       followScrollRef.current = isNearBottom({ scrollTop: window.scrollY, viewportHeight: window.innerHeight, scrollHeight: document.documentElement.scrollHeight });
     };
     // A wheel, touch or key scroll by the reader stops any auto-scroll in progress.
@@ -512,8 +576,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   }, []);
 
   useEffect(() => {
-    if (!chatHydrated || (!submittedQuery && !chatMessages.length && !timeline.live.length && !voiceOpen && !supportOpen && !trackingOpen)) return;
-    if (!followScrollRef.current) return;
+    if (!chatHydrated || (!submittedQuery && !chatMessages.length && !timeline.live.length && !voiceOpen && !trackingOpen)) return;
+    if (!followScrollRef.current || pushRef.current) return;
     let frame = window.requestAnimationFrame(() => {
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const destination = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
@@ -543,7 +607,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       window.cancelAnimationFrame(frame);
       scrollAnimatingRef.current = false;
     };
-  }, [chatHydrated, chatMessages, loading, submittedQuery, supportOpen, timeline, trackingOpen, voiceOpen]);
+  }, [chatHydrated, chatMessages, loading, submittedQuery, timeline, trackingOpen, voiceOpen]);
 
   async function startNewChat() {
     if (conversationSaveTimerRef.current !== null) {
@@ -679,7 +743,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       chatMessagesRef.current = withReply;
       setChatMessages(withReply);
       for (const event of turn.ui_events) {
-        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onOrderConfirmation: handleOrderConfirmation });
+        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onOrderConfirmation: handleOrderConfirmation, onSupportOpen: openSupport });
         if (outcome?.kind === "not_connected") setSetupOpen(true);
         if (outcome?.ack && outcome.ackId) void outcome.ack.then((ack) => { pendingTypedAcksRef.current.push(ack); });
         if (outcome) setMessage(outcome.message);
@@ -864,7 +928,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   return <main className="grain min-h-[100dvh] overflow-hidden bg-surface-muted text-ink">
     <AnimatePresence>
       {chatDrawerOpen && <>
-        <motion.aside initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -24, opacity: 0 }} transition={{ type: "spring", stiffness: 360, damping: 36 }} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-20 flex w-3/4 max-w-[360px] flex-col bg-surface-muted">
+        <motion.aside initial={{ x: reducedMotion ? 0 : -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: reducedMotion ? 0 : -24, opacity: 0 }} transition={DRAWER_SPRING} aria-label="Shopping chats" className="fixed inset-y-0 left-0 z-[35] flex w-3/4 max-w-[360px] flex-col bg-surface-muted">
           <div className="flex items-center gap-2 px-3 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
             <Brand dense />
             <button type="button" onClick={() => setChatDrawerOpen(false)} aria-label="Close chats" className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface-strong active:scale-[.96]"><X size={18} /></button>
@@ -912,22 +976,21 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         </motion.aside>
       </>}
     </AnimatePresence>
-    <motion.div animate={{ x: chatDrawerOpen ? "min(75vw, 360px)" : "0px" }} transition={{ type: "spring", stiffness: 360, damping: 36 }} className={`relative z-30 min-h-[100dvh] bg-surface-muted ${chatDrawerOpen ? "overflow-hidden rounded-l-[88px] [corner-shape:squircle]" : ""}`}>
+    <motion.div animate={{ x: pushOffset(drawer, viewportWidth, reducedMotion) }} transition={DRAWER_SPRING} transformTemplate={(_, generated) => push ? generated : "none"} onAnimationComplete={() => { if (!drawer) releasePush(); }} className={`${push ? "fixed inset-0 overflow-hidden" : "relative min-h-[100dvh]"} z-30 bg-surface-muted ${push && !reducedMotion ? `${push.side === "chats" ? "rounded-l-[88px]" : "rounded-r-[88px]"} [corner-shape:squircle]` : ""}`}>
     <AnimatePresence>
-      {chatDrawerOpen && <motion.button type="button" aria-label="Close chats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setChatDrawerOpen(false)} className="fixed inset-0 z-40 bg-scrim/20" />}
+      {drawer && <motion.button type="button" aria-label={drawer === "chats" ? "Close chats" : "Close account settings"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setChatDrawerOpen(false); setAccountSettingsOpen(false); }} className="fixed inset-0 z-40 bg-scrim/20" />}
     </AnimatePresence>
-    <header className="fixed inset-x-0 top-0 z-30 bg-surface shadow-[0_10px_35px_-30px_rgb(var(--shadow)/.7)]">
+    <header style={{ top: insets.top }} className="fixed inset-x-0 top-0 z-30 bg-surface pt-[env(safe-area-inset-top)] shadow-[0_10px_35px_-30px_rgb(var(--shadow)/.7)]">
       <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
-        <button type="button" onClick={() => setChatDrawerOpen(true)} aria-label="Open shopping chats" className="grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-accent-soft active:scale-[.96]"><List size={21} /></button>
+        <button type="button" onClick={() => openDrawer("chats")} aria-label="Open shopping chats" className="grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-accent-soft active:scale-[.96]"><List size={21} /></button>
         <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
           {basketCount > 0 && <button onClick={() => { if (headerCardIsNewest) { hideBasket(cartProvider); return; } followScrollRef.current = true; setBasketProvider(cartProvider); showBasketAtLatest(cartProvider, billStageRef.current[cartProvider] ?? "updated"); }} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-ink-secondary transition hover:bg-accent-soft active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-accent px-1 text-[9px] font-bold leading-4 text-on-accent">{basketCount}</span></button>}
-          <button type="button" onClick={() => setSupportOpen((open) => !open)} aria-label="Get help with an order" className={`grid size-10 place-items-center rounded-full transition active:scale-[.96] ${supportOpen ? "bg-border text-accent-strong" : "bg-white/70 text-ink-secondary hover:bg-surface-muted"}`}><ChatCircleDots size={21} weight={supportOpen ? "fill" : "regular"} /></button>
-          <button onClick={() => setAccountSettingsOpen(true)} aria-label={`Open account and store settings. ${connectionLabel}`} className={`relative ml-0.5 grid size-10 place-items-center rounded-full transition active:scale-[.98] ${accountSettingsOpen ? "bg-accent-soft text-accent-strong" : "bg-white/70 text-ink-secondary hover:bg-surface-muted"}`}><Storefront size={18} className="text-accent" /><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-surface ${readyStoreCount > 0 ? "bg-success" : "bg-subtle"}`} aria-hidden="true" /></button>
+          <button onClick={() => openDrawer("settings")} aria-label={`Open account and store settings. ${connectionLabel}`} className={`relative ml-0.5 grid size-10 place-items-center rounded-full transition active:scale-[.98] ${accountSettingsOpen ? "bg-accent-soft text-accent-strong" : "bg-white/70 text-ink-secondary hover:bg-surface-muted"}`}><Storefront size={18} className="text-accent" /><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-surface ${readyStoreCount > 0 ? "bg-success" : "bg-subtle"}`} aria-hidden="true" /></button>
         </nav>
       </div>
     </header>
 
-    <section className="mx-auto flex min-h-[100dvh] max-w-4xl flex-col overflow-x-clip px-4 pb-40 pt-[96px] sm:px-6 sm:pb-44">
+    <section style={push ? { transform: `translateY(${-push.scrollY}px)` } : undefined} className="mx-auto flex min-h-[100dvh] max-w-4xl flex-col overflow-x-clip px-4 pb-40 pt-[calc(96px+env(safe-area-inset-top))] sm:px-6 sm:pb-44">
       <div className="flex-1">
         <div className="mb-5 sm:mb-8"><span className="text-[10px] font-semibold uppercase tracking-[.18em] text-subtle">Today</span></div>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mr-7 sm:mr-12">
@@ -967,19 +1030,19 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         {chatFailure && loading !== "assistant" && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div role="alert" className="max-w-md rounded-[8px_22px_22px_22px] bg-surface px-5 py-4 shadow-[0_16px_38px_-34px_rgb(var(--shadow)/.7)]"><p className="text-sm leading-6 text-danger-hover">{chatFailure.message}</p><button type="button" onClick={() => { const failedQuery = chatFailure.query; setChatFailure(null); void runDirectSearch(failedQuery); }} className="mt-3 flex items-center gap-1.5 rounded-full bg-inverse px-4 py-2 text-xs font-semibold text-on-inverse transition active:scale-[.97]"><MagnifyingGlass size={14} /> Search directly</button></div></motion.div>}
         {chatSaveFailed && <p role="status" className="mt-6 text-center text-[11px] leading-4 text-danger-hover">This chat hasn&apos;t been saved yet. GharSaathi will try again with your next message.</p>}
 
-        <AnimatePresence>{supportOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><SupportPanel onClose={() => setSupportOpen(false)} onTrackOrder={() => { setSupportOpen(false); setTrackingOpen(true); }} /></motion.div>}</AnimatePresence>
         <AnimatePresence>{trackingOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><LiveOrderTracking initialAddressId={addressId || undefined} onClose={() => setTrackingOpen(false)} /></motion.div>}</AnimatePresence>
       </div>
     </section>
 
-    <div className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-4 pt-10 sm:pb-6">
+    <div style={{ bottom: insets.bottom }} className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <AnimatePresence mode="wait">
-        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onOrderConfirmation={handleOrderConfirmation} beforeSessionStart={flushConversationSave} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
+        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} beforeSessionStart={flushConversationSave} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
           <div className="flex items-center gap-2 rounded-[26px] border border-border-strong bg-surface p-2 pl-5 shadow-[0_24px_60px_-28px_rgb(var(--shadow)/.55),inset_0_1px_0_rgba(255,255,255,.9)]"><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search" || loading === "assistant"} className="min-w-0 flex-1 bg-transparent py-2 text-[15px] outline-none placeholder:text-subtle disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() ? <button type="submit" aria-label="Send request" disabled={loading === "search" || loading === "assistant"} className="grid size-12 shrink-0 place-items-center rounded-full bg-inverse text-on-inverse transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} onPointerEnter={prewarmVoice} onPointerDown={prewarmVoice} onFocus={prewarmVoice} disabled={loading === "search" || loading === "assistant"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[0_12px_30px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-accent" /><Microphone size={23} /></button>}</div>
           <p className="mt-2.5 text-center text-[10px] text-muted">Hindi · English · Hinglish &nbsp;·&nbsp; You approve every purchase</p>
         </motion.form>}
       </AnimatePresence>
     </div>
+    </motion.div>
 
     <AccountSettingsSheet
       open={accountSettingsOpen}
@@ -1013,6 +1076,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         else void selectAddress(id);
       }}
       onManagePreferences={onOpenSetup ? () => { setAccountSettingsOpen(false); onOpenSetup(); } : undefined}
+      onOpenSupport={openSupport}
       onSignOut={() => void signOut({ redirectUrl: "/" })}
     />
 
@@ -1054,6 +1118,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         void (disconnectConfirm.store === "zepto" ? disconnectZepto() : disconnect()).then((done) => { if (done) setDisconnectConfirm((current) => ({ ...current, open: false })); });
       }}
     />
+    <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} onTrackOrder={() => { setSupportOpen(false); setTrackingOpen(true); }} />
     <AddressFormSheet open={addressPopupOpen} prefillRequest={addressPrefillRequest} onAdded={applyAddedZeptoAddress} onClose={closeAddressPopup} onPrefillApplied={handleAddressPrefillApplied} />
     <AnimatePresence>
       {setupOpen && (
@@ -1087,7 +1152,6 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         </motion.div>
       )}
     </AnimatePresence>
-    </motion.div>
   </main>;
 }
 

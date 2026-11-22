@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   Brain,
@@ -8,6 +8,7 @@ import {
   Check,
   CircleNotch,
   Eye,
+  Lifebuoy,
   MapPin,
   PencilSimple,
   ShieldCheck,
@@ -17,6 +18,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import Image from "next/image";
+import { DRAWER_SPRING } from "./drawer-push.mjs";
 import { ADDRESS_FORM_OPTIONS } from "./onboarding-flow.mjs";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useApiRequest } from "./authenticated-api";
@@ -65,6 +67,8 @@ export type AccountSettingsSheetProps = {
   onSelectAddress?: (addressId: string) => void;
   /** Opens the "Choose delivery address" popup for one connected store. */
   onChooseStoreAddress?: (storeId: string) => void;
+  /** Opens the Order help popup (the header no longer has its own help button). */
+  onOpenSupport?: () => void;
   onSignOut: () => void;
   signOutPending?: boolean;
 };
@@ -92,12 +96,14 @@ export function AccountSettingsSheet({
   onManageAddresses,
   onSelectAddress,
   onChooseStoreAddress,
+  onOpenSupport,
   onSignOut,
   signOutPending = false,
 }: AccountSettingsSheetProps) {
   const [section, setSection] = useState<SettingsSection>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
+  const reducedMotion = useReducedMotion() ?? false;
   const connectedStoreCount = stores.filter((store) => store.connected).length;
   const addressSummary = addresses.length === 0
     ? "Add a delivery address"
@@ -135,18 +141,18 @@ export function AccountSettingsSheet({
             ? "Addresses"
             : "Account";
 
+  // A right-side push drawer: the page shell in page.tsx slides left by the same width with
+  // the same spring and owns the backdrop, so tapping the pushed page closes this panel.
   return <AnimatePresence>
-    {open && <motion.div className="fixed inset-0 z-50 flex items-stretch justify-start" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <button type="button" aria-label="Close account settings" className="absolute inset-0 cursor-default bg-scrim/35 backdrop-blur-[2px]" onClick={close} />
-      <motion.section
+    {open && <motion.section
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`relative flex h-[100dvh] ${section === "memory" ? "w-[min(94vw,420px)]" : "w-[min(75vw,360px)]"} flex-col overflow-hidden rounded-r-[36px] border-r border-border-strong bg-surface text-ink shadow-[18px_0_55px_-36px_rgb(var(--shadow)/.52)] [corner-shape:squircle]`}
-        initial={{ x: "-100%", opacity: 0.85 }}
+        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${section === "memory" ? "w-[min(94vw,420px)]" : "w-3/4 max-w-[360px]"} flex-col overflow-hidden bg-surface-muted text-ink`}
+        initial={{ x: reducedMotion ? 0 : 24, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
-        exit={{ x: "-100%", opacity: 0.85 }}
-        transition={{ type: "spring", damping: 28, stiffness: 330 }}
+        exit={{ x: reducedMotion ? 0 : 24, opacity: 0 }}
+        transition={DRAWER_SPRING}
       >
         <header className="flex items-center justify-between px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
           {section ? <button type="button" onClick={() => setSection(null)} className="grid size-11 place-items-center rounded-full text-ink-secondary transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Back to account settings"><ArrowLeft size={20} weight="bold" /></button> : <span className="size-11" />}
@@ -168,7 +174,8 @@ export function AccountSettingsSheet({
                   <SettingsRow icon={<Translate size={21} weight="duotone" />} title="Preferences" subtitle={languageLabel} onClick={() => setSection("preferences")} />
                   <SettingsRow icon={<Brain size={21} weight="duotone" />} title="Saved preferences" subtitle="Preferences, never, rules" onClick={() => setSection("memory")} />
                   <SettingsRow icon={<ShieldCheck size={21} weight="duotone" />} title="Privacy & memory" subtitle={privacySummary} onClick={() => setSection("privacy")} />
-                  <SettingsRow icon={<MapPin size={21} weight="duotone" />} title="Addresses" subtitle={addressSummary} onClick={() => setSection("addresses")} last />
+                  <SettingsRow icon={<MapPin size={21} weight="duotone" />} title="Addresses" subtitle={addressSummary} onClick={() => setSection("addresses")} last={!onOpenSupport} />
+                  {onOpenSupport && <SettingsRow icon={<Lifebuoy size={21} weight="duotone" />} title="Help with an order" subtitle="Missing, damaged or late items" onClick={onOpenSupport} last />}
                 </nav>
 
                 <button type="button" onClick={onSignOut} disabled={signOutPending} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-accent-border bg-surface px-4 text-sm font-semibold text-danger transition hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-55">
@@ -184,8 +191,7 @@ export function AccountSettingsSheet({
               </motion.div>}
           </AnimatePresence>
         </div>
-      </motion.section>
-    </motion.div>}
+      </motion.section>}
   </AnimatePresence>;
 }
 

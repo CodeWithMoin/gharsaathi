@@ -128,3 +128,14 @@ test("household annotations and backend price strings reach the results handler 
   applyAssistantEvent({ type: "tool.results", query: "doodh", products: [product] }, { onResults: (_query, products) => { received = products; } });
   assert.deepEqual(received, [product]);
 });
+
+test("support.open shows the Order help popup and nothing else", () => {
+  let opened = 0;
+  const outcome = applyAssistantEvent({ type: "support.open", order_id: "ignored" }, { onSupportOpen: () => { opened += 1; } });
+  assert.equal(opened, 1);
+  assert.equal(outcome.kind, "support");
+});
+
+test("support.open is ignored when the screen cannot show Order help", () => {
+  assert.equal(applyAssistantEvent({ type: "support.open" }, {}), null);
+});
