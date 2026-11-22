@@ -152,7 +152,10 @@ def quote_from_cod_preview(basket: Basket, payload: dict[str, Any], quoted_at: d
     ]
 
     basket_quantity = sum(line.quantity for line in basket.lines)
-    if total_items is not None and total_items != basket_quantity:
+    # Zepto reports ``totalItems`` as the number of distinct products, while some
+    # previews count units. Either is consistent; per-item quantities are checked
+    # exactly by ``_validate_exact_items``.
+    if total_items is not None and total_items not in {basket_quantity, len(basket.lines)}:
         raise ZeptoPreviewRefused(
             "Zepto preview has a different item quantity than the basket.",
             step="totalItems",
