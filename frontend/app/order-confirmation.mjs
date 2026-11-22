@@ -37,7 +37,7 @@ const AUTO_CHECK_LIMIT = 20;
  * }} OrderConfirmation
  */
 /**
- * @typedef {{ status: "open" } | { status: "placing" } | { status: "placed", orderId: string }
+ * @typedef {{ status: "open" } | { status: "placing" } | { status: "placed", orderId: string, tracking?: unknown }
  *   | { status: "unknown" } | { status: "failed", reason: string } | { status: "cancelling" }
  *   | { status: "cancelled" } | { status: "expired" } | { status: "switching" }
  *   | { status: "awaiting_payment", checkoutId: string, url: string | null }
@@ -228,7 +228,8 @@ export function orderCardStateFromResponse(outcome) {
     const orderId = text(body?.provider_order_id);
     const checkoutId = text(body?.checkout_id);
     switch (body?.status) {
-      case "confirmed": return orderId ? { status: "placed", orderId } : { status: "unknown" };
+      // `tracking` is the read-only status monitor the backend started for this order, if any.
+      case "confirmed": return orderId ? { status: "placed", orderId, tracking: body?.tracking ?? null } : { status: "unknown" };
       case "awaiting_payment": return checkoutId ? { status: "awaiting_payment", checkoutId, url: safePaymentUrl(body?.payment?.url) } : { status: "payment_unknown", checkoutId: null };
       case "payment_succeeded": return checkoutId ? { status: "payment_succeeded", checkoutId } : { status: "payment_unknown", checkoutId: null };
       case "payment_unknown": return { status: "payment_unknown", checkoutId };

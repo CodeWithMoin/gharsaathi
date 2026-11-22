@@ -259,6 +259,29 @@ def parse_allowed_methods(raw: str) -> frozenset[PaymentMethod]:
     return frozenset(method for method in PREPAID_METHODS if method in names)
 
 
+def prepaid_payments_offered(
+    settings: Any, contract: ZeptoPaymentContract | None = None
+) -> bool:
+    """Whether any prepaid method can be offered at all (no provider call).
+
+    Drives the assistant's payment rules: False keeps the cash-on-delivery-only
+    prompt. ``contract`` defaults to ``VERIFIED_CONTRACT``.
+    """
+
+    contract = VERIFIED_CONTRACT if contract is None else contract
+    if (
+        contract is None
+        or getattr(settings, "commerce_mode", "demo") != "live"
+        or not getattr(settings, "zepto_online_payments_enabled", False)
+    ):
+        return False
+    allowed = parse_allowed_methods(getattr(settings, "zepto_payment_methods_allowed", ""))
+    return any(
+        method in contract.per_method and method in contract.methods.identifiers
+        for method in allowed
+    )
+
+
 @dataclass
 class ZeptoPaymentGateway:
     """Zepto's prepaid order tools behind the feature flag and verified contract.

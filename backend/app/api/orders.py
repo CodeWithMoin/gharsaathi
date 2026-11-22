@@ -7,9 +7,10 @@ returns a fresh card; checking a payment makes one status read and never
 repeats the order call. No route accepts a PIN, card number or OTP.
 """
 
+import logging
 from typing import Literal, NoReturn
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth import UserIdDependency
@@ -26,9 +27,12 @@ from app.shopping.errors import (
     ProviderUnavailable,
     ShoppingError,
 )
+from app.tracking.models import StartTrackingRequest, TrackingProvider, TrackingRead
+from app.tracking.service import OrderTrackingService
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class ConfirmationRequest(BaseModel):
@@ -66,6 +70,9 @@ class OrderConfirmOut(BaseModel):
     payable: OrderMoney
     checkout_id: str | None = None
     payment: PaymentOut
+    # Read-only status monitor started for a provider-confirmed order; null when
+    # the order is unconfirmed or tracking could not start (the order stands).
+    tracking: TrackingRead | None = None
 
 
 class PaymentMethodOption(BaseModel):
@@ -86,7 +93,7 @@ class OrderCancelOut(BaseModel):
     status: Literal["cancelled"]
 
 
-def _result_out(result: OrderResult) -> OrderConfirmOut:
+def _result_out(result: OrderResult, *, tracking: TrackingRead | None = None) -> OrderConfirmOut:
     return OrderConfirmOut(
         status=result.status,
         store=result.store,
@@ -98,6 +105,7 @@ def _result_out(result: OrderResult) -> OrderConfirmOut:
             label=payment_label(result.payment_method),
             url=result.payment_url,
         ),
+        tracking=tracking,
     )
 
 
@@ -128,6 +136,7 @@ def _raise_http(exc: ShoppingError) -> NoReturn:
 @router.post("/confirm", response_model=OrderConfirmOut)
 async def confirm_order(
     body: ConfirmationRequest,
+    request: Request,
     response: Response,
     confirmations: OrderConfirmationsDependency,
     checkout: CheckoutServiceDependency,
@@ -139,7 +148,7 @@ async def confirm_order(
         _raise_http(exc)
     if result.status != "confirmed":
         response.status_code = status.HTTP_202_ACCEPTED
-    return _result_out(result)
+    return _result_out(result, tracking=await _start_tracking(request, user_id, result))
 
 
 @router.post("/payment-method", response_model=OrderCardOut)
@@ -160,6 +169,7 @@ async def change_payment_method(
 @router.post("/payment-status", response_model=OrderConfirmOut)
 async def check_payment_status(
     body: PaymentStatusRequest,
+    request: Request,
     response: Response,
     confirmations: OrderConfirmationsDependency,
     checkout: CheckoutServiceDependency,
@@ -171,7 +181,30 @@ async def check_payment_status(
         _raise_http(exc)
     if result.status != "confirmed":
         response.status_code = status.HTTP_202_ACCEPTED
-    return _result_out(result)
+    # A prepaid order confirmed by a status check is tracked like any other.
+    return _result_out(result, tracking=await _start_tracking(request, user_id, result))
+
+
+async def _start_tracking(request: Request, user_id: str, result: OrderResult) -> TrackingRead | None:
+    """Watch a provider-confirmed Zepto order (idempotent per order).
+
+    Only reads order status. A tracking failure never changes the order outcome.
+    """
+
+    # Only Zepto orders can be confirmed here (ORDERABLE_PROVIDERS).
+    if result.status != "confirmed" or not result.provider_order_id:
+        return None
+    service = getattr(request.app.state, "order_tracking_service", None)
+    if not isinstance(service, OrderTrackingService):
+        return None
+    try:
+        return await service.ensure(
+            user_id,
+            StartTrackingRequest(provider=TrackingProvider.ZEPTO, order_id=result.provider_order_id),
+        )
+    except Exception as exc:  # noqa: BLE001 - the order is placed; tracking is best effort
+        logger.warning("event=order_auto_track_failed error=%s", type(exc).__name__)
+        return None
 
 
 @router.post("/cancel", response_model=OrderCancelOut)

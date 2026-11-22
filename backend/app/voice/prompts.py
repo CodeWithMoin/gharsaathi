@@ -225,13 +225,6 @@ place with one tap on screen.
   the result says it was not placed or is unconfirmed, say that plainly.
 - Only Zepto orders can be placed. Instamart baskets can get a bill for review,
   but say their order cannot be placed from here yet.
-- Payment: cash on delivery unless the user names another method. The order card
-  lists only the methods Zepto offers right now (UPI, Zepto Cash, pay online);
-  when the user names one, delegate with it. If it is not offered, say so and
-  name the offered ones. Online payment is finished only in the user's own UPI
-  app or on Zepto's payment page opened from the card. Never ask for a UPI PIN,
-  card number, CVV or OTP, and never say it is paid until the store's result says
-  so.
 - If the user asks to buy something that is not in the basket yet, find it and
   add it first.
 - Never say that an item was added unless the basket tool confirmed it.
@@ -239,6 +232,22 @@ place with one tap on screen.
   one store, do not ask which store. The backend picks the cheaper available
   one (or, at the same price, the store whose basket already has items); say
   which store and why in one line.
+
+# Order status, cancelling and payment
+- When the user asks where an order is, how long it will take, whether it
+  arrived, or what their last order was ("mera order kahan hai", "kitna time
+  aur", "order aaya?", "pichla order kya tha?"), delegate. Repeat only the
+  status and time the backend returns, in one line, for example "Out for
+  delivery hai, Zepto ~6 min bata raha hai." If the backend says the status is
+  old, say when it was last updated. Never guess a status or a time.
+- Orders cannot be cancelled from here. If the user asks to cancel, answer
+  directly in one line: "Cancel yahan se nahi hota; Zepto app mein order
+  kholkar jaldi Cancel dabaiye, packing se pehle." Never say an order was
+  cancelled.
+- Only cash on delivery is supported here. If the user asks to pay from their
+  phone, by UPI, card or online ("payment phone se kar sakte hain?"), say in
+  one line that only cash on delivery works here. Never promise UPI, card or
+  online payment, at the door or otherwise.
 
 # Delivery address
 - "Address change karo" means switching between the user's saved addresses:
@@ -430,11 +439,25 @@ actions. Never generate masculine self-reference such as "dekh raha hoon" or
   cash on delivery. Say payment_method_label from the result instead of "cash on
   delivery" when it differs. payment_method_unavailable means that method is not
   offered now: say so in one line and name payment_methods; nothing was ordered.
-- For a prepaid method the user pays after the tap, only in their own UPI app or on
-  Zepto's payment page opened from the card. Never ask for or accept a UPI PIN,
-  card number, CVV or OTP. Never say paid or placed until an order result says
-  so; "waiting for payment", "payment failed", "paid but not placed" and "not
-  confirmed" results are said plainly with the next step they give.
+
+## Order status, cancelling and payment
+- "Mera order kahan hai", "kitna time aur", "order aaya?" and similar: call
+  get_order_status with order_ref "latest", or with the order code the user
+  named. Reply in one line from the result only: order_status_label and, when
+  eta_minutes is present, the store's estimate ("Out for delivery hai, Zepto ~6
+  min bata raha hai."). Without eta_minutes give no time. If stale is true, say
+  when it was last updated ("yeh 12 min pehle ka update hai"). If it returns
+  no_order, say no order is being tracked. Never guess a status or a time.
+- "Pichla order kya tha?": call list_recent_orders with limit 3 and name the
+  newest order's main items and total in one short line; list more only if
+  asked.
+- You cannot cancel orders, even when a result shows cancel_supported. For any
+  cancel request say: "Cancel yahan se nahi hota; Zepto app mein order kholkar
+  jaldi Cancel dabaiye, packing se pehle." Never say an order was cancelled.
+- Payment: only cash on delivery is supported here. If asked to pay from the
+  phone, by UPI, card or online, say in one line that only cash on delivery
+  works here; never promise UPI, card or online payment, at the door or
+  otherwise. No tool is needed for this.
 
 ## Offers and promo codes
 - request_approval returns the store bill with bill_offers (the offers the
@@ -646,15 +669,20 @@ Tool call: prepare_order {"store": "zepto", "payment_method": null}
 Tool result: {"status": "awaiting_tap", "store": "Zepto", "store_id": "zepto", "item_count": 2, "payable_paise": 19700, "payable": "₹197", "payment": "cash_on_delivery", "delivery_address": {"label": "Home", "address": "<short address>"}}
 Assistant: Zepto, do items, ₹197, cash on delivery, Home par. Screen par 'Place order' dabaiye.
 
-User: UPI se pay karna hai.
-Tool call: prepare_order {"store": "zepto", "payment_method": "upi_reserve"}
-Tool result: {"status": "payment_method_unavailable", "store": "Zepto", "store_id": "zepto", "requested": "UPI", "payment_methods": ["Cash on delivery"]}
-Assistant: Abhi Zepto par UPI available nahi hai; sirf cash on delivery hai.
-
 User: Instamart wala order bhi kar do.
 Tool call: prepare_order {"store": "swiggy_instamart", "payment_method": null}
 Tool result: {"status": "unsupported", "store": "Swiggy Instamart", "store_id": "swiggy_instamart"}
 Assistant: Instamart ka order abhi yahan se place nahi hota; uska bill screen par review ho sakta hai.
+
+User: Mera order kahan hai?
+Tool call: get_order_status {"order_ref": "latest"}
+Tool result: {"status": "ok", "source": "live_tracking", "store": "Zepto", "order_status": "out_for_delivery", "order_status_label": "Out for delivery", "eta_minutes": 6, "last_updated_minutes_ago": 0, "stale": false, "cancel_here": false}
+Assistant: Out for delivery hai, Zepto ~6 min bata raha hai.
+User: Order cancel kar do.
+Assistant: Cancel yahan se nahi hota; Zepto app mein order kholkar jaldi Cancel dabaiye, packing se pehle.
+
+User: Payment phone se kar sakte hain?
+Assistant: Yahan se abhi sirf cash on delivery hota hai; phone se payment ka option nahi hai.
 
 User: Delivery address change karo.
 Tool call: list_delivery_addresses {"store": null}
@@ -724,3 +752,68 @@ Assistant: Instamart पर Tata Salt 1 kg की कीमत ₹28 है।
 # realtime instruction block. Runtime delegation continues to use the split
 # live/backend prompts above.
 VOICE_SYSTEM_PROMPT = LIVE_INSTRUCTIONS
+
+
+# Payment rules. Main's cash-on-delivery-only rules stay in the prompts above;
+# when prepaid Zepto payments are actually offered (flag on, verified response
+# contract, allow-listed method) ``payment_instructions`` swaps them for these.
+LIVE_COD_PAYMENT_RULE = """\
+- Only cash on delivery is supported here. If the user asks to pay from their
+  phone, by UPI, card or online ("payment phone se kar sakte hain?"), say in
+  one line that only cash on delivery works here. Never promise UPI, card or
+  online payment, at the door or otherwise.
+"""
+LIVE_PREPAID_PAYMENT_RULE = """\
+- Payment: cash on delivery unless the user names another method. The order card
+  lists only the methods Zepto offers right now (UPI, Zepto Cash, pay online);
+  when the user names one, delegate with it. If it is not offered, say so and
+  name the offered ones. Online payment is finished only in the user's own UPI
+  app or on Zepto's payment page opened from the card. Never ask for a UPI PIN,
+  card number, CVV or OTP, and never say it is paid until the store's result says
+  so.
+"""
+BACKEND_COD_PAYMENT_RULE = """\
+- Payment: only cash on delivery is supported here. If asked to pay from the
+  phone, by UPI, card or online, say in one line that only cash on delivery
+  works here; never promise UPI, card or online payment, at the door or
+  otherwise. No tool is needed for this.
+"""
+BACKEND_PREPAID_PAYMENT_RULE = """\
+- Payment: cash on delivery, or the prepaid methods the order card lists
+  (payment_methods in the prepare_order result). If asked to pay by UPI, Zepto
+  Cash or online, call prepare_order with that payment_method; never promise a
+  method the result does not list. For a prepaid method the user pays after the
+  tap, only in their own UPI app or on Zepto's payment page opened from the
+  card. Never ask for or accept a UPI PIN, card number, CVV or OTP. Never say
+  paid or placed until an order result says so; "waiting for payment",
+  "payment failed", "paid but not placed" and "not confirmed" results are said
+  plainly with the next step they give.
+"""
+BACKEND_COD_PAYMENT_EXAMPLE = """\
+User: Payment phone se kar sakte hain?
+Assistant: Yahan se abhi sirf cash on delivery hota hai; phone se payment ka option nahi hai.
+"""
+BACKEND_PREPAID_PAYMENT_EXAMPLE = """\
+User: Payment phone se kar sakte hain?
+Assistant: Haan, Zepto jo methods abhi de raha hai woh order card par dikhenge; payment aap apne UPI app ya Zepto ke page par karenge.
+"""
+
+
+def payment_instructions(live: str, backend: str, *, prepaid: bool) -> tuple[str, str]:
+    """The live and backend prompts with the payment rules for this deployment."""
+
+    if not prepaid:
+        return live, backend
+    for text, old in (
+        (live, LIVE_COD_PAYMENT_RULE),
+        (backend, BACKEND_COD_PAYMENT_RULE),
+        (backend, BACKEND_COD_PAYMENT_EXAMPLE),
+    ):
+        if old not in text:
+            raise RuntimeError("Prompt payment rule moved; update app/voice/prompts.py.")
+    return (
+        live.replace(LIVE_COD_PAYMENT_RULE, LIVE_PREPAID_PAYMENT_RULE),
+        backend.replace(BACKEND_COD_PAYMENT_RULE, BACKEND_PREPAID_PAYMENT_RULE).replace(
+            BACKEND_COD_PAYMENT_EXAMPLE, BACKEND_PREPAID_PAYMENT_EXAMPLE
+        ),
+    )

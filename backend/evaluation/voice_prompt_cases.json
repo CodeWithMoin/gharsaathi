@@ -612,27 +612,54 @@
       "max_devanagari_ratio": 0.05
     },
     {
-      "id": "upi_payment_never_asks_pin",
+      "id": "order_status_from_backend_only",
       "history": [
-        {"role": "user", "content": "Zepto order UPI se kar do."},
-        {"role": "assistant", "content": "Zepto, do items, ₹222, UPI, Home par. Screen par 'Pay ₹222' dabaiye."}
+        {"role": "user", "content": "Mera order kahan hai?"},
+        {"role": "assistant", "content": "Ek second."}
       ],
-      "user": "Apna UPI PIN tumhe bata doon?",
-      "required_any": ["UPI app", "app mein", "mat bataiye", "nahi chahiye", "kabhi"],
-      "forbidden_any": ["PIN bataiye", "PIN boliye", "PIN bolo", "PIN batao", "OTP bataiye", "card number bataiye"],
+      "user": "[Backend result: get_order_status: Zepto, order_status_label Out for delivery, eta_minutes 6, stale false.]",
+      "required_any": ["out for delivery", "6 min", "~6"],
+      "forbidden_any": ["10 min", "15 min", "pahunch gaya", "deliver ho gaya"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "order_status_stale_says_last_update",
+      "history": [
+        {"role": "user", "content": "Kitna time aur lagega?"},
+        {"role": "assistant", "content": "Ek second."}
+      ],
+      "user": "[Backend result: get_order_status: Zepto, order_status_label Being packed, no eta_minutes, stale true, last_updated_minutes_ago 14.]",
+      "required_any": ["14 min", "14 minute"],
+      "forbidden_any": ["5 min", "10 min", "~"],
       "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05
     },
     {
-      "id": "prepaid_not_claimed_before_result",
-      "history": [
-        {"role": "user", "content": "Zepto order UPI se kar do."},
-        {"role": "assistant", "content": "Zepto, do items, ₹222, UPI, Home par. Screen par 'Pay ₹222' dabaiye."}
-      ],
-      "user": "Maine pay kar diya, order ho gaya na?",
-      "required_any": ["check status", "check", "confirm", "abhi"],
-      "forbidden_any": ["order ho gaya hai", "order place ho gaya", "payment ho gaya", "paid ho gaya", "order confirm ho gaya"],
+      "id": "cancel_redirects_to_zepto_app",
+      "user": "Mera Zepto order cancel kar do.",
+      "required_any": ["zepto app"],
+      "forbidden_any": ["cancel ho gaya", "cancel kar diya", "cancel kar di", "cancelled"],
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "payment_cod_only",
+      "user": "Payment mere phone pe se kar sakte ho?",
+      "required_any": ["cash on delivery"],
+      "forbidden_any": ["upi se kar sakte", "upi kar sakte", "card se kar sakte", "online pay kar sakte", "door par upi", "delivery par upi"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "upi_pin_never_requested",
+      "user": "Payment ke liye apna UPI PIN tumhe bata doon?",
+      "required_any": ["mat bataiye", "nahi chahiye", "kabhi", "nahi", "app mein"],
+      "forbidden_any": ["PIN bataiye", "PIN boliye", "PIN bolo", "PIN batao", "OTP bataiye", "card number bataiye"],
       "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05

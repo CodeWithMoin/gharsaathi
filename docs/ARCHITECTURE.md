@@ -103,6 +103,7 @@ flowchart TD
 | D8 | Suggest a preference from repeated choices (tier 2) | Code: basket adds are recorded; after a conversation save/archive `choice_signals.propose_from_choices` creates a pending proposal (same brand+pack in ≥3 conversations, or the same store every time both offered it) | **Yes:** never active without a yes; offered at most once per session (attached to a matching `add_to_basket` result); rejected/deleted suggestions never return |
 | D9 | Apply saved rules to search | Code (`memory/household_rules.py` in `search_products`) | **Yes:** `avoid_store` skips that store's search (and an earlier option from it cannot be added), `avoid_product`/`avoid_brand` hide options unless the query asks for them (then `avoided: true`), `prefer_*` adds `preferred: true` (separate from `remembered`) |
 | D10 | Prepare an order card | Backend model calls `prepare_order` on an explicit order request | **Yes, for the order itself:** the tool only shows the card; only the user's tap on **Place order** approves and orders, and code re-checks the bound confirmation first. Calling it at the wrong time can only show a card |
+| D11 | Answer "where is my order?" | Backend model calls `get_order_status` / `list_recent_orders` | **Yes:** read-only tools scoped to the verified household; status and ETA come only from the provider; cancelling is not possible (no tool) |
 
 ### Deterministic checks (code, every call)
 
@@ -121,8 +122,10 @@ flowchart TD
 | Approval bound to basket revision, conditional DB writes | `backend/app/shopping/approval.py`, `checkout.py` | Approving/ordering a basket the user didn't see |
 | Accepted current terms for consequential actions | `backend/app/legal_consent.py` dependency | Acting before consent |
 | No voice/typed tool can approve or place orders; `prepare_order` only shows the order card | `backend/app/voice/order_tools.py` | Spoken or typed "yes" becoming an order |
+| Order status tools read only this household's monitors; refresh obeys the provider interval; no cancel or order call exists | `backend/app/voice/order_status_tools.py`, `backend/app/tracking/service.py` | Another household's order, provider hammering, guessed status, cancellation by voice |
 | Order card tap: confirmation belongs to this user, is open (single-use, not cancelled/replaced), unexpired (5 min, capped by the bill), and the basket revision, address, approval, approval fingerprint, quote digest and payable are unchanged; Zepto only; accepted terms | `backend/app/shopping/order_confirmation.py`, `POST /api/orders/confirm` | Ordering a stale, edited, replayed, cancelled or someone else's bill |
 | Tap runs the existing approve + COD checkout: idempotency key `order-confirmation:<id>`, durable one-shot claim per approval, fresh re-quote must match, outcome-unknown never retried | `backend/app/shopping/checkout.py` | Double orders, price drift, blind retries |
+| The card binds the payment method; another method means a fresh card (`POST /api/orders/payment-method`). Prepaid methods are offered only with the flag on, allow-listed, covered by the verified response contract and listed by `get_payment_methods`; the tap re-quotes with that method's own unconfirmed preview, then makes one `create_*` call; only a provider-confirmed payment and order is placed | `backend/app/shopping/payments.py`, `backend/app/commerce/zepto/payments.py`, `checkout.py` | Paying an amount the user did not approve, guessed response fields, money claims without the provider |
 
 ## Placing an order (one tap)
 
@@ -153,6 +156,103 @@ for the same store replaces the older one. Confirmations live in backend memory;
 restart drops them and the user asks again. The order stays one-shot across processes
 because the checkout claim is unique per approval in PostgreSQL. Swiggy Instamart has
 no checkout, so `prepare_order` returns `unsupported` there.
+
+## After the tap: order status
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant A as Assistant (voice or typed)
+  participant B as Backend
+  participant Z as Zepto
+  U->>B: tap Place order → POST /api/orders/confirm
+  B->>Z: confirm COD (once) → order id
+  B->>B: tracking.ensure(user, zepto, order id): one monitor per order
+  B->>Z: get_order_detail (read-only; get_order_status if the catalogue has it)
+  B-->>U: confirm response + tracking read → order card becomes a status card
+  loop while the tab is visible and the order is moving
+    U->>B: POST /api/tracking/monitors/{id}/refresh (at next_check_at)
+    B->>Z: read status only when the provider interval allows
+    B-->>U: status, Zepto ETA, last updated, new in-app update?
+  end
+  U->>A: "mera order kahan hai?"
+  A->>B: get_order_status("latest")
+  B-->>A: household's own monitor (cadence-protected), stale flag, cancel_here false
+  A-->>U: "Out for delivery hai, Zepto ~6 min bata raha hai."
+```
+
+- **Auto-track.** Only a provider-confirmed order (`status: confirmed` with an order
+  id) starts a monitor, through `OrderTrackingService.ensure`: a replayed request,
+  a retry or a second tab reuses the same monitor. A tracking failure is logged and
+  never changes the order result. Orders placed by BasketPanel's Approve + COD
+  button are not auto-tracked; they can be tracked from Settings → Help with an order.
+- **Zepto status source.** `ZeptoOrderStatusAdapter` uses `get_order_status` when the
+  live catalogue has it, else the documented read-only `get_order_detail`: the latest
+  shipment's status maps to placed / packed / out for delivery / delivered / cancelled
+  by exact status words only (anything else is shown as Zepto's own text, never
+  guessed). The ETA is Zepto's committed ETA (placed time + `committedEtaInMins`).
+  It polls every 90 s (no provider hint) and never repurposes `list_order_history`.
+- **Status card.** `order-status-card.tsx` shows the steps, the latest Zepto ETA, when
+  it was last updated, **Track order** (LiveOrderTracking in an `InputDialog`) and
+  "Open the Zepto app" as text (no documented deep link). It is a timeline item
+  (`timeline.orders`, saved with the conversation), so reload keeps it and later
+  messages appear below it. It polls only while the tab is visible and stops when
+  tracking stops.
+- **Updates.** `app/tracking/notifications.py` keeps only four changes: out for
+  delivery, delivered, delayed (ETA moved later by ≥10 min) and cancelled. They are
+  stored on the monitor; the card shows each one once as an in-app toast. No push,
+  SMS or calls.
+- **Voice/typed.** `get_order_status` (household-scoped monitor, else the newest
+  Zepto history entry marked `order_history`) and `list_recent_orders` (≤5, Zepto
+  history) are read-only. A non-final status older than 5 min is `stale` with
+  `last_updated_minutes_ago`. Cancel requests get "Cancel yahan se nahi hota; Zepto
+  app mein order kholkar jaldi Cancel dabaiye, packing se pehle." Payment questions
+  get "only cash on delivery here". `cancel_supported` reports a live-catalogue cancel
+  tool if one ever appears; it is never called.
+
+## Paying online (behind a flag)
+
+`ZEPTO_ONLINE_PAYMENTS_ENABLED` (default false) plus `ZEPTO_PAYMENT_METHODS_ALLOWED`
+(default `upi_reserve,wallet,online`). Zepto's MCP documents only the input
+schemas of its payment tools, so every response is read through
+`VERIFIED_CONTRACT` in `app/commerce/zepto/payments.py`. It is `None` until the
+owner's tier-1/2 live smoke runs record the real shapes (`docs/LIVE_SMOKE.md`);
+until then only cash on delivery is offered, the assistant keeps the
+cash-on-delivery-only rule, and `get_payment_methods` is never called.
+
+| Method | Zepto tool (`confirmOrder: true`, once) | After the tap |
+|---|---|---|
+| `cod` Cash on delivery | `create_order` | placed when Zepto returns the order |
+| `upi_reserve` UPI | `create_upi_reserve_pay_order` | `awaiting_payment`; the user approves in their UPI app |
+| `wallet` Zepto Cash | `create_wallet_order` | placed if Zepto confirms the debit, else `awaiting_payment` |
+| `online` Pay online | `create_online_payment_order` | `awaiting_payment` with Zepto's https/upi link ("Open payment") |
+
+```mermaid
+stateDiagram-v2
+  [*] --> dispatching: tap (one-shot claim)
+  dispatching --> confirmed: placed at once
+  dispatching --> awaiting_payment: order id (+ link)
+  dispatching --> outcome_unknown: error / unknown shape / wrong amount
+  awaiting_payment --> confirmed: payment ok + order confirmed
+  awaiting_payment --> payment_succeeded: payment ok, order not yet confirmed
+  awaiting_payment --> payment_failed
+  awaiting_payment --> payment_unknown: unrecognised status
+  payment_succeeded --> confirmed
+  payment_succeeded --> paid_order_failed: payment ok, order failed
+  payment_unknown --> awaiting_payment
+  payment_unknown --> confirmed
+```
+
+- `confirmed`, `payment_failed`, `paid_order_failed` and `outcome_unknown` are
+  final; nothing retries the order call. The basket stays locked in every state
+  but `confirmed` → ordered.
+- Status: `POST /api/orders/payment-status {checkout_id}` makes one
+  `check_payment_status {orderId, poll: false}` read (at most one per 5 s per
+  order); `poll: true` only if the previous response explicitly asked. The card
+  checks when the user returns to the tab, on "I've paid — check status", and
+  every 15 s (20 times at most).
+- Unrecognised responses are logged as key paths and types only
+  (`zepto_payment_response_unrecognised`) and never become money claims.
 
 ## Delivery addresses (switch, add)
 

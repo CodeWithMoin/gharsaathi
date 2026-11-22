@@ -26,9 +26,12 @@ from app.voice.address_prefill import RecentUserWords
 from app.voice.address_tools import ZeptoConnectionChecker
 from app.voice.profile_context import with_profile
 from app.voice.basket_tools import AddressDescriber
-from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS
+from app.commerce.zepto.payments import prepaid_payments_offered
+from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS, payment_instructions
 from app.voice.sideband import SidebandHub
 from app.voice.toolbox import ToolExecutor, VOICE_TOOL_DEFINITIONS, VoiceToolbox
+from app.voice.order_status_tools import OrderHistoryReader
+from app.tracking.service import OrderTrackingService
 from app.voice.turn_taking import client_turn_taking, live_instructions
 from app.voice.tools import (
     TOOL_DEFINITIONS,
@@ -98,10 +101,13 @@ def build_session_config(
     quoted reference data. The backend model gets the whole context block.
     """
 
+    live_prompt, backend_prompt = payment_instructions(
+        LIVE_INSTRUCTIONS, BACKEND_INSTRUCTIONS, prepaid=prepaid_payments_offered(settings)
+    )
     session: dict[str, Any] = {
         "model": settings.live_model,
         "instructions": with_profile(
-            live_instructions(LIVE_INSTRUCTIONS, settings.voice_turn_taking), profile
+            live_instructions(live_prompt, settings.voice_turn_taking), profile
         )
         + context_instructions_block(context, include_turns=False),
         "audio": {"output": {"voice": settings.live_voice}},
@@ -109,7 +115,7 @@ def build_session_config(
             "type": "responses",
             "responses": {
                 "model": settings.live_backend_model,
-                "instructions": with_profile(BACKEND_INSTRUCTIONS, profile)
+                "instructions": with_profile(backend_prompt, profile)
                 + memory_summary_block(household_memory)
                 + context_instructions_block(context),
                 "tools": tool_definitions if tool_definitions is not None else TOOL_DEFINITIONS,
@@ -142,6 +148,8 @@ class LiveSessionService:
         context_reader: ConversationContextReader | None = None,
         order_confirmations: OrderConfirmations | None = None,
         address_book: AddressBook | None = None,
+        order_tracking: OrderTrackingService | None = None,
+        order_history: OrderHistoryReader | None = None,
     ) -> None:
         self.settings = settings
         self.searcher = searcher
@@ -156,6 +164,8 @@ class LiveSessionService:
         self.context_reader = context_reader
         self.order_confirmations = order_confirmations
         self.address_book = address_book
+        self.order_tracking = order_tracking
+        self.order_history = order_history
         self._http_client = http_client
         # One kept-alive connection to OpenAI per event loop, so a session start
         # does not pay for a fresh TLS handshake (and client setup) every time.
@@ -198,6 +208,8 @@ class LiveSessionService:
                 order_confirmations=self.order_confirmations,
                 address_book=self.address_book,
                 user_words=RecentUserWords(lambda: self.saved_user_words(household_id)),
+                order_tracking=self.order_tracking,
+                order_history=self.order_history,
             )
         if self.zepto_searcher is not None:
             return MultiProviderShoppingToolExecutor(

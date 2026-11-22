@@ -24,13 +24,18 @@ never inline in whatever sheet happens to be open. Current users:
 | Forget everything | `memory-settings.tsx` | `ConfirmDialog`, destructive |
 | Edit profile | `account-settings-sheet.tsx` | Name, how to address you and reply language in one popup with one Save; only changed fields are sent |
 | Disconnect Swiggy / Zepto | `page.tsx` setup sheet | `ConfirmDialog`, destructive; closes only after the disconnect succeeds |
+| Track order | `order-status-card.tsx` | Opens `LiveOrderTracking` on the placed order's monitor from the chat status card; read-only |
 
 `ConfirmDialog` (`frontend/app/ui/confirm-dialog.tsx`) is the yes/no variant:
 `title`, `message`, `confirmLabel`, `busyLabel`, `tone` (`"destructive"` paints
 the button red, uses `role="alertdialog"` and focuses Cancel first), `busy`,
 `error`, `onConfirm`, `onClose`. Pure logic for these flows is in
 `frontend/app/input-flows.mjs`. The order card, basket − / + and the onboarding
-pages are deliberately not popups.
+pages are deliberately not popups. The order card's payment-method chips
+(`role="radio"`, shown only when more than one method is offered) stay inline
+too; choosing one replaces the card. Prepaid cards say **Pay ₹…**, then show
+**Open payment** (Zepto's own link) and **I've paid — check status**; no field
+ever asks for a PIN, card number or OTP.
 
 | Prop | Type | Meaning |
 |---|---|---|

@@ -9,7 +9,7 @@ import { DRAWER_PANEL_TRANSITION, DRAWER_SPRING, pushOffset, restoreScrollTarget
 import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, useSetBasketLineQuantity, type Approval, type ApprovalRequest, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
 import { ProductOptions, type Product } from "./product-comparison";
 import { conversationSnapshot } from "./conversation-snapshot.mjs";
-import { basketSummary, collapseBasketCard, dropResultGroup, emptyTimeline, finishResultGroup, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordResultGroup, restoreTimeline, summaryText, withResultGroups, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
+import { basketSummary, collapseBasketCard, dropResultGroup, emptyTimeline, finishResultGroup, isNearBottom, latestMessageId, liveCard, moveBasketCard, placeTimelineItems, recordOrderCard, recordResultGroup, restoreTimeline, summaryText, updateOrderCard, withResultGroups, type ChatTimeline, type SummaryStage } from "./chat-timeline.mjs";
 import { restoreResultGroups, resultGroupIdentity, type ResultGroup } from "./result-groups.mjs";
 import { conversationTitle, relativeChatDate, searchConversations, visibleConversations, type ConversationSummary } from "./chat-list.mjs";
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
@@ -29,7 +29,9 @@ import type { AddressFormAck } from "./address-form-merge.mjs";
 import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
 import { applyAssistantEvent } from "./assistant-events.mjs";
 import { OrderConfirmationCard } from "./order-confirmation-card";
-import { orderCardIndex, type OrderConfirmation } from "./order-confirmation.mjs";
+import { orderCardIndex, type OrderCardState, type OrderConfirmation } from "./order-confirmation.mjs";
+import { OrderStatusCard } from "./order-status-card";
+import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
 
 const LEGACY_CHAT_STORAGE_KEY = "gharsaathi:conversation:v1";
 
@@ -65,7 +67,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [basketProvider, setBasketProvider] = useState<ProviderName>("swiggy_instamart");
   const [voiceApproval, setVoiceApproval] = useState<{ provider: ProviderName; request: ApprovalRequest } | null>(null);
   // The one-tap order card prepared by voice or typed chat; it is not saved with the chat.
+  // Once its order is placed it becomes a live status card in the (saved) timeline.
   const [orderCard, setOrderCard] = useState<{ confirmation: OrderConfirmation; afterMessageId: string | null } | null>(null);
+  // In-app order updates only (out for delivery, delivered, delayed, cancelled); no push or calls.
+  const [orderToast, setOrderToast] = useState<string | null>(null);
   const [chatSaveFailed, setChatSaveFailed] = useState(false);
   const [addingSku, setAddingSku] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(startWithSetupOpen);
@@ -149,6 +154,28 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     followScrollRef.current = true;
     setOrderCard({ confirmation, afterMessageId: latestMessageId(chatMessagesRef.current) });
   }, []);
+  const handleOrderCardResult = useCallback((card: { confirmation: OrderConfirmation; afterMessageId: string | null }, state: OrderCardState) => {
+    if (state.status !== "placed" || card.confirmation.provider !== "zepto") return;
+    const placed = orderCardFromPlaced({
+      orderId: state.orderId,
+      store: card.confirmation.store,
+      afterMessageId: card.afterMessageId,
+      seq: 0,
+      itemCount: card.confirmation.itemCount,
+      payable: card.confirmation.payable,
+      tracking: state.tracking,
+    });
+    setTimeline((current) => recordOrderCard(current, placed));
+    setOrderCard((current) => current?.confirmation.id === card.confirmation.id ? null : current);
+  }, []);
+  const handleOrderStatusChange = useCallback((card: OrderStatusCardState) => {
+    setTimeline((current) => updateOrderCard(current, card.orderId, card));
+  }, []);
+  useEffect(() => {
+    if (!orderToast) return;
+    const timer = window.setTimeout(() => setOrderToast(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [orderToast]);
   const handleApprovalChange = useCallback((approval: Approval | null) => {
     if (!approval) setVoiceApproval(null);
   }, []);
@@ -1004,7 +1031,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
         <AnimatePresence initial={false}>
           {withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard).map((item) => {
-            if (item.kind === "order-card") return <OrderConfirmationCard key={`order-card-${item.confirmation.id}`} confirmation={item.confirmation} />;
+            if (item.kind === "order-card") return <OrderConfirmationCard key={`order-card-${item.confirmation.id}`} confirmation={item.confirmation} onResult={(state) => { if (orderCard) handleOrderCardResult(orderCard, state); }} />;
+            if (item.kind === "order-status") return <OrderStatusCard key={`order-status-${item.card.orderId}`} card={item.card} onChange={handleOrderStatusChange} onUpdate={setOrderToast} />;
             if (item.kind === "results") return item.group ? <div key={`results-${item.group.key}`} className="contents">{renderResultGroup(item.group as ResultGroup<Product>)}</div> : null;
             if (item.kind === "basket-summary") {
               const { card } = item;
@@ -1033,6 +1061,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         <AnimatePresence>{trackingOpen && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="mt-8 mr-8 min-w-0 sm:mr-12"><LiveOrderTracking initialAddressId={addressId || undefined} onClose={() => setTrackingOpen(false)} /></motion.div>}</AnimatePresence>
       </div>
     </section>
+
+    <AnimatePresence>{orderToast && <motion.div key="order-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} style={{ bottom: insets.bottom + 112 }} className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4"><p role="status" aria-live="polite" className="pointer-events-auto max-w-sm rounded-full bg-inverse px-4 py-2.5 text-center text-sm font-medium text-on-inverse shadow-[0_18px_40px_-20px_rgb(var(--shadow)/.8)]">{orderToast}</p></motion.div>}</AnimatePresence>
 
     <div style={{ bottom: insets.bottom }} className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <AnimatePresence mode="wait">

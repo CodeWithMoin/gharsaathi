@@ -203,3 +203,43 @@ async def test_methods_are_cached_and_read_failures_hide_prepaid_methods() -> No
     off = ScriptedZeptoClient()
     assert await payment_gateway(off, enabled=False).available_methods("h") == ("cod",)
     assert off.calls == []
+
+
+def test_assistant_keeps_the_cod_only_rule_unless_prepaid_is_really_offered() -> None:
+    from types import SimpleNamespace
+
+    from app.commerce.zepto.payments import prepaid_payments_offered
+    from app.voice.prompts import (
+        BACKEND_COD_PAYMENT_RULE,
+        BACKEND_INSTRUCTIONS,
+        BACKEND_PREPAID_PAYMENT_RULE,
+        LIVE_COD_PAYMENT_RULE,
+        LIVE_INSTRUCTIONS,
+        LIVE_PREPAID_PAYMENT_RULE,
+        payment_instructions,
+    )
+
+    live, backend = payment_instructions(LIVE_INSTRUCTIONS, BACKEND_INSTRUCTIONS, prepaid=False)
+    assert (live, backend) == (LIVE_INSTRUCTIONS, BACKEND_INSTRUCTIONS)
+    assert LIVE_COD_PAYMENT_RULE in live and BACKEND_COD_PAYMENT_RULE in backend
+
+    live, backend = payment_instructions(LIVE_INSTRUCTIONS, BACKEND_INSTRUCTIONS, prepaid=True)
+    assert LIVE_COD_PAYMENT_RULE not in live and LIVE_PREPAID_PAYMENT_RULE in live
+    assert BACKEND_COD_PAYMENT_RULE not in backend and BACKEND_PREPAID_PAYMENT_RULE in backend
+    assert "sirf cash on delivery hota hai; phone se payment" not in backend
+    for text in (live, backend):
+        assert "Never ask for" in text and "OTP" in text
+
+    on = SimpleNamespace(
+        commerce_mode="live",
+        zepto_online_payments_enabled=True,
+        zepto_payment_methods_allowed="online",
+    )
+    assert prepaid_payments_offered(on) is False  # production contract is None
+    assert prepaid_payments_offered(on, TEST_CONTRACT) is True
+    for change in (
+        {"zepto_online_payments_enabled": False},
+        {"commerce_mode": "demo"},
+        {"zepto_payment_methods_allowed": "cod"},
+    ):
+        assert prepaid_payments_offered(SimpleNamespace(**{**vars(on), **change}), TEST_CONTRACT) is False
