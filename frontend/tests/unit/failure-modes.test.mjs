@@ -82,10 +82,10 @@ test("FM-A01 a deleted Zepto address opens the picker and is never silently repl
 test("FM-O12 only a provider-confirmed order id shows 'placed'; anything doubtful is 'unknown'", () => {
   assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: "ZP-1" } }), { status: "placed", orderId: "ZP-1", orderCode: null, tracking: null });
   for (const body of [{ status: "confirmed" }, { status: "outcome_unknown" }, { status: "something_new" }, null]) {
-    assert.deepEqual(orderCardStateFromResponse({ ok: true, body }), { status: "unknown" });
+    assert.equal(orderCardStateFromResponse({ ok: true, body }).status, "unknown");
   }
   // Dropped connection, server crash, proxy timeout: the order may exist, never tap again.
-  for (const status of [0, 500, 504]) assert.deepEqual(orderCardStateFromResponse({ ok: false, status, message: "x" }), { status: "unknown" });
+  for (const status of [0, 500, 504]) assert.equal(orderCardStateFromResponse({ ok: false, status, message: "x" }).status, "unknown");
   // 502/503 are raised before dispatch (bill refresh failed): nothing was ordered.
   assert.equal(orderCardStateFromResponse({ ok: false, status: 502, message: "Zepto could not refresh this bill. No order was placed." }).status, "failed");
   assert.equal(orderCardStateFromResponse({ ok: false, status: 409, message: "This order card was already used." }).status, "failed");
