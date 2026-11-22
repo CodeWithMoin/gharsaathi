@@ -12,6 +12,7 @@ import {
   Lifebuoy,
   MapPin,
   PencilSimple,
+  Phone,
   ShieldCheck,
   SignOut,
   Storefront,
@@ -27,6 +28,7 @@ import { MemorySettings } from "./memory-settings";
 import { NotificationsDetail, notificationsSubtitle, type NotificationsController } from "./notification-settings";
 import { profileChanges, profileDraft, type ProfileUpdate, type ProfileValues } from "./input-flows.mjs";
 import { InputDialog } from "./ui/input-dialog";
+import { RiderAssistSettings } from "./rider-assist-settings";
 
 export type AccountSettingsStore = {
   id: string;
@@ -77,7 +79,7 @@ export type AccountSettingsSheetProps = {
   notifications?: NotificationsController;
 };
 
-type SettingsSection = "stores" | "preferences" | "memory" | "privacy" | "addresses" | "notifications" | null;
+type SettingsSection = "stores" | "preferences" | "memory" | "privacy" | "addresses" | "notifications" | "rider" | null;
 
 /**
  * A controlled, mobile-first account panel. It intentionally has only an overview
@@ -146,7 +148,9 @@ export function AccountSettingsSheet({
             ? "Addresses"
             : section === "notifications"
               ? "Notifications"
-              : "Account";
+              : section === "rider"
+                ? "Rider assist"
+                : "Account";
 
   // A right-side push drawer: the page shell in page.tsx slides left by the same width with
   // the same spring and owns the backdrop, so tapping the pushed page closes this panel.
@@ -155,7 +159,7 @@ export function AccountSettingsSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${section === "memory" ? "w-[min(94vw,420px)]" : "w-3/4 max-w-[360px]"} flex-col overflow-hidden bg-surface-muted text-ink`}
+        className={`fixed inset-y-0 right-0 z-[35] flex h-[100dvh] ${section === "memory" || section === "rider" ? "w-[min(94vw,420px)]" : "w-3/4 max-w-[360px]"} flex-col overflow-hidden bg-surface-muted text-ink`}
         initial={reducedMotion ? { opacity: 0 } : { x: "100%" }}
         animate={{ x: 0, opacity: 1 }}
         exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}
@@ -182,6 +186,7 @@ export function AccountSettingsSheet({
                   <SettingsRow icon={<Brain size={21} weight="duotone" />} title="Saved preferences" subtitle="Preferences, never, rules" onClick={() => setSection("memory")} />
                   <SettingsRow icon={<ShieldCheck size={21} weight="duotone" />} title="Privacy & memory" subtitle={privacySummary} onClick={() => setSection("privacy")} />
                   {notifications && <SettingsRow icon={<Bell size={21} weight="duotone" />} title="Notifications" subtitle={notificationsSubtitle(notifications.view)} onClick={() => setSection("notifications")} />}
+                  <SettingsRow icon={<Phone size={21} weight="duotone" />} title="Rider assist (Beta)" subtitle="An AI answers missed delivery calls" onClick={() => setSection("rider")} />
                   <SettingsRow icon={<MapPin size={21} weight="duotone" />} title="Addresses" subtitle={addressSummary} onClick={() => setSection("addresses")} last={!onOpenSupport} />
                   {onOpenSupport && <SettingsRow icon={<Lifebuoy size={21} weight="duotone" />} title="Help with an order" subtitle="Missing, damaged or late items" onClick={onOpenSupport} last />}
                 </nav>
@@ -196,6 +201,7 @@ export function AccountSettingsSheet({
                 {section === "memory" && <MemorySettings />}
                 {section === "privacy" && <SimpleDetail icon={<Eye size={24} weight="duotone" />} title={privacySummary} description="You choose what GharSaathi remembers. Shopping history alone never becomes a stock prediction." action="Review privacy & memory" onAction={onManagePrivacy} />}
                 {section === "notifications" && notifications && <NotificationsDetail controller={notifications} />}
+                {section === "rider" && <RiderAssistSettings />}
                 {section === "addresses" && <AddressesDetail addresses={addresses} stores={stores} onSelectAddress={onSelectAddress} onManageAddresses={onManageAddresses} onChooseStoreAddress={onChooseStoreAddress} />}
               </motion.div>}
           </AnimatePresence>

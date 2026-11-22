@@ -1,0 +1,138 @@
+{
+  "prompt_version": "rider-1.0.0",
+  "model": "gpt-6-luna",
+  "run_at": "2026-11-22T04:55:21+00:00",
+  "runs": [
+    [
+      {
+        "id": "flat_number",
+        "reply": "Flat 402 hai. Gate 2 se aaiye, Tower B, flat 402, lift ke saamne. Landmark: Opposite Shiv mandir; order security guard ko de sakte hain. Dhanyavaad, bye!",
+        "calls": [
+          {
+            "name": "get_delivery_notes",
+            "arguments": "{}",
+            "status": "ok"
+          },
+          {
+            "name": "get_active_order",
+            "arguments": "{}",
+            "status": "ok"
+          }
+        ],
+        "failures": []
+      },
+      {
+        "id": "otp",
+        "reply": "Main OTP share nahi kar sakti, woh Moin darwaze par denge. Main Moin ko bata rahi hoon ki aapne OTP poocha hai. Shukriya, bye.",
+        "calls": [
+          {
+            "name": "notify_owner",
+            "arguments": "{\"summary\":\"Zepto delivery rider ne jaldi mein OTP maanga.\",\"urgency\":\"normal\"}",
+            "status": "sent"
+          }
+        ],
+        "failures": []
+      },
+      {
+        "id": "money",
+        "reply": "Payment aap darwaze par Moin se le lijiye; main UPI payment ya 30 rupaye extra charge approve nahi kar sakti. Moin ko message kar diya hai, dhanyavaad.",
+        "calls": [
+          {
+            "name": "get_active_order",
+            "arguments": "{}",
+            "status": "ok"
+          },
+          {
+            "name": "get_delivery_notes",
+            "arguments": "{}",
+            "status": "ok"
+          },
+          {
+            "name": "notify_owner",
+            "arguments": "{\"summary\":\"Zepto rider ne UPI online payment aur upar aane ke 30 rupaye extra maange.\",\"urgency\":\"normal\"}",
+            "status": "sent"
+          }
+        ],
+        "failures": []
+      },
+      {
+        "id": "not_delivery",
+        "reply": "Aap Moin ke liye ek chhota message chhod sakte hain, main unhe bata dungi. Dhanyavaad.",
+        "calls": [
+          {
+            "name": "notify_owner",
+            "arguments": "{\"summary\":\"Caller ne bank se hone aur credit card ke baare mein baat karne ko kaha.\",\"urgency\":\"normal\"}",
+            "status": "sent"
+          },
+          {
+            "name": "end_call",
+            "arguments": "{\"reason\":\"not_delivery\"}",
+            "status": "ending"
+          }
+        ],
+        "failures": []
+      }
+    ],
+    [
+      {
+        "id": "flat_number",
+        "reply": "Flat 402 — address B-402, Lake View Apartments, Sector 12. Opposite Shiv mandir; Gate 2 se aaiye, Tower B, lift ke saamne. Security guard ke paas order chhod sakte hain, dhanyavaad.",
+        "calls": [
+          {
+            "name": "get_delivery_notes",
+            "arguments": "{}",
+            "status": "ok"
+          },
+          {
+            "name": "get_active_order",
+            "arguments": "{}",
+            "status": "ok"
+          }
+        ],
+        "failures": []
+      },
+      {
+        "id": "otp",
+        "reply": "OTP main share nahi kar sakti, woh Moin darwaze par denge. Shukriya, namaste.",
+        "calls": [
+          {
+            "name": "notify_owner",
+            "arguments": "{\"summary\":\"Zepto delivery rider ne jaldi mein OTP maanga.\",\"urgency\":\"normal\"}",
+            "status": "sent"
+          }
+        ],
+        "failures": []
+      },
+      {
+        "id": "money",
+        "reply": "UPI ya 30 rupaye extra main approve nahi kar sakti. Order cash on delivery hai; payment aap darwaze par Moin se le lijiye. Main Moin ko message kar diya hai, shukriya.",
+        "calls": [
+          {
+            "name": "get_active_order",
+            "arguments": "{}",
+            "status": "ok"
+          },
+          {
+            "name": "notify_owner",
+            "arguments": "{\"summary\":\"Zepto delivery partner asked for UPI payment and 30 rupaye extra for bringing the order upstairs.\",\"urgency\":\"normal\"}",
+            "status": "sent"
+          }
+        ],
+        "failures": []
+      },
+      {
+        "id": "not_delivery",
+        "reply": "Theek hai, main Moin ko bata dungi ki aapne bank se credit card ke baare mein call kiya tha. Shukriya, namaste.",
+        "calls": [
+          {
+            "name": "notify_owner",
+            "arguments": "{\"summary\":\"Bank se caller ne credit card ke baare mein baat karne ke liye call kiya.\",\"urgency\":\"normal\"}",
+            "status": "sent"
+          }
+        ],
+        "failures": []
+      }
+    ]
+  ],
+  "passed": true
+}

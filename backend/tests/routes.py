@@ -22,6 +22,10 @@ PUBLIC_ROUTES: dict[str, str] = {
     # per-session token issued to the creating (Clerk-verified) user by
     # POST /api/voice/session, plus an Origin check.
     "GET /api/voice/sessions/{session_id}/events": "bound to its creator by a per-session events token",
+    # Vobiz webhooks (rider assist): HMAC-SHA256 signature over the URL + nonce with
+    # the Vobiz auth token, checked fail-closed; off unless RIDER_ASSIST_ENABLED.
+    "POST /api/rider/vobiz/answer": "Vobiz answer URL; Vobiz webhook signature (V3/V2) required",
+    "POST /api/rider/vobiz/after-stream": "Vobiz redirect after the stream; Vobiz webhook signature required",
 }
 
 

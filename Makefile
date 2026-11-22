@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: start start-demo help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household reconcile-unknown vapid-keys check check-full test test-unit test-module test-integration test-failures clean-run live-smoke live-smoke-cart
+.PHONY: start start-demo help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household reconcile-unknown vapid-keys vobiz-check check check-full test test-unit test-module test-integration test-failures clean-run live-smoke live-smoke-cart
 
 start:
 	@./scripts/start.sh live
@@ -23,6 +23,7 @@ help:
 	@echo "  make open          Open http://localhost:3003"
 	@echo "  make swiggy-doctor Read-only Swiggy local readiness check"
 	@echo "  make zepto-bridge  Run Zepto's port-80 OAuth bridge (asks for Mac password)"
+	@echo "  make vobiz-check  Read-only Vobiz check: lists your numbers (masked); rider assist beta"
 	@echo "  make zepto-doctor  Read-only Zepto local setup and callback readiness check"
 	@echo "  make zepto-preview Run a temporary-item, unconfirmed live preview (explicit opt-in)"
 	@echo "  make seed-sample-household   Demo only: load fictional sample orders + memories for your user"
@@ -71,6 +72,9 @@ swiggy-doctor:
 
 zepto-bridge:
 	@cd backend && sudo uv run --with-requirements requirements.txt uvicorn app.local_callback_bridge:app --host 127.0.0.1 --port 80 --no-access-log
+
+vobiz-check:
+	@./scripts/backend-cli.sh app.rider.vobiz_check
 
 zepto-doctor:
 	@./scripts/zepto-doctor.sh

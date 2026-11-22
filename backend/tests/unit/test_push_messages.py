@@ -77,7 +77,20 @@ def test_order_url_links_to_the_order_card() -> None:
 def test_only_meaningful_kinds_exist() -> None:
     assert set(PUSH_KINDS) == set(get_args(PushKind))
     for kind in PUSH_KINDS:
-        assert not any(word in kind for word in ("usual", "replenish", "stock", "reminder", "rider"))
+        assert not any(word in kind for word in ("usual", "replenish", "stock", "reminder"))
+    # The one non-order kind: a delivery partner's call about an order (rider assist).
+    assert [kind for kind in PUSH_KINDS if "rider" in kind] == ["rider_called"]
+
+
+def test_rider_call_is_one_short_private_line() -> None:
+    payload = messages.rider_called(AT, "Gate pe hoon, flat number? OTP 4821 bata do, B-402 Lake View Apartments Sector 12", "answered from your notes", call_id="c1")
+    assert payload.kind == "rider_called" and payload.title == "Rider called"
+    assert payload.body.startswith("8:26 am · ‘Gate pe hoon, flat number?")
+    assert "4821" not in payload.body and "Sector 12" not in payload.body
+    assert payload.body.endswith("— answered from your notes.") and len(payload.body) <= 160
+    assert payload.url == "/?rider_call=c1"
+    urgent = messages.rider_called(AT, None, "message taken", urgent=True)
+    assert urgent.title == "A rider is waiting" and urgent.body == "8:26 am — message taken."
 
 
 @pytest.mark.parametrize("url", ["https://evil.example/x", "//evil.example", "javascript:alert(1)", "/\\evil"])

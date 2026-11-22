@@ -33,6 +33,9 @@ STATE_BOUND_ROUTES = {
     "GET /api/swiggy/oauth/callback",
     "GET /api/zepto/oauth/callback",
     "GET /api/voice/sessions/{session_id}/events",
+    # Vobiz signature: the carrier's webhooks, checked by HMAC, not a Clerk session.
+    "POST /api/rider/vobiz/answer",
+    "POST /api/rider/vobiz/after-stream",
 }
 
 

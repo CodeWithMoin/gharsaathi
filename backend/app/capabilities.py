@@ -780,6 +780,53 @@ CAPABILITIES: tuple[Capability, ...] = (
         backend=S(W, "Read-only."),
         routes=("GET /api/zepto/cart",),
     ),
+    Capability(
+        id="rider_assist",
+        title="Rider assist: an AI answers the delivery partner's forwarded call",
+        voice=S(
+            U,
+            "Not part of the user's voice session. A forwarded phone call reaches the owner's "
+            "Vobiz number; its signed answer URL returns a bidirectional <Stream> to WSS "
+            "/api/rider/stream/{call}/{token} (OpenAI Realtime, its own 4 tools: "
+            "get_active_order, get_delivery_notes, notify_owner, end_call).",
+        ),
+        typed_chat=S(M, "Not a chat feature; rider calls appear as cards in the chat."),
+        ui=S(
+            P,
+            "Settings → Rider assist (Beta): switch, delivery notes popup, setup checklist, "
+            "recent calls with delete; new calls show as a toast and a chat card (polled every "
+            "30 s) and as a 'rider_called' browser notification (user-toggleable). Not yet "
+            "verified with a real Vobiz call.",
+        ),
+        backend=S(
+            P,
+            "Off by default (RIDER_ASSIST_ENABLED). Vobiz webhook signatures (fail closed), "
+            "per-call signed stream path, single owner (RIDER_ASSIST_OWNER_USER_ID), μ-law "
+            "passthrough to Realtime audio/pcmu (L16 resampled), 40 ms playAudio frames, "
+            "barge-in clearAudio/truncate, 3 min cap, spoken apology via the after-stream "
+            "redirect when OpenAI is down; answers only from the owner's notes and confirmed "
+            "order, never OTPs, money or order changes; stores a short summary, never audio. "
+            "Unverified against a live Vobiz call.",
+        ),
+        beta=True,
+        routes=(
+            "GET /api/rider/settings",
+            "PUT /api/rider/settings",
+            "GET /api/rider/calls",
+            "POST /api/rider/calls/{call_id}/seen",
+            "DELETE /api/rider/calls",
+            "DELETE /api/rider/calls/{call_id}",
+            "POST /api/rider/vobiz/answer",
+            "POST /api/rider/vobiz/after-stream",
+        ),
+        ui_files=(
+            "frontend/app/rider-assist-settings.tsx",
+            "frontend/app/rider-assist.mjs",
+            "frontend/app/rider-calls.tsx",
+            "frontend/app/account-settings-sheet.tsx",
+            "frontend/app/page.tsx",
+        ),
+    ),
 )
 
 # Routes that are plumbing rather than a user-facing capability.

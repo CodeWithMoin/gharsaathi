@@ -12,6 +12,7 @@ import { uploadErrorMessage, validatePhotoFile } from "../../app/photo-attachmen
 import { VOICE_START_TIMEOUT_MS, startDeadline, voiceFailureView, voiceSupport } from "../../app/voice-mic.mjs";
 import { zeptoAddressSelection } from "../../app/zepto-address-refresh.mjs";
 import { MESSAGES as PUSH_MESSAGES, detectSupport, notificationState, turnOn } from "../../app/push-notifications.mjs";
+import { riderCallCardText, riderStatus } from "../../app/rider-assist.mjs";
 
 /**
  * A strict expected failure: passes while `fn` fails, and fails (asking for
@@ -245,4 +246,10 @@ test("FM-N05 unsupported browser, plain-http LAN address or iPhone without Home 
   const messages = states.map((support) => notificationState({ available: true, support, permission: "default", subscribed: false }));
   assert.deepEqual(messages.map((view) => view.message), [PUSH_MESSAGES.unsupported, PUSH_MESSAGES.insecure, PUSH_MESSAGES.iosInstall]);
   assert.ok(messages.every((view) => view.disabled));
+});
+
+test("FM-R03 rider assist off on the server is shown as such, and a failed call is never 'answered'", () => {
+  const base = { feature_enabled: false, owner_configured: true, stream_auth_configured: true, enabled: true };
+  assert.deepEqual(riderStatus(base), { label: "Turned off on this server", active: false, canToggle: true });
+  assert.match(riderCallCardText({ started_at: "2026-11-22T02:54:00Z", outcome: "assistant_unavailable", answered_from: [] }), /couldn't answer/);
 });
