@@ -70,6 +70,21 @@ _DEMO_ZEPTO_OFFERS = {
 }
 
 
+class DemoAddressBook:
+    """Demo mode: the static fixture addresses, selectable only for this session."""
+
+    async def saved(self, household_id: str, provider: str) -> AddressList:
+        del household_id, provider
+        return await DemoSwiggyService().addresses(1, 10)
+
+    async def select(self, household_id: str, provider: str, address_id: str) -> AddressList | None:
+        addresses = await self.saved(household_id, provider)
+        if address_id not in {address.id for address in addresses.addresses}:
+            return None
+        addresses.resolution.default_address_id = address_id
+        return addresses
+
+
 class DemoSwiggyService:
     async def connection_status(self) -> ConnectionStatus:
         return ConnectionStatus(connected=True, mode="demo")

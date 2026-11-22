@@ -1,5 +1,5 @@
 {
-  "version": "1.11.0",
+  "version": "1.12.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -394,6 +394,41 @@
       "forbidden_any": ["Kis cheez", "kya chahiye"],
       "forbidden_prefix": ["haan.", "haan,", "theek hai."],
       "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "address_change_lists_saved_first",
+      "user": "Delivery address change karo na",
+      "required_any": ["saved", "address", "dekh"],
+      "forbidden_any": ["edit nahi kar sakti", "naya address form", "form khul"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "cannot_see_form_no_insisting",
+      "history": [
+        {"role": "user", "content": "Naya address add karo, RMZ The Loft"},
+        {"role": "assistant", "content": "Theek hai, form screen par la rahi hoon."}
+      ],
+      "user": "कहाँ खुला है, मैं तो देख नहीं सकता हूं",
+      "required_any": ["dekh", "form", "phir", "dobara", "check"],
+      "forbidden_any": ["khul gaya hai", "pehle se bhara hua"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "phone_number_never_filled",
+      "history": [
+        {"role": "user", "content": "Naya address add karo, RMZ The Loft, floor 3"},
+        {"role": "assistant", "content": "Theek hai, form screen par la rahi hoon."}
+      ],
+      "user": "Number mera bhar dena",
+      "required_any": ["type", "khud", "daal"],
+      "forbidden_any": ["number bhar diya", "bhar diya hai", "number daal diya"],
+      "max_questions": 1,
       "max_sentences": 2,
       "max_devanagari_ratio": 0.05
     }

@@ -19,7 +19,9 @@ import { VoicePanel, type VoiceAddressFormRequest, type VoiceTranscriptTurn } fr
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
 import { FirstRunOnboarding } from "./first-run-onboarding";
 import { AccountSettingsSheet } from "./account-settings-sheet";
-import { ZeptoAddressForm, type ZeptoAddressPrefill } from "./zepto-address-form";
+import type { ZeptoAddressPrefillRequest, ZeptoPrefillResult } from "./zepto-address-form";
+import { AddressFormSheet } from "./address-form-sheet";
+import type { AddressFormAck } from "./address-form-merge.mjs";
 import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
 import { applyAssistantEvent } from "./assistant-events.mjs";
 import { OrderConfirmationCard } from "./order-confirmation-card";
@@ -70,8 +72,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [zeptoBusy, setZeptoBusy] = useState(false);
   const [zeptoAddresses, setZeptoAddresses] = useState<Address[]>([]);
   const [zeptoAddressId, setZeptoAddressId] = useState("");
-  const [zeptoAddressFormOpen, setZeptoAddressFormOpen] = useState(false);
-  const [zeptoAddressPrefill, setZeptoAddressPrefill] = useState<{ key: number; values: ZeptoAddressPrefill } | null>(null);
+  // One Add delivery address popup for voice, typed chat and the manual button.
+  const [addressPopupOpen, setAddressPopupOpen] = useState(false);
+  const [addressPrefillRequest, setAddressPrefillRequest] = useState<ZeptoAddressPrefillRequest | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addressId, setAddressId] = useState("");
   const [query, setQuery] = useState("");
@@ -145,25 +148,38 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     setTimeline((current) => collapseBasketCard(current, provider, summary));
     setVoiceApproval((current) => current?.provider === provider ? null : current);
   }, []);
-  // Read through a ref so the voice callback stays stable and never restarts the live session.
-  const addressFormGateRef = useRef({ commerceMode, zeptoConnected });
-  useEffect(() => {
-    addressFormGateRef.current = { commerceMode, zeptoConnected };
-  }, [commerceMode, zeptoConnected]);
+  // The backend decides whether the form may open (address_form.open vs .unavailable);
+  // the page never second-guesses it and always reports what it showed.
+  const addressAckResolversRef = useRef<((result: { form_visible: boolean; reason?: string; filled_fields?: string[]; kept_user_fields?: string[] }) => void)[]>([]);
   const handleVoiceAddressForm = useCallback((request: VoiceAddressFormRequest) => {
     if ("unavailable" in request) {
       if (request.unavailable === "zepto_not_connected") setSetupOpen(true);
       return;
     }
-    const gate = addressFormGateRef.current;
-    if (gate.commerceMode !== "live" || gate.zeptoConnected !== true) {
-      setMessage(gate.commerceMode !== "live" ? "New addresses can't be added in demo mode." : "Connect Zepto first to add a new address.");
-      return;
-    }
-    setZeptoAddressPrefill((current) => ({ key: (current?.key ?? 0) + 1, values: request.prefill }));
-    setZeptoAddressFormOpen(true);
-    setSetupOpen(true);
+    return new Promise<{ form_visible: boolean; reason?: string; filled_fields?: string[]; kept_user_fields?: string[] }>((resolve) => {
+      addressAckResolversRef.current.push(resolve);
+      setAddressPrefillRequest((current) => ({ key: (current?.key ?? 0) + 1, values: request.prefill }));
+      setAddressPopupOpen(true);
+    });
   }, []);
+  const handleAddressPrefillApplied = useCallback((result: ZeptoPrefillResult) => {
+    const resolvers = addressAckResolversRef.current;
+    addressAckResolversRef.current = [];
+    for (const resolve of resolvers) resolve(result.visible ? { form_visible: true, filled_fields: result.filled, kept_user_fields: result.kept } : { form_visible: false, reason: "render_failed" });
+  }, []);
+  const closeAddressPopup = useCallback(() => {
+    setAddressPopupOpen(false);
+    setAddressPrefillRequest(null);
+  }, []);
+  // A voice or typed switch to another saved address; the server already saved it.
+  const handleAddressSelected = useCallback(({ provider, addressId: nextAddressId }: { provider: ProviderName; addressId: string }) => {
+    if (provider === "zepto") {
+      setZeptoAddressId(nextAddressId);
+      setZeptoSearchReady(true);
+    } else setAddressId(nextAddressId);
+  }, []);
+  // Typed chat cannot confirm the form within its own turn; the next turn carries the report.
+  const pendingTypedAcksRef = useRef<(AddressFormAck & { ack_id?: string })[]>([]);
   // Each searched item gets its own result group; searching it again replaces the group.
   const handleVoiceResults = useCallback((searchQuery: string, foundProducts: Product[], item: { itemKey?: string; itemLabel?: string }) => {
     const identity = resultGroupIdentity({ ...item, query: searchQuery, products: foundProducts });
@@ -605,8 +621,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       setZeptoAddressId(selected);
     }
     setZeptoSearchReady(data.addresses.length > 0);
-    setZeptoAddressFormOpen(false);
-    setZeptoAddressPrefill(null);
+    closeAddressPopup();
     setMessage("Address saved to Zepto and refreshed here.");
   }
 
@@ -648,7 +663,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       const turn = await apiRequest<ChatTurnResponse>("/api/chat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversation_id: conversationIdRef.current, message: clean, swiggy_address_id: swiggyReady ? addressId : null, zepto_address_id: zeptoReady ? zeptoAddressId : null }),
+        body: JSON.stringify({ conversation_id: conversationIdRef.current, message: clean, swiggy_address_id: swiggyReady ? addressId : null, zepto_address_id: zeptoReady ? zeptoAddressId : null, ui_acks: pendingTypedAcksRef.current.splice(0, 4) }),
       });
       if (turn.conversation_id) conversationIdRef.current ??= turn.conversation_id;
       const reply: ChatMessage = { id: `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}-assistant`, role: "assistant", content: turn.reply, modality: "text", created_at: new Date().toISOString() };
@@ -656,8 +671,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       chatMessagesRef.current = withReply;
       setChatMessages(withReply);
       for (const event of turn.ui_events) {
-        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onOrderConfirmation: handleOrderConfirmation });
+        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onOrderConfirmation: handleOrderConfirmation });
         if (outcome?.kind === "not_connected") setSetupOpen(true);
+        if (outcome?.ack && outcome.ackId) void outcome.ack.then((ack) => { pendingTypedAcksRef.current.push(ack); });
         if (outcome) setMessage(outcome.message);
       }
     } catch (cause) {
@@ -926,7 +942,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
     <div className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-[#f8f2ea] via-[#f8f2ea] to-transparent px-4 pb-4 pt-10 sm:pb-6">
       <AnimatePresence mode="wait">
-        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onOrderConfirmation={handleOrderConfirmation} beforeSessionStart={flushConversationSave} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
+        {voiceOpen ? <VoicePanel key="voice-composer" addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onOrderConfirmation={handleOrderConfirmation} beforeSessionStart={flushConversationSave} /> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
           <div className="flex items-center gap-2 rounded-[26px] border border-[#deccbf] bg-[#fffdf9] p-2 pl-5 shadow-[0_24px_60px_-28px_rgba(70,40,24,.55),inset_0_1px_0_rgba(255,255,255,.9)]"><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search" || loading === "assistant"} className="min-w-0 flex-1 bg-transparent py-2 text-[15px] outline-none placeholder:text-[#a28e82] disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() ? <button type="submit" aria-label="Send request" disabled={loading === "search" || loading === "assistant"} className="grid size-12 shrink-0 place-items-center rounded-full bg-[#3b2a22] text-white transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} disabled={loading === "search" || loading === "assistant"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-[#c6531d] text-white shadow-[0_12px_30px_-14px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-[#c6531d]" /><Microphone size={23} /></button>}</div>
           <p className="mt-2.5 text-center text-[10px] text-[#8d7a6f]">Hindi · English · Hinglish &nbsp;·&nbsp; You approve every purchase</p>
         </motion.form>}
@@ -967,6 +983,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       onSignOut={() => void signOut({ redirectUrl: "/" })}
     />
 
+    <AddressFormSheet open={addressPopupOpen} prefillRequest={addressPrefillRequest} onAdded={applyAddedZeptoAddress} onClose={closeAddressPopup} onPrefillApplied={handleAddressPrefillApplied} />
     <AnimatePresence>
       {setupOpen && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSetupOpen(false); }} className="fixed inset-0 z-40 flex items-end justify-end bg-[#35241c]/30 backdrop-blur-sm md:p-4">
@@ -990,7 +1007,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
             </div>
 
             {connected && <section className="mt-7"><div className="flex items-center"><div><h3 className="font-display font-semibold">{commerceMode === "demo" ? "Demo delivery address" : "Swiggy delivery address"}</h3><p className="mt-1 text-[10px] text-[#8e796d]">{commerceMode === "demo" ? "Local fixture only" : "Reload uses the saved snapshot"}</p></div><button onClick={() => void loadAddresses(true)} disabled={loading === "addresses"} className="ml-auto text-xs font-semibold text-[#c6531d] disabled:cursor-not-allowed disabled:opacity-45">{loading === "addresses" ? "Refreshing…" : commerceMode === "demo" ? "Reset demo" : "Refresh from Swiggy"}</button></div>{loading === "addresses" ? <div className="mt-3 h-20 animate-pulse rounded-2xl bg-[#eee2d8]" /> : <div className="mt-3 divide-y divide-[#e9dbcf]">{addresses.map((address) => <label key={address.id} className="flex cursor-pointer items-start gap-3 py-4"><input type="radio" checked={addressId === address.id} onChange={() => void selectAddress(address.id)} className="mt-1 accent-[#c6531d]" /><span className="flex-1"><strong className="block text-sm">{address.tag || address.category || "Saved address"}</strong><small className="mt-1 block leading-relaxed text-[#806f65]">{address.address_line}</small></span>{addressId === address.id && <Check size={17} className="text-[#c6531d]" />}</label>)}</div>}{!addresses.length && loading !== "addresses" && <p className="mt-3 rounded-2xl bg-[#f7ede5] px-4 py-3 text-xs leading-5 text-[#806f65]">{message}</p>}<button onClick={() => setSetupOpen(false)} disabled={!addressId} className="mt-5 w-full rounded-full bg-[#c6531d] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Use this address</button></section>}
-            {zeptoConnected && <section className="mt-7 border-t border-[#eaded5] pt-6"><div className="flex items-center"><div><h3 className="font-display font-semibold">{commerceMode === "demo" ? "Zepto demo address" : "Zepto delivery address"}</h3><p className="mt-1 text-[10px] text-[#8e796d]">{commerceMode === "demo" ? "Local fixture only" : "Reload uses the saved snapshot—no MCP call"}</p></div><button onClick={() => void loadZeptoAddresses(true)} disabled={zeptoBusy} className="ml-auto text-xs font-semibold text-[#7b3fc4] disabled:cursor-not-allowed disabled:opacity-45">{zeptoBusy ? "Refreshing…" : commerceMode === "demo" ? "Reset demo" : "Refresh from Zepto"}</button></div>{zeptoBusy && !zeptoAddresses.length ? <div className="mt-3 h-20 animate-pulse rounded-2xl bg-[#eee2d8]" /> : <div className="mt-3 divide-y divide-[#e9dbcf]">{zeptoAddresses.map((address) => <label key={address.id} className="flex cursor-pointer items-start gap-3 py-4"><input type="radio" checked={zeptoAddressId === address.id} onChange={() => void selectZeptoAddress(address.id)} className="mt-1 accent-[#7b3fc4]" /><span className="flex-1"><strong className="block text-sm">{address.tag || address.category || "Saved address"}</strong><small className="mt-1 block leading-relaxed text-[#806f65]">{address.address_line}</small></span>{zeptoAddressId === address.id && <Check size={17} className="text-[#7b3fc4]" />}</label>)}</div>}{!zeptoAddresses.length && !zeptoBusy && <p className="mt-3 rounded-2xl bg-[#f7ede5] px-4 py-3 text-xs leading-5 text-[#806f65]">Refresh once to save your Zepto addresses. Reloads after that stay local.</p>}{commerceMode === "live" && (zeptoAddressFormOpen ? <ZeptoAddressForm key={zeptoAddressPrefill?.key ?? 0} prefill={zeptoAddressPrefill?.values} onAdded={applyAddedZeptoAddress} onCancel={() => { setZeptoAddressFormOpen(false); setZeptoAddressPrefill(null); }} /> : <button type="button" onClick={() => setZeptoAddressFormOpen(true)} className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-[#6f359f]"><Plus size={14} /> Add a new Zepto address</button>)}<button onClick={() => setSetupOpen(false)} disabled={!zeptoAddressId} className="mt-5 w-full rounded-full bg-[#5f2e91] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Use Zepto address</button></section>}
+            {zeptoConnected && <section className="mt-7 border-t border-[#eaded5] pt-6"><div className="flex items-center"><div><h3 className="font-display font-semibold">{commerceMode === "demo" ? "Zepto demo address" : "Zepto delivery address"}</h3><p className="mt-1 text-[10px] text-[#8e796d]">{commerceMode === "demo" ? "Local fixture only" : "Reload uses the saved snapshot—no MCP call"}</p></div><button onClick={() => void loadZeptoAddresses(true)} disabled={zeptoBusy} className="ml-auto text-xs font-semibold text-[#7b3fc4] disabled:cursor-not-allowed disabled:opacity-45">{zeptoBusy ? "Refreshing…" : commerceMode === "demo" ? "Reset demo" : "Refresh from Zepto"}</button></div>{zeptoBusy && !zeptoAddresses.length ? <div className="mt-3 h-20 animate-pulse rounded-2xl bg-[#eee2d8]" /> : <div className="mt-3 divide-y divide-[#e9dbcf]">{zeptoAddresses.map((address) => <label key={address.id} className="flex cursor-pointer items-start gap-3 py-4"><input type="radio" checked={zeptoAddressId === address.id} onChange={() => void selectZeptoAddress(address.id)} className="mt-1 accent-[#7b3fc4]" /><span className="flex-1"><strong className="block text-sm">{address.tag || address.category || "Saved address"}</strong><small className="mt-1 block leading-relaxed text-[#806f65]">{address.address_line}</small></span>{zeptoAddressId === address.id && <Check size={17} className="text-[#7b3fc4]" />}</label>)}</div>}{!zeptoAddresses.length && !zeptoBusy && <p className="mt-3 rounded-2xl bg-[#f7ede5] px-4 py-3 text-xs leading-5 text-[#806f65]">Refresh once to save your Zepto addresses. Reloads after that stay local.</p>}{commerceMode === "live" && <button type="button" onClick={() => setAddressPopupOpen(true)} className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-[#6f359f]"><Plus size={14} /> Add a new Zepto address</button>}<button onClick={() => setSetupOpen(false)} disabled={!zeptoAddressId} className="mt-5 w-full rounded-full bg-[#5f2e91] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Use Zepto address</button></section>}
             <PersonalizationOnboarding commerceMode={commerceMode} swiggyConnected={connected === true} zeptoConnected={zeptoConnected === true} />
           </motion.section>
         </motion.div>

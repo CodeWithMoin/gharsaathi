@@ -4,11 +4,12 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.commerce.provider_state import SavedAddressDirectory
+from app.commerce.provider_state import SavedAddressBook, SavedAddressDirectory
 from app.commerce.swiggy.adapter import SwiggyInstamartAdapter
 from app.commerce.jev import JevProductReranker
 from app.commerce.swiggy.client import SwiggyMcpClient
 from app.commerce.demo import (
+    DemoAddressBook,
     DemoQuoteProvider,
     DemoSwiggyService,
     DemoZeptoQuoteProvider,
@@ -240,6 +241,11 @@ def get_voice_service() -> LiveSessionService:
         addresses=SavedAddressDirectory(get_session_factory()),
         context_reader=get_conversation_context_loader(),
         order_confirmations=get_order_confirmations(),
+        address_book=(
+            DemoAddressBook()
+            if get_settings().commerce_mode == "demo"
+            else SavedAddressBook(get_session_factory())
+        ),
     )
 
 

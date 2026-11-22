@@ -80,6 +80,33 @@ test("address form prefill is sanitised and unavailable reasons are explained", 
   assert.equal(unavailable.message, "New addresses can't be added in demo mode.");
 });
 
+test("address form open always yields a screen acknowledgement with its ack id", async () => {
+  const shown = applyAssistantEvent(
+    { type: "address_form.open", provider: "zepto", prefill: { building_name: "RMZ The Loft" }, ack_id: "ack_abcdefgh" },
+    { onAddressForm: async () => ({ form_visible: true, filled_fields: ["building_name"] }) },
+  );
+  assert.equal(shown.ackId, "ack_abcdefgh");
+  assert.deepEqual(await shown.ack, { form_visible: true, reason: "shown", filled_fields: ["building_name"], kept_user_fields: [], ack_id: "ack_abcdefgh" });
+
+  const unhandled = applyAssistantEvent({ type: "address_form.open", provider: "zepto", prefill: {}, ack_id: "ack_abcdefgh" }, {});
+  assert.equal((await unhandled.ack).form_visible, false);
+  assert.equal((await unhandled.ack).reason, "not_handled");
+
+  const throwing = applyAssistantEvent({ type: "address_form.open", provider: "zepto", ack_id: "ack_abcdefgh" }, { onAddressForm: () => { throw new Error("x"); } });
+  assert.equal((await throwing.ack).reason, "render_failed");
+});
+
+test("a selected saved address reaches its handler and refreshes the basket when a bill was cancelled", () => {
+  const calls = [];
+  const outcome = applyAssistantEvent(
+    { type: "address.selected", provider: "zepto", address_id: "zp-office", label: "Office", bill_cancelled: true },
+    { onAddressSelected: (selection) => calls.push(["selected", selection]), onBasketTouched: (provider) => calls.push(["basket", provider]) },
+  );
+  assert.deepEqual(calls, [["selected", { provider: "zepto", addressId: "zp-office", label: "Office", billCancelled: true }], ["basket", "zepto"]]);
+  assert.match(outcome.message, /Zepto will deliver to Office/);
+  assert.equal(applyAssistantEvent({ type: "address.selected", provider: "blinkit", address_id: "x" }, {}), null);
+});
+
 test("errors and not-connected only return a status", () => {
   const { calls, handlers } = recorder();
   assert.equal(applyAssistantEvent({ type: "tool.error", message: "Swiggy search failed." }, handlers).message, "Swiggy search failed.");

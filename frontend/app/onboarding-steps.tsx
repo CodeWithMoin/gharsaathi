@@ -35,7 +35,7 @@ import {
 } from "./onboarding-flow.mjs";
 import { providerLabel, RETENTION_CHOICES, usePurchaseHistoryImport, type HistoryProvider, type ProviderImportProgress } from "./purchase-history-import";
 import { STORE_PROVIDERS, storeName, type CommerceMode, type StoreProvider, type StoreState } from "./store-setup";
-import { ZeptoAddressForm } from "./zepto-address-form";
+import { AddressFormSheet } from "./address-form-sheet";
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f8f2ea]";
@@ -463,9 +463,8 @@ function StoreAddresses({ provider, state, demo, onLoad, onSelect, onAdded }: {
       {provider === "swiggy" && <button type="button" onClick={() => onLoad(true)} className={`${textButton} -ml-2 mt-2`}><ArrowClockwise size={14} weight="bold" /> Refresh</button>}
     </div>}
 
-    {provider === "zepto" && !demo && state.addressState === "ready" && (formOpen
-      ? <ZeptoAddressForm onAdded={(data) => { onAdded(data); setFormOpen(false); }} onCancel={() => setFormOpen(false)} />
-      : <button type="button" onClick={() => setFormOpen(true)} className={`${textButton} -ml-2 mt-2`}><Plus size={14} weight="bold" /> Add a new Zepto address</button>)}
+    {provider === "zepto" && !demo && state.addressState === "ready" && <button type="button" onClick={() => setFormOpen(true)} className={`${textButton} -ml-2 mt-2`}><Plus size={14} weight="bold" /> Add a new Zepto address</button>}
+    {provider === "zepto" && !demo && <AddressFormSheet open={formOpen} prefillRequest={null} onAdded={(data) => { onAdded(data); setFormOpen(false); }} onClose={() => setFormOpen(false)} />}
   </fieldset>;
 }
 

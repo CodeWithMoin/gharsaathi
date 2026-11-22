@@ -13,7 +13,9 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
 
 from app.core.config import Settings
+from app.voice.address_prefill import RecentUserWords
 from app.voice.tools import ShoppingToolExecutor
+from app.voice.ui_ack import UiAckRegistry, apply_ack
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +45,9 @@ SEARCH_LIMIT_OUTPUT = {
         "with the results you already have, or ask one short question."
     ),
 }
+# Top-level GPT-Live events carrying the user's own speech as text.
+_USER_TRANSCRIPT_DELTAS = {"session.input_transcript.delta", "conversation.item.input_audio_transcription.delta"}
+_USER_TRANSCRIPT_DONE = {"session.input_transcript.done", "conversation.item.input_audio_transcription.completed"}
 ROUND_LIMIT_OUTPUT = {
     "status": "limit_reached",
     "message": (
@@ -91,6 +96,7 @@ class SessionChannel:
     owner_id: str = ""
     events_token_digest: bytes = b""
     events_token_expires_at: float = 0.0
+    acks: UiAckRegistry = field(default_factory=UiAckRegistry)
 
     def publish(self, event: dict[str, Any]) -> None:
         self.history.append(event)
@@ -117,11 +123,15 @@ class SidebandRunner:
         publish: Callable[[dict[str, Any]], None],
         *,
         log_event_types: bool = False,
+        acks: UiAckRegistry | None = None,
+        user_words: RecentUserWords | None = None,
     ) -> None:
         self.connection = connection
         self.executor = executor
         self.publish = publish
         self.log_event_types = log_event_types
+        self.acks = acks
+        self.user_words = user_words
         self._seen_event_ids: set[str] = set()
         self._handled_call_ids: set[str] = set()
         self._pending: dict[str, list[asyncio.Task[None]]] = {}
@@ -180,6 +190,14 @@ class SidebandRunner:
         event_type = event.get("type")
         if event_type == "session.closed":
             return True
+        if self.user_words is not None and event_type in _USER_TRANSCRIPT_DELTAS:
+            if isinstance(event.get("delta"), str):
+                self.user_words.add_partial(event["delta"])
+            return False
+        if self.user_words is not None and event_type in _USER_TRANSCRIPT_DONE:
+            if isinstance(event.get("transcript"), str):
+                self.user_words.add(event["transcript"])
+            return False
         if event_type == "error":
             error = event.get("error") if isinstance(event.get("error"), dict) else {}
             logger.warning("GPT-Live error: %s %s", error.get("code"), error.get("message"))
@@ -242,6 +260,10 @@ class SidebandRunner:
             model_output = outcome.model_output
             if outcome.ui_event is not None:
                 self.publish(outcome.ui_event)
+                ack_id = outcome.ui_event.get("ack_id")
+                if isinstance(ack_id, str) and self.acks is not None:
+                    # Only claim what the screen confirmed it shows.
+                    model_output = apply_ack(model_output, await self.acks.wait(ack_id))
         except Exception:
             logger.exception("Voice tool %s failed", name)
             model_output = {"status": "error", "message": "The tool failed unexpectedly."}
@@ -314,8 +336,21 @@ class SidebandHub:
         while len(self._channels) >= MAX_TRACKED_SESSIONS and finished:
             self._channels.pop(finished.pop(0), None)
 
+    def owned_channel(self, session_id: str, owner_id: str) -> SessionChannel | None:
+        """The channel only for the verified user who created it."""
+
+        channel = self._channels.get(session_id)
+        if channel is None or not owner_id or not channel.owner_id:
+            return None
+        if not hmac.compare_digest(channel.owner_id.encode(), owner_id.encode()):
+            return None
+        return channel
+
     async def _attach(
-        self, session_id: str, executor: ShoppingToolExecutor, channel: SessionChannel
+        self,
+        session_id: str,
+        executor: ShoppingToolExecutor,
+        channel: SessionChannel,
     ) -> None:
         base = self.settings.openai_base_url.rstrip("/").replace("https://", "wss://", 1)
         url = f"{base}/live/sessions/{session_id}/attach"
@@ -332,6 +367,10 @@ class SidebandHub:
                     executor,
                     channel.publish,
                     log_event_types=self.settings.voice_event_log,
+                    acks=channel.acks,
+                    # The toolbox's own buffer, so the address form checks prefill
+                    # against what this session's user actually said.
+                    user_words=getattr(executor, "user_words", None),
                 ).run()
         except (OSError, WebSocketException, asyncio.TimeoutError) as exc:
             logger.warning("Voice sideband for %s ended: %s", session_id, type(exc).__name__)

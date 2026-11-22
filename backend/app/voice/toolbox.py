@@ -1,9 +1,18 @@
 """Session-scoped router for voice shopping tools."""
 
+import json
+from dataclasses import replace
 from typing import Protocol
 
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
+from app.voice.address_book_tools import (
+    ADDRESS_BOOK_TOOL_DEFINITIONS,
+    ADDRESS_BOOK_TOOL_NAMES,
+    AddressBook,
+    AddressBookToolExecutor,
+)
+from app.voice.address_prefill import RecentUserWords
 from app.voice.address_tools import (
     ADDRESS_TOOL_DEFINITIONS,
     ADDRESS_TOOL_NAMES,
@@ -26,6 +35,7 @@ from app.voice.memory_write_tools import (
 )
 from app.voice.memory_choices import MemoryChoiceHooks
 from app.voice.memory_tools import MEMORY_TOOL_DEFINITIONS, MEMORY_TOOL_NAMES, MemoryToolExecutor
+from app.shopping.models import ProviderName
 from app.shopping.order_confirmation import OrderConfirmations
 from app.voice.order_tools import ORDER_TOOL_DEFINITIONS, ORDER_TOOL_NAMES, OrderToolExecutor
 from app.voice.tools import TOOL_DEFINITIONS as SEARCH_TOOL_DEFINITIONS
@@ -45,7 +55,16 @@ VOICE_TOOL_DEFINITIONS = [
     *MEMORY_TOOL_DEFINITIONS,
     *MEMORY_WRITE_TOOL_DEFINITIONS,
     *ORDER_TOOL_DEFINITIONS,
+    *ADDRESS_BOOK_TOOL_DEFINITIONS,
 ]
+
+
+def _option_id(raw_arguments: str) -> str | None:
+    try:
+        value = json.loads(raw_arguments or "{}").get("option_id")
+    except (json.JSONDecodeError, AttributeError):
+        return None
+    return value if isinstance(value, str) else None
 
 
 class ToolExecutor(Protocol):
@@ -70,6 +89,8 @@ class VoiceToolbox:
         addresses: AddressDescriber | None = None,
         preference_writer: HouseholdPreferenceWriter | None = None,
         order_confirmations: OrderConfirmations | None = None,
+        address_book: AddressBook | None = None,
+        user_words: RecentUserWords | None = None,
     ) -> None:
         options: dict[str, SearchOption] = {}
         targets = [
@@ -104,7 +125,12 @@ class VoiceToolbox:
         self.basket = BasketToolExecutor(
             baskets, approvals, options, stores, household_id, addresses
         )
-        self.address_form = AddressFormToolExecutor(zepto_connection)
+        # The user's own recent words; the sideband and typed chat feed it.
+        self.user_words = user_words if user_words is not None else RecentUserWords()
+        self.address_form = AddressFormToolExecutor(zepto_connection, self.user_words)
+        self.options = options
+        self._stale_options: set[str] = set()
+        self.address_book = AddressBookToolExecutor(address_book, baskets, self, household_id)
         self.memory = MemoryToolExecutor(preference_recall, household_id)
         if preference_writer is None and isinstance(preference_recall, DatabasePreferenceRecaller):
             preference_writer = DatabaseHouseholdPreferences(preference_recall.session_factory)
@@ -114,7 +140,37 @@ class VoiceToolbox:
         )
         self.order = OrderToolExecutor(self.basket, order_confirmations)
 
+    def has_store(self, provider: ProviderName) -> bool:
+        return provider in self.basket.stores
+
+    def store_address(self, provider: ProviderName) -> str | None:
+        store = self.basket.stores.get(provider)
+        return store.address_id if store is not None else None
+
+    def current_addresses(self) -> tuple[str | None, str | None]:
+        return self.store_address("swiggy_instamart"), self.store_address("zepto")
+
+    def use_address(self, provider: ProviderName, address_id: str) -> None:
+        """Later searches, baskets and bills in this session use ``address_id``."""
+
+        previous = self.store_address(provider)
+        self.search.targets = [
+            replace(target, address_id=address_id) if target.provider == provider else target
+            for target in self.search.targets
+        ]
+        store = self.basket.stores.get(provider)
+        if store is not None:
+            self.basket.stores[provider] = replace(store, address_id=address_id)
+        if previous != address_id:
+            # Options were priced for the old address; the model must search again.
+            # (Ids stay in ``options`` so new option ids never reuse them.)
+            self._stale_options.update(
+                key for key, option in self.options.items() if option.provider == provider
+            )
+
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
+        if name in ADDRESS_BOOK_TOOL_NAMES:
+            return await self.address_book.execute(name, raw_arguments)
         if name in ADDRESS_TOOL_NAMES:
             return await self.address_form.execute(name, raw_arguments)
         if name in MEMORY_TOOL_NAMES:
@@ -124,6 +180,16 @@ class VoiceToolbox:
         if name in MEMORY_WRITE_TOOL_NAMES:
             return await self.memory_write.execute(name, raw_arguments)
         if name == "add_to_basket":
+            if _option_id(raw_arguments) in self._stale_options:
+                return ToolOutcome(
+                    model_output={
+                        "status": "error",
+                        "message": (
+                            "That option was found for the previous delivery address. Search "
+                            "again and use an option_id from the new results."
+                        ),
+                    }
+                )
             blocked = await self.choices.blocked_add(raw_arguments)
             if blocked is not None:
                 return blocked
