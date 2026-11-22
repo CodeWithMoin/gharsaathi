@@ -28,7 +28,7 @@ import { AddressPickerDialog, StoreAddressRow, type AddressPickerStore } from ".
 import { disconnectCopy } from "./input-flows.mjs";
 import { ConfirmDialog } from "./ui/confirm-dialog";
 import type { AddressFormAck } from "./address-form-merge.mjs";
-import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
+import { ApiError, useApiRequest } from "./authenticated-api";
 import { ADDRESS_REMOVED_MESSAGE, applyAssistantEvent } from "./assistant-events.mjs";
 import { zeptoAddressSelection } from "./zepto-address-refresh.mjs";
 import { OrderConfirmationCard } from "./order-confirmation-card";
@@ -1031,7 +1031,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         setMessage(readiness.message);
         return;
       }
-      window.location.assign(`${API_BASE_URL}/api/${provider}/oauth/start`);
+      const { authorization_url: authorizationUrl } = await apiRequest<{ authorization_url: string }>(`/api/${provider}/oauth/authorization`, { method: "POST" });
+      window.location.assign(authorizationUrl);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : `Could not prepare ${provider} login.`);
     } finally {

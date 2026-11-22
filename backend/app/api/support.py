@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 from app.dependencies import SupportServiceDependency
-from app.auth import UserIdDependency
+from app.auth import OwnerIfPrivateDependency, UserIdDependency
 from app.legal_consent import (
     ConsentAcceptedDependency,
     ConsentedUserIdDependency,
@@ -40,7 +40,11 @@ def _raise_http(exc: Exception) -> None:
     raise exc
 
 
-@router.get("/agent/tools", response_model=list[dict])
+@router.get(
+    "/agent/tools",
+    response_model=list[dict],
+    dependencies=[OwnerIfPrivateDependency],
+)
 async def agent_tools() -> list[dict]:
     return tool_definitions()
 
