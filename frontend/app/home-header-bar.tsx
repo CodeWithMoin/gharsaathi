@@ -28,7 +28,7 @@ export function HomeHeader({ address, basketCount, orderChip, userName, userImag
   onOpenAccount: () => void;
   onOpenOrder: (orderId: string) => void;
 }) {
-  return <header style={{ top }} className="fixed inset-x-0 top-0 z-30 bg-surface pt-[env(safe-area-inset-top)] shadow-[0_10px_35px_-30px_rgb(var(--shadow)/.7)]">
+  return <header style={{ top }} className="fixed inset-x-0 top-0 z-30 rounded-b-[26px] border-b border-border bg-surface pt-[env(safe-area-inset-top)] shadow-[0_14px_36px_-26px_rgb(var(--shadow)/.6)]">
     <div className="mx-auto flex h-[68px] max-w-4xl items-center gap-2 pl-3 pr-4 sm:px-6">
       <button type="button" onClick={onOpenChats} aria-label="Open shopping chats" className={iconButton}><List size={21} /></button>
       <button type="button" onClick={onOpenAddress} disabled={address.state === "checking"} aria-label={address.accessibleLabel} data-testid="header-address" className="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 rounded-2xl px-1.5 py-1 text-left outline-none transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-focus/50 disabled:cursor-default">
