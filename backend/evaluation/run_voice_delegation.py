@@ -608,6 +608,14 @@ def check_turn(
     names = [call["name"] for call in calls]
     adds = [call for call in calls if call["name"] == "add_to_basket"]
     successful_adds = [call for call in adds if call["status"] == "added"]
+    # quick_add / express_order (prompt 1.40.0+) search and add in one call; their
+    # added items count as add_to_basket adds for the add_* expectations.
+    quick_items = [
+        item
+        for call in calls
+        if call["name"] in {"quick_add", "express_order"} and call["status"] in {"added", "ready", "needs_choice"}
+        for item in call["model_output"].get("added", [])
+    ]
     changed = [call for call in calls if call["status"] in {"added", "updated"}]
     approvals = [call for call in calls if call["status"] == "awaiting_user_approval"]
     sentences = [sentence for sentence in SENTENCE_SPLIT.split(reply.strip()) if sentence]
@@ -654,10 +662,17 @@ def check_turn(
         if searches < expect["min_searches"]:
             failures.append(f"Expected at least {expect['min_searches']} searches, got {searches}.")
     for name in expect.get("tools_required", []):
-        if name not in names:
+        if name not in names and not (quick_items and name in {"search_products", "add_to_basket"}):
             failures.append(f"Expected tool {name} was not called (called: {names}).")
-    if "add_count" in expect and len(adds) != expect["add_count"]:
-        failures.append(f"Expected {expect['add_count']} add_to_basket call(s), got {len(adds)}.")
+    if "add_count" in expect and len(adds) + len(quick_items) != expect["add_count"]:
+        failures.append(f"Expected {expect['add_count']} add_to_basket call(s), got {len(adds) + len(quick_items)}.")
+    for item in quick_items:
+        facts.setdefault("added", []).append({key: item.get(key) for key in ("name", "pack_size", "quantity", "store_id")})
+        if "add_store" in expect and item.get("store_id") != expect["add_store"]:
+            failures.append(f"Added to {item.get('store_id')}, expected {expect['add_store']}.")
+        needle = expect.get("add_product_contains")
+        if needle and needle.lower() not in str(item.get("name", "")).lower():
+            failures.append(f"Added {item.get('name')!r}, expected a product containing {needle!r}.")
     if adds and len(successful_adds) != len(adds):
         failures.append(f"add_to_basket failed: {[call['model_output'] for call in adds]}.")
     options = _search_options(session_calls)
