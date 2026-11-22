@@ -15,6 +15,7 @@ from app.database.upsert import insert_if_absent
 
 AddressForm = Literal["masculine", "feminine", "neutral"]
 ReplyLanguage = Literal["hinglish", "hindi", "english"]
+ReplyStyle = Literal["quick", "detailed"]
 
 _NAME_PUNCTUATION = set(" .'-")
 
@@ -23,6 +24,7 @@ class UserProfile(BaseModel):
     first_name: str | None = None
     address_form: AddressForm = "neutral"
     language: ReplyLanguage = "hinglish"
+    reply_style: ReplyStyle = "quick"
     updated_at: datetime | None = None
 
 
@@ -34,6 +36,7 @@ class UserProfileUpdate(BaseModel):
     first_name: str | None = Field(default=None, max_length=40)
     address_form: AddressForm | None = None
     language: ReplyLanguage | None = None
+    reply_style: ReplyStyle | None = None
 
     @field_validator("first_name")
     @classmethod
@@ -67,6 +70,7 @@ def profile_for(record: UserProfileRecord | None) -> UserProfile:
             "first_name": record.first_name,
             "address_form": record.address_form,
             "language": record.language,
+            "reply_style": record.reply_style or "quick",
             "updated_at": record.updated_at,
         }
     )
@@ -83,7 +87,13 @@ async def update_profile(
     await insert_if_absent(
         session,
         UserProfileRecord,
-        {"id": uuid4(), "user_id": user_id, "address_form": "neutral", "language": "hinglish"},
+        {
+            "id": uuid4(),
+            "user_id": user_id,
+            "address_form": "neutral",
+            "language": "hinglish",
+            "reply_style": "quick",
+        },
         ["user_id"],
     )
     record = await session.scalar(
@@ -100,6 +110,8 @@ async def update_profile(
         record.address_form = update.address_form or "neutral"
     if "language" in fields:
         record.language = update.language or "hinglish"
+    if "reply_style" in fields:
+        record.reply_style = update.reply_style or "quick"
     await session.commit()
     await session.refresh(record)
     return record

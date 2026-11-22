@@ -104,6 +104,7 @@ flowchart TD
 | D9 | Apply saved rules to search | Code (`memory/household_rules.py` in `search_products`) | **Yes:** `avoid_store` skips that store's search (and an earlier option from it cannot be added), `avoid_product`/`avoid_brand` hide options unless the query asks for them (then `avoided: true`), `prefer_*` adds `preferred: true` (separate from `remembered`) |
 | D10 | Prepare an order card | Backend model calls `prepare_order` on an explicit order request | **Yes, for the order itself:** the tool only shows the card; only the user's tap on **Place order** approves and orders, and code re-checks the bound confirmation first. Calling it at the wrong time can only show a card |
 | D11 | Answer "where is my order?" | Backend model calls `get_order_status` / `list_recent_orders` | **Yes:** read-only tools scoped to the verified household; status and ETA come only from the provider; cancelling is not possible (no tool) |
+| D12 | Pick a product for "X order kar do" / "X add karo" | Code (`express_tools.pick_option`) after the model calls `express_order` / `quick_add` | **Yes:** only the remembered product or the single named brand+size match in stock is picked; otherwise `needs_choice` (one question). The order still needs the tap |
 
 ### Deterministic checks (code, every call)
 
@@ -448,6 +449,54 @@ sequenceDiagram
   onboarding all open the same popup.
 - Contact number and coordinates are never prefilled; the model says the user must
   type the number.
+
+## Ask → tap: express order, quick add, clear basket
+
+Fewer model rounds is the main latency lever (see Turn latency), so simple
+intents run their safe steps in code in one tool call
+(`backend/app/voice/express_tools.py`, `BasketToolExecutor._clear`):
+
+| User says | Tool | Code does | Model then |
+|---|---|---|---|
+| "2 Amul lassi order kar do", "usual milk mangwa do" | `express_order(items[{query, quantity}], store?, payment_method?)` | Zepto only: one search per item (household rules + memory annotations, concurrently), confident pick, set the line to the asked quantity in the open basket (other lines stay; `also_in_basket` names them), then the normal `prepare_order` (bill + order card) | One line from `ready`: items, bill, address, "Place order dabaiye" |
+| "doodh add karo", "usual atta daal do" | `quick_add(items, store?)` | Same pick across ready stores (same product on both: cheaper, then the store whose basket has items); adds, never bills | "Amul Taaza 1 L, ₹54, Zepto basket mein add kiya — change karna ho to bolo." |
+| "clear cart", "basket khali karo" | `clear_basket(store?: zepto / swiggy_instamart / all)` | `BasketService.clear`: one revision-checked edit per store (supersedes its bill, so the order card is out of date); refused while checkout is pending or the outcome is unknown (`locked` with the reason) | One line from the result |
+
+**Confident pick (code, `pick_option`).** Among in-stock options that are not
+avoided and contain every product word of the query (Hinglish aliases such as
+doodh → milk) and its pack size when given: the one remembered product
+(confirmed preference before purchase history, then most bought), else the one
+product whose brand the user named. Anything else is `needs_choice` with the
+reason (`several_matches`, `confirm_single`, `not_available`, `avoided`,
+`needs_product`) and that item's options on screen; confident items are already
+in the basket, no card is shown, and the model asks one question, then calls
+the tool again with the picked product. A store-level problem
+(`provider_error`, `address_invalid`, not connected, every item failed) adds
+nothing (`failed`). Nothing here approves, pays or orders: `express_order`'s card
+is the same bound order card, placed only by the tap.
+
+**Result shape.** A multi-step tool returns every UI event it caused
+(`ToolOutcome.extra_ui_events`, then `ui_event`); the sideband and typed chat
+publish them in order. Change results (`add_to_basket`, `set_basket_quantity`,
+`clear_basket`, `quick_add`, `express_order`) carry the basket after the change,
+and their notes and the prompt say not to call `view_basket` after them.
+
+**Reply style.** `user_profiles.reply_style` (`quick` default, `detailed`;
+Settings → Preferences → "How much should GharSaathi say?") adds one rule to the
+session profile block that both the live and the backend (voice and typed)
+instructions carry.
+
+Measured with `python -m evaluation.run_turns_to_order` (real backend model,
+demo stores, one run each, prompt 1.30.0 → 1.40.0):
+
+| Scenario | Before: turns / rounds / s | After: turns / rounds / s |
+|---|---|---|
+| Express single ("2 Amul lassi order kar do") | 1 / 4 / 16.5 | 1 / 2 / 6.6 |
+| Express two items | 1 / 4 / 16.2 | 1 / 2 / 8.2 |
+| Usual milk (remembered) | 3 / 7 / 25.7 | 1 / 2 / 6.4 |
+| Ambiguous → one question → card | 4 / 10 / 37.4 | 2 / 4 / 13.9 |
+| Typed "clear cart" (2 items) | 1 / 3 / 8.7 | 1 / 2 / 6.7 |
+| **Median to order card** | **2 turns, 21.1 s** | **1 turn, 7.4 s** |
 
 ## Turn latency
 

@@ -303,6 +303,8 @@ class SidebandRunner:
                     round_number=traced[1], stages=stages,
                 )
             model_output = outcome.model_output
+            for event in outcome.extra_ui_events:
+                self.publish(event)
             if outcome.ui_event is not None:
                 self.publish(outcome.ui_event)
                 ack_id = outcome.ui_event.get("ack_id")

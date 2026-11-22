@@ -276,6 +276,34 @@ CAPABILITIES: tuple[Capability, ...] = (
         ui_files=("frontend/app/basket/BasketPanel.tsx",),
     ),
     Capability(
+        id="clear_basket",
+        title="Empty the basket in one step",
+        voice=S(
+            W,
+            "clear_basket empties one store or every store in one revision-checked edit; the open "
+            "bill and order card are cancelled; refused while an order outcome is unknown.",
+        ),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
+        ui=S(IP, "Basket card 'Clear basket' button.", "codex/quick-actions-ui"),
+        backend=S(W, "BasketService.clear."),
+        voice_tools=("clear_basket",),
+    ),
+    Capability(
+        id="express_order",
+        title="Ask → tap: order or add named items in one turn",
+        voice=S(
+            W,
+            "express_order searches, picks a confident match (remembered, or the single product of "
+            "the named brand and size), adds and shows the order card in one call; quick_add does "
+            "the same for plain adds. Ambiguous items return needs_choice (one question).",
+        ),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
+        ui=S(W, "Same order card and basket card as prepare_order and add_to_basket."),
+        backend=S(W, "app/voice/express_tools.py; never approves or orders."),
+        voice_tools=("express_order", "quick_add"),
+        ui_files=("frontend/app/page.tsx",),
+    ),
+    Capability(
         id="view_basket",
         title="Hear or see the basket and item total",
         voice=S(W, "One basket per store; store null lists every store."),
@@ -858,6 +886,14 @@ UNMOUNTED_ROUTERS: dict[str, str] = {
 # be a defined voice tool.
 PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
     {
+        # express_order / quick_add / clear_basket result fields and statuses.
+        "also_in_basket",
+        "bill_breakdown",
+        "items_removed",
+        "named_brand_and_size",
+        "needs_choice",
+        "picked_because",
+        "several_matches",
         # read_attached_photo item fields and photo kinds.
         "printed_name",
         "search_query",
