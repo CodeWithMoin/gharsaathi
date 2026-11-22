@@ -45,6 +45,35 @@ export function bestPickBadge(product) {
   return "Best match";
 }
 
+export const PHOTO_MATCH_BADGE = "Looks like your photo";
+export const PHOTO_DIFFERENT_NOTE = "Not the pack in your photo";
+
+/**
+ * The backend's visual comparison with the user's photo (photo searches only):
+ * the badge for a same-product option, or a quiet note for a different one.
+ *
+ * @param {{ visual_match?: unknown }} product
+ * @returns {{ badge: "Looks like your photo" | null, note: string | null }}
+ */
+export function photoMatch(product) {
+  if (product.visual_match === "same_product") return { badge: PHOTO_MATCH_BADGE, note: null };
+  if (product.visual_match === "different") return { badge: null, note: PHOTO_DIFFERENT_NOTE };
+  return { badge: null, note: null };
+}
+
+/**
+ * Card 1's badge, or any card's photo badge. A card that looks like the user's
+ * photo says so; that wins over the household badges.
+ *
+ * @param {{ remembered?: unknown, preferred?: unknown, available?: unknown, visual_match?: unknown }} product
+ * @param {number} number
+ */
+function cardBadge(product, number) {
+  const photo = photoMatch(product).badge;
+  if (photo) return photo;
+  return number === 1 ? bestPickBadge(product) : null;
+}
+
 /** @param {unknown} value */
 const validPosition = (value) => (Number.isInteger(value) && /** @type {number} */ (value) >= 1 ? /** @type {number} */ (value) : null);
 
@@ -62,7 +91,7 @@ export function orderOptions(products, limit = MAX_OPTIONS) {
       .slice(0, limit)
       .map((product) => {
         const number = /** @type {number} */ (validPosition(product.position));
-        return { key: `${optionKey(product)}:${number}`, product, number, badge: number === 1 ? bestPickBadge(product) : null };
+        return { key: `${optionKey(product)}:${number}`, product, number, badge: cardBadge(product, number) };
       });
   }
   return fallbackOrder(named, limit);
@@ -87,7 +116,7 @@ function fallbackOrder(products, limit) {
   return kept
     .sort((a, b) => rank(a.product) - rank(b.product) || a.index - b.index)
     .slice(0, limit)
-    .map(({ product, key }, index) => ({ key, product, number: index + 1, badge: index === 0 ? bestPickBadge(product) : null }));
+    .map(({ product, key }, index) => ({ key, product, number: index + 1, badge: cardBadge(product, index + 1) }));
 }
 
 /** "1/3" */

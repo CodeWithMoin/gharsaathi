@@ -41,6 +41,8 @@ class ProductSnapshot(BaseModel):
     avoided: bool | None = None
     # Card number from the assistant's search, the same one the model refers to.
     position: int | None = Field(default=None, ge=1, le=50)
+    # How the option compares with the user's photo (photo searches only).
+    visual_match: Literal["same_product", "similar", "different"] | None = None
 
 
 class ChatMessageSnapshot(BaseModel):

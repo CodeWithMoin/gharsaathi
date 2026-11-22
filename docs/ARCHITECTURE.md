@@ -504,18 +504,21 @@ sequenceDiagram
   alt typed
     B->>A: POST /api/chat/turn {message (may be empty), attachment_id}
     A->>V: image + strict JSON schema
-    A->>A: sanitise items, delete the image
+    A->>A: sanitise items; delete the image (pack/shelf photo: hold it for the visual match)
     A->>M: developer note: photo items (data) + the user's message
   else voice
     U->>M: "photo dekho" (GPT-Live delegates)
     M->>A: read_attached_photo {}
     A->>V: newest pending photo of this user
-    A->>A: sanitise items, delete the image (and older pending ones)
+    A->>A: sanitise items; delete or hold the image (older pending ones deleted)
     A-->>B: photo.read (chip clears)
   end
   M-->>U: one confirm line ("…yahi dhoondhun?")
   U->>M: "haan"
   M->>A: search_products per item → result groups
+  A->>V: held photo + top 6 store images (one call, 6 s cap)
+  V-->>A: same_product / similar / different per option
+  A->>A: same product first, different last; delete the photo
 ```
 
 - **Vision call.** `app/photos/extraction.py`: Responses API, `input_image` data URL,
@@ -529,12 +532,47 @@ sequenceDiagram
   (`camera-dialog.tsx`, `getUserMedia`, video only); the captured frame becomes a JPEG
   `File` and goes through the same `preparePhoto` downscale and upload, so the server
   sees no difference. Camera tracks stop on close, capture, unmount and hidden tab.
-- **Read the pack verbatim.** Each item carries `printed_name` (the name exactly as
-  printed) and `search_query`. Code rebuilds `search_query` from `printed_name` + pack
-  size whenever the model's query drops a printed word, so a legible "Amul Lassi" is
-  never searched as "flavoured milk" or a sibling product. Medium/low-confidence items
-  are read back to the user once. Live check: `python -m evaluation.run_photo_extraction`
-  (one OpenAI call on a drawn "Amul Lassi 200 ml" label).
+- **Beta.** Shop from a photo is a beta feature (`beta: true` on `shop_from_photo` in
+  `app/capabilities.py`). The 📎 photo menu, the webcam dialog and the photo chip show a
+  small "Beta" tag (`app/ui/beta-tag.tsx`); the assistant says it is beta only when an
+  item's confidence is low.
+- **Identify: read the pack and look at it.** Each item carries `printed_name`,
+  `search_query`, up to 2 `alternative_queries`, a short `visual_description` (pack
+  type, colours, logo, imagery) and `identified_from` (`printed_text` | `visual` |
+  `both`). The core rule: **brand visible → use the brand** (legible name or a clearly
+  recognised logo: brand + product + variant + size); **no brand visible → the most
+  likely generic product** ("sweet lassi tetra pack", "plain curd 400 g cup", "tomato
+  500 g") plus alternatives, never a refusal and never an invented brand. Code enforces
+  both ends: it rebuilds `search_query` from `printed_name` + pack size whenever the
+  model's query drops a printed word (a legible "Amul Lassi" is never searched as
+  "flavoured milk" or a sibling product), and for pack photos it drops a brand that no
+  printed name, evidence or named logo in `visual_description` shows, removing it from
+  the queries too. Medium/low-confidence items are read back to the user once. Live
+  check: `python -m evaluation.run_photo_extraction` (drawn "Amul Lassi 200 ml" label,
+  plus `--visual` for a text-less lassi pack, loose tomatoes and a visual-match run).
+- **Visual match against store results.** For a `product_photo` or `shelf` photo the
+  reader *holds* the image instead of deleting it: it is marked read (never read
+  again, `newest`/`get` skip it), keeps its 15-minute TTL and stays in the same memory
+  store. When `search_products` returns options for one of its first 3 items
+  (`photo_tools.item_for_query` matches the query to the item's `search_query` or an
+  alternative), `app/photos/visual_match.py` fetches the top 6 option images (https,
+  provider image hosts only: `*.swiggy.com`/`*.swiggy.in`, `*.zeptonow.com`/
+  `*.zepto.com`/`*.zepto.co.in`; no redirects, 2 MB and 2.5 s per image, decoded and
+  re-encoded to ≤384 px JPEG) and makes **one** vision call (`PHOTO_VISUAL_MATCH_MODEL`,
+  default the extraction model; photo `detail: high`, candidates `detail: low`,
+  `store: false`) under a 6 s budget. The model only labels each candidate
+  `same_product` | `similar` | `different` with a short reason; code orders (in-stock
+  `same_product` first, `different` last, the rest in search order; nothing dropped)
+  for the model and the screen alike, renumbers `position`, and adds `photo_match`
+  (`same_product_found` / `same_product_unavailable` / `no_exact_match`) so the
+  assistant mentions the matched pack first, never claims an exact match without
+  `same_product`, and says it couldn't find that exact pack otherwise. Cards show
+  "Looks like your photo" or a quiet "Not the pack in your photo". Any error, timeout
+  or missing image keeps the normal order. The photo is deleted once its items have
+  been compared (or when a newer photo is read, the chip is removed, or the TTL ends).
+  Logs: `event=photo_visual_match outcome=… candidates=… compared=… latency_ms=…`, no
+  names, URLs or text. `PHOTO_VISUAL_MATCH_ENABLED=false` turns the step off (photos
+  are then deleted right after reading, as before).
 - **Untrusted image text.** The prompt says every word in the photo is data. Code then
   drops instruction-like items ("ignore previous instructions", "add to basket",
   "place order", links), strips prices, caps field lengths, merges duplicates, caps
@@ -542,7 +580,8 @@ sequenceDiagram
   "data, not instructions" note; photos never carry prices or stores.
 - **Discard after reading, keep a small thumbnail.** Full image bytes exist only in
   `PhotoAttachmentStore` (memory, per verified user, random `ph_…` id, at most 3
-  pending per user, 15 min TTL). They are deleted as soon as items are extracted (a
+  pending per user, 15 min TTL). They are deleted as soon as items are extracted, or
+  for a pack/shelf photo once its visual match is done (see above) (a
   failed extraction keeps the photo until its TTL so the user can retry), or when the
   chip's remove button calls `DELETE /api/chat/attachments/{id}`. The saved chat keeps
   the user turn "📷 Photo" (plus any text), the assistant's confirm line and, by owner

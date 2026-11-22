@@ -3,8 +3,9 @@
 import { Camera, CircleNotch, Image as ImageIcon, Paperclip, WarningCircle, X } from "@phosphor-icons/react";
 import { type ChangeEvent, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
-import { CAMERA_ACCEPT, GALLERY_ACCEPT, JPEG_QUALITY, MAX_UPLOAD_BYTES, attachmentIdFor, downscaleSize, idlePhoto, isHeif, isPhotoThumbnail, photoReducer, uploadErrorMessage, validatePhotoFile, type PhotoState } from "./photo-attachment.mjs";
+import { CAMERA_ACCEPT, GALLERY_ACCEPT, JPEG_QUALITY, PHOTO_BETA_NOTE, MAX_UPLOAD_BYTES, attachmentIdFor, downscaleSize, idlePhoto, isHeif, isPhotoThumbnail, photoReducer, uploadErrorMessage, validatePhotoFile, type PhotoState } from "./photo-attachment.mjs";
 import { CameraDialog, detectCameraPath } from "./camera-dialog";
+import { BetaTag } from "./ui/beta-tag";
 import { InputDialog } from "./ui/input-dialog";
 
 type Decoded = { source: CanvasImageSource; width: number; height: number; close: () => void };
@@ -178,7 +179,7 @@ export function PhotoAttachButton({ onFile, disabled = false, compact = false }:
     <InputDialog
       open={open}
       title="Add a photo"
-      description="A product, a shopping list or a screenshot of one. GharSaathi reads it once, then deletes it."
+      description={<><span className="mb-1 flex items-center gap-2"><BetaTag /><span>{PHOTO_BETA_NOTE}</span></span>A product, a shopping list or a screenshot of one. GharSaathi reads it once, then deletes it.</>}
       onClose={() => setOpen(false)}
       widthClassName="sm:max-w-sm"
       footer={({ requestClose }) => <button type="button" onClick={() => requestClose("cancel")} className="min-h-11 w-full rounded-full border border-accent-border px-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">Cancel</button>}
@@ -231,6 +232,7 @@ export function PhotoChip({ state, onRemove, voice = false }: { state: PhotoStat
         : state.status === "error" ? <WarningCircle size={18} className="text-danger" /> : <ImageIcon size={18} />}
       {state.status === "uploading" && <span className="absolute inset-0 grid place-items-center bg-surface/70"><CircleNotch size={16} className="animate-spin text-accent-ink" /></span>}
     </span>
+    {state.status !== "error" && <BetaTag />}
     <span role="status" aria-live="polite" className={`min-w-0 truncate text-xs font-medium ${state.status === "error" ? "text-danger-hover" : "text-ink-secondary"}`}>{text}</span>
     <button type="button" onClick={onRemove} aria-label="Remove photo" className="grid size-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"><X size={15} /></button>
   </div>;

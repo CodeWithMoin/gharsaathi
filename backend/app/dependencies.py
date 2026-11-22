@@ -62,6 +62,7 @@ from app.conversations.summarizer import (
 from app.memory.recall import DatabasePreferenceRecaller
 from app.photos.extraction import OpenAIPhotoExtractor, PhotoReader
 from app.photos.store import PhotoAttachmentStore
+from app.photos.visual_match import HttpImageFetcher, OpenAIVisualMatchModel, PhotoVisualMatcher
 from app.user_profile import DatabaseProfileReader
 from app.chat.service import ChatTurnService
 from app.voice.service import LiveSessionService
@@ -265,7 +266,19 @@ def get_photo_reader() -> PhotoReader:
         if api_key
         else None
     )
-    return PhotoReader(get_photo_store(), extractor)
+    matcher = (
+        PhotoVisualMatcher(
+            OpenAIVisualMatchModel(
+                api_key,
+                settings.openai_base_url,
+                settings.photo_visual_match_model.strip() or settings.photo_extraction_model,
+            ),
+            HttpImageFetcher(),
+        )
+        if api_key and settings.photo_visual_match_enabled
+        else None
+    )
+    return PhotoReader(get_photo_store(), extractor, visual_matcher=matcher)
 
 
 PhotoStoreDependency = Annotated[PhotoAttachmentStore, Depends(get_photo_store)]

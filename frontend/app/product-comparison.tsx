@@ -6,7 +6,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import type { ProviderName, ShoppingBasket } from "./basket/BasketPanel";
-import { activeIndexFromScroll, basketActionLabel, basketQuantity, optionPositionLabel, optionPrices, orderOptions, positionLabel, storeName, type BestPickBadge } from "./product-options.mjs";
+import { activeIndexFromScroll, basketActionLabel, basketQuantity, optionPositionLabel, optionPrices, orderOptions, photoMatch, positionLabel, storeName, type CardBadge, type VisualMatch } from "./product-options.mjs";
 import { groupBadge } from "./result-groups.mjs";
 
 export type Product = {
@@ -29,6 +29,8 @@ export type Product = {
   remembered?: string | null;
   preferred?: boolean | null;
   avoided?: boolean | null;
+  /** How this option compares with the user's photo (photo searches only). */
+  visual_match?: VisualMatch | null;
   /** Card number from the assistant's search; the model uses the same number. */
   position?: number | null;
 };
@@ -45,7 +47,7 @@ type ProductOptionsProps = {
 
 const MAX_QUANTITY = 50;
 const STORE_DOT: Record<ProviderName, string> = { swiggy_instamart: "bg-accent", zepto: "bg-zepto" };
-const BADGE_ICON: Record<BestPickBadge, typeof Sparkle> = { "You bought this before": ClockCounterClockwise, "Your usual": Heart, "Best match": Sparkle };
+const BADGE_ICON: Record<CardBadge, typeof Sparkle> = { "You bought this before": ClockCounterClockwise, "Your usual": Heart, "Best match": Sparkle, "Looks like your photo": ImageSquare };
 const focusRing = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 function productImage(product: Product) {
@@ -144,7 +146,7 @@ function OptionCard({ product, number, total, badge, commerceMode, quantity, loc
   product: Product;
   number: number;
   total: number;
-  badge: BestPickBadge | null;
+  badge: CardBadge | null;
   commerceMode: "demo" | "live";
   quantity: number;
   locked: boolean;
@@ -155,6 +157,7 @@ function OptionCard({ product, number, total, badge, commerceMode, quantity, loc
   const image = productImage(product);
   const prices = optionPrices(product);
   const BadgeIcon = badge ? BADGE_ICON[badge] : null;
+  const photoNote = photoMatch(product).note;
   const provider = product.provider ?? "swiggy_instamart";
   const eta = product.delivery_value ? `${product.delivery_value} ${product.delivery_unit ?? "min"}` : null;
 
@@ -178,6 +181,7 @@ function OptionCard({ product, number, total, badge, commerceMode, quantity, loc
 
         <h4 className="mt-2 line-clamp-2 min-h-[2.6em] text-[13px] font-semibold leading-[1.3] text-ink" title={product.name}>{product.name}</h4>
         <p className="mt-0.5 truncate text-[11px] text-muted">{product.pack_size || "\u00a0"}</p>
+        {photoNote && <p className="mt-0.5 truncate text-[11px] text-subtle">{photoNote}</p>}
 
         <div className="mt-2 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
           {prices.price ? <strong className="text-[17px] leading-none tabular-nums text-ink">{prices.price}</strong> : <span className="text-xs text-muted">Price shown in basket</span>}
