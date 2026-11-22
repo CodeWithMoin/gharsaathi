@@ -9,6 +9,7 @@ import {
   CircleNotch,
   Eye,
   MapPin,
+  PencilSimple,
   ShieldCheck,
   SignOut,
   Storefront,
@@ -20,6 +21,8 @@ import { ADDRESS_FORM_OPTIONS } from "./onboarding-flow.mjs";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useApiRequest } from "./authenticated-api";
 import { MemorySettings } from "./memory-settings";
+import { profileChanges, profileDraft, type ProfileUpdate, type ProfileValues } from "./input-flows.mjs";
+import { InputDialog } from "./ui/input-dialog";
 
 export type AccountSettingsStore = {
   id: string;
@@ -60,6 +63,8 @@ export type AccountSettingsSheetProps = {
   onManagePrivacy?: () => void;
   onManageAddresses?: () => void;
   onSelectAddress?: (addressId: string) => void;
+  /** Opens the "Choose delivery address" popup for one connected store. */
+  onChooseStoreAddress?: (storeId: string) => void;
   onSignOut: () => void;
   signOutPending?: boolean;
 };
@@ -86,6 +91,7 @@ export function AccountSettingsSheet({
   onManagePrivacy,
   onManageAddresses,
   onSelectAddress,
+  onChooseStoreAddress,
   onSignOut,
   signOutPending = false,
 }: AccountSettingsSheetProps) {
@@ -174,7 +180,7 @@ export function AccountSettingsSheet({
                 {section === "preferences" && <PreferencesDetail languageLabel={languageLabel} onLanguageChange={onLanguageChange} onManagePreferences={onManagePreferences} />}
                 {section === "memory" && <MemorySettings />}
                 {section === "privacy" && <SimpleDetail icon={<Eye size={24} weight="duotone" />} title={privacySummary} description="You choose what GharSaathi remembers. Shopping history alone never becomes a stock prediction." action="Review privacy & memory" onAction={onManagePrivacy} />}
-                {section === "addresses" && <AddressesDetail addresses={addresses} onSelectAddress={onSelectAddress} onManageAddresses={onManageAddresses} />}
+                {section === "addresses" && <AddressesDetail addresses={addresses} stores={stores} onSelectAddress={onSelectAddress} onManageAddresses={onManageAddresses} onChooseStoreAddress={onChooseStoreAddress} />}
               </motion.div>}
           </AnimatePresence>
         </div>
@@ -212,82 +218,131 @@ type ReplyLanguage = "hinglish" | "hindi" | "english";
 type VoiceProfile = { first_name: string | null; address_form: AddressForm; language: ReplyLanguage };
 
 const ADDRESS_FORMS: { id: AddressForm; label: string; example: string }[] = ADDRESS_FORM_OPTIONS.map((option) => ({ id: option.value, label: option.label, example: option.example }));
+const LANGUAGES: { id: ReplyLanguage; label: string }[] = [
+  { id: "hinglish", label: "Hinglish" },
+  { id: "hindi", label: "Hindi" },
+  { id: "english", label: "English" },
+];
+const choiceClass = (selected: boolean) => `min-h-11 rounded-xl px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:opacity-60 ${selected ? "bg-[#c6531d] text-white" : "border border-[#e4cabc] text-[#68493c]"}`;
 
 function PreferencesDetail({ languageLabel, onLanguageChange, onManagePreferences }: { languageLabel: string; onLanguageChange?: (language: "hinglish" | "hindi" | "english") => void; onManagePreferences?: () => void }) {
   const request = useApiRequest();
-  const languages = [
-    { id: "hinglish" as const, label: "Hinglish" },
-    { id: "hindi" as const, label: "Hindi" },
-    { id: "english" as const, label: "English" },
-  ];
-  return <div className="rounded-2xl border border-[#ead9cd] bg-[#fffdf9] p-4">
-    <span className="grid size-11 place-items-center rounded-xl bg-[#f7e8de] text-[#bd5525]"><Translate size={24} weight="duotone" /></span>
-    <h3 className="mt-4 text-base font-semibold tracking-[-.02em]">Chat language</h3>
-    <p className="mt-2 text-sm leading-6 text-[#806f65]">Choose how GharSaathi speaks and writes with you.</p>
-    <div className="mt-4 grid grid-cols-3 gap-2">
-      {languages.map((language) => {
-        const selected = languageLabel.toLowerCase() === language.id;
-        return <button key={language.id} type="button" aria-pressed={selected} onClick={() => { onLanguageChange?.(language.id); void request<VoiceProfile>("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: language.id }) }).catch(() => undefined); }} disabled={!onLanguageChange} className={`min-h-11 rounded-xl px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:cursor-default ${selected ? "bg-[#c6531d] text-white" : "border border-[#e4cabc] text-[#68493c]"}`}>{language.label}</button>;
-      })}
-    </div>
-    <AddressPreference />
-    {onManagePreferences && <button type="button" onClick={onManagePreferences} className="mt-4 min-h-11 w-full rounded-xl border border-[#e4cabc] px-4 text-sm font-semibold text-[#68493c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d]">More preferences</button>}
-  </div>;
-}
-
-function AddressPreference() {
-  const request = useApiRequest();
-  const nameId = useId();
   const [profile, setProfile] = useState<VoiceProfile | null>(null);
-  const [name, setName] = useState("");
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [savedNotice, setSavedNotice] = useState(false);
 
   useEffect(() => {
     let active = true;
     void request<VoiceProfile>("/api/profile")
-      .then((loaded) => { if (active) { setProfile(loaded); setName(loaded.first_name ?? ""); } })
-      .catch(() => { if (active) { setProfile({ first_name: null, address_form: "neutral", language: "hinglish" }); setStatus("error"); setError("Could not load your profile."); } });
+      .then((loaded) => { if (active) setProfile(loaded); })
+      .catch(() => { if (active) { setProfile({ first_name: null, address_form: "neutral", language: "hinglish" }); setLoadError("Could not load your profile."); } });
     return () => { active = false; };
   }, [request]);
 
-  async function save(update: Partial<VoiceProfile>) {
-    setStatus("saving");
+  const draft = profileDraft(profile, languageLabel);
+  const addressForm = ADDRESS_FORMS.find((form) => form.id === draft.address_form);
+  return <div className="rounded-2xl border border-[#ead9cd] bg-[#fffdf9] p-4">
+    <span className="grid size-11 place-items-center rounded-xl bg-[#f7e8de] text-[#bd5525]"><Translate size={24} weight="duotone" /></span>
+    <h3 className="mt-4 text-base font-semibold tracking-[-.02em]">Your profile</h3>
+    <p className="mt-2 text-sm leading-6 text-[#806f65]">How GharSaathi speaks and writes with you. You can change it at any time.</p>
+    {profile
+      ? <dl className="mt-4 divide-y divide-[#f0e2d8] rounded-xl border border-[#f0e2d8] text-sm">
+        <div className="flex items-center gap-3 px-3 py-2.5"><dt className="w-28 shrink-0 text-xs text-[#8d766a]">Name</dt><dd className="min-w-0 flex-1 truncate font-semibold">{draft.first_name || "Not set"}</dd></div>
+        <div className="flex items-center gap-3 px-3 py-2.5"><dt className="w-28 shrink-0 text-xs text-[#8d766a]">How to address you</dt><dd className="min-w-0 flex-1"><span className="block font-semibold">{addressForm?.label}</span><span className="block truncate text-[11px] text-[#8d766a]">“{addressForm?.example}”</span></dd></div>
+        <div className="flex items-center gap-3 px-3 py-2.5"><dt className="w-28 shrink-0 text-xs text-[#8d766a]">Reply language</dt><dd className="min-w-0 flex-1 font-semibold">{LANGUAGES.find((language) => language.id === draft.language)?.label}</dd></div>
+      </dl>
+      : <div className="mt-4 h-28 animate-pulse rounded-xl bg-[#f3e6dc]" aria-label="Loading profile" />}
+    <p aria-live="polite" className={`mt-2 min-h-4 text-[11px] ${loadError ? "text-[#a33d2c]" : "text-[#55745c]"}`}>{loadError || (savedNotice ? "Saved. This applies from your next voice chat." : "")}</p>
+    <button type="button" onClick={() => { setSavedNotice(false); setEditing(true); }} disabled={!profile} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#3b2a22] px-4 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:opacity-50"><PencilSimple size={16} weight="bold" />Edit profile</button>
+    {onManagePreferences && <button type="button" onClick={onManagePreferences} className="mt-3 min-h-11 w-full rounded-xl border border-[#e4cabc] px-4 text-sm font-semibold text-[#68493c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d]">More preferences</button>}
+    <EditProfileDialog
+      open={editing && profile !== null}
+      initial={draft}
+      languageEditable={Boolean(onLanguageChange)}
+      onClose={() => setEditing(false)}
+      onSave={async (changes) => {
+        const saved = await request<VoiceProfile>("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(changes) });
+        setProfile(saved);
+        setLoadError("");
+        if (changes.language) onLanguageChange?.(changes.language);
+        setSavedNotice(true);
+        setEditing(false);
+      }}
+    />
+  </div>;
+}
+
+/** One "Edit profile" popup for name, how to address you and reply language; one Save. */
+function EditProfileDialog({ open, initial, languageEditable, onClose, onSave }: { open: boolean; initial: ProfileValues; languageEditable: boolean; onClose: () => void; onSave: (changes: ProfileUpdate) => Promise<void> }) {
+  const baseId = useId();
+  const formId = `${baseId}-form`;
+  const [session, setSession] = useState<{ initial: ProfileValues; values: ProfileValues } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (open && !session) setSession({ initial, values: initial });
+  else if (!open && session && !busy) setSession(null);
+  const values = session?.values ?? initial;
+  const dirty = open && session !== null && profileChanges(session.initial, session.values) !== null;
+  const update = (patch: Partial<ProfileValues>) => { setError(""); setSession((current) => current && { ...current, values: { ...current.values, ...patch } }); };
+
+  async function submit() {
+    if (!session || busy) return;
+    const changes = profileChanges(session.initial, session.values);
+    if (!changes) { onClose(); return; }
+    setBusy(true);
     setError("");
     try {
-      const saved = await request<VoiceProfile>("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(update) });
-      setProfile(saved);
-      setName(saved.first_name ?? "");
-      setStatus("saved");
+      await onSave(changes);
     } catch (cause) {
-      setStatus("error");
       setError(cause instanceof Error && cause.message !== "Request failed." ? cause.message : "Could not save. Use only letters in your name.");
+    } finally {
+      setBusy(false);
     }
   }
 
-  if (!profile) return <div className="mt-5 h-28 animate-pulse rounded-xl bg-[#f3e6dc]" aria-label="Loading profile" />;
-  const nameChanged = name.trim() !== (profile.first_name ?? "");
-  return <section className="mt-5 border-t border-[#f0e2d8] pt-4" aria-label="How should GharSaathi address you?">
-    <h3 className="text-base font-semibold tracking-[-.02em]">How should GharSaathi address you?</h3>
-    <p className="mt-1 text-xs leading-5 text-[#806f65]">GharSaathi uses this when talking to you. You can change it at any time.</p>
-    <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Address form">
-      {ADDRESS_FORMS.map((form) => {
-        const selected = profile.address_form === form.id;
-        return <button key={form.id} type="button" aria-pressed={selected} disabled={status === "saving"} onClick={() => void save({ address_form: form.id })} className={`min-h-11 rounded-xl px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:opacity-60 ${selected ? "bg-[#c6531d] text-white" : "border border-[#e4cabc] text-[#68493c]"}`}>{form.label}</button>;
-      })}
-    </div>
-    <p className="mt-2 text-[11px] text-[#8d766a]">For example: “{ADDRESS_FORMS.find((form) => form.id === profile.address_form)?.example}”</p>
-    <label htmlFor={nameId} className="mt-4 block text-[11px] font-semibold text-[#5f4a3f]">What should GharSaathi call you? (optional)</label>
-    <div className="mt-2 flex gap-2">
-      <input id={nameId} value={name} maxLength={40} onChange={(event) => { setName(event.target.value); setStatus("idle"); }} placeholder="e.g. Moin" className="min-h-11 min-w-0 flex-1 rounded-xl border border-[#deccbf] bg-white px-3 text-sm outline-none focus:border-[#c6531d]" />
-      <button type="button" disabled={!nameChanged || status === "saving"} onClick={() => void save({ first_name: name.trim() || null })} className="min-h-11 rounded-xl bg-[#3b2a22] px-4 text-xs font-semibold text-white disabled:opacity-40">{status === "saving" ? "Saving…" : "Save"}</button>
-    </div>
-    <p aria-live="polite" className={`mt-2 min-h-4 text-[11px] ${status === "error" ? "text-[#a33d2c]" : "text-[#55745c]"}`}>{status === "saved" ? "Saved. This applies from your next voice chat." : status === "error" ? error : ""}</p>
-  </section>;
+  const example = ADDRESS_FORMS.find((form) => form.id === values.address_form)?.example;
+  return <InputDialog
+    open={open}
+    title="Edit profile"
+    description="GharSaathi uses this when talking to you."
+    dirty={dirty}
+    busy={busy}
+    discardMessage="Discard your profile changes?"
+    closeLabel="Close edit profile"
+    widthClassName="sm:max-w-md"
+    onClose={() => { setError(""); onClose(); }}
+    footer={({ requestClose }) => <div className="flex items-center gap-3">
+      <button type="button" disabled={busy} onClick={() => requestClose("cancel")} className="rounded-full px-4 py-3 text-sm font-semibold text-[#6f5b50] transition hover:bg-[#f3e7dd] disabled:opacity-40">Cancel</button>
+      <button type="submit" form={formId} disabled={busy} className="ml-auto flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[#3b2a22] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none">{busy && <CircleNotch size={15} className="animate-spin" />}{busy ? "Saving…" : "Save"}</button>
+    </div>}
+  >
+    <form id={formId} onSubmit={(event) => { event.preventDefault(); void submit(); }} className="space-y-5">
+      <div>
+        <label htmlFor={`${baseId}-name`} className="block text-xs font-semibold text-[#5f4a3f]">What should GharSaathi call you? (optional)</label>
+        <input id={`${baseId}-name`} value={values.first_name} maxLength={40} disabled={busy} onChange={(event) => update({ first_name: event.target.value })} placeholder="e.g. Moin" autoComplete="given-name" className="mt-1.5 min-h-11 w-full rounded-xl border border-[#deccbf] bg-white px-3 text-sm outline-none focus:border-[#c6531d] focus-visible:ring-2 focus-visible:ring-[#c6531d]/30" />
+      </div>
+      <fieldset>
+        <legend className="text-xs font-semibold text-[#5f4a3f]">How should GharSaathi address you?</legend>
+        <div className="mt-1.5 grid grid-cols-3 gap-2">
+          {ADDRESS_FORMS.map((form) => <button key={form.id} type="button" aria-pressed={values.address_form === form.id} disabled={busy} onClick={() => update({ address_form: form.id })} className={choiceClass(values.address_form === form.id)}>{form.label}</button>)}
+        </div>
+        <p className="mt-2 text-[11px] text-[#8d766a]">For example: “{example}”</p>
+      </fieldset>
+      <fieldset>
+        <legend className="text-xs font-semibold text-[#5f4a3f]">Reply language</legend>
+        <div className="mt-1.5 grid grid-cols-3 gap-2">
+          {LANGUAGES.map((language) => <button key={language.id} type="button" aria-pressed={values.language === language.id} disabled={busy || !languageEditable} onClick={() => update({ language: language.id })} className={choiceClass(values.language === language.id)}>{language.label}</button>)}
+        </div>
+      </fieldset>
+      {error && <p role="alert" className="rounded-xl bg-[#fff4ef] px-3 py-2 text-xs leading-5 text-[#8f3a2a]">{error}</p>}
+    </form>
+  </InputDialog>;
 }
 
-function AddressesDetail({ addresses, onSelectAddress, onManageAddresses }: { addresses: AccountSettingsAddress[]; onSelectAddress?: (addressId: string) => void; onManageAddresses?: () => void }) {
-  return <div><div className="overflow-hidden rounded-2xl border border-[#ead9cd] bg-[#fffdf9]">{addresses.length ? addresses.map((address, index) => <button type="button" key={address.id} onClick={() => onSelectAddress?.(address.id)} className={`flex min-h-[72px] w-full items-center gap-3 px-3.5 text-left focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#c6531d] ${index ? "border-t border-[#f0e2d8]" : ""}`}><span className="grid size-10 place-items-center rounded-xl bg-[#f7e8de] text-[#bd5525]"><MapPin size={20} weight="duotone" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{address.label}</span>{address.detail && <span className="mt-0.5 block truncate text-xs text-[#8d766a]">{address.detail}</span>}</span>{address.selected && <span className="grid size-6 place-items-center rounded-full bg-[#e3f0e7] text-[#347653]" aria-label="Selected address"><Check size={14} weight="bold" /></span>}</button>) : <p className="px-4 py-5 text-sm leading-6 text-[#806f65]">Add a delivery address to use with a connected store.</p>}</div><button type="button" onClick={onManageAddresses} disabled={!onManageAddresses} className="mt-4 min-h-11 w-full rounded-xl border border-[#e4cabc] bg-[#fffdf9] px-4 text-sm font-semibold text-[#68493c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:cursor-default disabled:opacity-55">Manage addresses</button></div>;
+function AddressesDetail({ addresses, stores, onSelectAddress, onManageAddresses, onChooseStoreAddress }: { addresses: AccountSettingsAddress[]; stores: AccountSettingsStore[]; onSelectAddress?: (addressId: string) => void; onManageAddresses?: () => void; onChooseStoreAddress?: (storeId: string) => void }) {
+  const connectedStores = onChooseStoreAddress ? stores.filter((store) => store.connected) : [];
+  return <div><div className="overflow-hidden rounded-2xl border border-[#ead9cd] bg-[#fffdf9]">{addresses.length ? addresses.map((address, index) => <button type="button" key={address.id} onClick={() => onSelectAddress?.(address.id)} className={`flex min-h-[72px] w-full items-center gap-3 px-3.5 text-left focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#c6531d] ${index ? "border-t border-[#f0e2d8]" : ""}`}><span className="grid size-10 place-items-center rounded-xl bg-[#f7e8de] text-[#bd5525]"><MapPin size={20} weight="duotone" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{address.label}</span>{address.detail && <span className="mt-0.5 block truncate text-xs text-[#8d766a]">{address.detail}</span>}</span>{address.selected && <span className="grid size-6 place-items-center rounded-full bg-[#e3f0e7] text-[#347653]" aria-label="Selected address"><Check size={14} weight="bold" /></span>}</button>) : <p className="px-4 py-5 text-sm leading-6 text-[#806f65]">Add a delivery address to use with a connected store.</p>}</div>{connectedStores.map((store) => <button key={store.id} type="button" onClick={() => onChooseStoreAddress?.(store.id)} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#e4cabc] bg-[#fffdf9] px-4 text-sm font-semibold text-[#68493c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d]"><MapPin size={16} weight="bold" />Choose {store.name} address</button>)}<button type="button" onClick={onManageAddresses} disabled={!onManageAddresses} className="mt-4 min-h-11 w-full rounded-xl border border-[#e4cabc] bg-[#fffdf9] px-4 text-sm font-semibold text-[#68493c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:cursor-default disabled:opacity-55">Manage addresses</button></div>;
 }
 
 function initials(name: string) {
