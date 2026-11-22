@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from app.shopping.query_relax import relaxed_query
 from app.commerce.swiggy.errors import (
     SwiggyAuthenticationRequired,
     SwiggyConfigurationError,
@@ -791,6 +792,14 @@ class MultiProviderShoppingToolExecutor:
             return {**base, "status": "provider_error", "reason": exc.reason}
         except (SwiggyError, ZeptoError):
             return {**base, "status": "provider_error", "reason": "unavailable"}
+        if not result.products:
+            # One broader retry (brand + product words) before reporting "nothing found".
+            broader = relaxed_query(query)
+            if broader:
+                try:
+                    result = await target.searcher.search(broader, target.address_id, 0)
+                except (SwiggyError, ZeptoError):
+                    pass
         return {**base, "status": "ok", "products": result.products}
 
 
