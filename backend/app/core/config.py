@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     zepto_oauth_scope: str = "tools:read"
     # Zepto's saved-address snapshot auto-refreshes when older than this (minutes).
     zepto_address_refresh_max_age_min: int = Field(default=30, ge=1, le=24 * 60)
+    # Prepaid Zepto orders (UPI, Zepto Cash, pay online). Off by default; even
+    # when on, a method is offered only if it is allow-listed here, covered by
+    # the verified response contract (app/commerce/zepto/payments.py) and listed
+    # by Zepto's get_payment_methods. Cash on delivery is always offered.
+    zepto_online_payments_enabled: bool = False
+    zepto_payment_methods_allowed: str = "upi_reserve,wallet,online"
     frontend_url: str = "http://localhost:3003"
     cors_origins: str = "http://localhost:3003,http://127.0.0.1:3003"
     app_encryption_key: str = ""
@@ -52,6 +58,8 @@ class Settings(BaseSettings):
     live_backend_model: str = "gpt-6-luna"
     # Typed chat runs the same backend model and tools as voice, one bounded turn per request.
     chat_turn_timeout_seconds: float = Field(default=60.0, ge=5.0, le=180.0)
+    # Shop from a photo: vision model for reading attached photos (Responses API, image input).
+    photo_extraction_model: str = "gpt-6-luna"
     # native | tuned (option A) | smart_turn (option B); see docs/voice-turn-taking.md
     voice_turn_taking: Literal["native", "tuned", "smart_turn"] = "native"
     # Dev diagnostic: log content-free sideband event summaries (type, id field names, timing).

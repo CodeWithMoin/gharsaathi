@@ -6,8 +6,15 @@ open approval, its quote and payable amount, and the delivery address, and the
 browser shows it as a card with a "Place order" button. Nothing is approved or
 ordered until the signed-in user taps that button, which calls
 ``OrderConfirmations.place``. ``place`` re-checks every binding, then runs the
-existing approval and Zepto COD checkout path (same locks, durable one-shot
-claim and outcome-unknown handling). Cancel invalidates the confirmation.
+existing approval and Zepto checkout path (same locks, durable one-shot claim
+and outcome-unknown handling). Cancel invalidates the confirmation.
+
+The payment method is part of the binding. Cash on delivery is always offered;
+prepaid methods only when ``PaymentOptions`` lists them. Choosing another
+method replaces the card with a fresh one. A prepaid tap ends in
+``awaiting_payment``: the user pays in a provider-authorised flow, and
+``check_payment`` reads the result once per tap. Only a provider-confirmed
+payment *and* order is reported as placed.
 
 Confirmations live in process memory: a backend restart drops them and the
 user asks for a fresh card. The order itself stays one-shot across processes
@@ -24,7 +31,7 @@ import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, Protocol
 
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import Clock, utc_now
@@ -36,10 +43,13 @@ from app.shopping.models import (
     ApprovalStatus,
     Basket,
     BasketStatus,
+    CheckoutAttempt,
     CheckoutStatus,
+    PaymentMethod,
     ProviderName,
     Quote,
 )
+from app.shopping.payments import PAYMENT_LABELS, PREPAID_METHODS, payment_label
 from app.shopping.ports import BasketRepository
 
 
@@ -55,32 +65,120 @@ ORDERABLE_PROVIDERS: frozenset[ProviderName] = frozenset({"zepto"})
 ConfirmationState = Literal["open", "cancelled", "used", "superseded", "expired"]
 
 
+OrderStatus = Literal[
+    "confirmed",
+    "outcome_unknown",
+    "not_placed",
+    "cancelled",
+    "awaiting_payment",
+    "payment_succeeded",
+    "payment_failed",
+    "paid_order_failed",
+    "payment_unknown",
+]
+
+_STATUS_FROM_CHECKOUT: dict[CheckoutStatus, OrderStatus] = {
+    CheckoutStatus.CONFIRMED: "confirmed",
+    CheckoutStatus.OUTCOME_UNKNOWN: "outcome_unknown",
+    CheckoutStatus.DISPATCHING: "outcome_unknown",
+    CheckoutStatus.AWAITING_PAYMENT: "awaiting_payment",
+    CheckoutStatus.PAYMENT_SUCCEEDED: "payment_succeeded",
+    CheckoutStatus.PAYMENT_FAILED: "payment_failed",
+    CheckoutStatus.PAID_ORDER_FAILED: "paid_order_failed",
+    CheckoutStatus.PAYMENT_UNKNOWN: "payment_unknown",
+}
+
+
+class PaymentOptions(Protocol):
+    async def available_methods(self, household_id: str) -> tuple[PaymentMethod, ...]: ...
+
+
 @dataclass(frozen=True)
 class OrderResult:
     """What happened to one confirmation, as told to the assistant and the UI."""
 
     confirmation_id: str
-    status: Literal["confirmed", "outcome_unknown", "not_placed", "cancelled"]
+    status: OrderStatus
     store: str
     payable_paise: int
     provider_order_id: str | None = None
     reason: str | None = None
+    payment_method: PaymentMethod = "cod"
+    checkout_id: str | None = None
+    # Provider-issued link to finish payment; only while awaiting payment.
+    payment_url: str | None = None
+
+    @classmethod
+    def from_attempt(
+        cls, confirmation_id: str, store: str, attempt: CheckoutAttempt
+    ) -> "OrderResult":
+        status = _STATUS_FROM_CHECKOUT.get(attempt.status, "outcome_unknown")
+        order_id = attempt.provider_order_id
+        if status == "confirmed" and not order_id:
+            status = "outcome_unknown"
+        return cls(
+            confirmation_id,
+            status,
+            store,
+            attempt.payable_paise,
+            provider_order_id=order_id,
+            payment_method=attempt.payment_method,
+            checkout_id=attempt.id,
+            payment_url=attempt.payment_url if status == "awaiting_payment" else None,
+        )
 
     def assistant_note(self) -> str:
         """Application-authored text for the assistant; never user text."""
 
         amount = format_rupees(self.payable_paise)
+        method = payment_label(self.payment_method)
+        never = (
+            "Never ask for a UPI PIN, card number, CVV or OTP, and never say it is paid "
+            "until a later result says so."
+        )
         if self.status == "confirmed":
+            paid = "cash on delivery" if self.payment_method == "cod" else f"paid by {method}"
             return (
                 f"{self.store} confirmed the order (order id {self.provider_order_id}), "
-                f"{amount}, cash on delivery. Tell the user in one short line that the "
+                f"{amount}, {paid}. Tell the user in one short line that the "
                 "order is placed."
             )
         if self.status == "outcome_unknown":
             return (
                 f"{self.store} did not confirm whether the order went through. Do not say it "
-                "was placed and do not prepare it again; ask the user to check order "
-                "tracking first."
+                "was placed or paid and do not prepare it again; ask the user to check the "
+                "Zepto app or order tracking first."
+            )
+        if self.status == "awaiting_payment":
+            return (
+                f"{self.store} is waiting for payment of {amount} by {method}. Nothing is paid "
+                "or placed yet. In one short line ask the user to finish the payment in their "
+                "UPI app or on Zepto's payment page opened from the card, then tap "
+                f"\"I've paid, check status\". {never}"
+            )
+        if self.status == "payment_succeeded":
+            return (
+                f"{self.store} confirmed the payment of {amount} but has not confirmed the order "
+                "yet. Say that plainly and ask the user to check the status again in a moment. "
+                "Do not say the order is placed."
+            )
+        if self.status == "payment_failed":
+            return (
+                f"{self.store} says the payment of {amount} did not go through, so the order is "
+                "not placed. Say that plainly; do not prepare it again. Ask the user to check "
+                "their UPI app and the Zepto app before trying anything else."
+            )
+        if self.status == "paid_order_failed":
+            return (
+                f"{self.store} says the payment of {amount} went through but the order was not "
+                "created. Say that plainly, ask the user not to pay again, and to contact Zepto "
+                "support in the Zepto app about this payment. Do not promise a refund."
+            )
+        if self.status == "payment_unknown":
+            return (
+                f"{self.store} did not clearly confirm the payment. Do not say it was paid or "
+                "placed and do not prepare it again; ask the user to tap \"I've paid, check "
+                f"status\" on the card or check their UPI app. {never}"
             )
         if self.status == "cancelled":
             return "The user cancelled the order confirmation. Nothing was ordered."
@@ -108,6 +206,11 @@ class OrderConfirmation:
     state: ConfirmationState = "open"
     closed_at: datetime | None = None
     notifier: Notifier | None = field(default=None, repr=False)
+    payment_method: PaymentMethod = "cod"
+    # Methods offered when the card was made, in display order.
+    payment_methods: tuple[PaymentMethod, ...] = ("cod",)
+    checkout_id: str | None = None
+    last_status: OrderStatus | None = None
 
 
 def quote_digest(quote: Quote | None) -> str:
@@ -137,11 +240,13 @@ class OrderConfirmations:
         approvals: ApprovalService,
         clock: Clock = utc_now,
         ttl: timedelta = CONFIRMATION_TTL,
+        payments: PaymentOptions | None = None,
     ) -> None:
         self.baskets = baskets
         self.approvals = approvals
         self.clock = clock
         self.ttl = ttl
+        self.payments = payments
         self._items: dict[str, OrderConfirmation] = {}
         self._lock = asyncio.Lock()
 
@@ -153,13 +258,19 @@ class OrderConfirmations:
         *,
         store: str,
         notifier: Notifier | None = None,
+        payment_method: PaymentMethod = "cod",
     ) -> OrderConfirmation:
-        """Bind a confirmation to this exact bill. No approval or order happens here."""
+        """Bind a confirmation to this exact bill and payment method.
+
+        No approval or order happens here.
+        """
 
         if not household_id or basket.household_id != household_id:
             raise NotFound("Basket not found.")
         if basket.provider not in ORDERABLE_PROVIDERS:
-            raise ApprovalRefused("Only Zepto cash-on-delivery orders can be placed here.")
+            raise ApprovalRefused("Only Zepto orders can be placed here.")
+        if payment_method not in PAYMENT_LABELS:
+            raise ApprovalRefused("Unknown payment method.")
         if (
             approval.basket_id != basket.id
             or approval.basket_revision != basket.revision
@@ -172,6 +283,12 @@ class OrderConfirmations:
         expires_at = min(_utc(now) + self.ttl, _utc(approval.expires_at))
         if expires_at <= _utc(now):
             raise ApprovalRefused("This bill expired. Get the final bill again.")
+        methods = await self.available_methods(household_id)
+        if payment_method not in methods:
+            raise ApprovalRefused(
+                f"{payment_label(payment_method)} is not available for this order right now. "
+                "Choose another payment method."
+            )
         confirmation = OrderConfirmation(
             id=secrets.token_urlsafe(18),
             household_id=household_id,
@@ -187,6 +304,8 @@ class OrderConfirmations:
             created_at=now,
             expires_at=expires_at,
             notifier=notifier,
+            payment_method=payment_method,
+            payment_methods=methods,
         )
         async with self._lock:
             self._prune(now)
@@ -201,6 +320,73 @@ class OrderConfirmations:
                     other.closed_at = now
             self._items[confirmation.id] = confirmation
         return confirmation
+
+    async def available_methods(self, household_id: str) -> tuple[PaymentMethod, ...]:
+        """Cash on delivery, plus prepaid methods the provider lists and the flag allows."""
+
+        if self.payments is None:
+            return ("cod",)
+        try:
+            listed = await self.payments.available_methods(household_id)
+        except Exception as exc:  # noqa: BLE001 - payment discovery never blocks COD
+            logger.warning("event=payment_methods_failed error=%s", type(exc).__name__)
+            return ("cod",)
+        extra = tuple(method for method in listed if method in PREPAID_METHODS)
+        return ("cod", *dict.fromkeys(extra))
+
+    async def change_payment_method(
+        self, household_id: str, confirmation_id: str, payment_method: PaymentMethod
+    ) -> OrderConfirmation:
+        """Replace an open card with a fresh one bound to ``payment_method``."""
+
+        async with self._lock:
+            old = self._owned(household_id, confirmation_id)
+            if old.state != "open":
+                raise ApprovalRefused(self._closed_reason(old))
+            if _utc(self.clock()) >= _utc(old.expires_at):
+                old.state = "expired"
+                old.closed_at = self.clock()
+                raise ApprovalRefused(self._closed_reason(old))
+        basket = await self.baskets.get(old.basket_id)
+        approval = await self.approvals.approvals.get(old.approval_id)
+        if (
+            basket is None
+            or approval is None
+            or basket.revision != old.basket_revision
+            or basket.address_id != old.address_id
+            or approval.fingerprint != old.fingerprint
+            or quote_digest(approval.quote) != old.quote_digest
+        ):
+            raise ApprovalRefused(
+                "The bill changed after this order card was shown. Get the final bill again."
+            )
+        # prepare() re-checks the bill and supersedes the old card.
+        return await self.prepare(
+            household_id,
+            basket,
+            approval,
+            store=old.store,
+            notifier=old.notifier,
+            payment_method=payment_method,
+        )
+
+    async def check_payment(
+        self, household_id: str, checkout_id: str, checkout: CheckoutService
+    ) -> OrderResult:
+        """The user's "I've paid, check status" tap: one status read, never an order call."""
+
+        attempt = await checkout.check_payment(checkout_id, household_id)
+        confirmation = next(
+            (item for item in self._items.values() if item.checkout_id == checkout_id), None
+        )
+        store = confirmation.store if confirmation is not None else "Zepto"
+        result = OrderResult.from_attempt(
+            confirmation.id if confirmation is not None else "", store, attempt
+        )
+        if confirmation is not None and confirmation.last_status != result.status:
+            confirmation.last_status = result.status
+            await self._notify(confirmation, result)
+        return result
 
     async def cancel(self, household_id: str, confirmation_id: str) -> OrderConfirmation:
         async with self._lock:
@@ -220,7 +406,7 @@ class OrderConfirmations:
     async def place(
         self, household_id: str, confirmation_id: str, checkout: CheckoutService
     ) -> OrderResult:
-        """The user's tap: verify every binding, then approve and place the COD order once."""
+        """The user's tap: verify every binding, then approve and place the order once."""
 
         async with self._lock:
             confirmation = self._owned(household_id, confirmation_id)
@@ -254,7 +440,7 @@ class OrderConfirmations:
 
     async def _place(self, confirmation: OrderConfirmation, checkout: CheckoutService) -> OrderResult:
         if confirmation.provider not in ORDERABLE_PROVIDERS:
-            raise ApprovalRefused("Only Zepto cash-on-delivery orders can be placed here.")
+            raise ApprovalRefused("Only Zepto orders can be placed here.")
         basket = await self.baskets.get(confirmation.basket_id)
         if basket is None or basket.household_id != confirmation.household_id:
             raise NotFound("Basket not found.")
@@ -286,25 +472,19 @@ class OrderConfirmations:
             raise ApprovalRefused(
                 f"This bill is {approval.status.value}. Get the final bill again."
             )
-        attempt = await checkout.checkout_cod(
+        attempt = await checkout.checkout(
             approval.id,
             confirmation.household_id,
             # Derived from the single-use confirmation: a retried tap can never
             # become a second order, and the claim stays one-shot per approval.
             f"order-confirmation:{confirmation.id}",
             expected_fingerprint=confirmation.fingerprint,
+            payment_method=confirmation.payment_method,
         )
-        if attempt.status == CheckoutStatus.CONFIRMED and attempt.provider_order_id:
-            return OrderResult(
-                confirmation.id,
-                "confirmed",
-                confirmation.store,
-                attempt.payable_paise,
-                provider_order_id=attempt.provider_order_id,
-            )
-        return OrderResult(
-            confirmation.id, "outcome_unknown", confirmation.store, attempt.payable_paise
-        )
+        confirmation.checkout_id = attempt.id
+        result = OrderResult.from_attempt(confirmation.id, confirmation.store, attempt)
+        confirmation.last_status = result.status
+        return result
 
     def _owned(self, household_id: str, confirmation_id: str) -> OrderConfirmation:
         confirmation = self._items.get(confirmation_id)

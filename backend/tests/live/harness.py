@@ -3,8 +3,10 @@
 Nothing in this module talks to a provider by itself. It provides:
 
 * the opt-in gate (``live_skip_reason``),
-* a tool-call guard that makes order confirmation, payment and checkout calls
-  structurally impossible from the smoke suite (``GuardedToolClient``),
+* a tool-call guard that makes order confirmation, payment, payment-status
+  polling and checkout calls structurally impossible from the smoke suite
+  (``GuardedToolClient``); only exact, unconfirmed payment-contract discovery
+  calls are allowed,
 * a rate-limit tripwire that halts the whole run on the first 429, and
 * a content-free schema reporter (``shape_of``) that records key paths, JSON
   types and counts but never a provider value.
@@ -104,23 +106,45 @@ CART_TOOLS: dict[str, frozenset[str]] = {
     "zepto": frozenset({"view_cart", "update_cart", "create_order"}),
 }
 CREATE_ORDER_ALLOWED_KEYS = frozenset({"confirmOrder", "userAddressId"})
-# Defence in depth: even an allow-listed name is refused if it looks like a
-# confirmation, payment or checkout capability.
+# Payment contract discovery (docs/LIVE_SMOKE.md): exact names only. Tier 1 may
+# list payment methods; tier 2 may ask each prepaid order tool for an
+# UNCONFIRMED preview (confirmOrder exactly False). Nothing else payment-shaped.
+PAYMENT_DISCOVERY_TOOLS: dict[str, dict[str, frozenset[str]]] = {
+    "zepto": {
+        "read": frozenset({"get_payment_methods"}),
+        "cart": frozenset(
+            {
+                "get_payment_methods",
+                "create_online_payment_order",
+                "create_wallet_order",
+                "create_upi_reserve_pay_order",
+            }
+        ),
+    }
+}
+# Never callable from the smoke suite, in any tier, with any arguments.
+NEVER_CALLABLE = frozenset({"check_payment_status"})
+# Defence in depth: any other name is refused if it looks like a confirmation,
+# payment or checkout capability.
 FORBIDDEN_NAME = re.compile(
     r"(confirm|checkout|pay|place|wallet|upi|cancel|refund|reserve)", re.IGNORECASE
 )
 
 
-def _confirm_flags(value: object, path: str = "") -> Iterable[tuple[str, object]]:
+def _flags(value: object, marker: str, path: str = "") -> Iterable[tuple[str, object]]:
     if isinstance(value, dict):
         for key, item in value.items():
             here = f"{path}.{key}" if path else str(key)
-            if "confirm" in str(key).casefold():
+            if marker in str(key).casefold():
                 yield here, item
-            yield from _confirm_flags(item, here)
+            yield from _flags(item, marker, here)
     elif isinstance(value, list):
         for item in value:
-            yield from _confirm_flags(item, f"{path}[]")
+            yield from _flags(item, marker, f"{path}[]")
+
+
+def _confirm_flags(value: object, path: str = "") -> Iterable[tuple[str, object]]:
+    return _flags(value, "confirm", path)
 
 
 def assert_call_permitted(
@@ -134,9 +158,17 @@ def assert_call_permitted(
 
     if tier not in ("read", "cart"):
         raise ForbiddenLiveCall(f"Unknown live smoke tier {tier!r}.")
-    if FORBIDDEN_NAME.search(name):
+    if name in NEVER_CALLABLE:
         raise ForbiddenLiveCall(f"{provider}.{name} is never callable from live smoke.")
-    allowed = set(READ_ONLY_TOOLS.get(provider, frozenset()))
+    for path, flag in _flags(dict(arguments), "poll"):
+        if flag is not False:
+            raise ForbiddenLiveCall(
+                f"{provider}.{name}: {path} must be exactly False; polling is never started."
+            )
+    discovery = PAYMENT_DISCOVERY_TOOLS.get(provider, {}).get(tier, frozenset())
+    if name not in discovery and FORBIDDEN_NAME.search(name):
+        raise ForbiddenLiveCall(f"{provider}.{name} is never callable from live smoke.")
+    allowed = set(READ_ONLY_TOOLS.get(provider, frozenset())) | set(discovery)
     if tier == "cart":
         if not _enabled(env, CART_ENV):
             raise ForbiddenLiveCall(
@@ -152,14 +184,18 @@ def assert_call_permitted(
             raise ForbiddenLiveCall(
                 f"{provider}.{name}: {path} must be exactly False in live smoke."
             )
-    if name == "create_order":
+    if name.startswith("create_"):
+        # Every order tool: an unconfirmed preview, nothing else (no Zepto Cash,
+        # no tip, no defaults trusted).
         if arguments.get("confirmOrder") is not False:
-            raise ForbiddenLiveCall("create_order requires confirmOrder=False exactly.")
+            raise ForbiddenLiveCall(f"{name} requires confirmOrder=False exactly.")
         extra = set(arguments) - CREATE_ORDER_ALLOWED_KEYS
         if extra:
             raise ForbiddenLiveCall(
-                f"create_order received unexpected arguments: {sorted(extra)}"
+                f"{name} received unexpected arguments: {sorted(extra)}"
             )
+    if name == "get_payment_methods" and dict(arguments):
+        raise ForbiddenLiveCall("get_payment_methods takes no arguments in live smoke.")
 
 
 # --------------------------------------------------------------------------

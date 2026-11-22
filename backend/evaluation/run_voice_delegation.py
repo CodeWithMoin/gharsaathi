@@ -61,6 +61,7 @@ from app.commerce.zepto.models import ConnectionStatus as ZeptoConnectionStatus
 from app.tracking.models import StartTrackingRequest, TrackingProvider, TrackingSnapshot, TrackingStatus
 from app.tracking.service import OrderTrackingService
 from app.tracking.store import OrderTrackingStore
+from app.photos.extraction import PhotoReadResult, sanitize_extraction
 from evaluation.memory_db import ScenarioMemoryDatabase
 from evaluation.run_realtime_voice import MASCULINE_SELF_FORMS
 
@@ -311,6 +312,25 @@ class LiveZeptoConnection:
         return ZeptoConnectionStatus(connected=True, mode="live")
 
 
+class ScenarioPhotoReader:
+    """A fake extraction result for one attached photo; no image or vision call.
+
+    The scenario's raw model output still goes through the real sanitiser, and the
+    photo is "deleted" after the first read, exactly like PhotoReader.
+    """
+
+    def __init__(self, raw: dict[str, Any]) -> None:
+        self.raw = raw
+        self.read_once = False
+
+    async def read(self, owner_id: str, attachment_id: str | None = None) -> PhotoReadResult:
+        if self.read_once:
+            return PhotoReadResult("no_photo", attachment_id)
+        self.read_once = True
+        extraction = sanitize_extraction(self.raw)
+        return PhotoReadResult("ok" if extraction.items else "no_items", "ph_qa_scenario_photo", extraction)
+
+
 def build_toolbox(
     catalogue: str,
     catalogues: dict[str, Any],
@@ -358,6 +378,7 @@ def build_toolbox(
         # Demo Zepto history is empty and its catalogue has no tools: nothing leaves the process.
         order_tracking=order_tracking,
         order_history=DemoZeptoService(),
+        photo_reader=ScenarioPhotoReader(scenario["photo"]) if scenario.get("photo") else None,
     )
 
 
@@ -535,6 +556,10 @@ def check_turn(
     if facts["order_claims"]:
         failures.append(f"Reply claims an order/approval: {facts['order_claims']}.")
 
+    if "min_searches" in expect:
+        searches = sum(1 for name in names if name == "search_products")
+        if searches < expect["min_searches"]:
+            failures.append(f"Expected at least {expect['min_searches']} searches, got {searches}.")
     for name in expect.get("tools_required", []):
         if name not in names:
             failures.append(f"Expected tool {name} was not called (called: {names}).")

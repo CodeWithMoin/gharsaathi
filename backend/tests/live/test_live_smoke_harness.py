@@ -216,13 +216,75 @@ def test_guard_allows_only_the_exact_unconfirmed_preview_in_cart_tier() -> None:
         assert_call_permitted("zepto", "cart", "create_order", preview, BOTH)
 
 
+PREPAID_TOOLS = (
+    "create_online_payment_order",
+    "create_wallet_order",
+    "create_upi_reserve_pay_order",
+)
+
+
+@pytest.mark.parametrize("name", PREPAID_TOOLS)
+def test_prepaid_tools_allow_only_an_unconfirmed_preview_in_cart_tier(name: str) -> None:
+    preview = {"confirmOrder": False, "userAddressId": "a"}
+    assert_call_permitted("zepto", "cart", name, preview, CART)
+    for arguments in (
+        {"confirmOrder": True, "userAddressId": "a"},
+        {"confirmOrder": "false", "userAddressId": "a"},
+        {"confirmOrder": 0},
+        {"userAddressId": "a"},
+        {"confirmOrder": False, "useZeptoCash": False},
+        {"confirmOrder": False, "riderTip": 0},
+    ):
+        with pytest.raises(ForbiddenLiveCall):
+            assert_call_permitted("zepto", "cart", name, arguments, CART)
+    # Never in the read tier, never without the cart opt-in, never for Swiggy.
+    with pytest.raises(ForbiddenLiveCall):
+        assert_call_permitted("zepto", "read", name, preview, CART)
+    with pytest.raises(ForbiddenLiveCall):
+        assert_call_permitted("zepto", "cart", name, preview, BOTH)
+    with pytest.raises(ForbiddenLiveCall):
+        assert_call_permitted("swiggy", "cart", name, preview, CART)
+
+
+def test_payment_methods_listing_is_read_only_and_argument_free() -> None:
+    assert_call_permitted("zepto", "read", "get_payment_methods", {}, BOTH)
+    assert_call_permitted("zepto", "cart", "get_payment_methods", {}, CART)
+    with pytest.raises(ForbiddenLiveCall):
+        assert_call_permitted("zepto", "read", "get_payment_methods", {"x": 1}, BOTH)
+    with pytest.raises(ForbiddenLiveCall):
+        assert_call_permitted("swiggy", "read", "get_payment_methods", {}, BOTH)
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [{"orderId": "o"}, {"orderId": "o", "poll": False}, {"orderId": "o", "poll": True}],
+)
+def test_payment_status_is_never_callable_and_polling_never_starts(
+    arguments: dict[str, Any],
+) -> None:
+    for tier in ("read", "cart"):
+        with pytest.raises(ForbiddenLiveCall):
+            assert_call_permitted("zepto", tier, "check_payment_status", arguments, CART)
+    with pytest.raises(ForbiddenLiveCall, match="polling"):
+        assert_call_permitted("zepto", "read", "search_products", {"poll": True}, BOTH)
+    with pytest.raises(ForbiddenLiveCall, match="polling"):
+        assert_call_permitted("zepto", "cart", "update_cart", {"x": [{"pollNow": 1}]}, CART)
+
+
+async def test_prepaid_confirmation_never_reaches_the_inner_client() -> None:
+    inner = FakeClient()
+    client = guarded(inner, tier="cart", env=CART)
+    for name in PREPAID_TOOLS:
+        with pytest.raises(ForbiddenLiveCall):
+            await client.call_tool(name, {"confirmOrder": True, "userAddressId": "a"})
+    with pytest.raises(ForbiddenLiveCall):
+        await client.call_tool("check_payment_status", {"orderId": "o", "poll": False})
+    assert inner.calls == []
+
+
 @pytest.mark.parametrize(
     "name",
     [
-        "create_online_payment_order",
-        "create_wallet_order",
-        "create_upi_reserve_pay_order",
-        "get_payment_methods",
         "checkout",
         "place_order",
         "confirm_order",
@@ -494,3 +556,19 @@ def test_committed_zepto_snapshot_compares_cleanly_with_itself() -> None:
     entries = json.loads((FIXTURE_DIR / "zepto_tools_catalogue_2026-11-21.json").read_text())
     diff = compare_catalogues(entries, entries)
     assert not any(diff.values())
+
+
+async def test_production_prepaid_gateway_is_unusable_through_the_guard() -> None:
+    """Even with a contract and the flag on, the guard stops every real payment call."""
+
+    from tests.payment_fakes import payment_gateway
+
+    inner = FakeClient()
+    client = guarded(inner, tier="cart", env=CART)
+    gateway = payment_gateway(client)  # type: ignore[arg-type]
+    for method in ("online", "upi_reserve", "wallet"):
+        with pytest.raises(ForbiddenLiveCall):
+            await gateway.start_unlocked(zepto_basket(), method, 100)  # type: ignore[arg-type]
+    with pytest.raises(ForbiddenLiveCall):
+        await gateway.check_status("ZP-1", poll=False)
+    assert inner.calls == []
