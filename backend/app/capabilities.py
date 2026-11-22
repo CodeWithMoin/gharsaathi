@@ -844,7 +844,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             "DELETE /api/inbound-delivery/calls",
             "DELETE /api/inbound-delivery/calls/{call_id}",
         ),
-        ui_files=("frontend/app/inbound-calls.tsx", "frontend/app/order-status-card.tsx"),
+        ui_files=("frontend/app/inbound-calls-ui.tsx", "frontend/app/order-status-card.tsx"),
     ),
     Capability(
         id="support_complaint",
