@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
+  Brain,
   CaretRight,
   Check,
   CircleNotch,
@@ -18,6 +19,7 @@ import Image from "next/image";
 import { ADDRESS_FORM_OPTIONS } from "./onboarding-flow.mjs";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useApiRequest } from "./authenticated-api";
+import { MemorySettings } from "./memory-settings";
 
 export type AccountSettingsStore = {
   id: string;
@@ -62,7 +64,7 @@ export type AccountSettingsSheetProps = {
   signOutPending?: boolean;
 };
 
-type SettingsSection = "stores" | "preferences" | "privacy" | "addresses" | null;
+type SettingsSection = "stores" | "preferences" | "memory" | "privacy" | "addresses" | null;
 
 /**
  * A controlled, mobile-first account panel. It intentionally has only an overview
@@ -119,11 +121,13 @@ export function AccountSettingsSheet({
     ? "Stores"
     : section === "preferences"
       ? "Preferences"
-      : section === "privacy"
-        ? "Privacy & memory"
-        : section === "addresses"
-          ? "Addresses"
-          : "Account";
+      : section === "memory"
+        ? "Yaad rakhi baatein"
+        : section === "privacy"
+          ? "Privacy & memory"
+          : section === "addresses"
+            ? "Addresses"
+            : "Account";
 
   return <AnimatePresence>
     {open && <motion.div className="fixed inset-0 z-50 flex items-stretch justify-start" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -132,7 +136,7 @@ export function AccountSettingsSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative flex h-[100dvh] w-[min(75vw,360px)] flex-col overflow-hidden rounded-r-[36px] border-r border-[#ead7ca] bg-[#fffaf5] text-[#35241c] shadow-[18px_0_55px_-36px_rgba(62,34,22,.52)] [corner-shape:squircle]"
+        className={`relative flex h-[100dvh] ${section === "memory" ? "w-[min(94vw,420px)]" : "w-[min(75vw,360px)]"} flex-col overflow-hidden rounded-r-[36px] border-r border-[#ead7ca] bg-[#fffaf5] text-[#35241c] shadow-[18px_0_55px_-36px_rgba(62,34,22,.52)] [corner-shape:squircle]`}
         initial={{ x: "-100%", opacity: 0.85 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: "-100%", opacity: 0.85 }}
@@ -156,6 +160,7 @@ export function AccountSettingsSheet({
                 <nav aria-label="Account settings" className="mt-4 overflow-hidden rounded-[22px] border border-[#ead9cd] bg-[#fffdf9]">
                   <SettingsRow icon={<Storefront size={21} weight="duotone" />} title="Stores" subtitle={connectedStoreCount ? `${connectedStoreCount} store${connectedStoreCount === 1 ? "" : "s"} connected` : "Connect a shopping store"} onClick={() => setSection("stores")} />
                   <SettingsRow icon={<Translate size={21} weight="duotone" />} title="Preferences" subtitle={languageLabel} onClick={() => setSection("preferences")} />
+                  <SettingsRow icon={<Brain size={21} weight="duotone" />} title="Yaad rakhi baatein" subtitle="Pasand, kabhi nahi, niyam" onClick={() => setSection("memory")} />
                   <SettingsRow icon={<ShieldCheck size={21} weight="duotone" />} title="Privacy & memory" subtitle={privacySummary} onClick={() => setSection("privacy")} />
                   <SettingsRow icon={<MapPin size={21} weight="duotone" />} title="Addresses" subtitle={addressSummary} onClick={() => setSection("addresses")} last />
                 </nav>
@@ -167,6 +172,7 @@ export function AccountSettingsSheet({
               : <motion.div key={section} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 14 }} transition={{ duration: .16 }}>
                 {section === "stores" && <StoresDetail stores={stores} commerceMode={commerceMode} onConnectStore={onConnectStore} onDisconnectStore={onDisconnectStore} />}
                 {section === "preferences" && <PreferencesDetail languageLabel={languageLabel} onLanguageChange={onLanguageChange} onManagePreferences={onManagePreferences} />}
+                {section === "memory" && <MemorySettings />}
                 {section === "privacy" && <SimpleDetail icon={<Eye size={24} weight="duotone" />} title={privacySummary} description="You choose what GharSaathi remembers. Shopping history alone never becomes a stock prediction." action="Review privacy & memory" onAction={onManagePrivacy} />}
                 {section === "addresses" && <AddressesDetail addresses={addresses} onSelectAddress={onSelectAddress} onManageAddresses={onManageAddresses} />}
               </motion.div>}
