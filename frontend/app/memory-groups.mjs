@@ -1,44 +1,47 @@
 /**
- * Pure helpers for the "Yaad rakhi baatein" settings screen: grouping, readable
- * Roman-script Hinglish sentences, origin badges, the undo window and the
+ * Pure helpers for the "Saved preferences" settings screen: grouping, readable
+ * English sentences, origin badges, the undo window and the
  * correction payload for inline edits. No I/O; safe to unit test.
  */
 
 export const UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export const GROUPS = /** @type {const} */ ([
-  { id: "pasand", title: "Pasand" },
-  { id: "kabhi_nahi", title: "Kabhi nahi" },
-  { id: "niyam", title: "Niyam" },
+  { id: "pasand", title: "Preferences" },
+  { id: "kabhi_nahi", title: "Never" },
+  { id: "niyam", title: "Rules" },
 ]);
 
 export const BADGES = {
-  stated_recent: "abhi seekha",
-  stated: "aapne bataya",
-  explicit: "aapne bataya",
-  inferred: "suggestion",
+  stated_recent: "Just learned",
+  stated: "You told us",
+  explicit: "You told us",
+  inferred: "Suggested",
 };
 
 const PRODUCT_WORDS = {
-  milk: "Doodh",
-  doodh: "Doodh",
-  "cooking oil": "Tel",
-  oil: "Tel",
-  tel: "Tel",
+  milk: "Milk",
+  doodh: "Milk",
+  "cooking oil": "Cooking oil",
+  oil: "Cooking oil",
+  tel: "Cooking oil",
   atta: "Atta",
   flour: "Atta",
   "wheat flour": "Atta",
-  rice: "Chawal",
-  chawal: "Chawal",
-  tea: "Chai",
-  chai: "Chai",
-  soap: "Sabun",
-  sabun: "Sabun",
-  egg: "Ande",
-  eggs: "Ande",
-  salt: "Namak",
-  sugar: "Cheeni",
-  curd: "Dahi",
+  rice: "Rice",
+  chawal: "Rice",
+  tea: "Tea",
+  chai: "Tea",
+  soap: "Soap",
+  sabun: "Soap",
+  egg: "Eggs",
+  eggs: "Eggs",
+  salt: "Salt",
+  namak: "Salt",
+  sugar: "Sugar",
+  cheeni: "Sugar",
+  curd: "Curd",
+  dahi: "Curd",
   bread: "Bread",
 };
 
@@ -51,17 +54,17 @@ const STORE_NAMES = {
 
 const FIELD_LABELS = {
   brand: "Brand",
-  alternative_brand: "Doosra brand",
-  product_category: "Cheez",
+  alternative_brand: "Other brand",
+  product_category: "Item",
   product: "Product",
   pack_size: "Pack size",
   quantity: "Quantity",
   unit: "Unit",
   store: "Store",
   provider: "Store",
-  preference: "Niyam",
-  rule: "Niyam",
-  reason: "Wajah",
+  preference: "Rule",
+  rule: "Rule",
+  reason: "Reason",
 };
 
 const REQUIRED_FIELDS = new Set(["brand", "pack_size", "product", "store", "provider", "quantity", "preference", "rule"]);
@@ -78,7 +81,7 @@ function capitalize(text) {
   return text ? text[0].toUpperCase() + text.slice(1) : text;
 }
 
-/** Hinglish display word for a product/category, e.g. "milk" -> "Doodh". */
+/** English display word for a product/category, e.g. "doodh" -> "Milk". */
 export function productLabel(value) {
   const text = clean(value);
   if (!text) return "";
@@ -111,7 +114,7 @@ function values(memory) {
   return out;
 }
 
-/** A short readable sentence such as "Doodh: hamesha Amul Taaza". */
+/** A short readable sentence such as "Milk: always Amul Taaza". */
 export function memorySentence(memory) {
   const type = String(memory.memory_type ?? "").toLowerCase();
   const v = values(memory);
@@ -120,33 +123,33 @@ export function memorySentence(memory) {
   const withSubject = (fallback, rest) => `${subject || fallback}: ${rest}`;
 
   if (type === "brand_preference" && v.brand) {
-    let rest = `hamesha ${v.brand}`;
-    if (v.alternative_brand) rest += ` ya ${v.alternative_brand}`;
+    let rest = `always ${v.brand}`;
+    if (v.alternative_brand) rest += ` or ${v.alternative_brand}`;
     if (v.pack_size) rest += `, ${v.pack_size}`;
     return withSubject("Brand", rest);
   }
   if (type === "pack_size_preference" && v.pack_size) {
-    return withSubject("Pack size", `hamesha ${v.pack_size}`);
+    return withSubject("Pack size", `always ${v.pack_size}`);
   }
   if (type === "quantity_preference" && v.quantity) {
-    return withSubject("Quantity", `aam taur par ${v.quantity}${v.unit ? ` ${v.unit}` : ""}`);
+    return withSubject("Quantity", `usually ${v.quantity}${v.unit ? ` ${v.unit}` : ""}`);
   }
   if (type === "store_preference" && store) {
-    return subject ? `${subject}: hamesha ${store} se` : `Store: pehle ${store}`;
+    return subject ? `${subject}: always from ${store}` : `Store: ${store} first`;
   }
   if (type === "store_avoidance" && store) {
-    return subject ? `${subject}: ${store} se kabhi nahi` : `${store}: kabhi nahi`;
+    return subject ? `${subject}: never from ${store}` : `${store}: never`;
   }
   if (type.includes("avoid")) {
     const product = productLabel(v.product ?? "");
     const category = productLabel(v.product_category ?? "");
-    if (v.brand && category) return `${category}: ${v.brand} kabhi nahi`;
-    if (v.brand && product) return `${product}: ${v.brand} kabhi nahi`;
-    if (product || v.brand) return `${product || v.brand}: kabhi nahi lena`;
+    if (v.brand && category) return `${category}: never ${v.brand}`;
+    if (v.brand && product) return `${product}: never ${v.brand}`;
+    if (product || v.brand) return `${product || v.brand}: never buy`;
   }
-  if (type === "dietary_preference" && v.preference) return `Khaana: ${v.preference}`;
+  if (type === "dietary_preference" && v.preference) return `Diet: ${v.preference}`;
   if (v.rule) return capitalize(v.rule);
-  return capitalize(clean(memory.text)) || "Ek yaad";
+  return capitalize(clean(memory.text)) || "Saved preference";
 }
 
 /** The moment GharSaathi learned this memory, as epoch ms, or null. */
@@ -237,7 +240,7 @@ export function editableFields(memory) {
     .filter(([key]) => FIELD_LABELS[key])
     .map(([key, value]) => ({ key, label: FIELD_LABELS[key], value }));
   if (fields.length) return fields;
-  return [{ key: "text", label: "Yaad", value: clean(memory.text) }];
+  return [{ key: "text", label: "Note", value: clean(memory.text) }];
 }
 
 /**

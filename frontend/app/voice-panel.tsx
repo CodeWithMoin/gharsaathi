@@ -46,7 +46,7 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       peer.removeEventListener("icegatheringstatechange", onChange);
-      reject(new Error("Voice connection taiyaar hone mein der ho gayi. Phir se try kijiye."));
+      reject(new Error("The voice connection took too long to start. Please try again."));
     }, 10_000);
     function onChange() {
       if (peer.iceGatheringState !== "complete") return;
@@ -67,7 +67,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     callbacksRef.current = { onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, beforeSessionStart, authenticatedFetch };
   });
   const [status, setStatus] = useState<VoiceStatus>("connecting");
-  const [message, setMessage] = useState("Voice connect ho raha hai…");
+  const [message, setMessage] = useState("Connecting voice…");
   const [searching, setSearching] = useState(false);
   const [hasResults, setHasResults] = useState(false);
   const [basketNotice, setBasketNotice] = useState("");
@@ -119,12 +119,12 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         eventRecorderRef.current?.record(event, "tools");
         if (event.type === "tool.started" && event.name === "search_products") {
           setSearching(true);
-          setMessage("Connected stores par dekh rahi hoon…");
+          setMessage("Searching your connected stores…");
         } else if (event.type === "tool.started" && event.name === "open_address_form") {
-          setMessage("Address form khol rahi hoon…");
+          setMessage("Opening the address form…");
         } else if (event.type === "tool.started") {
           setBasketNotice("");
-          setMessage("Basket update kar rahi hoon…");
+          setMessage("Updating your basket…");
         } else if (event.type === "session.finished") {
           source.close();
         } else {
@@ -162,7 +162,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       smartTurnRef.current?.stop();
       smartTurnRef.current = null;
       if (audioRef.current) audioRef.current.muted = false;
-      setMessage("Smart listening load nahi hui—main normal tarah sun rahi hoon.");
+      setMessage("Smart listening didn't load—using standard listening.");
     }
   }, []);
 
@@ -173,7 +173,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     transcriptTurnsRef.current.reset();
     eventRecorderRef.current ??= voiceEventRecorder();
     setStatus("connecting");
-    setMessage("Voice connect ho raha hai…");
+    setMessage("Connecting voice…");
     try {
       const peer = new RTCPeerConnection();
       peerRef.current = peer;
@@ -183,13 +183,13 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         assistantStreamRef.current = assistantStream;
         smartTurnRef.current?.attachAssistant(assistantStream);
         audioRef.current.srcObject = assistantStream;
-        audioRef.current.play().catch(() => setMessage("Awaaz sunne ke liye ek baar tap kijiye."));
+        audioRef.current.play().catch(() => setMessage("Tap once to hear the voice."));
       });
       peer.addEventListener("connectionstatechange", () => {
         if (attempt === attemptRef.current && peer.connectionState === "failed") {
           attemptRef.current += 1;
           setStatus("error");
-          setMessage("Voice connection toot gaya. Phir se try kijiye.");
+          setMessage("The voice connection dropped. Please try again.");
           cleanup();
         }
       });
@@ -211,14 +211,14 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
           eventRecorderRef.current?.record(event, "datachannel");
           if (event.type === "session.started") {
             setStatus("live");
-            setMessage("Listening—boliye kya chahiye.");
+            setMessage("Listening—say what you need.");
           } else if (handleTranscriptEvent(event)) {
             // The main chat renders and persists spoken turns.
           } else if (event.type === "error" && event.error?.client_event_id?.startsWith(YIELD_EVENT_PREFIX)) {
             // A rejected yield request is not fatal; GPT-Live keeps its native turn-taking.
           } else if (event.type === "error") {
             setStatus("error");
-            setMessage("Voice session ruk gaya. Phir se try kijiye.");
+            setMessage("The voice session stopped. Please try again.");
             console.warn("[voice] session error", event.error?.message);
           } else if (event.type === "session.closed") callbacksRef.current.onClose();
         } catch {
@@ -230,7 +230,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       await waitForIceGathering(peer);
       if (attempt !== attemptRef.current) return;
       const sdp = peer.localDescription?.sdp;
-      if (!sdp) throw new Error("Mic connection taiyaar nahi ho paya. Phir se try kijiye.");
+      if (!sdp) throw new Error("Could not set up the mic connection. Please try again.");
       // The server reads this chat's context at session start; save the latest turn first.
       await callbacksRef.current.beforeSessionStart?.().catch(() => undefined);
       if (attempt !== attemptRef.current) return;
@@ -245,7 +245,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       });
       const payload = await response.json().catch(() => null);
       if (attempt !== attemptRef.current) return;
-      if (!response.ok) throw new Error(payload && typeof payload.detail === "string" ? payload.detail : "GharSaathi voice shuru nahi ho paya. Phir se try kijiye.");
+      if (!response.ok) throw new Error(payload && typeof payload.detail === "string" ? payload.detail : "Could not start GharSaathi voice. Please try again.");
       await peer.setRemoteDescription({ type: "answer", sdp: payload.sdp });
       assistantScriptRef.current = payload.assistant_transcript_script === "native" ? "native" : "roman";
       listenForToolEvents(payload.session_id, payload.events_token);
@@ -256,7 +256,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       if (attempt !== attemptRef.current) return;
       const denied = error instanceof DOMException && error.name === "NotAllowedError";
       setStatus("error");
-      setMessage(denied ? "Voice shopping ke liye mic permission chahiye." : error instanceof Error ? error.message : "Voice shuru nahi ho paya. Phir se try kijiye.");
+      setMessage(denied ? "Voice shopping needs microphone permission." : error instanceof Error ? error.message : "Could not start voice. Please try again.");
       cleanup();
     }
   }, [addressId, cleanup, handleTranscriptEvent, listenForToolEvents, startSmartTurn, zeptoAddressId]);
@@ -277,7 +277,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     onClose();
   }
 
-  const statusLabel = status === "connecting" ? "Voice shuru ho raha hai…" : status === "error" ? "Voice abhi band hai" : searching ? "Stores mein dekh rahi hoon…" : "Sun rahi hoon…";
+  const statusLabel = status === "connecting" ? "Starting voice…" : status === "error" ? "Voice is off" : searching ? "Searching stores…" : "Listening…";
 
   return <motion.section initial={{ opacity: 0, y: 12, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: .99 }} transition={{ duration: .2 }} className="mx-auto max-w-3xl rounded-[26px] border border-[#deccbf] bg-[#fffdf9] p-3 shadow-[0_24px_60px_-28px_rgba(70,40,24,.55),inset_0_1px_0_rgba(255,255,255,.9)]" aria-label="Voice conversation">
     <div className="flex items-center gap-3">
@@ -300,8 +300,8 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     </AnimatePresence>
 
     <div className="mt-3 flex items-center gap-2 border-t border-[#eee2d9] pt-3">
-      <p className="mr-auto flex min-w-0 items-center gap-1.5 text-[10px] leading-4 text-[#75645a]"><ShieldCheck size={13} className="shrink-0" /> <span className="truncate">Panel khula hai tab tak mic on · chat save hoti hai</span></p>
-      {status === "error" ? <button onClick={() => void start()} className="flex items-center gap-1.5 rounded-full bg-[#3b2a22] px-4 py-2.5 text-xs font-semibold text-white transition active:scale-[.97]">Phir try karein <ArrowRight size={14} /></button> : hasResults ? <button onClick={closeConversation} className="flex items-center gap-1.5 rounded-full bg-[#3b2a22] px-4 py-2.5 text-xs font-semibold text-white transition active:scale-[.97]">Results dekhein <ArrowRight size={14} /></button> : <button onClick={closeConversation} className="flex items-center gap-2 rounded-full bg-[#c6531d] px-4 py-2.5 text-xs font-semibold text-white shadow-[0_8px_22px_-12px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.97]"><Stop size={13} weight="fill" /> Band karein</button>}
+      <p className="mr-auto flex min-w-0 items-center gap-1.5 text-[10px] leading-4 text-[#75645a]"><ShieldCheck size={13} className="shrink-0" /> <span className="truncate">Mic stays on while this panel is open · chat is saved</span></p>
+      {status === "error" ? <button onClick={() => void start()} className="flex items-center gap-1.5 rounded-full bg-[#3b2a22] px-4 py-2.5 text-xs font-semibold text-white transition active:scale-[.97]">Try again <ArrowRight size={14} /></button> : hasResults ? <button onClick={closeConversation} className="flex items-center gap-1.5 rounded-full bg-[#3b2a22] px-4 py-2.5 text-xs font-semibold text-white transition active:scale-[.97]">View results <ArrowRight size={14} /></button> : <button onClick={closeConversation} className="flex items-center gap-2 rounded-full bg-[#c6531d] px-4 py-2.5 text-xs font-semibold text-white shadow-[0_8px_22px_-12px_rgba(158,65,24,.8)] transition hover:bg-[#b94a18] active:scale-[.97]"><Stop size={13} weight="fill" /> End</button>}
     </div>
     <audio ref={audioRef} autoPlay hidden />
   </motion.section>;
