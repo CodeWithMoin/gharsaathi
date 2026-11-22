@@ -476,6 +476,8 @@ while the demo-store tools took ~0 ms. Fewer rounds is the main lever.
   `saving_paise`, `total_variants`, and `provider_statuses` when every store
   answered (−22% tokens per search result).
 
+Per-turn traces (rounds, tools, ms, tokens; local JSONL): `DEV_TRACE=true` and
+`scripts/gs trace last` ([`DEV_TOOLS.md`](DEV_TOOLS.md)).
 Diagnostics: `VOICE_EVENT_LOG=true` logs content-free
 `event=voice_delegation_timing`, `voice_tool_timing`, `chat_tool_timing` and
 `chat_turn_timing` lines. Benchmark: `python -m evaluation.run_turn_latency`
@@ -713,6 +715,7 @@ sequenceDiagram
 
 - Feature × surface matrix: [`CAPABILITIES.md`](CAPABILITIES.md)
 - Test layers and how to run them: [`TESTING.md`](TESTING.md)
+- Local operator toolkit (`make doctor`, `scripts/gs`, `DEV_TRACE`, `/dev`): [`DEV_TOOLS.md`](DEV_TOOLS.md)
 - Opt-in real-provider smoke tests: [`LIVE_SMOKE.md`](LIVE_SMOKE.md)
 - Voice turn-taking modes: [`voice-turn-taking.md`](voice-turn-taking.md)
 - Rider assist (beta, Vobiz → OpenAI Realtime phone assistant for delivery partners): [`RIDER_ASSIST.md`](RIDER_ASSIST.md)

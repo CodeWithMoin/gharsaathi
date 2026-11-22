@@ -600,6 +600,11 @@ Resources:
               Value: !Sub https://rider.${DomainName}
             - Name: RIDER_ASSIST_NUMBER
               Value: !Ref RiderNumber
+            # Local-only operator tools (docs/DEV_TOOLS.md); never on in AWS.
+            - Name: DEV_TOOLS_ENABLED
+              Value: "false"
+            - Name: DEV_TRACE
+              Value: "false"
           Secrets:
             - Name: DATABASE_PASSWORD
               ValueFrom: !Sub "${DatabaseSecret}:password::"
