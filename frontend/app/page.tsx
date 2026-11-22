@@ -22,7 +22,7 @@ import { conversationIntent, conversationReply } from "./conversation-intent.mjs
 import { FirstRunOnboarding } from "./first-run-onboarding";
 import { AccountSettingsSheet, type SettingsSection } from "./account-settings-sheet";
 import { RiderCallCard, useRiderCalls } from "./rider-calls";
-import { InboundCallCard, useInboundCalls } from "./inbound-calls";
+import { InboundCallCard, useInboundCalls } from "./inbound-calls-ui";
 import { placeInboundCalls, riderDirectionsLine } from "./inbound-calls.mjs";
 import { placeRiderCalls } from "./rider-assist.mjs";
 import { OrderNotificationPrompt, useNotifications } from "./notification-settings";
