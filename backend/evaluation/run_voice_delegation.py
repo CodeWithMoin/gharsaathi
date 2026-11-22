@@ -812,6 +812,11 @@ def check_turn(
         call["name"] == "prepare_order" and call["status"] == "awaiting_tap" for call in calls
     ):
         failures.append(f"No order card was prepared (calls: {[c['model_output'] for c in calls]}).")
+    if expect.get("order_card_ready") and not any(
+        call["name"] in {"prepare_order", "express_order"} and call["status"] in {"awaiting_tap", "ready"}
+        for call in calls
+    ):
+        failures.append("No order card was prepared by prepare_order or express_order.")
     if expect.get("no_order_refusal") and ORDER_REFUSAL_PATTERN.search(reply):
         failures.append("Reply refuses to place orders although the order card is the order path.")
     if expect.get("refuses_order"):

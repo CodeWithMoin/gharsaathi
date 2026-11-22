@@ -1551,7 +1551,7 @@
     },
     {
       "id": "p3-photo-order-summary-names-items-and-fees",
-      "title": "Photo of an Amul Lassi pack + 'order karo': the order summary names the item and explains the fees from the backend breakdown (never just 'ek item').",
+      "title": "Photo of an Amul Lassi pack + 'order karo': the order summary names the item and explains the fees from the backend breakdown (never just 'ek item'). Either path is fine: search + add + prepare_order, or express_order.",
       "catalogue": "lassi_fixture",
       "photo": {
         "kind": "product_photo",
@@ -1576,15 +1576,8 @@
           "user": "(Photo attached) order karo",
           "expect": {
             "tools_required": [
-              "read_attached_photo",
-              "search_products",
-              "add_to_basket",
-              "prepare_order"
+              "read_attached_photo"
             ],
-            "add_count": 1,
-            "add_store": "zepto",
-            "add_product_contains": "Lassi",
-            "prepared_order": true,
             "reply_mentions_all": [
               "Amul Sweet Lassi",
               "₹30",
@@ -1599,7 +1592,8 @@
             ],
             "max_questions": 1,
             "max_sentences": 3,
-            "roman_only": true
+            "roman_only": true,
+            "order_card_ready": true
           }
         }
       ]
