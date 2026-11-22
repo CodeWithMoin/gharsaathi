@@ -81,10 +81,21 @@ export function InputDialog({ open, title, description, children, footer, onClos
     restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const panelHolder = panelRef;
     return () => {
       document.body.style.overflow = previousOverflow;
       const restore = restoreRef.current;
-      if (restore && document.contains(restore)) restore.focus({ preventScroll: true });
+      const panel = panelHolder.current;
+      // After React's commit: React re-focuses the element that had focus before
+      // the commit (still inside the exiting panel), which would undo an earlier restore.
+      queueMicrotask(() => {
+        if (restore && restore !== document.body && document.contains(restore)) restore.focus({ preventScroll: true });
+        // Stacked popups: with nothing to return to, focus the popup still open underneath.
+        if (!document.activeElement || document.activeElement === document.body || (panel && panel.contains(document.activeElement))) {
+          const below = [...document.querySelectorAll<HTMLElement>("[aria-modal='true']")].filter((element) => element !== panel).at(-1);
+          below?.focus({ preventScroll: true });
+        }
+      });
     };
   }, [open]);
 
