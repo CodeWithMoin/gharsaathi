@@ -15,6 +15,8 @@ from app.commerce.zepto.errors import (
     ZeptoProviderError,
     ZeptoRateLimited,
 )
+from app.commerce.zepto.history import parse_order_detail
+from app.tracking.cancellation import order_cancel_tool
 from app.tracking.errors import TrackingProviderError
 from app.tracking.models import TrackingProvider, TrackingSnapshot, TrackingStatus
 
@@ -92,14 +94,21 @@ class SwiggyDeliveryStatusAdapter:
 
 
 class ZeptoOrderStatusAdapter:
-    """Use Zepto tracking only if its live catalogue exposes a read-only status tool.
+    """Read Zepto order status only through documented read-only tools.
 
-    No order-history tool is repurposed as a polling source, and no arbitrary
-    provider tool name can be accepted from an API request.
+    ``get_order_status`` is used when the live catalogue exposes it; otherwise
+    ``get_order_detail`` (the documented read-only order-detail tool) supplies
+    the shipment status and Zepto's committed ETA. ``list_order_history`` is
+    never repurposed as a polling source, and no provider tool name can be
+    accepted from an API request. The live catalogue is also checked for an
+    order-cancellation tool; it is reported (``cancel_supported``), never called.
     """
 
     provider = TrackingProvider.ZEPTO
     READ_ONLY_TOOL_NAMES = frozenset({"get_order_status"})
+    DETAIL_TOOL_NAME = "get_order_detail"
+    # get_order_detail carries no polling hint; stay gentle with Zepto's quota.
+    DETAIL_POLL_INTERVAL_SECONDS = 90
     LOCAL_RATE_LIMIT_FALLBACK_SECONDS = 300
 
     def __init__(self, client: _ToolCatalogueReader) -> None:
@@ -126,7 +135,10 @@ class ZeptoOrderStatusAdapter:
                 "Zepto returned an invalid tracking capability response.", transient=False
             ) from exc
         names = {tool.name for tool in tools}
+        cancel_supported = order_cancel_tool(tools) is not None
         name = next((tool for tool in self.READ_ONLY_TOOL_NAMES if tool in names), None)
+        if name is None and self.DETAIL_TOOL_NAME in names:
+            name = self.DETAIL_TOOL_NAME
         if name is None:
             raise TrackingProviderError(
                 "Zepto's connected catalogue does not expose an authorised live order-status tool.",
@@ -148,7 +160,52 @@ class ZeptoOrderStatusAdapter:
             raise TrackingProviderError(
                 "Zepto returned an invalid delivery update.", transient=False
             ) from exc
-        return _parse_snapshot(payload)
+        if name == self.DETAIL_TOOL_NAME:
+            snapshot = _snapshot_from_zepto_detail(payload, self.DETAIL_POLL_INTERVAL_SECONDS)
+        else:
+            snapshot = _parse_snapshot(payload)
+        return snapshot.model_copy(update={"cancel_supported": cancel_supported})
+
+
+def _snapshot_from_zepto_detail(
+    payload: dict[str, Any], poll_interval_seconds: int
+) -> TrackingSnapshot:
+    """Status from the live ``get_order_detail`` shape (strictly validated).
+
+    The latest shipment's machine status decides the step; its formatted
+    status is the display text. The ETA is Zepto's own committed ETA
+    (placed time + ``committedEtaInMins``); none is invented when either is
+    missing, and none is shown once the order is delivered or cancelled.
+    """
+
+    try:
+        detail = parse_order_detail(payload)
+    except ZeptoError as exc:
+        raise TrackingProviderError(
+            "Zepto returned an invalid delivery update.", transient=False
+        ) from exc
+    shipment = detail.shipments[-1] if detail.shipments else None
+    raw_status = shipment.status if shipment else None
+    status = _normalise_status(raw_status)
+    if status == TrackingStatus.UNKNOWN:
+        status = _normalise_status(
+            shipment.formatted_status if shipment else detail.formatted_status
+        )
+    display = (shipment.formatted_status if shipment else None) or detail.formatted_status
+    eta_at = None
+    if shipment and status not in {TrackingStatus.DELIVERED, TrackingStatus.CANCELLED}:
+        placed = _datetime(shipment.placed_time)
+        if placed is not None and shipment.committed_eta_minutes > 0:
+            eta_at = placed + timedelta(minutes=shipment.committed_eta_minutes)
+    return TrackingSnapshot(
+        status=status,
+        provider_status=display[:160] if display else None,
+        eta_at=eta_at,
+        poll_interval_seconds=poll_interval_seconds,
+        delivered=status == TrackingStatus.DELIVERED,
+        cancelled=status == TrackingStatus.CANCELLED,
+        order_code=detail.code[:64] if detail.code else None,
+    )
 
 
 def _rate_limited_error(
@@ -235,15 +292,23 @@ def _datetime(value: object) -> datetime | None:
 
 
 def _normalise_status(value: str | None) -> TrackingStatus:
+    """Exact known status words only; anything else stays unknown (never guessed)."""
+
     text = (value or "").strip().casefold().replace("-", "_").replace(" ", "_")
-    if text in {"delivered", "complete", "completed"}:
+    if text in {"delivered", "complete", "completed", "order_delivered"}:
         return TrackingStatus.DELIVERED
-    if text in {"cancelled", "canceled"}:
+    if text in {"cancelled", "canceled", "order_cancelled", "order_canceled"}:
         return TrackingStatus.CANCELLED
-    if text in {"out_for_delivery", "on_the_way", "dispatched"}:
+    if text in {"out_for_delivery", "on_the_way", "dispatched", "arriving", "arrived"}:
         return TrackingStatus.OUT_FOR_DELIVERY
-    if text in {"preparing", "packed", "packing"}:
+    if text in {"preparing", "packed", "packing", "order_packed", "ready_for_dispatch"}:
         return TrackingStatus.PREPARING
-    if text in {"confirmed", "placed", "accepted"}:
+    if text in {"confirmed", "placed", "accepted", "order_placed", "order_confirmed", "created"}:
         return TrackingStatus.CONFIRMED
     return TrackingStatus.UNKNOWN
+
+
+def normalise_status(value: str | None) -> TrackingStatus:
+    """Public form of the conservative status-word mapping."""
+
+    return _normalise_status(value)

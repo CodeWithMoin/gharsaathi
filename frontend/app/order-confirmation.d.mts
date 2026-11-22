@@ -16,7 +16,7 @@ export type OrderConfirmation = {
 export type OrderCardState =
   | { status: "open" }
   | { status: "placing" }
-  | { status: "placed"; orderId: string }
+  | { status: "placed"; orderId: string; tracking?: unknown }
   | { status: "unknown" }
   | { status: "failed"; reason: string }
   | { status: "cancelling" }

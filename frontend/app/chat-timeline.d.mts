@@ -1,3 +1,4 @@
+import type { OrderCardSnapshot, OrderStatusCard } from "./order-status.mjs";
 import type { ResultGroup } from "./result-groups.mjs";
 
 export type Store = "swiggy_instamart" | "zepto";
@@ -5,13 +6,14 @@ export type SummaryStage = "updated" | "bill_ready" | "bill_approved" | "ordered
 export type BasketCard = { provider: Store; afterMessageId: string | null; seq: number };
 export type BasketSummary = { stage: SummaryStage; itemCount: number | null; itemTotalPaise: number | null };
 export type SummaryCard = BasketCard & BasketSummary;
-export type ChatTimeline = { seq: number; resultsSeq: number; live: BasketCard[]; summaries: SummaryCard[]; groups: ResultGroup<unknown>[] };
-export type TimelineItem<M> = { kind: "message"; message: M } | { kind: "results"; group?: ResultGroup<unknown> } | { kind: "basket"; card: BasketCard } | { kind: "basket-summary"; card: SummaryCard };
+export type ChatTimeline = { seq: number; resultsSeq: number; live: BasketCard[]; summaries: SummaryCard[]; groups: ResultGroup<unknown>[]; orders: OrderStatusCard[] };
+export type TimelineItem<M> = { kind: "message"; message: M } | { kind: "results"; group?: ResultGroup<unknown> } | { kind: "basket"; card: BasketCard } | { kind: "basket-summary"; card: SummaryCard } | { kind: "order-status"; card: OrderStatusCard };
 export type TimelineSnapshot = {
   seq: number;
   results_seq: number;
   live: { provider: Store; after_message_id: string | null; seq: number }[];
   summaries: { provider: Store; after_message_id: string | null; seq: number; stage: SummaryStage; item_count: number | null; item_total_paise: number | null }[];
+  orders?: OrderCardSnapshot[];
 };
 
 export const STORES: readonly Store[];
@@ -19,6 +21,8 @@ export const SUMMARY_STAGES: readonly SummaryStage[];
 export const MAX_SUMMARIES: number;
 export const NEAR_BOTTOM_PX: number;
 export function emptyTimeline(): ChatTimeline;
+export function recordOrderCard(timeline: ChatTimeline, card: Omit<OrderStatusCard, "seq">): ChatTimeline;
+export function updateOrderCard(timeline: ChatTimeline, orderId: string, card: OrderStatusCard): ChatTimeline;
 export function latestMessageId(messages: { id: string }[]): string | null;
 export function recordResults(timeline: ChatTimeline): ChatTimeline;
 export function recordResultGroup(timeline: ChatTimeline, group: Omit<ResultGroup<unknown>, "seq">): ChatTimeline;

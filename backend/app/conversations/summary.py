@@ -84,7 +84,9 @@ def is_empty_conversation(state: object) -> bool:
     if _text(state.get("submitted_query")) or searched_items(state):
         return False
     timeline = state.get("timeline")
-    if isinstance(timeline, Mapping) and (timeline.get("live") or timeline.get("summaries")):
+    if isinstance(timeline, Mapping) and (
+        timeline.get("live") or timeline.get("summaries") or timeline.get("orders")
+    ):
         return False
     return True
 

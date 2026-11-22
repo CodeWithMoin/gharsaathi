@@ -24,6 +24,7 @@ never inline in whatever sheet happens to be open. Current users:
 | Forget everything | `memory-settings.tsx` | `ConfirmDialog`, destructive |
 | Edit profile | `account-settings-sheet.tsx` | Name, how to address you and reply language in one popup with one Save; only changed fields are sent |
 | Disconnect Swiggy / Zepto | `page.tsx` setup sheet | `ConfirmDialog`, destructive; closes only after the disconnect succeeds |
+| Track order | `order-status-card.tsx` | Opens `LiveOrderTracking` on the placed order's monitor from the chat status card; read-only |
 
 `ConfirmDialog` (`frontend/app/ui/confirm-dialog.tsx`) is the yes/no variant:
 `title`, `message`, `confirmLabel`, `busyLabel`, `tone` (`"destructive"` paints

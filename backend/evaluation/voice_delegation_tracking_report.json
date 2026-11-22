@@ -1,0 +1,312 @@
+{
+  "generated_at": "2026-11-22T02:35:53.069363+00:00",
+  "model": "gpt-6-luna",
+  "prompt_version": "1.15.0",
+  "tool_names": [
+    "search_products",
+    "add_to_basket",
+    "set_basket_quantity",
+    "view_basket",
+    "request_approval",
+    "open_address_form",
+    "recall_household_preferences",
+    "remember_preference",
+    "update_preference",
+    "forget_preference",
+    "list_preferences",
+    "confirm_memory",
+    "prepare_order",
+    "list_delivery_addresses",
+    "select_delivery_address",
+    "get_order_status",
+    "list_recent_orders"
+  ],
+  "network": {
+    "allowed_host": "api.openai.com",
+    "blocked_lookups": []
+  },
+  "summary": {
+    "t1-order-status-where": {
+      "passed": true,
+      "run": 2
+    },
+    "t2-order-cancel-zepto-app": {
+      "passed": true,
+      "run": 2
+    },
+    "t3-payment-phone-cod-only": {
+      "passed": true,
+      "run": 2
+    }
+  },
+  "runs": [
+    {
+      "id": "t1-order-status-where",
+      "title": "'Mera order kahan hai' reads the household's tracking monitor and answers in one line with the store's ETA; no guessing, no new order card.",
+      "catalogue": "demo",
+      "passed": true,
+      "turns": [
+        {
+          "user": "mera order kahan hai",
+          "reply": "Out for delivery hai, Zepto ~6 min bata raha hai.",
+          "tool_calls": [
+            {
+              "name": "get_order_status",
+              "arguments": {
+                "order_ref": "latest"
+              },
+              "status": "ok",
+              "model_output": {
+                "status": "ok",
+                "source": "live_tracking",
+                "store": "Zepto",
+                "order_ref": "ZEP-QA-1",
+                "order_code": "Z123",
+                "order_status": "out_for_delivery",
+                "order_status_label": "Out for delivery",
+                "provider_status": "Out for delivery",
+                "eta_minutes": 6,
+                "last_updated_at": "2026-11-22T02:35:16.408612+00:00",
+                "last_updated_minutes_ago": 0,
+                "stale": false,
+                "tracking": "active",
+                "cancel_here": false,
+                "cancel_supported": false,
+                "note": "Answer in one line from these fields only: order_status_label (or provider_status) and, when eta_minutes is present, that the store estimates about that many minutes. Never guess a status or a time. If stale is true, say when it was last updated (last_updated_minutes_ago). Cancelling is not possible from GharSaathi. If the user asks, say it cannot be done here and to open the order in the Zepto app and tap Cancel quickly, before it is packed."
+              },
+              "ui_event_type": null,
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "get_order_status"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [
+              6
+            ],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 36,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-22T02:35:23.240512+00:00"
+    },
+    {
+      "id": "t2-order-cancel-zepto-app",
+      "title": "'Order cancel kar do' is not done here: she points to the Zepto app before packing and never claims a cancellation.",
+      "catalogue": "demo",
+      "passed": true,
+      "turns": [
+        {
+          "user": "order cancel kar do",
+          "reply": "Cancel yahan se nahi hota; Zepto app mein order kholkar jaldi Cancel dabaiye, packing se pehle.",
+          "tool_calls": [],
+          "facts": {
+            "tool_names": [],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 77,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-22T02:35:25.963275+00:00"
+    },
+    {
+      "id": "t3-payment-phone-cod-only",
+      "title": "'Payment phone se?' gets: only cash on delivery here; no UPI-at-door promise.",
+      "catalogue": "demo",
+      "passed": true,
+      "turns": [
+        {
+          "user": "payment mere phone pe se kar sakte ho?",
+          "reply": "Yahan sirf cash on delivery hota hai; phone se payment ka option nahi hai.",
+          "tool_calls": [],
+          "facts": {
+            "tool_names": [],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 59,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 1,
+      "finished_at": "2026-11-22T02:35:28.484054+00:00"
+    },
+    {
+      "id": "t1-order-status-where",
+      "title": "'Mera order kahan hai' reads the household's tracking monitor and answers in one line with the store's ETA; no guessing, no new order card.",
+      "catalogue": "demo",
+      "passed": true,
+      "turns": [
+        {
+          "user": "mera order kahan hai",
+          "reply": "Out for delivery hai, Zepto ~6 min bata raha hai.",
+          "tool_calls": [
+            {
+              "name": "get_order_status",
+              "arguments": {
+                "order_ref": "latest"
+              },
+              "status": "ok",
+              "model_output": {
+                "status": "ok",
+                "source": "live_tracking",
+                "store": "Zepto",
+                "order_ref": "ZEP-QA-1",
+                "order_code": "Z123",
+                "order_status": "out_for_delivery",
+                "order_status_label": "Out for delivery",
+                "provider_status": "Out for delivery",
+                "eta_minutes": 6,
+                "last_updated_at": "2026-11-22T02:35:40.619443+00:00",
+                "last_updated_minutes_ago": 0,
+                "stale": false,
+                "tracking": "active",
+                "cancel_here": false,
+                "cancel_supported": false,
+                "note": "Answer in one line from these fields only: order_status_label (or provider_status) and, when eta_minutes is present, that the store estimates about that many minutes. Never guess a status or a time. If stale is true, say when it was last updated (last_updated_minutes_ago). Cancelling is not possible from GharSaathi. If the user asks, say it cannot be done here and to open the order in the Zepto app and tap Cancel quickly, before it is packed."
+              },
+              "ui_event_type": null,
+              "ui_prefill": null
+            }
+          ],
+          "facts": {
+            "tool_names": [
+              "get_order_status"
+            ],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [
+              6
+            ],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 36,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 2,
+      "finished_at": "2026-11-22T02:35:46.615583+00:00"
+    },
+    {
+      "id": "t2-order-cancel-zepto-app",
+      "title": "'Order cancel kar do' is not done here: she points to the Zepto app before packing and never claims a cancellation.",
+      "catalogue": "demo",
+      "passed": true,
+      "turns": [
+        {
+          "user": "order cancel kar do",
+          "reply": "Cancel yahan se nahi hota; Zepto app mein order kholkar jaldi Cancel dabaiye, packing se pehle.",
+          "tool_calls": [],
+          "facts": {
+            "tool_names": [],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 77,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 2,
+      "finished_at": "2026-11-22T02:35:50.064800+00:00"
+    },
+    {
+      "id": "t3-payment-phone-cod-only",
+      "title": "'Payment phone se?' gets: only cash on delivery here; no UPI-at-door promise.",
+      "catalogue": "demo",
+      "passed": true,
+      "turns": [
+        {
+          "user": "payment mere phone pe se kar sakte ho?",
+          "reply": "Yahan sirf cash on delivery hota hai; phone se payment ka option nahi hai.",
+          "tool_calls": [],
+          "facts": {
+            "tool_names": [],
+            "question_count": 0,
+            "sentence_count": 1,
+            "masculine_self_forms": [],
+            "reply_prices": [],
+            "invented_prices": [],
+            "reply_eta_minutes": [],
+            "invented_eta_minutes": [],
+            "unconfirmed_add_claim": false,
+            "order_claims": [],
+            "script": {
+              "devanagari_ratio": 0.0,
+              "latin_letters": 59,
+              "dominant": "latin"
+            },
+            "memory_statuses": []
+          },
+          "failures": []
+        }
+      ],
+      "run": 2,
+      "finished_at": "2026-11-22T02:35:53.069322+00:00"
+    }
+  ]
+}

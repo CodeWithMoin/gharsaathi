@@ -78,6 +78,38 @@ class TimelineSummarySnapshot(TimelineCardSnapshot):
     item_total_paise: int | None = Field(default=None, ge=0)
 
 
+MAX_TIMELINE_ORDERS = 10
+
+OrderCardStatus = Literal[
+    "unknown", "confirmed", "preparing", "out_for_delivery", "delivered", "cancelled", "paused", "unavailable"
+]
+
+
+class TimelineOrderSnapshot(BaseModel):
+    """A placed order's live status card, placed after a chat message by ``seq``.
+
+    Display state only: the order and its status come from the provider via the
+    tracking monitor, never from this snapshot.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    provider: Literal["zepto"]
+    order_id: str = Field(min_length=1, max_length=160)
+    monitor_id: str | None = Field(default=None, max_length=64)
+    store: str = Field(default="Zepto", max_length=40)
+    after_message_id: str | None = Field(default=None, max_length=128)
+    seq: int = Field(ge=0)
+    item_count: int | None = Field(default=None, ge=0)
+    payable: str | None = Field(default=None, max_length=40)
+    status: OrderCardStatus = "confirmed"
+    provider_status: str | None = Field(default=None, max_length=160)
+    eta_at: datetime | None = None
+    checked_at: datetime | None = None
+    active: bool = True
+    last_notification_id: str | None = Field(default=None, max_length=64)
+
+
 class ChatTimelineSnapshot(BaseModel):
     seq: int = Field(default=0, ge=0)
     results_seq: int = Field(default=0, ge=0)
@@ -85,6 +117,7 @@ class ChatTimelineSnapshot(BaseModel):
     summaries: list[TimelineSummarySnapshot] = Field(
         default_factory=list, max_length=MAX_TIMELINE_SUMMARIES
     )
+    orders: list[TimelineOrderSnapshot] = Field(default_factory=list, max_length=MAX_TIMELINE_ORDERS)
 
     @field_validator("live")
     @classmethod

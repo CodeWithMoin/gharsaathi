@@ -357,10 +357,10 @@ async def test_chat_timeline_round_trips_with_the_chat(
     saved = await conversation_client.put("/api/conversations/current", headers=headers("timeline-user"), json=body)
     assert saved.status_code == 200
     restored = await conversation_client.get("/api/conversations/current", headers=headers("timeline-user"))
-    assert restored.json()["timeline"] == timeline
+    assert restored.json()["timeline"] == {**timeline, "orders": []}
 
     legacy = await conversation_client.put("/api/conversations/current", headers=headers("timeline-user"), json=state("diet coke", messages=messages))
-    assert legacy.json()["timeline"] == {"seq": 0, "results_seq": 0, "live": [], "summaries": []}
+    assert legacy.json()["timeline"] == {"seq": 0, "results_seq": 0, "live": [], "summaries": [], "orders": []}
 
     duplicate_live = {**timeline, "live": timeline["live"] * 2}
     rejected = await conversation_client.put(

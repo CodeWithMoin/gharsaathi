@@ -29,6 +29,8 @@ from app.voice.basket_tools import AddressDescriber
 from app.voice.prompts import BACKEND_INSTRUCTIONS, LIVE_INSTRUCTIONS
 from app.voice.sideband import SidebandHub
 from app.voice.toolbox import ToolExecutor, VOICE_TOOL_DEFINITIONS, VoiceToolbox
+from app.voice.order_status_tools import OrderHistoryReader
+from app.tracking.service import OrderTrackingService
 from app.voice.turn_taking import client_turn_taking, live_instructions
 from app.voice.tools import (
     TOOL_DEFINITIONS,
@@ -142,6 +144,8 @@ class LiveSessionService:
         context_reader: ConversationContextReader | None = None,
         order_confirmations: OrderConfirmations | None = None,
         address_book: AddressBook | None = None,
+        order_tracking: OrderTrackingService | None = None,
+        order_history: OrderHistoryReader | None = None,
     ) -> None:
         self.settings = settings
         self.searcher = searcher
@@ -156,6 +160,8 @@ class LiveSessionService:
         self.context_reader = context_reader
         self.order_confirmations = order_confirmations
         self.address_book = address_book
+        self.order_tracking = order_tracking
+        self.order_history = order_history
         self._http_client = http_client
         # One kept-alive connection to OpenAI per event loop, so a session start
         # does not pay for a fresh TLS handshake (and client setup) every time.
@@ -198,6 +204,8 @@ class LiveSessionService:
                 order_confirmations=self.order_confirmations,
                 address_book=self.address_book,
                 user_words=RecentUserWords(lambda: self.saved_user_words(household_id)),
+                order_tracking=self.order_tracking,
+                order_history=self.order_history,
             )
         if self.zepto_searcher is not None:
             return MultiProviderShoppingToolExecutor(

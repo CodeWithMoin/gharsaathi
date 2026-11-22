@@ -38,6 +38,13 @@ from app.voice.memory_tools import MEMORY_TOOL_DEFINITIONS, MEMORY_TOOL_NAMES, M
 from app.shopping.models import ProviderName
 from app.shopping.order_confirmation import OrderConfirmations
 from app.voice.order_tools import ORDER_TOOL_DEFINITIONS, ORDER_TOOL_NAMES, OrderToolExecutor
+from app.voice.order_status_tools import (
+    ORDER_STATUS_TOOL_DEFINITIONS,
+    ORDER_STATUS_TOOL_NAMES,
+    OrderHistoryReader,
+    OrderStatusToolExecutor,
+)
+from app.tracking.service import OrderTrackingService
 from app.voice.tools import TOOL_DEFINITIONS as SEARCH_TOOL_DEFINITIONS
 from app.voice.tools import (
     MultiProviderShoppingToolExecutor,
@@ -56,6 +63,7 @@ VOICE_TOOL_DEFINITIONS = [
     *MEMORY_WRITE_TOOL_DEFINITIONS,
     *ORDER_TOOL_DEFINITIONS,
     *ADDRESS_BOOK_TOOL_DEFINITIONS,
+    *ORDER_STATUS_TOOL_DEFINITIONS,
 ]
 
 
@@ -91,6 +99,8 @@ class VoiceToolbox:
         order_confirmations: OrderConfirmations | None = None,
         address_book: AddressBook | None = None,
         user_words: RecentUserWords | None = None,
+        order_tracking: OrderTrackingService | None = None,
+        order_history: OrderHistoryReader | None = None,
     ) -> None:
         options: dict[str, SearchOption] = {}
         targets = [
@@ -139,6 +149,7 @@ class VoiceToolbox:
             preference_writer, self.memory_write, self.search, options, household_id
         )
         self.order = OrderToolExecutor(self.basket, order_confirmations)
+        self.order_status = OrderStatusToolExecutor(order_tracking, order_history, household_id)
 
     def has_store(self, provider: ProviderName) -> bool:
         return provider in self.basket.stores
@@ -177,6 +188,8 @@ class VoiceToolbox:
             return await self.memory.execute(name, raw_arguments)
         if name in ORDER_TOOL_NAMES:
             return await self.order.execute(name, raw_arguments)
+        if name in ORDER_STATUS_TOOL_NAMES:
+            return await self.order_status.execute(name, raw_arguments)
         if name in MEMORY_WRITE_TOOL_NAMES:
             return await self.memory_write.execute(name, raw_arguments)
         if name == "add_to_basket":
