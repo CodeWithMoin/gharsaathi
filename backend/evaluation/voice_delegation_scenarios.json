@@ -1181,6 +1181,68 @@
       ]
     },
     {
+      "id": "t3-unknown-order-reconciled",
+      "title": "The tap's outcome is unknown: she says it is not confirmed and offers 'Check with Zepto'; once order history confirms it, she names the order code. Never claims it before.",
+      "catalogue": "demo",
+      "tracking": {
+        "watch": false,
+        "status": "preparing",
+        "provider_status": "In transit",
+        "order_code": "UIIMJHTCC04881"
+      },
+      "unknown_checkout": {
+        "order_id": "ord-live",
+        "order_code": "UIIMJHTCC04881",
+        "payable_paise": 5500,
+        "settle_on_check": 2
+      },
+      "turns": [
+        {
+          "user": "order ho gaya kya?",
+          "expect": {
+            "tools_required": [
+              "get_order_status"
+            ],
+            "tools_forbidden": [
+              "prepare_order",
+              "search_products"
+            ],
+            "reply_mentions_any": [
+              "confirm nahi",
+              "check with zepto",
+              "zepto app"
+            ],
+            "reply_forbids_any": [
+              "order ho gaya",
+              "confirm kar diya",
+              "order place ho gaya",
+              "UIIMJHTCC04881"
+            ],
+            "max_questions": 1,
+            "max_sentences": 2,
+            "roman_only": true
+          }
+        },
+        {
+          "user": "ab dobara check karo",
+          "expect": {
+            "tools_required": [
+              "get_order_status"
+            ],
+            "tools_forbidden": [
+              "prepare_order"
+            ],
+            "reply_mentions_any": [
+              "UIIMJHTCC04881"
+            ],
+            "max_questions": 1,
+            "max_sentences": 2,
+            "roman_only": true
+          }
+        }
+      ]
+    },
+    {
       "id": "t2-order-cancel-zepto-app",
       "title": "'Order cancel kar do' is not done here: she points to the Zepto app before packing and never claims a cancellation.",
       "catalogue": "demo",

@@ -153,7 +153,17 @@ class VoiceToolbox:
         )
         self.order = OrderToolExecutor(self.basket, order_confirmations)
         self.photo = PhotoToolExecutor(photo_reader, household_id)
-        self.order_status = OrderStatusToolExecutor(order_tracking, order_history, household_id)
+        self.order_status = OrderStatusToolExecutor(
+            order_tracking,
+            order_history,
+            household_id,
+            checkouts=getattr(order_confirmations, "reconciler", None),
+            on_reconciled=(
+                (lambda outcome: order_confirmations.notify_reconciled(outcome, announce=False))
+                if order_confirmations is not None
+                else None
+            ),
+        )
 
     def has_store(self, provider: ProviderName) -> bool:
         return provider in self.basket.stores

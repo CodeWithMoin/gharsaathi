@@ -19,7 +19,12 @@ export const MAX_SUMMARIES = 50;
 /** @typedef {"swiggy_instamart" | "zepto"} Store */
 /** @typedef {"updated" | "bill_ready" | "bill_approved" | "ordered"} SummaryStage */
 /** @typedef {{ provider: Store, afterMessageId: string | null, seq: number }} BasketCard */
-/** @typedef {{ stage: SummaryStage, itemCount: number | null, itemTotalPaise: number | null }} BasketSummary */
+/**
+ * For the "ordered" stage `itemTotalPaise` is the order's payable amount and
+ * `orderId` links the summary to that order's live status card.
+ *
+ * @typedef {{ stage: SummaryStage, itemCount: number | null, itemTotalPaise: number | null, orderId?: string | null }} BasketSummary
+ */
 /** @typedef {BasketCard & BasketSummary} SummaryCard */
 /** @typedef {import("./result-groups.mjs").ResultGroup<unknown>} ResultGroup */
 /**
@@ -243,7 +248,7 @@ export function basketSummary(basket, stage) {
   };
 }
 
-const STAGE_LABELS = { updated: "Basket updated", bill_ready: "Bill ready", bill_approved: "Bill approved", ordered: "Order placed" };
+const STAGE_LABELS = { updated: "Basket updated", bill_ready: "Bill ready", bill_approved: "Bill approved", ordered: "Ordered" };
 
 /** @param {number} paise */
 export function formatRupees(paise) {
@@ -274,7 +279,7 @@ export function timelineSnapshot(timeline) {
     seq: timeline.seq,
     results_seq: timeline.resultsSeq,
     live: timeline.live.map(anchor),
-    summaries: timeline.summaries.slice(-MAX_SUMMARIES).map((card) => ({ ...anchor(card), stage: card.stage, item_count: card.itemCount, item_total_paise: card.itemTotalPaise })),
+    summaries: timeline.summaries.slice(-MAX_SUMMARIES).map((card) => ({ ...anchor(card), stage: card.stage, item_count: card.itemCount, item_total_paise: card.itemTotalPaise, ...(card.orderId ? { order_id: card.orderId } : {}) })),
     ...(orders.length ? { orders } : {}),
   };
 }
@@ -318,7 +323,8 @@ export function restoreTimeline(raw) {
     const card = restoreCard(entry);
     const fields = /** @type {Record<string, unknown>} */ (entry);
     const stage = SUMMARY_STAGES.find((item) => item === fields.stage);
-    if (card && stage) summaries.push({ ...card, stage, itemCount: count(fields.item_count), itemTotalPaise: count(fields.item_total_paise) });
+    const orderId = typeof fields.order_id === "string" && fields.order_id.trim() ? fields.order_id.trim() : null;
+    if (card && stage) summaries.push({ ...card, stage, itemCount: count(fields.item_count), itemTotalPaise: count(fields.item_total_paise), ...(orderId ? { orderId } : {}) });
   }
   /** @type {OrderStatusCard[]} */
   const orders = [];

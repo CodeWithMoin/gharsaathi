@@ -157,6 +157,56 @@ restart drops them and the user asks again. The order stays one-shot across proc
 because the checkout claim is unique per approval in PostgreSQL. Swiggy Instamart has
 no checkout, so `prepare_order` returns `unsupported` there.
 
+### Order placed: one transaction
+
+When the provider confirms an order (the tap, a prepaid status check, or a
+reconciliation below), one PostgreSQL transaction marks the checkout attempt
+`confirmed` with the order id, consumes the approval and marks the basket
+`ordered`. `ordered` is not an open status, so the store has no open basket and the
+next add creates a fresh one. Tracking starts and events go out only after the
+commit. If the transaction fails nothing changes, and the provider is never called
+again; the attempt stays as the provider path recorded it (an unknown outcome stays
+`outcome_unknown`). The page closes the basket card as "Ordered · 1 item · ₹55",
+linked to the order's status card, and the cart badge counts only open baskets.
+
+### Unknown outcome: read-only reconciliation
+
+A timed-out or unreadable confirmation leaves the attempt `outcome_unknown` and the
+basket locked (`checkout_pending`). The parser accepts the documented variants
+(id under `orderId`/`order_id`/`id`/`code`, nested `data`/`order`/`result`, a
+text-only success that names one order id or code) only with a provider order
+identifier, and logs `event=zepto_cod_confirm_unparsed` with key paths and types,
+never values. `app/shopping/reconciliation.py` then reads Zepto's history only
+(`list_order_history`, then `get_order_detail` for orders whose grand total equals
+the approved payable). An order matches when it was placed between attempt
+created − 2 min and completed + 10 min, its grand total and item count fit, and
+every basket line matches one ordered product (provider id or normalised name) with
+the same quantity. Exactly one match settles it in one transaction (COD →
+`confirmed`; prepaid → `awaiting_payment`, so only `check_payment_status` reads can
+confirm payment) and starts tracking. No match or several matches keep it unknown:
+GharSaathi never guesses and never calls a create/confirm tool here.
+
+Checks run after the tap (15 s, 45 s, 60 s), on the card's **Check with Zepto**
+(`POST /api/orders/check`; the card also checks 3 times over ~2 min), on app load
+(`POST /api/orders/reconcile-pending`), and from `get_order_status`, which returns
+`not_confirmed` until a check confirms it. Checks within 15 s reuse the last
+answer. `python -m app.shopping.reconcile_unknown --dry-run|--apply` runs the same
+check for existing unknown attempts and prints only an attempt prefix, match yes/no
+and the order code.
+
+### Stale cards
+
+A bill and an order card are bound to one basket revision. When the store's basket
+changes, `card-lifecycle.mjs` collapses an open order card to "… · Out of date —
+basket changed" (no buttons) and BasketPanel replaces the bill with "This bill is
+out of date — get a fresh bill". The next card replaces the old one at the newest
+point in the chat, keyed by basket id, revision and confirmation id. A card whose
+order may exist (placing, unknown, payment in progress) is never collapsed. A
+delivered or store-cancelled order's status card collapses to one line
+("Delivered ✓ · 8:26 am · took 9 min (estimate 8 min)", from Zepto's delivered time /
+"Cancelled by Zepto · Amul Sweet Lassi · ₹55 · 8:41 am"); tapping it shows the
+details, including items and total. Reloading keeps the line.
+
 ## After the tap: order status
 
 ```mermaid
@@ -191,9 +241,14 @@ sequenceDiagram
   shipment's status maps to placed / packed / out for delivery / delivered / cancelled
   by exact status words only (anything else is shown as Zepto's own text, never
   guessed). The ETA is Zepto's committed ETA (placed time + `committedEtaInMins`).
+  The snapshot also keeps Zepto's `placed_at`, `arrived_at`, `delivered_at` (delivered
+  shipments only), `committed_eta_minutes`, `total_arrival_minutes` and a derived
+  `took_minutes`; all optional (older watch files load unchanged, a missing or zone-less
+  time stays empty), and a delivered monitor's `status_at` is Zepto's delivery time.
   It polls every 90 s (no provider hint) and never repurposes `list_order_history`.
-- **Status card.** `order-status-card.tsx` shows the steps, the latest Zepto ETA, when
-  it was last updated, **Track order** (LiveOrderTracking in an `InputDialog`) and
+- **Status card.** `order-status-card.tsx` shows the steps, "Arriving by 8:26 am · about
+  4 min" (or "Running late — Zepto estimated 8:26 am"), the placed time, when it was
+  last updated, **Track order** (LiveOrderTracking in an `InputDialog`) and
   "Open the Zepto app" as text (no documented deep link). It is a timeline item
   (`timeline.orders`, saved with the conversation), so reload keeps it and later
   messages appear below it. It polls only while the tab is visible and stops when

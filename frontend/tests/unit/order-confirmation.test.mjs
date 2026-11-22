@@ -4,6 +4,8 @@ import { applyAssistantEvent } from "../../app/assistant-events.mjs";
 import {
   autoCheckDelayMs,
   checkableCheckoutId,
+  checkableOrderId,
+  orderCheckDelayMs,
   placeButtonLabel,
   safePaymentUrl,
   withPaymentMethodCard,
@@ -47,8 +49,13 @@ test("a valid order event becomes the card's confirmation", () => {
     address: "Green Park",
     paymentMethod: "cod",
     paymentMethods: [{ id: "cod", label: "Cash on delivery" }],
+    basketId: null,
+    basketRevision: null,
   });
   assert.equal(deliverToLabel(confirmation), "Deliver to: Home");
+  const bound = orderConfirmationFromEvent({ ...event(), basket: { id: "basket-1", revision: 4 } });
+  assert.equal(bound?.basketId, "basket-1");
+  assert.equal(bound?.basketRevision, 4);
 });
 
 test("malformed order events are ignored", () => {
@@ -71,16 +78,31 @@ test("the countdown reads minutes:seconds and ends at expiry", () => {
 });
 
 test("only a provider-confirmed order id counts as placed", () => {
-  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: "ZEP-1" } }), { status: "placed", orderId: "ZEP-1", tracking: null });
+  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: "ZEP-1" } }), { status: "placed", orderId: "ZEP-1", orderCode: null, tracking: null });
   const tracking = { monitor_id: "m1", order: { order_id: "ZEP-1" } };
-  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: "ZEP-1", tracking } }), { status: "placed", orderId: "ZEP-1", tracking });
-  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: null } }), { status: "unknown" });
-  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "outcome_unknown" } }), { status: "unknown" });
+  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: "ZEP-1", tracking } }), { status: "placed", orderId: "ZEP-1", orderCode: null, tracking });
+  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: null } }), { status: "unknown", checkoutId: null });
+  assert.deepEqual(orderCardStateFromResponse({ ok: true, body: { status: "outcome_unknown" } }), { status: "unknown", checkoutId: null, check: null, candidates: [] });
   assert.deepEqual(orderCardStateFromResponse({ ok: false, status: 409, message: "This order card expired." }), { status: "failed", reason: "This order card expired." });
   assert.deepEqual(orderCardStateFromResponse({ ok: false, status: 502, message: "Zepto could not refresh this bill." }), { status: "failed", reason: "Zepto could not refresh this bill." });
   // A dropped connection or unexpected server error is never "not placed": the user must not tap again blindly.
   assert.deepEqual(orderCardStateFromResponse({ ok: false, status: 0, message: "" }), { status: "unknown" });
   assert.deepEqual(orderCardStateFromResponse({ ok: false, status: 500, message: "boom" }), { status: "unknown" });
+});
+
+test("an unknown outcome offers read-only checks with Zepto and never claims placed", () => {
+  const unknown = orderCardStateFromResponse({ ok: true, body: { status: "outcome_unknown", checkout_id: "chk_12345678", check: "not_found" } });
+  assert.deepEqual(unknown, { status: "unknown", checkoutId: "chk_12345678", check: "not_found", candidates: [] });
+  assert.equal(checkableOrderId(unknown), "chk_12345678");
+  assert.equal(checkableOrderId({ status: "unknown" }), null);
+  assert.equal(checkableOrderId({ status: "placed", orderId: "o" }), null);
+  assert.match(orderCardResultText(unknown, "Zepto"), /hasn't confirmed this order.*Zepto app/);
+  assert.doesNotMatch(orderCardResultText(unknown, "Zepto"), /placed/i);
+  const ambiguous = orderCardStateFromResponse({ ok: true, body: { status: "outcome_unknown", checkout_id: "chk_12345678", check: "ambiguous", candidates: ["AAA111", "BBB222"] } });
+  assert.match(orderCardResultText(ambiguous, "Zepto"), /#AAA111, #BBB222.*won't guess/);
+  const settled = orderCardStateFromResponse({ ok: true, body: { status: "confirmed", provider_order_id: "ord-live", provider_order_code: "UIIMJHTCC04881", tracking: null } });
+  assert.equal(orderCardResultText(settled, "Zepto"), "Order placed · #UIIMJHTCC04881");
+  assert.deepEqual([0, 1, 2, 3].map(orderCheckDelayMs), [20000, 45000, 60000, null]);
 });
 
 test("result lines are plain English", () => {
@@ -158,7 +180,7 @@ test("prepaid responses map to explicit payment states; only confirmed counts as
   assert.deepEqual(ok({ status: "payment_failed", checkout_id: "chk_12345678" }), { status: "payment_failed" });
   assert.deepEqual(ok({ status: "paid_order_failed" }), { status: "paid_order_failed" });
   assert.deepEqual(ok({ status: "payment_unknown", checkout_id: "chk_12345678" }), { status: "payment_unknown", checkoutId: "chk_12345678" });
-  assert.deepEqual(ok({ status: "something_new" }), { status: "unknown" });
+  assert.deepEqual(ok({ status: "something_new" }), { status: "unknown", checkoutId: null, check: null, candidates: [] });
 });
 
 test("only waiting payment states can be checked, on a bounded schedule", () => {

@@ -29,7 +29,7 @@ import json
 import logging
 import secrets
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Literal, Protocol
 
@@ -51,6 +51,7 @@ from app.shopping.models import (
 )
 from app.shopping.payments import PAYMENT_LABELS, PREPAID_METHODS, payment_label
 from app.shopping.ports import BasketRepository
+from app.shopping.reconciliation import RECONCILED_STATUS, CheckoutReconciler, ReconcileOutcome
 
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,13 @@ class OrderResult:
     checkout_id: str | None = None
     # Provider-issued link to finish payment; only while awaiting payment.
     payment_url: str | None = None
+    # The store's order code ("#UIIMJHTCC04881"), when known.
+    order_code: str | None = None
+    # "order_history" when the outcome came from a read-only reconciliation.
+    source: Literal["checkout", "order_history"] = "checkout"
+    # The last reconciliation check for an unknown outcome, if any.
+    check: Literal["matched", "not_found", "ambiguous", "unavailable", "not_unknown"] | None = None
+    candidates: tuple[str, ...] = ()
 
     @classmethod
     def from_attempt(
@@ -136,6 +144,14 @@ class OrderResult:
             "Never ask for a UPI PIN, card number, CVV or OTP, and never say it is paid "
             "until a later result says so."
         )
+        if self.status == "confirmed" and self.source == "order_history":
+            paid = "cash on delivery" if self.payment_method == "cod" else f"paid by {method}"
+            reference = self.order_code or self.provider_order_id
+            return (
+                f"{self.store}'s order history shows this order was placed (order code "
+                f"{reference}), {amount}, {paid}. The earlier result was unconfirmed; now tell "
+                f"the user in one short line that the order is placed, with code #{reference}."
+            )
         if self.status == "confirmed":
             paid = "cash on delivery" if self.payment_method == "cod" else f"paid by {method}"
             return (
@@ -143,11 +159,25 @@ class OrderResult:
                 f"{amount}, {paid}. Tell the user in one short line that the "
                 "order is placed."
             )
+        if self.status == "outcome_unknown" and self.check == "not_found":
+            return (
+                f"{self.store}'s order history shows no matching order yet, so this order is "
+                "still not confirmed. Do not say it was placed or paid and do not prepare it "
+                "again. Say exactly that it is not confirmed and ask the user to check the "
+                "Zepto app."
+            )
+        if self.status == "outcome_unknown" and self.check == "ambiguous":
+            codes = ", ".join(f"#{code}" for code in self.candidates[:3])
+            return (
+                f"Several {self.store} orders could match this one ({codes}); GharSaathi will "
+                "not guess which. Do not say it was placed. Ask the user to check the Zepto "
+                "app; do not prepare it again."
+            )
         if self.status == "outcome_unknown":
             return (
                 f"{self.store} did not confirm whether the order went through. Do not say it "
-                "was placed or paid and do not prepare it again; ask the user to check the "
-                "Zepto app or order tracking first."
+                "was placed or paid and do not prepare it again. Say it is not confirmed yet "
+                "and offer 'Check with Zepto' on the order card, or the Zepto app."
             )
         if self.status == "awaiting_payment":
             return (
@@ -185,6 +215,27 @@ class OrderResult:
         return f"The order was not placed: {self.reason} Nothing was ordered."
 
 
+def result_from_reconciliation(
+    confirmation_id: str, store: str, outcome: ReconcileOutcome
+) -> OrderResult:
+    """An order result from a read-only order-history check."""
+
+    assert outcome.attempt is not None
+    result = OrderResult.from_attempt(confirmation_id, store, outcome.attempt)
+    return replace(
+        result,
+        order_code=outcome.order_code,
+        source=(
+            "order_history"
+            if outcome.check == "matched"
+            or outcome.attempt.provider_status == RECONCILED_STATUS
+            else "checkout"
+        ),
+        check=outcome.check,
+        candidates=outcome.candidates,
+    )
+
+
 Notifier = Callable[[OrderResult], Awaitable[None]]
 
 
@@ -211,6 +262,8 @@ class OrderConfirmation:
     payment_methods: tuple[PaymentMethod, ...] = ("cod",)
     checkout_id: str | None = None
     last_status: OrderStatus | None = None
+    # The last reconciliation answer told to the session, so it is told once.
+    last_note: str | None = None
 
 
 def quote_digest(quote: Quote | None) -> str:
@@ -241,12 +294,15 @@ class OrderConfirmations:
         clock: Clock = utc_now,
         ttl: timedelta = CONFIRMATION_TTL,
         payments: PaymentOptions | None = None,
+        reconciler: CheckoutReconciler | None = None,
     ) -> None:
         self.baskets = baskets
         self.approvals = approvals
         self.clock = clock
         self.ttl = ttl
         self.payments = payments
+        # Read-only order-history checks for unknown outcomes (app/shopping/reconciliation.py).
+        self.reconciler = reconciler
         self._items: dict[str, OrderConfirmation] = {}
         self._lock = asyncio.Lock()
 
@@ -436,7 +492,69 @@ class OrderConfirmations:
             )
             raise
         await self._notify(confirmation, result)
+        if result.status == "outcome_unknown" and result.checkout_id and self.reconciler is not None:
+            self.reconciler.follow_up(
+                result.checkout_id,
+                on_final=lambda outcome: self._after_check(confirmation, outcome),
+            )
         return result
+
+    async def check_order(self, household_id: str, checkout_id: str) -> OrderResult:
+        """The user's "Check with Zepto" tap: one read-only order-history check.
+
+        Never calls an order tool. Repeated taps within the reconciler's interval
+        reuse the last answer.
+        """
+
+        if self.reconciler is None:
+            raise NotFound("Order checks are not available right now. Check the Zepto app.")
+        outcome = await self.reconciler.reconcile(checkout_id, household_id=household_id)
+        if outcome.attempt is None:
+            raise NotFound("Checkout not found.")
+        confirmation = next(
+            (item for item in self._items.values() if item.checkout_id == checkout_id), None
+        )
+        result = result_from_reconciliation(
+            confirmation.id if confirmation else "",
+            confirmation.store if confirmation else "Zepto",
+            outcome,
+        )
+        if confirmation is not None:
+            await self._after_check(confirmation, outcome)
+        return result
+
+    async def notify_reconciled(self, outcome: ReconcileOutcome, *, announce: bool = True) -> None:
+        """Tell the session that prepared this order about a reconciled outcome.
+
+        ``announce=False`` only records it as told (the caller's own tool result
+        already carries it), so a later background check does not repeat it.
+        """
+
+        if outcome.attempt is None:
+            return
+        confirmation = next(
+            (item for item in self._items.values() if item.checkout_id == outcome.attempt.id), None
+        )
+        if confirmation is not None:
+            await self._after_check(confirmation, outcome, announce=announce)
+
+    async def _after_check(
+        self, confirmation: OrderConfirmation, outcome: ReconcileOutcome, *, announce: bool = True
+    ) -> None:
+        """Notify once per new answer; an unreadable history adds nothing new."""
+
+        result = result_from_reconciliation(confirmation.id, confirmation.store, outcome)
+        if result.status == "outcome_unknown" and result.check not in {"not_found", "ambiguous"}:
+            return
+        key = f"{result.status}:{result.check if result.status == 'outcome_unknown' else ''}"
+        if confirmation.last_note == key or (
+            result.status != "outcome_unknown" and confirmation.last_status == result.status
+        ):
+            return
+        confirmation.last_note = key
+        confirmation.last_status = result.status
+        if announce:
+            await self._notify(confirmation, result)
 
     async def _place(self, confirmation: OrderConfirmation, checkout: CheckoutService) -> OrderResult:
         if confirmation.provider not in ORDERABLE_PROVIDERS:
