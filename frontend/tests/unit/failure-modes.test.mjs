@@ -9,6 +9,7 @@ import { emptyTimeline, moveBasketCard } from "../../app/chat-timeline.mjs";
 import { countdownLabel, orderCardResultText, orderCardStateFromResponse, orderConfirmationFromEvent } from "../../app/order-confirmation.mjs";
 import { applyTrackingRead, orderCardFromPlaced } from "../../app/order-status.mjs";
 import { uploadErrorMessage, validatePhotoFile } from "../../app/photo-attachment.mjs";
+import { VOICE_START_TIMEOUT_MS, startDeadline, voiceFailureView, voiceSupport } from "../../app/voice-mic.mjs";
 import { zeptoAddressSelection } from "../../app/zepto-address-refresh.mjs";
 import { MESSAGES as PUSH_MESSAGES, detectSupport, notificationState, turnOn } from "../../app/push-notifications.mjs";
 
@@ -173,6 +174,36 @@ test("FM-PH05 webcam denied, missing or busy each get a way out to the file pick
 test("FM-PH05 / FM-V04 without getUserMedia (plain http on a phone) the camera falls back to the native picker", () => {
   assert.equal(cameraPath({ userAgent: "Mozilla/5.0 (Macintosh)", hasGetUserMedia: false }), "native");
   assert.equal(cameraPath({ userAgent: "Mozilla/5.0 (Macintosh)", hasGetUserMedia: true }), "webcam");
+});
+
+test("FM-V03 a denied microphone asks for browser settings and keeps Try again", () => {
+  const view = voiceFailureView({ error: { name: "NotAllowedError" } });
+  assert.match(view.message, /^Allow microphone access in your browser settings/);
+  assert.equal(view.retry, true);
+});
+
+test("FM-V04 plain http or no mediaDevices stops voice before any session, with an https message", () => {
+  const phoneOnLan = { isSecureContext: false, navigator: {}, RTCPeerConnection() {} };
+  assert.equal(voiceSupport(phoneOnLan), "insecure_context");
+  assert.deepEqual(voiceFailureView({ support: "insecure_context" }), {
+    kind: "insecure_context",
+    message: "Voice needs a secure connection (https) or localhost. Open the app on https, or use typed chat.",
+    retry: false,
+  });
+  assert.equal(voiceSupport({ isSecureContext: true, navigator: {}, RTCPeerConnection() {} }), "unsupported");
+  for (const [name, kind] of [["NotAllowedError", "denied"], ["NotFoundError", "not_found"], ["NotReadableError", "in_use"]]) {
+    assert.equal(voiceFailureView({ error: { name } }).kind, kind);
+  }
+});
+
+test("FM-V04 a hung voice start ends in a retryable error after 15 s, never an endless Connecting", () => {
+  let fire;
+  let expired = null;
+  startDeadline(VOICE_START_TIMEOUT_MS, (error) => { expired = error; }, (callback, ms) => { assert.equal(ms, 15_000); fire = callback; });
+  fire();
+  const view = voiceFailureView({ error: expired });
+  assert.equal(view.kind, "timeout");
+  assert.equal(view.retry, true);
 });
 
 test("FM-V07 browser-extension attributes on <html>/<body> do not break hydration", () => {
