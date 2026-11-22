@@ -170,6 +170,9 @@ def test_backend_reasoning_effort_is_a_setting() -> None:
     unset = build_session_config(Settings(live_backend_reasoning_effort=""))["delegation"]["responses"]
     assert "reasoning" not in unset
     assert Settings.model_fields["live_backend_reasoning_effort"].default == "low"
+    tier = build_session_config(Settings(live_backend_service_tier="priority"))["delegation"]["responses"]
+    assert tier["service_tier"] == "priority"
+    assert "service_tier" not in low
 
 
 class TwoSearchResponses:

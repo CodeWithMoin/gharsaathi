@@ -374,7 +374,7 @@ async def run_turn(
             parallel_tool_calls=delegation["parallel_tool_calls"],
             input=request_input,
             previous_response_id=previous,
-            **({"reasoning": delegation["reasoning"]} if "reasoning" in delegation else {}),
+            **{key: delegation[key] for key in ("reasoning", "service_tier") if key in delegation},
         )
         previous = response.id
         function_calls = [item for item in response.output if item.type == "function_call"]

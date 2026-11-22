@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # https://developers.openai.com/api/docs/models/gpt-6-luna
     # Empty omits the setting (model default).
     live_backend_reasoning_effort: Literal["", "none", "low", "medium", "high"] = "low"
+    # Responses service tier for the backend model: "" omits it (project default);
+    # "priority" measured ~0.2 s faster per model round at a higher price.
+    live_backend_service_tier: Literal["", "auto", "default", "flex", "priority"] = ""
     # Typed chat runs the same backend model and tools as voice, one bounded turn per request.
     chat_turn_timeout_seconds: float = Field(default=60.0, ge=5.0, le=180.0)
     # native | tuned (option A) | smart_turn (option B); see docs/voice-turn-taking.md

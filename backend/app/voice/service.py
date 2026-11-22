@@ -117,7 +117,7 @@ def build_session_config(
                 "tools": tool_definitions if tool_definitions is not None else TOOL_DEFINITIONS,
                 "tool_choice": "auto",
                 "parallel_tool_calls": True,
-                **_reasoning(settings),
+                **_backend_tuning(settings),
             },
         },
     }
@@ -127,11 +127,15 @@ def build_session_config(
     return session
 
 
-def _reasoning(settings: Settings) -> dict[str, Any]:
+def _backend_tuning(settings: Settings) -> dict[str, Any]:
     # Responses delegation accepts the backend model's reasoning settings:
     # https://developers.openai.com/api/docs/guides/live-delegation#reduce-backend-latency
     effort = settings.live_backend_reasoning_effort
-    return {"reasoning": {"effort": effort}} if effort else {}
+    tier = settings.live_backend_service_tier
+    return {
+        **({"reasoning": {"effort": effort}} if effort else {}),
+        **({"service_tier": tier} if tier else {}),
+    }
 
 
 class LiveSessionService:

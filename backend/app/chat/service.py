@@ -323,7 +323,7 @@ class ChatTurnService:
                 parallel_tool_calls=delegation["parallel_tool_calls"],
                 input=request_input,
                 previous_response_id=previous_response_id,
-                **({"reasoning": delegation["reasoning"]} if "reasoning" in delegation else {}),
+                **{key: delegation[key] for key in ("reasoning", "service_tier") if key in delegation},
             )
             model_ms.append(ms_since(mark))
             previous_response_id = response.id

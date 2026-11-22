@@ -223,7 +223,7 @@ async def _delegation_turn(client: Any, delegation: dict[str, Any], toolbox: Any
             model=delegation["model"], instructions=delegation["instructions"], tools=delegation["tools"],
             tool_choice=delegation["tool_choice"], parallel_tool_calls=delegation["parallel_tool_calls"],
             input=request_input, previous_response_id=previous,
-            **({"reasoning": delegation["reasoning"]} if "reasoning" in delegation else {}),
+            **{key: delegation[key] for key in ("reasoning", "service_tier") if key in delegation},
         )
         model_ms = round((time.perf_counter() - mark) * 1000, 1)
         previous = response.id
@@ -253,7 +253,7 @@ def _scenario_parts(scenario: dict[str, Any], data: dict[str, Any]) -> tuple[str
     return scenario["catalogue"], catalogues, harness_scenario
 
 
-async def live(runs: int, efforts: list[str], typed: bool) -> dict[str, Any]:
+async def live(runs: int, efforts: list[str], typed: bool, on_effort: Any = None) -> dict[str, Any]:
     from openai import AsyncOpenAI
 
     from app.memory.remembered import memory_summary_block
@@ -279,6 +279,7 @@ async def live(runs: int, efforts: list[str], typed: bool) -> dict[str, Any]:
         if effort and not has_effort_setting:
             delegation = {**delegation, "reasoning": {"effort": effort}}
         label = effort or "default"
+        errors: list[str] = []
         per_turn: dict[str, list[dict[str, Any]]] = {}
         for run in range(runs):
             for scenario in LIVE_SCENARIOS:
@@ -291,15 +292,21 @@ async def live(runs: int, efforts: list[str], typed: bool) -> dict[str, Any]:
                         "instructions": delegation["instructions"] + memory_summary_block(toolbox.memory.recaller.memory),  # type: ignore[union-attr]
                     }
                 previous: str | None = None
-                for index, text in enumerate(scenario["turns"], 1):
-                    stage_log.lines.clear()
-                    turn, previous = await _delegation_turn(client, scenario_delegation, toolbox, text, previous)
-                    turn["tool_stages"] = list(stage_log.lines)
-                    per_turn.setdefault(f"delegation:{scenario['id']}:t{index}", []).append(turn)
-                if typed:
-                    await _typed_scenario(settings, client, scenario, catalogue, catalogues, harness_scenario, stage_log, per_turn, run)
+                try:
+                    for index, text in enumerate(scenario["turns"], 1):
+                        stage_log.lines.clear()
+                        turn, previous = await _delegation_turn(client, scenario_delegation, toolbox, text, previous)
+                        turn["tool_stages"] = list(stage_log.lines)
+                        per_turn.setdefault(f"delegation:{scenario['id']}:t{index}", []).append(turn)
+                    if typed:
+                        await _typed_scenario(settings, client, scenario, catalogue, catalogues, harness_scenario, stage_log, per_turn, run)
+                except Exception as exc:  # noqa: BLE001 - one stalled API call must not lose the run
+                    errors.append(f"{label} run {run + 1} {scenario['id']}: {type(exc).__name__}")
+                    print(errors[-1], flush=True)
             print(f"effort={label} run {run + 1}/{runs} done", flush=True)
-        results[label] = {"turns": per_turn, "summary": _summarise(per_turn)}
+        results[label] = {"turns": per_turn, "summary": _summarise(per_turn), "errors": errors}
+        if on_effort is not None:
+            on_effort(results)
     return results
 
 
@@ -359,7 +366,12 @@ async def main() -> None:
     report: dict[str, Any] = json.loads(args.report.read_text()) if args.report.exists() else {}
     label = args.label or "current"
     if args.live:
-        result = await live(args.runs, args.effort if args.effort is not None else [get_settings().live_backend_reasoning_effort if hasattr(get_settings(), "live_backend_reasoning_effort") else ""], not args.no_typed)
+        def save(partial: dict[str, Any]) -> None:
+            report.setdefault("live", {})[label] = partial
+            args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        efforts = args.effort if args.effort is not None else [getattr(get_settings(), "live_backend_reasoning_effort", "")]
+        result = await live(args.runs, efforts, not args.no_typed, save)
         report.setdefault("live", {})[label] = result
         for effort, body in result.items():
             print(f"\n== effort {effort}")
