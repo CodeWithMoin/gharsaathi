@@ -1038,6 +1038,8 @@
           }
         }
       ]
-    }
+    },
+    {"id": "s17-address-switch-saved", "title": "'Address change karo' lists saved addresses, then switches to Office", "catalogue": "demo", "address_book": "home_office", "turns": [{"user": "delivery address change karo", "expect": {"address_listed": true, "tools_forbidden": ["open_address_form"], "reply_mentions_any": ["Office"], "max_questions": 1, "max_sentences": 2}}, {"user": "Office", "expect": {"address_selected": "demo-office", "reply_mentions_any": ["Office"], "max_sentences": 2}}]},
+    {"id": "s18-new-address-form-ack", "title": "New address: prefill only what was said, claim open only after the screen ack, never fill the phone", "catalogue": "demo", "address_form_screen": "visible", "turns": [{"user": "naya address add karo, RMZ The Loft", "expect": {"tools_required": ["open_address_form"], "prefill_equals": {"building_name": "RMZ The Loft"}, "form_claim_needs_ack": true, "no_saved_claim": true}}, {"user": "lagado floor 3, Gachibowli. number mera bhar dena", "expect": {"tools_required": ["open_address_form"], "prefill_equals": {"building_name": "RMZ The Loft", "floor": "3", "short_address": "Gachibowli"}, "no_phone_fill_claim": true, "reply_mentions_any": ["type", "khud", "daal"], "no_saved_claim": true}}]}
   ]
 }

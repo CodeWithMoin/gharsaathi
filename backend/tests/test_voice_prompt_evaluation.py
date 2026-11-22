@@ -4,6 +4,8 @@ import re
 import pytest
 
 from app.shopping.money import format_rupees
+from app.voice.address_book_tools import ListArguments as AddressListArguments
+from app.voice.address_book_tools import SelectArguments as AddressSelectArguments
 from app.voice.address_tools import OpenAddressFormArguments
 from app.voice.basket_tools import AddArguments, QuantityArguments, StoreArguments
 from app.voice.memory_tools import RecallArguments
@@ -423,6 +425,8 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "list_preferences": ListArguments,
         "confirm_memory": DecisionArguments,
         "prepare_order": StoreArguments,
+        "list_delivery_addresses": AddressListArguments,
+        "select_delivery_address": AddressSelectArguments,
     }
     assert set(validators) == set(definitions)
 
@@ -445,7 +449,7 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
             issued_options.update(
                 item["option_id"] for item in result.get("results", []) if "option_id" in item
             )
-    assert {"search_products", "add_to_basket", "request_approval", "open_address_form", "prepare_order"} <= used
+    assert {"search_products", "add_to_basket", "request_approval", "open_address_form", "prepare_order", "list_delivery_addresses", "select_delivery_address"} <= used
     lines_text = _examples(BACKEND_INSTRUCTIONS, "\n## Examples\n")
     for index, line in enumerate(lines_text):
         if line.startswith("Assistant:") and "Place order" in line:

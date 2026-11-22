@@ -21,7 +21,7 @@ flowchart LR
   subgraph Backend["FastAPI backend (127.0.0.1:8000)"]
     API["REST API<br/>every route needs sign-in<br/>(except OAuth + health)"]
     SB["Voice sideband<br/>runs tool calls,<br/>posts results, continues"]
-    TOOLS["Voice tools<br/>search · basket · bill ·<br/>order card · address form · memory"]
+    TOOLS["Voice tools<br/>search · basket · bill ·<br/>order card · saved addresses ·<br/>address form · memory"]
     CORE["Shopping core<br/>per-store baskets, deterministic bill maths,<br/>approval bound to exact basket revision"]
     MEM["Memory<br/>confirmed preferences +<br/>consented purchase history + profile"]
     ADP["Provider adapters<br/>schema-validated MCP calls,<br/>Swiggy 429 cooldown"]
@@ -153,6 +153,50 @@ for the same store replaces the older one. Confirmations live in backend memory;
 restart drops them and the user asks again. The order stays one-shot across processes
 because the checkout claim is unique per approval in PostgreSQL. Swiggy Instamart has
 no checkout, so `prepare_order` returns `unsupported` there.
+
+## Delivery addresses (switch, add)
+
+**Switch to a saved address.** "Address change karo" calls `list_delivery_addresses`
+(saved addresses per connected store from the server-side snapshot, or the demo
+fixture; no provider call), the model names them in one line, then
+`select_delivery_address(store, address_id)`:
+
+1. The id must be in that user's own snapshot for that store (`SavedAddressBook.select`,
+   the same repository write as `PUT /api/{store}/addresses/selected`).
+2. The store's basket gets the new address (`BasketService.set_address`), which
+   supersedes any open bill; refused once checkout started.
+3. The session's toolbox uses it for later searches, baskets, bills and order cards;
+   options found for the old address can no longer be added.
+4. `address.selected` updates the on-screen selection. The voice panel does not
+   restart for a switch the assistant made; typed chat keeps its session.
+
+**Add a new (Zepto) address.**
+
+```mermaid
+sequenceDiagram
+  participant M as Backend model
+  participant T as open_address_form
+  participant S as Sideband
+  participant B as Browser
+  M->>T: prefill from what the user said
+  T->>T: Zepto live + connected? (else address_form.unavailable)<br/>drop fields not in the user's own recent words,<br/>sample values, phones, coordinates; merge with earlier prefill
+  T-->>S: form_requested + ui event (ack_id)
+  S->>B: address_form.open (SSE)
+  B->>B: open the Add delivery address popup,<br/>fill only empty, untouched fields, focus first empty
+  B->>S: POST /api/voice/sessions/{id}/ui-ack {form_visible, filled_fields}
+  S-->>M: form_opened (form_visible true) or form_not_shown (reason; 6 s timeout)
+```
+
+- The user's own words come from GPT-Live input transcripts seen by the sideband,
+  typed messages, and the saved chat's user turns — never from the model.
+- Typed chat cannot confirm within its own turn: the reply says the form is
+  opening, and the browser sends `ui_acks` with the next turn as a developer note.
+- The popup is `AddressFormSheet` on the shared `ui/input-dialog.tsx`
+  (`InputDialog`: modal, focus trap, Escape/backdrop close with an unsaved-changes
+  guard, bottom sheet under 640 px). Voice, typed chat, the setup sheet's button and
+  onboarding all open the same popup.
+- Contact number and coordinates are never prefilled; the model says the user must
+  type the number.
 
 ## Context size per turn (prompt 1.8.0, o200k tokens)
 

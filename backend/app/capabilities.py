@@ -112,42 +112,51 @@ CAPABILITIES: tuple[Capability, ...] = (
         id="select_address",
         title="List and select a saved delivery address",
         voice=S(
-            M,
-            "Voice uses whichever address is selected on screen when the session starts; "
-            "basket tools report it (label + short line from the saved snapshot). No selection tool.",
+            W,
+            "'Address change karo' lists the saved addresses per connected store "
+            "(list_delivery_addresses, server-side snapshot, no provider call) and switches "
+            "with select_delivery_address: validated against the user's own snapshot, saved "
+            "like PUT .../addresses/selected, moved onto the store's basket (an open bill is "
+            "superseded), used by later tools in the same session, and shown on screen "
+            "(address.selected).",
         ),
-        typed_chat=S(
-            M,
-            "Typed turns use the addresses selected on screen (sent with each turn); "
-            "there is no selection tool.",
-        ),
-        ui=S(W, "Radio list per store in the setup sheet."),
-        backend=S(W),
+        typed_chat=S(W, "Same list/select tools as voice; the switched address is kept for later turns. " + TYPED_VIA_ASSISTANT),
+        ui=S(W, "Radio list per store in the setup sheet; a voice/typed switch updates it without restarting voice."),
+        backend=S(W, "Demo mode lists the static fixture and keeps the selection for the session only."),
+        voice_tools=("list_delivery_addresses", "select_delivery_address"),
         routes=(
             "GET /api/swiggy/addresses",
             "PUT /api/swiggy/addresses/selected",
             "GET /api/zepto/addresses",
             "PUT /api/zepto/addresses/selected",
         ),
-        ui_files=("frontend/app/page.tsx",),
+        ui_files=("frontend/app/page.tsx", "frontend/app/assistant-events.mjs"),
     ),
     Capability(
         id="add_address",
         title="Add a new delivery address",
         voice=S(
             W,
-            "Zepto, live mode: opens the address form prefilled with what the user said; "
-            "the user checks, sets location and saves on screen. Swiggy is refused "
-            "(swiggy_unsupported). Known gap: a second voice prefill remounts the form "
-            "(new key in page.tsx) and overwrites fields the user is editing.",
+            "Zepto, live mode: opens a focused Add delivery address sheet prefilled only with "
+            "words found in the user's own recent speech/chat (sample values, phone numbers "
+            "and coordinates are dropped server-side). Follow-up details fill the open form's "
+            "empty fields without overwriting what the user typed. The assistant says the form "
+            "is open only after the browser reports form_visible (POST .../ui-ack). Swiggy is "
+            "refused (swiggy_unsupported); demo mode returns demo_mode.",
         ),
-        typed_chat=S(W, "Same open_address_form tool and limits as voice. " + TYPED_VIA_ASSISTANT),
-        ui=S(P, "Zepto only, live mode only (ZeptoAddressForm)."),
+        typed_chat=S(
+            W,
+            "Same open_address_form tool; the browser reports form_visible with the next turn "
+            "(ui_acks). " + TYPED_VIA_ASSISTANT,
+        ),
+        ui=S(P, "Zepto only, live mode only (AddressFormSheet + ZeptoAddressForm)."),
         backend=S(P, "Zepto only; Swiggy add-address is unsupported (no route)."),
         voice_tools=("open_address_form",),
-        routes=("POST /api/zepto/addresses",),
+        routes=("POST /api/zepto/addresses", "POST /api/voice/sessions/{session_id}/ui-ack"),
         ui_files=(
             "frontend/app/zepto-address-form.tsx",
+            "frontend/app/address-form-sheet.tsx",
+            "frontend/app/address-form-merge.mjs",
             "frontend/app/voice-address-prefill.mjs",
         ),
     ),
@@ -632,6 +641,11 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "awaiting_user_approval",
         "form_opened",
         "prefilled_fields",
+        "form_visible",
+        "filled_fields",
+        "kept_user_fields",
+        "bill_cancelled",
+        "address_id",
         "address_type",
         "flat_details",
         "building_name",
@@ -700,12 +714,14 @@ API_CONTRACTS: dict[str, tuple[str, ...]] = {
     "POST /api/chat/turn": (
         "Auth: Clerk bearer token and accepted current terms (403 legal_consent_required otherwise).",
         'Request: {"conversation_id": "<uuid>" | null, "message": "AXE Dark sabse chhota add karo", '
-        '"swiggy_address_id": "<id>" | null, "zepto_address_id": "<id>" | null}',
+        '"swiggy_address_id": "<id>" | null, "zepto_address_id": "<id>" | null, '
+        '"ui_acks": [{"ack_id": "<from address_form.open>", "form_visible": true, "reason": null, '
+        '"filled_fields": ["building_name"], "kept_user_fields": []}]}',
         "conversation_id null means the current conversation; another user's id is 404. "
         "message: 1-2000 characters; unknown keys are 422.",
         'Response 200: {"conversation_id": "<uuid>" | null, "reply": "Roman-script Hinglish text", '
         '"ui_events": [{"type": "tool.results" | "basket.updated" | "basket.approval_requested" | '
-        '"order.confirmation_requested" | "address_form.open" | "address_form.unavailable" | "tool.not_connected" | "tool.error" | '
+        '"order.confirmation_requested" | "address_form.open" | "address_form.unavailable" | "address.selected" | "tool.not_connected" | "tool.error" | '
         '"memory.changed", ...}]}',
         "ui_events use the voice sideband shapes. Caps per turn: 6 tool rounds, 2 searches. "
         "Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS).",

@@ -10,3 +10,30 @@ These are durable product conventions for the mobile shopping chat.
 - Never let horizontal interactions create page-level overflow, clipped half-cards, or hard cut edges. Keep the active card comfortably contained and use depth/fade only as an affordance.
 - Preserve explicit approval for purchases and support messages. Clearly distinguish prepared/approved from actually submitted or purchased.
 - Use static demo data while iterating on UI. Live provider calls happen only when explicitly switching to live mode.
+
+## Input popups (`frontend/app/ui/input-dialog.tsx`)
+
+Every flow that asks the user to type or choose something opens in `InputDialog`,
+never inline in whatever sheet happens to be open. The Add delivery address popup
+(`address-form-sheet.tsx`) is the first user; other input flows move to it next.
+
+| Prop | Type | Meaning |
+|---|---|---|
+| `open` | `boolean` | Shown or not |
+| `title` | `string` | Heading and accessible name |
+| `description` | `ReactNode?` | Supporting text under the title |
+| `children` | `ReactNode` | Scrollable body |
+| `footer` | `ReactNode \| ({ requestClose, presentation }) => ReactNode` | Sticky actions; use `requestClose("cancel")` for Cancel |
+| `onClose` | `() => void` | Called when a close request passes the guard |
+| `dirty` | `boolean?` | Unsaved changes: Escape, backdrop, X and Cancel ask before discarding |
+| `busy` | `boolean?` | Saving: only `requestClose("done")` closes |
+| `discardMessage` | `string?` | Text of the discard confirmation |
+| `initialFocusRef` | `RefObject?` | Focus target on open (default: first focusable in the body) |
+| `onShown` | `(dialog) => void?` | After the dialog is visible and laid out |
+| `closeLabel` | `string?` | Label of the X button |
+| `widthClassName` | `string?` | Max width when centered (default `sm:max-w-lg`) |
+
+Behaviour: portal to `document.body` above everything (including the voice panel),
+dimmed backdrop, focus trapped and restored on close, body scroll locked, bottom
+sheet under 640 px and centered above, reduced-motion respected. Pure logic
+(`input-dialog-logic.mjs`) is unit-tested.
