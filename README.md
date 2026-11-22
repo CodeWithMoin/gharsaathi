@@ -392,6 +392,16 @@ permissions if they are not already on. Seeded orders use `sample-` order ids an
 memories use the `sample-household-seed` source, so the unseed command removes only
 them; it leaves permissions for you to change in settings.
 
+### Settle unknown Zepto orders
+
+```bash
+make reconcile-unknown ARGS=--dry-run   # read-only; ARGS=--apply settles single matches
+```
+
+Checks every `outcome_unknown` Zepto checkout against Zepto's order history (read-only
+tools only). Like the seed commands it runs through `scripts/backend-cli.sh`, which uses
+the same `DATABASE_URL` as the app (`scripts/local-env.sh`).
+
 ## Voice transcript turns and event diagnostics
 
 GPT-Live transcript events (`session.input_transcript.delta`,

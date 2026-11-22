@@ -190,9 +190,13 @@ Checks run after the tap (15 s, 45 s, 60 s), on the card's **Check with Zepto**
 (`POST /api/orders/check`; the card also checks 3 times over ~2 min), on app load
 (`POST /api/orders/reconcile-pending`), and from `get_order_status`, which returns
 `not_confirmed` until a check confirms it. Checks within 15 s reuse the last
-answer. `python -m app.shopping.reconcile_unknown --dry-run|--apply` runs the same
+answer. `make reconcile-unknown ARGS=--dry-run` (or `ARGS=--apply`) runs the same
 check for existing unknown attempts and prints only an attempt prefix, match yes/no
-and the order code.
+and the order code. It goes through `scripts/backend-cli.sh`, which sets
+`DATABASE_URL` exactly as `scripts/dev.sh` does for the app (`scripts/local-env.sh`:
+the shell's `DATABASE_URL`, else `postgresql+asyncpg://$USER@127.0.0.1:5432/equal_ai`).
+A bare `python -m app.shopping.reconcile_unknown` reads only `.env`, which has no
+`DATABASE_URL`, and falls back to the `postgres` user.
 
 ### Stale cards
 
