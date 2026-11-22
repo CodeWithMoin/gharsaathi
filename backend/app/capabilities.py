@@ -359,6 +359,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             "frontend/app/basket/BasketPanel.tsx",
             "frontend/app/basket/zepto-checkout-state.mjs",
             "frontend/app/order-confirmation-card.tsx",
+            "frontend/app/card-lifecycle.mjs",
         ),
     ),
     Capability(

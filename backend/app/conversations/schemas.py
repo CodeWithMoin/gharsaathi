@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, field_validator, model_serializer
@@ -94,6 +94,15 @@ class TimelineSummarySnapshot(TimelineCardSnapshot):
     stage: Literal["updated", "bill_ready", "bill_approved", "ordered"]
     item_count: int | None = Field(default=None, ge=0)
     item_total_paise: int | None = Field(default=None, ge=0)
+    # "ordered" only: the order whose live status card this summary links to.
+    order_id: str | None = Field(default=None, max_length=160)
+
+    @model_serializer(mode="wrap")
+    def omit_missing_order(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        data = handler(self)
+        if data.get("order_id") is None:
+            data.pop("order_id", None)
+        return data
 
 
 MAX_TIMELINE_ORDERS = 10
@@ -126,6 +135,10 @@ class TimelineOrderSnapshot(BaseModel):
     checked_at: datetime | None = None
     active: bool = True
     last_notification_id: str | None = Field(default=None, max_length=64)
+    # Names of the ordered items, for the one-line delivered/cancelled summary.
+    item_names: list[Annotated[str, Field(max_length=120)]] = Field(default_factory=list, max_length=5)
+    # When the store reported delivered or cancelled.
+    finished_at: datetime | None = None
 
 
 class ChatTimelineSnapshot(BaseModel):

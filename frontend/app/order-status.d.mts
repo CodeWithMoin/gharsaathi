@@ -15,6 +15,8 @@ export type OrderStatusCard = {
   checkedAt: string | null;
   active: boolean;
   lastNotificationId: string | null;
+  itemNames: string[];
+  finishedAt: string | null;
 };
 
 export type OrderStep = { id: string; label: string; state: "done" | "current" | "todo" | "cancelled" };
@@ -34,6 +36,8 @@ export type OrderCardSnapshot = {
   checked_at: string | null;
   active: boolean;
   last_notification_id: string | null;
+  item_names: string[];
+  finished_at: string | null;
 };
 
 export const ORDER_STEPS: readonly ["confirmed", "preparing", "out_for_delivery", "delivered"];
@@ -44,7 +48,8 @@ export const MAX_POLL_MS: number;
 export function orderSteps(status: CardStatus): OrderStep[];
 export function orderHeadline(card: Pick<OrderStatusCard, "status" | "providerStatus">): string;
 export function isFinal(card: OrderStatusCard): boolean;
-export function orderCardFromPlaced(input: { orderId: string; store: string; afterMessageId: string | null; seq: number; itemCount?: number | null; payable?: string | null; tracking?: unknown }): OrderStatusCard;
+export function orderCardFromPlaced(input: { orderId: string; store: string; afterMessageId: string | null; seq: number; itemCount?: number | null; payable?: string | null; itemNames?: string[]; tracking?: unknown }): OrderStatusCard;
+export function finishedOrderSummary(card: OrderStatusCard): string | null;
 export function applyTrackingRead(card: OrderStatusCard, raw: unknown): { card: OrderStatusCard; changed: boolean; toast: string | null };
 export function pollDelayMs(raw: unknown, nowMs: number): number | null;
 export function etaText(card: Pick<OrderStatusCard, "etaAt" | "status" | "store">, nowMs: number): string | null;

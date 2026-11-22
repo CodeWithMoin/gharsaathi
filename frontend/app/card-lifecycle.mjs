@@ -89,7 +89,8 @@ export function supersedeOrderCard(card, basket) {
   if (card.result === "placed") return card;
   const { basketId, basketRevision } = card.confirmation;
   if (basketId === null || basketRevision === null) return card;
-  if (basketId === basket.id && basketRevision === basket.revision) return card;
+  // An older read of the same basket (a late response) never supersedes a newer card.
+  if (basketId === basket.id && basket.revision <= basketRevision) return card;
   return { ...card, superseded: true };
 }
 

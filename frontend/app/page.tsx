@@ -29,6 +29,7 @@ import type { AddressFormAck } from "./address-form-merge.mjs";
 import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
 import { applyAssistantEvent } from "./assistant-events.mjs";
 import { OrderConfirmationCard } from "./order-confirmation-card";
+import { cartBadgeCount, newOrderCard, orderCardKey, orderedSummary, supersedeOrderCard, supersededOrderText, withOrderResult, type LiveOrderCard } from "./card-lifecycle.mjs";
 import { orderCardIndex, type OrderCardState, type OrderConfirmation } from "./order-confirmation.mjs";
 import { OrderStatusCard } from "./order-status-card";
 import { orderCardFromPlaced, type OrderStatusCard as OrderStatusCardState } from "./order-status.mjs";
@@ -70,7 +71,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [voiceApproval, setVoiceApproval] = useState<{ provider: ProviderName; request: ApprovalRequest } | null>(null);
   // The one-tap order card prepared by voice or typed chat; it is not saved with the chat.
   // Once its order is placed it becomes a live status card in the (saved) timeline.
-  const [orderCard, setOrderCard] = useState<{ confirmation: OrderConfirmation; afterMessageId: string | null } | null>(null);
+  const [orderCard, setOrderCard] = useState<LiveOrderCard | null>(null);
   // In-app order updates only (out for delivery, delivered, delayed, cancelled); no push or calls.
   const [orderToast, setOrderToast] = useState<string | null>(null);
   const [chatSaveFailed, setChatSaveFailed] = useState(false);
@@ -133,6 +134,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const handleBasketChange = useCallback((next: ShoppingBasket) => {
     basketsRef.current = { ...basketsRef.current, [next.provider]: next };
     setBaskets(basketsRef.current);
+    // A changed basket makes an open order card for the old revision out of date at once.
+    setOrderCard((current) => supersedeOrderCard(current, next));
   }, []);
   // The store's live card moves to now; the card it leaves becomes a summary.
   const showBasketAtLatest = useCallback((provider: ProviderName, stage: SummaryStage = "updated") => {
@@ -158,22 +161,57 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   }, []);
   const handleOrderConfirmation = useCallback((confirmation: OrderConfirmation) => {
     followScrollRef.current = true;
-    setOrderCard({ confirmation, afterMessageId: latestMessageId(chatMessagesRef.current) });
+    // The newest card replaces any earlier one, at the newest point in the chat.
+    setOrderCard(newOrderCard(confirmation, latestMessageId(chatMessagesRef.current)));
   }, []);
-  const handleOrderCardResult = useCallback((card: { confirmation: OrderConfirmation; afterMessageId: string | null }, state: OrderCardState) => {
+  // The store confirmed an order: the basket closed with it (server-side, one
+  // transaction). Its card becomes "Ordered · 1 item · ₹55", linked to the live
+  // status card, the cart badge drops to 0 and the next add starts a new basket.
+  const recordPlacedOrder = useCallback((order: { orderId: string; store: string; provider: ProviderName; afterMessageId: string | null; itemCount: number | null; payable: string | null; payablePaise: number | null; itemNames: string[]; tracking: unknown }) => {
+    const placed = orderCardFromPlaced({ orderId: order.orderId, store: order.store, afterMessageId: order.afterMessageId, seq: 0, itemCount: order.itemCount, payable: order.payable, itemNames: order.itemNames, tracking: order.tracking });
+    const ordered = basketsRef.current[order.provider];
+    if (ordered) basketsRef.current = { ...basketsRef.current, [order.provider]: { ...ordered, status: "ordered" } };
+    setBaskets(basketsRef.current);
+    const summary = order.itemCount !== null && order.payablePaise !== null ? orderedSummary({ itemCount: order.itemCount, payablePaise: order.payablePaise, orderId: order.orderId }) : { stage: "ordered" as const, itemCount: order.itemCount, itemTotalPaise: order.payablePaise, orderId: order.orderId };
+    setTimeline((current) => recordOrderCard(collapseBasketCard(current, order.provider, summary), placed));
+    billStageRef.current = { ...billStageRef.current, [order.provider]: undefined };
+    setVoiceApproval((current) => current?.provider === order.provider ? null : current);
+    window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
+  }, []);
+  const handleOrderCardResult = useCallback((card: LiveOrderCard, state: OrderCardState) => {
+    setOrderCard((current) => withOrderResult(current, card.confirmation.id, state.status));
     if (state.status !== "placed" || card.confirmation.provider !== "zepto") return;
-    const placed = orderCardFromPlaced({
+    recordPlacedOrder({
       orderId: state.orderId,
       store: card.confirmation.store,
+      provider: card.confirmation.provider,
       afterMessageId: card.afterMessageId,
-      seq: 0,
       itemCount: card.confirmation.itemCount,
       payable: card.confirmation.payable,
+      payablePaise: card.confirmation.payablePaise,
+      itemNames: card.confirmation.items.map((item) => item.name),
       tracking: state.tracking,
     });
-    setTimeline((current) => recordOrderCard(current, placed));
     setOrderCard((current) => current?.confirmation.id === card.confirmation.id ? null : current);
-  }, []);
+  }, [recordPlacedOrder]);
+  // On app load: one read-only check of any earlier order whose outcome is unknown.
+  const pendingOrdersCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!chatHydrated || pendingOrdersCheckedRef.current) return;
+    pendingOrdersCheckedRef.current = true;
+    void apiRequest<{ orders: { status: string; store: string; provider_order_id: string | null; provider_order_code?: string | null; payable: { paise: number; display: string }; tracking?: unknown }[] }>("/api/orders/reconcile-pending", { method: "POST" })
+      .then(({ orders }) => {
+        for (const order of orders) {
+          if (order.status === "confirmed" && order.provider_order_id) {
+            recordPlacedOrder({ orderId: order.provider_order_id, store: order.store, provider: "zepto", afterMessageId: latestMessageId(chatMessagesRef.current), itemCount: null, payable: order.payable.display, payablePaise: order.payable.paise, itemNames: [], tracking: order.tracking ?? null });
+            setOrderToast(`${order.store} confirmed your earlier order${order.provider_order_code ? ` #${order.provider_order_code}` : ""}.`);
+          } else if (order.status === "outcome_unknown") {
+            setOrderToast(`${order.store} hasn't confirmed an earlier order (${order.payable.display}). Check the ${order.store} app before ordering again.`);
+          }
+        }
+      })
+      .catch(() => { /* A failed read changes nothing; the card and the assistant can check later. */ });
+  }, [apiRequest, chatHydrated, recordPlacedOrder]);
   const handleOrderStatusChange = useCallback((card: OrderStatusCardState) => {
     setTimeline((current) => updateOrderCard(current, card.orderId, card));
   }, []);
@@ -945,8 +983,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
   const connectionLabel = commerceMode === "demo" ? "Safe demo · no live calls" : connected && zeptoConnected ? "Swiggy + Zepto linked" : connected && selectedAddress ? selectedAddress.tag || selectedAddress.category || "Swiggy ready" : zeptoConnected ? "Zepto linked" : connected ? "Choose address" : "Connect stores";
   const readyStoreCount = Number(connected === true && Boolean(selectedAddress)) + Number(zeptoSearchReady);
-  const basketCount = Object.values(baskets).reduce((total, basket) => total + (basket?.lines.reduce((sum, line) => sum + line.quantity, 0) ?? 0), 0);
-  const storeItemCount = (provider: ProviderName) => baskets[provider]?.lines.reduce((sum, line) => sum + line.quantity, 0) ?? 0;
+  const basketCount = cartBadgeCount(baskets);
+  const storeItemCount = (provider: ProviderName) => cartBadgeCount({ [provider]: baskets[provider] });
   // The header cart opens a store that actually has items, so the badge and the basket it opens always agree.
   const cartProvider: ProviderName = storeItemCount(basketProvider) > 0
     ? basketProvider
@@ -1043,12 +1081,20 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
         <AnimatePresence initial={false}>
           {withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard).map((item) => {
-            if (item.kind === "order-card") return <OrderConfirmationCard key={`order-card-${item.confirmation.id}`} confirmation={item.confirmation} onResult={(state) => { if (orderCard) handleOrderCardResult(orderCard, state); }} />;
+            if (item.kind === "order-card") {
+              const { card } = item;
+              if (card.superseded) return <motion.div key={orderCardKey(card)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12"><p role="status" className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted"><ShoppingCartSimple size={13} className="shrink-0 text-subtle" /><span className="truncate">{supersededOrderText(card)}</span></p></motion.div>;
+              return <OrderConfirmationCard key={orderCardKey(card)} confirmation={card.confirmation} onResult={(state) => handleOrderCardResult(card, state)} />;
+            }
             if (item.kind === "order-status") return <OrderStatusCard key={`order-status-${item.card.orderId}`} card={item.card} onChange={handleOrderStatusChange} onUpdate={setOrderToast} />;
             if (item.kind === "results") return item.group ? <div key={`results-${item.group.key}`} className="contents">{renderResultGroup(item.group as ResultGroup<Product>)}</div> : null;
             if (item.kind === "basket-summary") {
               const { card } = item;
-              return <motion.div key={`basket-summary-${card.provider}-${card.seq}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12"><p className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted"><ShoppingCartSimple size={13} className="shrink-0 text-subtle" /><span className="shrink-0 font-semibold text-ink-secondary">{card.provider === "zepto" ? "Zepto" : "Instamart"}</span><span className="truncate">{summaryText(card)}</span></p></motion.div>;
+              const linked = card.stage === "ordered" && card.orderId ? card.orderId : null;
+              const chip = <><ShoppingCartSimple size={13} className="shrink-0 text-subtle" /><span className="shrink-0 font-semibold text-ink-secondary">{card.provider === "zepto" ? "Zepto" : "Instamart"}</span><span className="truncate">{summaryText(card)}</span></>;
+              return <motion.div key={`basket-summary-${card.provider}-${card.seq}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12">{linked
+                ? <button type="button" onClick={() => document.getElementById(`order-status-${linked}`)?.scrollIntoView({ behavior: "smooth", block: "center" })} aria-label={`${summaryText(card)}. Show the order status`} className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted transition hover:bg-border-strong">{chip}</button>
+                : <p className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted">{chip}</p>}</motion.div>;
             }
             if (item.kind === "basket") {
               const { provider } = item.card;
@@ -1203,10 +1249,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   </main>;
 }
 
-type OrderCardItem = { kind: "order-card"; confirmation: OrderConfirmation };
+type OrderCardItem = { kind: "order-card"; card: LiveOrderCard };
 
-function withOrderCard<T extends { kind: string; message?: { id: string } }>(items: T[], card: { confirmation: OrderConfirmation; afterMessageId: string | null } | null): (T | OrderCardItem)[] {
+function withOrderCard<T extends { kind: string; message?: { id: string } }>(items: T[], card: LiveOrderCard | null): (T | OrderCardItem)[] {
   if (!card) return items;
   const index = orderCardIndex(items, card.afterMessageId);
-  return [...items.slice(0, index), { kind: "order-card", confirmation: card.confirmation }, ...items.slice(index)];
+  return [...items.slice(0, index), { kind: "order-card", card }, ...items.slice(index)];
 }
