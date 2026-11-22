@@ -817,7 +817,12 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const connectionLabel = commerceMode === "demo" ? "Safe demo · no live calls" : connected && zeptoConnected ? "Swiggy + Zepto linked" : connected && selectedAddress ? selectedAddress.tag || selectedAddress.category || "Swiggy ready" : zeptoConnected ? "Zepto linked" : connected ? "Choose address" : "Connect stores";
   const readyStoreCount = Number(connected === true && Boolean(selectedAddress)) + Number(zeptoSearchReady);
   const basketCount = Object.values(baskets).reduce((total, basket) => total + (basket?.lines.reduce((sum, line) => sum + line.quantity, 0) ?? 0), 0);
-  const headerCard = liveCard(timeline, basketProvider);
+  const storeItemCount = (provider: ProviderName) => baskets[provider]?.lines.reduce((sum, line) => sum + line.quantity, 0) ?? 0;
+  // The header cart opens a store that actually has items, so the badge and the basket it opens always agree.
+  const cartProvider: ProviderName = storeItemCount(basketProvider) > 0
+    ? basketProvider
+    : (["zepto", "swiggy_instamart"] as ProviderName[]).find((provider) => storeItemCount(provider) > 0) ?? basketProvider;
+  const headerCard = liveCard(timeline, cartProvider);
   const headerCardIsNewest = headerCard !== null && headerCard.seq === timeline.seq && headerCard.afterMessageId === latestMessageId(chatMessages);
   const hasChat = Boolean(submittedQuery || chatMessages.length);
   const replyLanguage = String((user?.unsafeMetadata.gharsaathiProfile as { language?: string } | undefined)?.language ?? "hinglish");
@@ -888,7 +893,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       <div className="mx-auto flex h-[68px] max-w-4xl items-center px-4 sm:px-6">
         <button type="button" onClick={() => setChatDrawerOpen(true)} aria-label="Open shopping chats" className="grid size-10 shrink-0 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><List size={21} /></button>
         <nav className="ml-auto flex shrink-0 items-center gap-0.5" aria-label="Chat actions">
-          {basketCount > 0 && <button onClick={() => { if (headerCardIsNewest) { hideBasket(basketProvider); return; } followScrollRef.current = true; showBasketAtLatest(basketProvider, billStageRef.current[basketProvider] ?? "updated"); }} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
+          {basketCount > 0 && <button onClick={() => { if (headerCardIsNewest) { hideBasket(cartProvider); return; } followScrollRef.current = true; setBasketProvider(cartProvider); showBasketAtLatest(cartProvider, billStageRef.current[cartProvider] ?? "updated"); }} aria-label={`Open basket with ${basketCount} items`} className="relative grid size-10 place-items-center rounded-full text-[#70584b] transition hover:bg-[#f4e7dc] active:scale-[.96]"><ShoppingCartSimple size={21} /><span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-[#c6531d] px-1 text-[9px] font-bold leading-4 text-white">{basketCount}</span></button>}
           <button type="button" onClick={() => setSupportOpen((open) => !open)} aria-label="Get help with an order" className={`grid size-10 place-items-center rounded-full transition active:scale-[.96] ${supportOpen ? "bg-[#f1dfd2] text-[#9f451d]" : "bg-white/70 text-[#70584b] hover:bg-[#f6ece4]"}`}><ChatCircleDots size={21} weight={supportOpen ? "fill" : "regular"} /></button>
           <button onClick={() => setAccountSettingsOpen(true)} aria-label={`Open account and store settings. ${connectionLabel}`} className={`relative ml-0.5 grid size-10 place-items-center rounded-full transition active:scale-[.98] ${accountSettingsOpen ? "bg-[#f4e2d6] text-[#8f421b]" : "bg-white/70 text-[#5c463b] hover:bg-[#f6ece4]"}`}><Storefront size={18} className="text-[#c6531d]" /><span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-[#fffdf9] ${readyStoreCount > 0 ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} aria-hidden="true" /></button>
         </nav>
