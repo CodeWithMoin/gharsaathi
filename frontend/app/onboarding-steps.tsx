@@ -223,10 +223,9 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
         {ADDRESS_FORM_OPTIONS.map((option) => {
           const selected = addressForm === option.value;
           // A horizontal segmented choice: label on top, the example underneath.
-          return <label key={option.value} className={`relative flex min-h-[64px] cursor-pointer flex-col items-center justify-center rounded-2xl border px-2 py-2.5 text-center transition-colors duration-150 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus ${selected ? "border-accent bg-accent-soft" : "border-border-strong bg-surface hover:bg-surface-muted"}`}>
+          return <label key={option.value} className={`relative flex min-h-[52px] cursor-pointer flex-col items-center justify-center rounded-2xl border px-2 py-2 text-center transition-colors duration-150 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus ${selected ? "border-accent bg-accent-soft" : "border-border-strong bg-surface hover:bg-surface-muted"}`}>
             <input type="radio" name="address-form" value={option.value} checked={selected} onChange={() => setAddressForm(option.value)} className="sr-only" />
             <span className={`block text-[14px] font-semibold ${selected ? "text-accent-ink" : "text-ink"}`}>{option.label}</span>
-            <span className="mt-0.5 block text-[11px] leading-4 text-muted">&ldquo;{option.example}&rdquo;</span>
             {selected && <Check size={14} weight="bold" className="absolute right-2.5 top-2.5 text-accent-ink" aria-hidden="true" />}
           </label>;
         })}
