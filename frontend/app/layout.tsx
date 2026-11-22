@@ -1,6 +1,7 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import "./globals.css";
+import { PrivateDeploymentGate } from "./private-deployment-gate";
 
 export const metadata: Metadata = {
   title: "GharSaathi · Your AI household shopping agent",
@@ -14,5 +15,5 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   // Browser extensions (Grammarly, password managers, translators) add attributes to
   // <html>/<body> before React hydrates; ignore those attribute-only mismatches.
-  return <html lang="en-IN" suppressHydrationWarning><body suppressHydrationWarning><ClerkProvider>{children}</ClerkProvider></body></html>;
+  return <html lang="en-IN" suppressHydrationWarning><body suppressHydrationWarning><ClerkProvider><PrivateDeploymentGate>{children}</PrivateDeploymentGate></ClerkProvider></body></html>;
 }

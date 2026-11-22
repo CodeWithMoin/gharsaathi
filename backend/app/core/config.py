@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     clerk_secret_key: SecretStr = SecretStr("")
     clerk_jwt_key: str = ""
     clerk_authorized_parties_csv: str = ""
+    # Private deployment: comma-separated Clerk user ids allowed to use the API.
+    # Empty (local development) allows any verified user. When set, every other
+    # verified user gets 403 `private_deployment` and the API docs are hidden.
+    allowed_user_ids: str = ""
     local_encryption_key_path: Path = Field(
         default=Path("backend/.data/app_encryption.key")
     )
@@ -149,6 +153,16 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def allowed_user_id_set(self) -> frozenset[str]:
+        return frozenset(
+            user_id.strip() for user_id in self.allowed_user_ids.split(",") if user_id.strip()
+        )
+
+    @property
+    def private_deployment(self) -> bool:
+        return bool(self.allowed_user_id_set)
 
     @property
     def clerk_authorized_parties(self) -> list[str]:

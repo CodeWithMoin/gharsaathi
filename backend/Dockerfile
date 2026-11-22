@@ -13,8 +13,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
-RUN chown -R app:app /workspace
+# backend/.data holds the encrypted provider connections, support drafts and
+# order-tracking watches. On AWS it is an EFS mount so a task restart keeps them.
+RUN mkdir -p /workspace/backend/.data && chown -R app:app /workspace
 
 USER app
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --no-access-log"]
+# Migrations run before the server on every start. The ECS service runs at most
+# one backend task (MaximumPercent 100), so two tasks never migrate at once.
+# Keep-alive outlives the ALB idle timeout (120 s) so the ALB never reuses a
+# connection uvicorn already closed (intermittent 502s).
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --no-access-log --proxy-headers --forwarded-allow-ips='*' --timeout-keep-alive 130"]
