@@ -115,6 +115,16 @@ export function basketFromEvent(raw, provider) {
   return { id: basket.id, provider: store, revision: basket.revision, status: typeof basket.status === "string" ? basket.status : "draft", lines };
 }
 
+/**
+ * True while the store may still be placing this card's order (placing, outcome
+ * unknown, payment in progress): a new bill must wait until it settles.
+ *
+ * @param {LiveOrderCard | null | undefined} card
+ */
+export function orderCardInFlight(card) {
+  return Boolean(card && !card.superseded && card.result && IN_FLIGHT.has(card.result));
+}
+
 /** @param {LiveOrderCard} card */
 export function orderCardInteractive(card) {
   return !card.superseded && (card.result === null || card.result === "open");
