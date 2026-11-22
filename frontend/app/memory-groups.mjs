@@ -303,6 +303,7 @@ export const SOURCE_LABELS = {
   in_passing: "Said in passing",
   repeated_choice: "From your repeated choices",
   order_history: "From your orders",
+  demo_history: "From demo history",
 };
 
 /**

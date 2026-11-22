@@ -28,7 +28,7 @@ from app.memory.repository import MemoryRepository
 from app.user_profile import get_profile_record
 
 GroupId = Literal["home", "food", "usual_buys", "avoid", "shopping_style", "from_orders"]
-Source = Literal["told", "in_passing", "repeated_choice", "order_history"]
+Source = Literal["told", "in_passing", "repeated_choice", "order_history", "demo_history"]
 
 GROUP_TITLES: dict[str, str] = {
     "home": "Home",
@@ -43,6 +43,7 @@ SOURCE_LABELS: dict[str, str] = {
     "in_passing": "Said in passing",
     "repeated_choice": "From your repeated choices",
     "order_history": "From your orders",
+    "demo_history": "From demo history",
 }
 # What the voice answer reads first: food rules, then nevers, then usual buys.
 SPOKEN_ORDER: tuple[str, ...] = ("food", "avoid", "usual_buys", "home", "shopping_style", "from_orders")
@@ -169,8 +170,8 @@ async def _order_items(session: AsyncSession, actor: MemorySubject) -> tuple[boo
                 id=f"order:{index}",
                 group="from_orders",
                 label=f"{purchase.product_name} — bought {times} on {store}",
-                source="order_history",
-                source_label=SOURCE_LABELS["order_history"],
+                source="demo_history" if purchase.synthetic else "order_history",
+                source_label=SOURCE_LABELS["demo_history" if purchase.synthetic else "order_history"],
                 updated_at=purchase.last_purchased_at,
                 managed_by="order",
             )

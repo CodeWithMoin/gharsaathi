@@ -37,7 +37,7 @@ export type MemoryGroup = { id: MemoryGroupId; title: string; rows: MemoryRow[] 
 export type FieldOption = { value: string; label: string };
 export type EditableField = { key: string; label: string; value: string; options?: FieldOption[] };
 export type SummaryGroupId = "home" | "food" | "usual_buys" | "avoid" | "shopping_style" | "from_orders";
-export type SummarySource = "told" | "in_passing" | "repeated_choice" | "order_history";
+export type SummarySource = "told" | "in_passing" | "repeated_choice" | "order_history" | "demo_history";
 export type SummaryItem = {
   id: string;
   group: SummaryGroupId;

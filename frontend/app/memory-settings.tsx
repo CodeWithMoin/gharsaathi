@@ -17,6 +17,7 @@ const BADGE_STYLES: Record<string, string> = {
   "Said in passing": "bg-accent-soft text-accent-strong",
   "From your repeated choices": "bg-zepto-soft text-zepto-strong",
   "From your orders": "bg-surface-muted text-ink-secondary",
+  "From demo history": "bg-warning-soft text-warning",
 };
 
 function errorText(cause: unknown, fallback: string) {

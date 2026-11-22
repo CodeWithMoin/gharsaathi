@@ -94,3 +94,29 @@ async def test_seed_summary_edit_and_remove(api: TestClient, session_factory, tm
     assert removed[-1].startswith("Removed 4 seeded memories.")
     assert api.get("/api/memory?status=confirmed", headers=owner).json() == []
     assert api.get("/api/profile", headers=owner).json()["language"] == "english"
+
+
+@pytest.mark.asyncio
+async def test_synthetic_history_apply_and_remove_on_postgres(api: TestClient, session_factory, tmp_path: Path) -> None:
+    from app.memory import demo_synth
+
+    owner = as_user(OWNER)
+    _allow(api, owner)
+    path = tmp_path / "answers.json"
+    path.write_text(json.dumps({
+        "diet": "non-veg",
+        "usual_buys": [{"category": "milk", "brand": "Amul", "product": "Taaza toned milk", "size": "500 ml"}],
+        "avoid": [{"item": "pork products"}],
+    }), encoding="utf-8")
+    base = ["--file", str(path), "--months", "2", "--user-id", OWNER]
+    async with session_factory() as session:
+        applied = await demo_synth.run(demo_synth.parse_args([*base, "--apply", "--turn-on-history"]), session)
+        again = await demo_synth.run(demo_synth.parse_args([*base, "--apply"]), session)
+    assert applied[1].startswith("Applied: ") and again[1].startswith("Applied: 0 new")
+    summary = api.get("/api/memory/summary", headers=owner).json()
+    orders = next(group for group in summary["groups"] if group["id"] == "from_orders")
+    assert {item["source_label"] for item in orders["items"]} == {"From demo history"}
+    async with session_factory() as session:
+        removed = await demo_synth.run(demo_synth.parse_args(["--remove", "--apply", "--user-id", OWNER]), session)
+    assert removed[1].startswith("Removed ")
+    assert not any(group["id"] == "from_orders" for group in api.get("/api/memory/summary", headers=owner).json()["groups"])
