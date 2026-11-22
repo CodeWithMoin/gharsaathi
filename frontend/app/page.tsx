@@ -19,7 +19,7 @@ import { SupportDialog } from "./support-panel";
 import { VoicePanel, useVoicePrewarm, type VoiceAddressFormRequest, type VoiceTranscriptTurn } from "./voice-panel";
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
 import { FirstRunOnboarding } from "./first-run-onboarding";
-import { AccountSettingsSheet } from "./account-settings-sheet";
+import { AccountSettingsSheet, type SettingsSection } from "./account-settings-sheet";
 import { RiderCallCard, useRiderCalls } from "./rider-calls";
 import { placeRiderCalls } from "./rider-assist.mjs";
 import { OrderNotificationPrompt, useNotifications } from "./notification-settings";
@@ -114,6 +114,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>(null);
   const [recentChats, setRecentChats] = useState<ConversationSummary[]>([]);
   const [chatSearch, setChatSearch] = useState("");
   const [recentChatsLoading, setRecentChatsLoading] = useState(false);
@@ -639,6 +640,11 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     setAccountSettingsOpen(next === "settings");
   };
   // Order help is a popup; the settings drawer row (and later a `support.open` UI event) opens it.
+  // "What do you know about me?" opens Settings on the memory page.
+  const openMemorySummary = useCallback(() => {
+    setSettingsSection("memory");
+    setAccountSettingsOpen(true);
+  }, []);
   const openSupport = useCallback(() => {
     setChatDrawerOpen(false);
     setAccountSettingsOpen(false);
@@ -880,7 +886,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       chatMessagesRef.current = withReply;
       setChatMessages(withReply);
       for (const event of turn.ui_events) {
-        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onAddressRemoved: handleAddressRemoved, onOrderConfirmation: handleOrderConfirmation, onSupportOpen: openSupport, onPhotoRead: handlePhotoRead });
+        const outcome = applyAssistantEvent<Product>(event, { onResults: handleVoiceResults, onBasketTouched: handleBasketTouched, onApprovalRequested: handleVoiceApproval, onAddressForm: handleVoiceAddressForm, onAddressSelected: handleAddressSelected, onAddressRemoved: handleAddressRemoved, onOrderConfirmation: handleOrderConfirmation, onSupportOpen: openSupport, onPhotoRead: handlePhotoRead, onMemorySummary: openMemorySummary });
         if (outcome?.kind === "not_connected") setSetupOpen(true);
         if (outcome?.ack && outcome.ackId) void outcome.ack.then((ack) => { pendingTypedAcksRef.current.push(ack); });
         if (outcome) setMessage(outcome.message);
@@ -1198,7 +1204,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
 
     <div style={{ bottom: insets.bottom }} className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-surface-muted via-surface-muted to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <AnimatePresence mode="wait">
-        {voiceOpen ? <motion.div key="voice-composer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }} className="mx-auto max-w-3xl"><PhotoChip state={photo.state} onRemove={photo.remove} voice /><div className="flex items-end justify-center gap-2"><PhotoAttachButton compact onFile={(file) => void photo.attach(file)} disabled={photo.state.status === "uploading"} /><VoicePanel addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onAddressRemoved={handleAddressRemoved} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} onPhotoRead={handlePhotoRead} beforeSessionStart={flushConversationSave} /></div></motion.div> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
+        {voiceOpen ? <motion.div key="voice-composer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }} className="mx-auto max-w-3xl"><PhotoChip state={photo.state} onRemove={photo.remove} voice /><div className="flex items-end justify-center gap-2"><PhotoAttachButton compact onFile={(file) => void photo.attach(file)} disabled={photo.state.status === "uploading"} /><VoicePanel addressId={addressId} zeptoAddressId={zeptoAddressId} onClose={closeVoice} onResults={handleVoiceResults} onTranscriptTurn={handleVoiceTranscript} onBasketTouched={handleBasketTouched} onApprovalRequested={handleVoiceApproval} onAddressForm={handleVoiceAddressForm} onAddressSelected={handleAddressSelected} onAddressRemoved={handleAddressRemoved} onOrderConfirmation={handleOrderConfirmation} onSupportOpen={openSupport} onPhotoRead={handlePhotoRead} onMemorySummary={openMemorySummary} beforeSessionStart={flushConversationSave} /></div></motion.div> : <motion.form key="text-composer" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} onSubmit={(event: FormEvent) => { event.preventDefault(); void runSearch(query); }} className="mx-auto max-w-3xl">
           <PhotoChip state={photo.state} onRemove={photo.remove} />
           <div className="flex items-center gap-1 rounded-[26px] border border-border-strong bg-surface p-2 pl-2 shadow-[0_24px_60px_-28px_rgb(var(--shadow)/.55),inset_0_1px_0_rgba(255,255,255,.9)]"><PhotoAttachButton onFile={(file) => void photo.attach(file)} disabled={loading === "search" || loading === "assistant" || photo.state.status === "uploading"} /><input value={query} onChange={(event) => setQuery(event.target.value)} disabled={loading === "search" || loading === "assistant"} className="min-w-0 flex-1 bg-transparent py-2 pl-1 text-[15px] outline-none placeholder:text-subtle disabled:cursor-not-allowed disabled:opacity-60" placeholder="Type or just tap the mic…" aria-label="Shopping request" />{query.trim() || photo.state.status !== "idle" ? <button type="submit" aria-label={attachmentIdFor(photo.state) ? "Send photo" : "Send request"} disabled={loading === "search" || loading === "assistant" || !canSend(photo.state, query)} className="grid size-12 shrink-0 place-items-center rounded-full bg-inverse text-on-inverse transition active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><PaperPlaneRight size={20} weight="fill" /></button> : <button type="button" onClick={() => setVoiceOpen(true)} onPointerEnter={prewarmVoice} onPointerDown={prewarmVoice} onFocus={prewarmVoice} disabled={loading === "search" || loading === "assistant"} aria-label="Speak your shopping list" className="relative grid size-14 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[0_12px_30px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.96] disabled:cursor-not-allowed disabled:opacity-45"><motion.span animate={{ scale: [1,1.08,1], opacity: [.35,0,.35] }} transition={{ duration: 2.2, repeat: Infinity }} className="absolute inset-0 rounded-full border border-accent" /><Microphone size={23} /></button>}</div>
           <p className="mt-2.5 text-center text-[10px] text-muted">Hindi · English · Hinglish &nbsp;·&nbsp; You approve every purchase</p>
@@ -1210,7 +1216,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
     <AccountSettingsSheet
       notifications={notifications}
       open={accountSettingsOpen}
-      onOpenChange={setAccountSettingsOpen}
+      initialSection={settingsSection}
+      onOpenChange={(open) => { setAccountSettingsOpen(open); if (!open) setSettingsSection(null); }}
       identity={{ name: userName, email: user?.primaryEmailAddress?.emailAddress }}
       commerceMode={commerceMode}
       languageLabel={replyLanguage.replace(/^./, (letter) => letter.toUpperCase())}

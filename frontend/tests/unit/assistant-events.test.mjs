@@ -153,3 +153,11 @@ test("support.open shows the Order help popup and nothing else", () => {
 test("support.open is ignored when the screen cannot show Order help", () => {
   assert.equal(applyAssistantEvent({ type: "support.open" }, {}), null);
 });
+
+test("memory.summary opens What GharSaathi knows and nothing else", () => {
+  let opened = 0;
+  const outcome = applyAssistantEvent({ type: "memory.summary", total: 7 }, { onMemorySummary: () => { opened += 1; } });
+  assert.equal(opened, 1);
+  assert.equal(outcome.kind, "memory");
+  assert.equal(applyAssistantEvent({ type: "memory.summary" }, {}), null);
+});

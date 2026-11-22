@@ -1,0 +1,50 @@
+# Example answers file for `make memory-seed` (app/memory/demo_seed.py).
+# Placeholder values only: copy it, fill in the household's own answers, and keep
+# the filled copy out of git (it is personal data).
+#
+#   make memory-seed ARGS="--file my-home.yaml --dry-run"
+#   make memory-seed ARGS="--file my-home.yaml --apply"
+#   make memory-seed ARGS="--remove-seeded --apply"
+#
+# Every section is optional. Each answer is saved as something the owner told
+# GharSaathi; it shows in Settings → What GharSaathi knows, where it can be edited
+# or deleted. Never put health conditions, religion, money, age or family details
+# here; the tool refuses them. Allergies are saved only as ingredients to keep
+# out of food, not as a health fact.
+
+household:
+  people: 3            # 1-15
+  kids: no             # yes | no
+  baby: no             # yes | no
+  pets: none           # none | dog | cat | dog_and_cat | other
+
+diet: vegetarian       # vegetarian | eggetarian | jain | non_vegetarian
+
+allergies:             # ingredients to keep out of food, e.g. peanut, tree nut, gluten, milk, egg, soy, sesame
+  - example-ingredient
+
+usual_buys:            # category + at least one of brand / size / quantity
+  - category: milk
+    brand: Example Brand
+    product: Example Brand Toned Milk   # optional, needs brand
+    size: 1 L
+    quantity: 2                         # packs, 1-20
+  - category: atta
+    brand: Example Brand
+    size: 5 kg
+  - category: eggs
+    quantity: 1
+
+avoid:
+  products: [example product]   # never suggest
+  brands: [Example Avoided Brand]
+  stores: []                    # swiggy_instamart | zepto
+
+value_preference: balanced      # cheapest | balanced | premium
+preferred_store: zepto          # swiggy_instamart | zepto
+
+delivery_notes:                 # no OTPs, PINs, passwords, payment details or links
+  - Example note for the delivery partner
+
+language: hinglish              # hinglish | hindi | english
+address_form: neutral           # masculine | feminine | neutral

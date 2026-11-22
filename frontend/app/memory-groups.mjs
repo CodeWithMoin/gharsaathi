@@ -65,9 +65,42 @@ const FIELD_LABELS = {
   preference: "Rule",
   rule: "Rule",
   reason: "Reason",
+  product_name: "Product",
+  diet: "Diet",
+  ingredient: "Keep out of food",
+  style: "Value preference",
+  fact: "Answer",
+  note: "Delivery note",
 };
 
-const REQUIRED_FIELDS = new Set(["brand", "pack_size", "product", "store", "provider", "quantity", "preference", "rule"]);
+/** Fields whose value is one of a fixed set; the edit popup shows a choice. */
+export const FIELD_OPTIONS = {
+  diet: [
+    { value: "vegetarian", label: "Vegetarian" },
+    { value: "eggetarian", label: "Vegetarian, eggs are fine" },
+    { value: "jain", label: "Jain food" },
+    { value: "non_vegetarian", label: "Non-vegetarian" },
+  ],
+  style: [
+    { value: "cheapest", label: "Cheapest first" },
+    { value: "balanced", label: "Balance price and quality" },
+    { value: "premium", label: "Premium brands" },
+  ],
+};
+const FACT_OPTIONS = {
+  people: Array.from({ length: 15 }, (_, index) => ({ value: String(index + 1), label: String(index + 1) })),
+  kids: [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }],
+  baby: [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }],
+  pets: [
+    { value: "none", label: "None" },
+    { value: "dog", label: "Dog" },
+    { value: "cat", label: "Cat" },
+    { value: "dog_and_cat", label: "Dog and cat" },
+    { value: "other", label: "Other" },
+  ],
+};
+
+const REQUIRED_FIELDS = new Set(["brand", "pack_size", "product", "store", "provider", "quantity", "preference", "rule", "diet", "ingredient", "style", "fact", "note"]);
 
 /** @param {unknown} value */
 function clean(value) {
@@ -94,9 +127,11 @@ export function storeLabel(value) {
   return STORE_NAMES[text.toLowerCase()] ?? capitalize(text);
 }
 
-/** @param {{ memory_type: string }} memory */
+/** @param {{ memory_type: string, value?: any }} memory */
 export function groupFor(memory) {
   const type = String(memory.memory_type ?? "").toLowerCase();
+  const kind = memory?.value && typeof memory.value === "object" ? memory.value.kind : undefined;
+  if (kind === "household" || kind === "delivery_note") return "niyam";
   if (type.includes("avoid")) return "kabhi_nahi";
   if (type === "dietary_preference" || type.includes("rule")) return "niyam";
   if (type.endsWith("_preference")) return "pasand";
@@ -126,6 +161,7 @@ export function memorySentence(memory) {
     let rest = `always ${v.brand}`;
     if (v.alternative_brand) rest += ` or ${v.alternative_brand}`;
     if (v.pack_size) rest += `, ${v.pack_size}`;
+    if (v.quantity) rest += `, usually ${v.quantity}`;
     return withSubject("Brand", rest);
   }
   if (type === "pack_size_preference" && v.pack_size) {
@@ -234,13 +270,88 @@ export function groupMemories(memories, now = Date.now()) {
   };
 }
 
-/** Text fields a person can edit inline; falls back to the free text. */
+/** Fields a person can edit inline (with choices for fixed-set values); falls back to the free text. */
 export function editableFields(memory) {
-  const fields = Object.entries(values(memory))
-    .filter(([key]) => FIELD_LABELS[key])
-    .map(([key, value]) => ({ key, label: FIELD_LABELS[key], value }));
+  const kind = memory?.value && typeof memory.value === "object" ? memory.value.kind : undefined;
+  const v = values(memory);
+  const fields = Object.entries(v)
+    // A household fact's item names the question ("people"), not something to retype.
+    .filter(([key]) => FIELD_LABELS[key] && !(kind === "household" && key === "product_category"))
+    .map(([key, value]) => {
+      const options = key === "fact" ? FACT_OPTIONS[v.product_category] : FIELD_OPTIONS[key];
+      const label = key === "fact" ? HOUSEHOLD_LABELS[v.product_category] ?? FIELD_LABELS.fact : FIELD_LABELS[key];
+      return options ? { key, label, value, options } : { key, label, value };
+    });
   if (fields.length) return fields;
   return [{ key: "text", label: "Note", value: clean(memory.text) }];
+}
+
+const HOUSEHOLD_LABELS = { people: "People at home", kids: "Children at home", baby: "Baby at home", pets: "Pets" };
+
+/** Summary groups in screen order (backend app/memory/summary.py GROUP_TITLES). */
+export const SUMMARY_GROUPS = /** @type {const} */ ([
+  { id: "home", title: "Home" },
+  { id: "food", title: "Food" },
+  { id: "usual_buys", title: "Usual buys" },
+  { id: "avoid", title: "Avoid" },
+  { id: "shopping_style", title: "Shopping style" },
+  { id: "from_orders", title: "From your orders" },
+]);
+
+export const SOURCE_LABELS = {
+  told: "You told us",
+  in_passing: "Said in passing",
+  repeated_choice: "From your repeated choices",
+  order_history: "From your orders",
+};
+
+/**
+ * Screen rows for "What GharSaathi knows" from GET /api/memory/summary, joined
+ * with the raw records (GET /api/memory) that Edit, Undo and Delete need.
+ * Unknown groups, sources and malformed items are dropped.
+ */
+export function summaryView(summary, records, now = Date.now()) {
+  const byId = new Map((Array.isArray(records) ? records : []).filter((record) => record && record.id).map((record) => [String(record.id), record]));
+  const toRow = (item) => {
+    if (!item || typeof item.id !== "string" || typeof item.label !== "string" || !item.label.trim()) return null;
+    const managedBy = item.managed_by === "profile" || item.managed_by === "order" ? item.managed_by : "memory";
+    const record = managedBy === "memory" ? byId.get(item.id) : undefined;
+    if (managedBy === "memory" && !record) return null;
+    const source = SOURCE_LABELS[item.source] ? item.source : "told";
+    const time = item.updated_at ? Date.parse(item.updated_at) : NaN;
+    const recent = record ? isRecentlyLearned(record, now) : false;
+    return {
+      id: item.id,
+      label: item.label.trim(),
+      kind: typeof item.kind === "string" ? item.kind : null,
+      source,
+      badge: recent ? BADGES.stated_recent : SOURCE_LABELS[source],
+      date: Number.isFinite(time) ? formatMemoryDate(time, now) : "",
+      managedBy,
+      value: typeof item.value === "string" ? item.value : null,
+      record: record ?? null,
+      undoable: record ? canUndo(record, now) : false,
+      editable: managedBy === "profile" || (record ? editableFields(record).length > 0 : false),
+      deletable: managedBy !== "order",
+    };
+  };
+  const incoming = new Map((Array.isArray(summary?.groups) ? summary.groups : []).map((group) => [group?.id, group]));
+  const groups = SUMMARY_GROUPS.map((group) => ({
+    ...group,
+    rows: (Array.isArray(incoming.get(group.id)?.items) ? incoming.get(group.id).items : []).map(toRow).filter(Boolean),
+  })).filter((group) => group.rows.length);
+  const suggestions = (Array.isArray(summary?.suggestions) ? summary.suggestions : []).map(toRow).filter(Boolean);
+  const total = groups.reduce((sum, group) => sum + group.rows.length, 0);
+  const deletable = groups.reduce((sum, group) => sum + group.rows.filter((row) => row.managedBy === "memory").length, 0) + suggestions.length;
+  return { groups, suggestions, total, deletable, consent: summary?.consent?.saved_preferences === "on" ? "on" : "off", history: summary?.consent?.purchase_history === "on" ? "on" : "off" };
+}
+
+/** PUT /api/profile body that removes one profile answer (back to the default). */
+export function profileResetPayload(kind) {
+  if (kind === "first_name") return { first_name: null };
+  if (kind === "language") return { language: "hinglish" };
+  if (kind === "address_form") return { address_form: "neutral" };
+  return null;
 }
 
 /**

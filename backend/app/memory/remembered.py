@@ -166,6 +166,11 @@ def _summary_line(item: RememberedItem) -> str | None:
         return None
     if item.source == "confirmed_preference":
         size = clean_text(item.pack_size or "", 20)
+        if item.kind in {"diet", "avoid_ingredient", "shopping_style", "household", "delivery_note", "routine", "goal", "usual_item"}:
+            label, _, rest = item.name.partition(": ")
+            return f"- {clean_text(label, 30)}: {clean_text(rest, 70)}" if rest else f"- {name}"
+        if item.kind == "usual_quantity":
+            return f"- Usual quantity: {name}"
         if item.kind == "avoid_store" and item.store_id:
             scope = clean_text(item.item or "", 30)
             return f"- Never order from: {STORE_LABELS[item.store_id]}{f' ({scope})' if scope else ''}"
@@ -179,7 +184,8 @@ def _summary_line(item: RememberedItem) -> str | None:
             if item.preference == "product_avoidance" or item.kind in {"avoid_product", "avoid_brand"}
             else "Prefers"
         )
-        return f"- {label}: {name}{f', {size}' if size and size not in name else ''}"
+        usual = f", usually {item.quantity}" if item.quantity and item.kind != "usual_quantity" else ""
+        return f"- {label}: {name}{f', {size}' if size and size not in name else ''}{usual}"
     parts = [name]
     if item.store_id:
         parts.append(STORE_LABELS[item.store_id])
@@ -195,7 +201,11 @@ def memory_summary_block(memory: HouseholdMemory | None, limit: int = SUMMARY_LI
 
     if memory is None:
         return ""
-    preferences = [item for item in memory.items if item.source == "confirmed_preference"]
+    preferences = sorted(
+        (item for item in memory.items if item.source == "confirmed_preference"),
+        # Food rules first: they must never fall off the end of the summary.
+        key=lambda item: 0 if item.kind in {"diet", "avoid_ingredient"} else 1,
+    )
     purchases = sorted(
         (item for item in memory.items if item.source == "purchase_history"),
         key=lambda item: (item.times or 0, item.last_bought or ""),

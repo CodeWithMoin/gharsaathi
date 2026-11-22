@@ -121,7 +121,7 @@ async def test_basket_enabled_session_exposes_only_safe_basket_tools() -> None:
     assert names == {
         "search_products", "add_to_basket", "set_basket_quantity", "view_basket", "request_approval",
         "open_address_form", "recall_household_preferences", "remember_preference",
-        "update_preference", "forget_preference", "list_preferences", "confirm_memory",
+        "update_preference", "forget_preference", "list_preferences", "confirm_memory", "summarize_my_memory",
         "prepare_order", "list_delivery_addresses", "select_delivery_address",
         "read_attached_photo",
         "get_order_status", "list_recent_orders",

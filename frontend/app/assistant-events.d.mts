@@ -21,12 +21,14 @@ export type AssistantEventHandlers<Product> = {
   onAddressRemoved?: (provider: ProviderName) => void;
   /** `photo.read`: the server read the attached photo and deleted it. */
   onPhotoRead?: (read: { attachmentId: string; itemCount: number }) => void;
+  /** `memory.summary`: open Settings → What GharSaathi knows. */
+  onMemorySummary?: () => void;
 };
 
 export const ADDRESS_REMOVED_MESSAGE: string;
 
 export type AssistantEventOutcome = {
-  kind: "results" | "not_connected" | "error" | "basket" | "bill" | "address_form" | "address" | "order_confirmation" | "support" | "photo";
+  kind: "results" | "not_connected" | "error" | "basket" | "bill" | "address_form" | "address" | "order_confirmation" | "support" | "photo" | "memory";
   message: string;
   notice?: string;
   /** address_form.open only: what the screen showed, with the event's ack_id when it had one. */

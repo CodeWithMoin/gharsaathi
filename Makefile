@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: start start-demo help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household reconcile-unknown vapid-keys vobiz-check check check-full test test-unit test-module test-integration test-failures clean-run live-smoke live-smoke-cart
+.PHONY: start start-demo help setup dev dev-live up stop restart status logs open swiggy-doctor zepto-bridge zepto-doctor zepto-preview seed-sample-household unseed-sample-household memory-seed reconcile-unknown vapid-keys vobiz-check check check-full test test-unit test-module test-integration test-failures clean-run live-smoke live-smoke-cart
 
 start:
 	@./scripts/start.sh live
@@ -28,6 +28,7 @@ help:
 	@echo "  make zepto-preview Run a temporary-item, unconfirmed live preview (explicit opt-in)"
 	@echo "  make seed-sample-household   Demo only: load fictional sample orders + memories for your user"
 	@echo "  make unseed-sample-household Remove only that seeded sample data"
+	@echo "  make memory-seed ARGS=\"--file <path> --dry-run|--apply\"  Owner's own household memory from a YAML/JSON file (--remove-seeded undoes it)"
 	@echo "  make reconcile-unknown ARGS=--dry-run  Check unknown Zepto orders against order history (--apply settles single matches)"
 	@echo "  make vapid-keys    Generate browser-notification (Web Push) keys; prints them here only"
 	@echo "  make test          Run every test layer (backend + frontend)"
@@ -87,6 +88,12 @@ seed-sample-household:
 
 unseed-sample-household:
 	@./scripts/backend-cli.sh app.memory.sample_seed --remove $(if $(USER_ID),--user-id $(USER_ID))
+
+# The owner's household answers -> memory (app/memory/demo_seed.py; docs/demo-memory.example.yaml).
+# Dry run unless ARGS has --apply. Same database as `make start`.
+memory-seed:
+	@test -n "$(ARGS)" || { echo 'Usage: make memory-seed ARGS="--file <path> --dry-run"  (or --apply, or --remove-seeded --apply)' >&2; exit 2; }
+	@./scripts/backend-cli.sh app.memory.demo_seed $(ARGS)
 
 # The same database as `make start` (scripts/local-env.sh). ARGS is required: --dry-run or --apply.
 reconcile-unknown:

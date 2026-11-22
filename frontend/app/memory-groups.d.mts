@@ -34,7 +34,50 @@ export type MemoryRow = {
 };
 
 export type MemoryGroup = { id: MemoryGroupId; title: string; rows: MemoryRow[] };
-export type EditableField = { key: string; label: string; value: string };
+export type FieldOption = { value: string; label: string };
+export type EditableField = { key: string; label: string; value: string; options?: FieldOption[] };
+export type SummaryGroupId = "home" | "food" | "usual_buys" | "avoid" | "shopping_style" | "from_orders";
+export type SummarySource = "told" | "in_passing" | "repeated_choice" | "order_history";
+export type SummaryItem = {
+  id: string;
+  group: SummaryGroupId;
+  kind?: string | null;
+  label: string;
+  source: SummarySource;
+  source_label?: string;
+  updated_at?: string | null;
+  managed_by?: "memory" | "profile" | "order";
+  item?: string | null;
+  value?: string | null;
+};
+export type MemorySummaryResponse = {
+  consent: { saved_preferences: "on" | "off"; purchase_history: "on" | "off" };
+  groups: { id: SummaryGroupId; title: string; items: SummaryItem[] }[];
+  suggestions: SummaryItem[];
+  total: number;
+};
+export type SummaryRow = {
+  id: string;
+  label: string;
+  kind: string | null;
+  source: SummarySource;
+  badge: string;
+  date: string;
+  managedBy: "memory" | "profile" | "order";
+  value: string | null;
+  record: MemoryRecord | null;
+  undoable: boolean;
+  editable: boolean;
+  deletable: boolean;
+};
+export type SummaryView = {
+  groups: { id: SummaryGroupId; title: string; rows: SummaryRow[] }[];
+  suggestions: SummaryRow[];
+  total: number;
+  deletable: number;
+  consent: "on" | "off";
+  history: "on" | "off";
+};
 export type CorrectionPayload = {
   memory_type: string;
   value: Record<string, unknown>;
@@ -64,4 +107,9 @@ export function formatMemoryDate(time: number | null, now?: number): string;
 export function groupMemories(memories: MemoryRecord[], now?: number): { groups: MemoryGroup[]; suggestions: MemoryRow[]; total: number };
 export function editableFields(memory: Pick<MemoryRecord, "value" | "text">): EditableField[];
 export function correctionPayload(memory: MemoryRecord, edits: Record<string, string>): CorrectionPayload | null;
+export const FIELD_OPTIONS: Record<string, FieldOption[]>;
+export const SUMMARY_GROUPS: readonly { id: SummaryGroupId; title: string }[];
+export const SOURCE_LABELS: Record<SummarySource, string>;
+export function summaryView(summary: MemorySummaryResponse | null | undefined, records: MemoryRecord[], now?: number): SummaryView;
+export function profileResetPayload(kind: string | null): { first_name?: null; language?: "hinglish"; address_form?: "neutral" } | null;
 export function preferencePermissionState(permissions: PermissionLike[], categories: readonly string[], purpose?: string): "on" | "off" | "partial";

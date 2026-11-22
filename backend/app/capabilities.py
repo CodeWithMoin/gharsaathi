@@ -524,6 +524,36 @@ CAPABILITIES: tuple[Capability, ...] = (
         ),
     ),
     Capability(
+        id="memory_summary",
+        title="What do you know about me? (saved memory by group, with sources)",
+        voice=S(
+            W,
+            "summarize_my_memory: top 5 (food rules, nevers, usual buys, home, style, orders) "
+            "with each source; 'baaki screen par'; opens the full list on screen (memory.summary).",
+        ),
+        typed_chat=S(W, "Same tool. " + TYPED_VIA_ASSISTANT),
+        ui=S(
+            W,
+            "Settings → What GharSaathi knows: Home, Food, Usual buys, Avoid, Shopping style, "
+            "From your orders; each with source and date, Edit / Delete, Delete everything.",
+        ),
+        backend=S(
+            W,
+            "Read-only summary of confirmed memories (visible even when memory is off), "
+            "profile choices and consented order history. Household facts (diet, keep-outs, "
+            "usual quantity, value preference, home, delivery notes) are written today only by "
+            "the owner's manual seed (make memory-seed); diet/keep-outs/avoid filter search and "
+            "usual quantities default adds in code.",
+        ),
+        voice_tools=("summarize_my_memory",),
+        routes=("GET /api/memory/summary",),
+        ui_files=(
+            "frontend/app/memory-settings.tsx",
+            "frontend/app/memory-groups.mjs",
+            "frontend/app/assistant-events.mjs",
+        ),
+    ),
+    Capability(
         id="order_history",
         title="See past orders",
         voice=S(
@@ -851,6 +881,11 @@ UNMOUNTED_ROUTERS: dict[str, str] = {
 # be a defined voice tool.
 PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
     {
+        # summarize_my_memory and search_products household-fact fields.
+        "more_on_screen",
+        "nothing_saved",
+        "ingredient_check",
+        "usual_quantity",
         # read_attached_photo item fields and photo kinds.
         "printed_name",
         "search_query",
@@ -988,6 +1023,15 @@ API_CONTRACTS: dict[str, tuple[str, ...]] = {
     "POST /api/memory/{memory_id}/undo": (
         "Auth: Clerk bearer token. Reverts a memory learned in passing (origin stated, status confirmed, learned_at within 24 h): it is deleted, and the memory it superseded, if any, is restored to confirmed.",
         "Response 200: the restored MemoryResponse, or null. 404 memory not found for this person; 409 outside the undo window or not undo-able.",
+    ),
+    "GET /api/memory/summary": (
+        "Auth: Clerk bearer token. Read-only. Response 200: {\"consent\": {\"saved_preferences\": \"on\"|\"off\", "
+        "\"purchase_history\": \"on\"|\"off\"}, \"groups\": [{\"id\": \"home\"|\"food\"|\"usual_buys\"|\"avoid\"|"
+        "\"shopping_style\"|\"from_orders\", \"title\", \"items\": [{\"id\", \"kind\", \"label\", \"source\": "
+        "\"told\"|\"in_passing\"|\"repeated_choice\"|\"order_history\", \"source_label\", \"updated_at\", "
+        "\"managed_by\": \"memory\"|\"profile\"|\"order\"}]}], \"suggestions\": [...], \"total\": n}.",
+        "memory items are edited/deleted through /api/memory/{id}; profile items through PUT /api/profile; "
+        "order items are read-only (DELETE /api/memory/purchase-history removes all).",
     ),
     "DELETE /api/memory/{memory_id}": (
         "Auth: Clerk bearer token. Forget one memory (status deleted; excluded from every list and from search). Response 204; idempotent.",
