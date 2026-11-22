@@ -4,6 +4,7 @@ import { Camera, CircleNotch, Image as ImageIcon, Paperclip, WarningCircle, X } 
 import { type ChangeEvent, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { API_BASE_URL, useAuthenticatedFetch } from "./authenticated-api";
 import { CAMERA_ACCEPT, GALLERY_ACCEPT, JPEG_QUALITY, MAX_UPLOAD_BYTES, attachmentIdFor, downscaleSize, idlePhoto, isHeif, photoReducer, uploadErrorMessage, validatePhotoFile, type PhotoState } from "./photo-attachment.mjs";
+import { CameraDialog, detectCameraPath } from "./camera-dialog";
 import { InputDialog } from "./ui/input-dialog";
 
 type Decoded = { source: CanvasImageSource; width: number; height: number; close: () => void };
@@ -133,11 +134,26 @@ export function usePhotoAttachment() {
 /** Photo button: opens a small sheet with Take photo / Choose from gallery. */
 export function PhotoAttachButton({ onFile, disabled = false, compact = false }: { onFile: (file: File | undefined) => void; disabled?: boolean; compact?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const pick = (input: HTMLInputElement | null) => {
     setOpen(false);
     input?.click();
+  };
+  const takePhoto = () => {
+    if (detectCameraPath() === "native") {
+      pick(cameraRef.current);
+      return;
+    }
+    setOpen(false);
+    // Next frame: the first popup has returned focus to the 📎 button by then,
+    // so closing the camera returns focus there too.
+    window.requestAnimationFrame(() => setCameraOpen(true));
+  };
+  const chooseFiles = () => {
+    setCameraOpen(false);
+    galleryRef.current?.click();
   };
   const take = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -158,10 +174,11 @@ export function PhotoAttachButton({ onFile, disabled = false, compact = false }:
       footer={({ requestClose }) => <button type="button" onClick={() => requestClose("cancel")} className="min-h-11 w-full rounded-full border border-accent-border px-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">Cancel</button>}
     >
       <div className="space-y-2">
-        <button type="button" onClick={() => pick(cameraRef.current)} className={option}><span className="grid size-9 place-items-center rounded-xl bg-accent-soft text-accent-ink"><Camera size={19} /></span>Take photo</button>
+        <button type="button" onClick={takePhoto} className={option}><span className="grid size-9 place-items-center rounded-xl bg-accent-soft text-accent-ink"><Camera size={19} /></span>Take photo</button>
         <button type="button" onClick={() => pick(galleryRef.current)} className={option}><span className="grid size-9 place-items-center rounded-xl bg-accent-soft text-accent-ink"><ImageIcon size={19} /></span>Choose from gallery</button>
       </div>
     </InputDialog>
+    <CameraDialog open={cameraOpen} onClose={() => setCameraOpen(false)} onPhoto={onFile} onChooseFiles={chooseFiles} />
   </>;
 }
 
