@@ -3,6 +3,6 @@
 export const CLERK_COLORS = {
   colorPrimary: "#a3401a", // --color-accent-ink
   colorText: "#1a1613", // --color-text
-  colorTextSecondary: "#574e46", // --color-text-muted
+  colorTextSecondary: "#4a423b", // --color-text-muted
   colorBackground: "#fffdfa", // --color-surface
 };

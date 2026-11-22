@@ -165,7 +165,7 @@ export function AccountSettingsSheet({
             {section === null
               ? <motion.div key="overview" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: .16 }}>
                 <div className="flex items-center gap-3 rounded-[22px] border border-border bg-surface p-3.5">
-                  {identity.imageUrl ? <Image src={identity.imageUrl} alt="" width={48} height={48} className="size-12 rounded-2xl object-cover" /> : <span aria-hidden="true" className="grid size-12 place-items-center rounded-2xl bg-border text-base font-bold text-accent-strong">{initials(identity.name)}</span>}
+                  {identity.imageUrl ? <Image src={identity.imageUrl} alt="" width={48} height={48} className="size-12 rounded-2xl object-cover" /> : <span aria-hidden="true" className="grid size-12 place-items-center rounded-2xl bg-accent text-base font-bold text-on-accent">{initials(identity.name)}</span>}
                   <div className="min-w-0"><p className="truncate text-sm font-semibold">{identity.name}</p>{identity.email && <p className="mt-0.5 truncate text-xs text-muted">{identity.email}</p>}</div>
                 </div>
 
@@ -197,7 +197,7 @@ export function AccountSettingsSheet({
 
 /** A 44px+ account trigger whose fallback label is the requested M-style initial. */
 export function AccountMenuButton({ name, onClick, imageUrl }: { name: string; onClick: () => void; imageUrl?: string }) {
-  return <button type="button" onClick={onClick} aria-label="Open account settings" className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-2xl border border-accent-border bg-surface text-sm font-bold text-accent-strong shadow-[0_12px_26px_-20px_rgb(var(--shadow)/.8)] transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:scale-[.96]">
+  return <button type="button" onClick={onClick} aria-label="Open account settings" className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-accent text-sm font-bold text-on-accent shadow-[0_12px_26px_-20px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:scale-[.96]">
     {imageUrl ? <Image src={imageUrl} alt="" width={44} height={44} className="size-full object-cover" /> : initials(name)}
   </button>;
 }

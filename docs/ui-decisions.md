@@ -99,9 +99,9 @@ dark onboarding card. Zepto keeps its own purple only where Zepto is the actor.
 | `border` | `--color-border` | `#e0d6ca` | Hairlines, dividers |
 | `border-strong` | `--color-border-strong` | `#cbbfb1` | Input and button outlines, disabled fills |
 | `ink` | `--color-text` | `#1a1613` | Primary text |
-| `ink-secondary` | `--color-text-secondary` | `#3b342e` | Body copy, secondary labels |
-| `muted` | `--color-text-muted` | `#574e46` | Helper text, metadata |
-| `subtle` | `--color-text-subtle` | `#5f564e` | Smallest captions, placeholders (still AA) |
+| `ink-secondary` | `--color-text-secondary` | `#332d28` | Body copy, secondary labels |
+| `muted` | `--color-text-muted` | `#4a423b` | Helper text, metadata |
+| `subtle` | `--color-text-subtle` | `#524a43` | Smallest captions, placeholders (still AA) |
 | `accent` | `--color-accent` | `#c2561f` | Filled primary buttons, mic, selected fills (white text) |
 | `accent-ink` | `--color-accent-ink` | `#a3401a` | Accent-coloured text and links on light backgrounds |
 | `accent-hover` | `--color-accent-hover` | `#8a3614` | Hover/pressed primary |
