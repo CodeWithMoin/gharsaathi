@@ -195,7 +195,10 @@ class AddressBookToolExecutor:
                 "stores": stores,
                 "message": (
                     "Name the saved addresses by label in one short line and ask which one to "
-                    "use. Offer adding a new address only if the user wants one not listed."
+                    "use. If the user named no store, ask only which address, never which "
+                    "store; then switch every store listing it, one select_delivery_address "
+                    "call per store. Offer adding a new address only if the user wants one "
+                    "not listed."
                 ),
             }
         )
