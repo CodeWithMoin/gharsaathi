@@ -14,8 +14,23 @@ These are durable product conventions for the mobile shopping chat.
 ## Input popups (`frontend/app/ui/input-dialog.tsx`)
 
 Every flow that asks the user to type or choose something opens in `InputDialog`,
-never inline in whatever sheet happens to be open. The Add delivery address popup
-(`address-form-sheet.tsx`) is the first user; other input flows move to it next.
+never inline in whatever sheet happens to be open. Current users:
+
+| Popup | Where | Notes |
+|---|---|---|
+| Add delivery address | `address-form-sheet.tsx` | Voice, typed chat, onboarding and the picker's "Add a new address" |
+| Choose delivery address | `address-picker-dialog.tsx` | One store at a time; tapping an address saves it right away; Refresh; Zepto (live) can add a new address on top. Opened from the setup sheet's address rows and Settings → Addresses. No voice/typed event opens it yet (none exists) |
+| Edit preference | `memory-settings.tsx` | Unsaved-changes guard; save errors show inside the popup |
+| Forget everything | `memory-settings.tsx` | `ConfirmDialog`, destructive |
+| Edit profile | `account-settings-sheet.tsx` | Name, how to address you and reply language in one popup with one Save; only changed fields are sent |
+| Disconnect Swiggy / Zepto | `page.tsx` setup sheet | `ConfirmDialog`, destructive; closes only after the disconnect succeeds |
+
+`ConfirmDialog` (`frontend/app/ui/confirm-dialog.tsx`) is the yes/no variant:
+`title`, `message`, `confirmLabel`, `busyLabel`, `tone` (`"destructive"` paints
+the button red, uses `role="alertdialog"` and focuses Cancel first), `busy`,
+`error`, `onConfirm`, `onClose`. Pure logic for these flows is in
+`frontend/app/input-flows.mjs`. The order card, basket − / + and the onboarding
+pages are deliberately not popups.
 
 | Prop | Type | Meaning |
 |---|---|---|
@@ -32,6 +47,7 @@ never inline in whatever sheet happens to be open. The Add delivery address popu
 | `onShown` | `(dialog) => void?` | After the dialog is visible and laid out |
 | `closeLabel` | `string?` | Label of the X button |
 | `widthClassName` | `string?` | Max width when centered (default `sm:max-w-lg`) |
+| `role` | `"dialog" \| "alertdialog"?` | `alertdialog` for interrupting confirmations (default `dialog`) |
 
 Behaviour: portal to `document.body` above everything (including the voice panel),
 dimmed backdrop, focus trapped and restored on close, body scroll locked, bottom

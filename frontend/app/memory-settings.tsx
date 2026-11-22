@@ -1,10 +1,14 @@
 "use client";
 
 import { ArrowCounterClockwise, Check, CircleNotch, PencilSimple, Sparkle, Trash, Warning } from "@phosphor-icons/react";
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ApiError } from "./authenticated-api";
 import { PREFERENCE_CATEGORIES, RouteUnavailableError, useMemoryApi, type MemoryPermission } from "./memory-api";
 import { correctionPayload, editableFields, groupMemories, preferencePermissionState, type MemoryRecord, type MemoryRow } from "./memory-groups.mjs";
+import { initialEditValues } from "./input-flows.mjs";
+import { ConfirmDialog } from "./ui/confirm-dialog";
+import { InputDialog } from "./ui/input-dialog";
+import { hasUnsavedChanges } from "./ui/input-dialog-logic.mjs";
 
 const ring = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d]";
 const BADGE_STYLES: Record<string, string> = {
@@ -166,8 +170,10 @@ export function MemorySettings() {
 
   function cancelForgetAll() {
     setForgetAll(null);
-    forgetAllButtonRef.current?.focus();
+    window.requestAnimationFrame(() => forgetAllButtonRef.current?.focus());
   }
+
+  const editingRow = editingId ? view.groups.flatMap((group) => group.rows).find((row) => row.id === editingId) ?? null : null;
 
   return <div className="space-y-4">
     <div>
@@ -210,16 +216,8 @@ export function MemorySettings() {
               first={index === 0}
               busy={busyId === row.id}
               disabled={busyId !== null}
-              editing={editingId === row.id}
               showUndo={undoAvailable && row.undoable}
               onEdit={() => { setEditingId(row.id); setNotice(null); }}
-              onCancelEdit={() => setEditingId(null)}
-              onSave={async (edits) => {
-                const payload = correctionPayload(row.memory, edits);
-                if (!payload) { setEditingId(null); return; }
-                const saved = await act(row.id, () => api.correct(row.id, payload), "Updated.", "Could not save your change.");
-                if (saved) setEditingId(null);
-              }}
               onDelete={() => void remove(row)}
               onUndo={() => void undo(row)}
             />)}
@@ -229,7 +227,26 @@ export function MemorySettings() {
         {forgetAllAvailable && view.total + view.suggestions.length > 0 && <button ref={forgetAllButtonRef} type="button" onClick={() => void startForgetAll()} disabled={forgetAllBusy || busyId !== null} className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#e6cfc2] bg-[#fffdf9] px-4 text-sm font-semibold text-[#9f3f2c] hover:bg-[#fff5ef] disabled:opacity-55 ${ring}`}>{forgetAllBusy && !forgetAll ? <CircleNotch size={16} className="animate-spin" /> : <Trash size={16} weight="bold" />}Forget everything</button>}
       </>}
 
-    {forgetAll && <ConfirmDialog count={forgetAll.count ?? view.total + view.suggestions.length} busy={forgetAllBusy} onCancel={cancelForgetAll} onConfirm={() => void confirmForgetAll()} />}
+    <EditPreferenceDialog
+      row={editingRow}
+      busy={editingRow !== null && busyId === editingRow.id}
+      error={editingRow && notice?.tone === "error" ? notice.text : ""}
+      onClose={() => setEditingId(null)}
+      onSave={async (row, edits) => {
+        const payload = correctionPayload(row.memory, edits);
+        if (!payload) { setEditingId(null); return; }
+        const saved = await act(row.id, () => api.correct(row.id, payload), "Updated.", "Could not save your change.");
+        if (saved) setEditingId(null);
+      }}
+    />
+
+    <ForgetAllDialog
+      open={forgetAll !== null}
+      count={forgetAll?.count ?? view.total + view.suggestions.length}
+      busy={forgetAllBusy}
+      onCancel={cancelForgetAll}
+      onConfirm={() => void confirmForgetAll()}
+    />
   </div>;
 }
 
@@ -255,97 +272,79 @@ function PermissionCard({ state, busy, error, onToggle }: { state: "on" | "off" 
   </div>;
 }
 
-function MemoryItemRow({ row, first, busy, disabled, editing, showUndo, onEdit, onCancelEdit, onSave, onDelete, onUndo }: {
+function MemoryItemRow({ row, first, busy, disabled, showUndo, onEdit, onDelete, onUndo }: {
   row: MemoryRow;
   first: boolean;
   busy: boolean;
   disabled: boolean;
-  editing: boolean;
   showUndo: boolean;
   onEdit: () => void;
-  onCancelEdit: () => void;
-  onSave: (edits: Record<string, string>) => Promise<void>;
   onDelete: () => void;
   onUndo: () => void;
 }) {
-  const editButtonRef = useRef<HTMLButtonElement>(null);
-  const wasEditing = useRef(false);
-  useEffect(() => {
-    if (wasEditing.current && !editing) editButtonRef.current?.focus();
-    wasEditing.current = editing;
-  }, [editing]);
-
   const small = `flex min-h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold disabled:opacity-50 ${ring}`;
   return <li className={`px-3.5 py-3 ${first ? "" : "border-t border-[#f0e2d8]"}`}>
-    {editing
-      ? <EditForm row={row} busy={busy} onCancel={onCancelEdit} onSave={onSave} />
-      : <>
-        <p className="break-words text-sm font-semibold leading-5">{row.sentence}</p>
-        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-[#8d766a]">
-          <span className={`rounded-full px-2 py-0.5 font-semibold ${BADGE_STYLES[row.badge] ?? BADGE_STYLES["You told us"]}`}>{row.badge}</span>
-          {row.date && <span>{row.date}</span>}
-        </p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {showUndo && <button type="button" disabled={disabled} onClick={onUndo} aria-label={`Undo: ${row.sentence}`} className={`${small} bg-[#e3f0e7] text-[#2f6a48]`}>{busy ? <CircleNotch size={13} className="animate-spin" /> : <ArrowCounterClockwise size={13} weight="bold" />}Undo</button>}
-          <button ref={editButtonRef} type="button" disabled={disabled} onClick={onEdit} aria-label={`Edit: ${row.sentence}`} className={`${small} border border-[#e4cabc] text-[#68493c]`}><PencilSimple size={13} weight="bold" />Edit</button>
-          <button type="button" disabled={disabled} onClick={onDelete} aria-label={`Delete: ${row.sentence}`} className={`${small} border border-[#efcfc4] text-[#9f3f2c]`}>{busy && !showUndo ? <CircleNotch size={13} className="animate-spin" /> : <Trash size={13} weight="bold" />}Delete</button>
-        </div>
-      </>}
+    <p className="break-words text-sm font-semibold leading-5">{row.sentence}</p>
+    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-[#8d766a]">
+      <span className={`rounded-full px-2 py-0.5 font-semibold ${BADGE_STYLES[row.badge] ?? BADGE_STYLES["You told us"]}`}>{row.badge}</span>
+      {row.date && <span>{row.date}</span>}
+    </p>
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {showUndo && <button type="button" disabled={disabled} onClick={onUndo} aria-label={`Undo: ${row.sentence}`} className={`${small} bg-[#e3f0e7] text-[#2f6a48]`}>{busy ? <CircleNotch size={13} className="animate-spin" /> : <ArrowCounterClockwise size={13} weight="bold" />}Undo</button>}
+      <button type="button" disabled={disabled} onClick={onEdit} aria-label={`Edit: ${row.sentence}`} className={`${small} border border-[#e4cabc] text-[#68493c]`}><PencilSimple size={13} weight="bold" />Edit</button>
+      <button type="button" disabled={disabled} onClick={onDelete} aria-label={`Delete: ${row.sentence}`} className={`${small} border border-[#efcfc4] text-[#9f3f2c]`}>{busy && !showUndo ? <CircleNotch size={13} className="animate-spin" /> : <Trash size={13} weight="bold" />}Delete</button>
+    </div>
   </li>;
 }
 
-function EditForm({ row, busy, onCancel, onSave }: { row: MemoryRow; busy: boolean; onCancel: () => void; onSave: (edits: Record<string, string>) => Promise<void> }) {
-  const fields = editableFields(row.memory);
+/** "Edit preference" popup. Keeps the last row while the popup animates out. */
+function EditPreferenceDialog({ row, busy, error, onClose, onSave }: { row: MemoryRow | null; busy: boolean; error: string; onClose: () => void; onSave: (row: MemoryRow, edits: Record<string, string>) => Promise<void> }) {
   const baseId = useId();
-  const firstInputRef = useRef<HTMLInputElement>(null);
-  const [edits, setEdits] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((field) => [field.key, field.value])));
-  useEffect(() => { firstInputRef.current?.focus(); }, []);
+  const formId = `${baseId}-form`;
+  const [draft, setDraft] = useState<{ row: MemoryRow; open: boolean; initial: Record<string, string>; values: Record<string, string> } | null>(null);
+  if (row && (!draft?.open || draft.row.id !== row.id)) {
+    const initial = initialEditValues(editableFields(row.memory));
+    setDraft({ row, open: true, initial, values: initial });
+  } else if (!row && draft?.open) setDraft({ ...draft, open: false });
+  const shown = draft?.row ?? row;
+  const fields = shown ? editableFields(shown.memory) : [];
+  const dirty = row !== null && draft !== null && hasUnsavedChanges(draft.initial, draft.values);
 
-  function onKeyDown(event: ReactKeyboardEvent) {
-    if (event.key !== "Escape") return;
-    event.stopPropagation();
-    onCancel();
-  }
-
-  return <form onKeyDown={onKeyDown} onSubmit={(event) => { event.preventDefault(); void onSave(edits); }} aria-label={`Edit: ${row.sentence}`}>
-    <div className="space-y-2">
-      {fields.map((field, index) => <div key={field.key}>
-        <label htmlFor={`${baseId}-${field.key}`} className="block text-[11px] font-semibold text-[#5f4a3f]">{field.label}</label>
-        <input ref={index === 0 ? firstInputRef : undefined} id={`${baseId}-${field.key}`} value={edits[field.key] ?? ""} maxLength={field.key === "text" ? 300 : 160} onChange={(event) => setEdits((current) => ({ ...current, [field.key]: event.target.value }))} className="mt-1 min-h-10 w-full rounded-xl border border-[#deccbf] bg-white px-3 text-sm outline-none focus:border-[#c6531d] focus-visible:ring-2 focus-visible:ring-[#c6531d]/30" />
+  return <InputDialog
+    open={row !== null}
+    title="Edit preference"
+    description={shown ? <span className="break-words">{shown.sentence}</span> : undefined}
+    dirty={dirty}
+    busy={busy}
+    discardMessage="Discard your changes to this preference?"
+    closeLabel="Close edit preference"
+    widthClassName="sm:max-w-md"
+    onClose={onClose}
+    footer={({ requestClose }) => <div className="flex items-center gap-3">
+      <button type="button" disabled={busy} onClick={() => requestClose("cancel")} className={`rounded-full px-4 py-3 text-sm font-semibold text-[#6f5b50] transition hover:bg-[#f3e7dd] disabled:opacity-40 ${ring}`}>Cancel</button>
+      <button type="submit" form={formId} disabled={busy} className={`ml-auto flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[#3b2a22] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:flex-none ${ring}`}>{busy && <CircleNotch size={15} className="animate-spin" />}{busy ? "Saving…" : "Save"}</button>
+    </div>}
+  >
+    {shown && draft && <form id={formId} onSubmit={(event) => { event.preventDefault(); if (!busy) void onSave(shown, draft.values); }} aria-label={`Edit: ${shown.sentence}`} className="space-y-3">
+      {fields.map((field) => <div key={field.key}>
+        <label htmlFor={`${baseId}-${field.key}`} className="block text-xs font-semibold text-[#5f4a3f]">{field.label}</label>
+        <input id={`${baseId}-${field.key}`} value={draft.values[field.key] ?? ""} maxLength={field.key === "text" ? 300 : 160} disabled={busy} onChange={(event) => { const value = event.target.value; setDraft((current) => current && { ...current, values: { ...current.values, [field.key]: value } }); }} className="mt-1 min-h-11 w-full rounded-xl border border-[#deccbf] bg-white px-3 text-sm outline-none focus:border-[#c6531d] focus-visible:ring-2 focus-visible:ring-[#c6531d]/30 disabled:opacity-60" />
       </div>)}
-    </div>
-    <div className="mt-3 flex gap-2">
-      <button type="submit" disabled={busy} className={`flex min-h-10 flex-1 items-center justify-center gap-1 rounded-xl bg-[#3b2a22] px-3 text-xs font-semibold text-white disabled:opacity-50 ${ring}`}>{busy && <CircleNotch size={13} className="animate-spin" />}{busy ? "Saving…" : "Save"}</button>
-      <button type="button" disabled={busy} onClick={onCancel} className={`min-h-10 flex-1 rounded-xl border border-[#e4cabc] px-3 text-xs font-semibold text-[#68493c] disabled:opacity-50 ${ring}`}>Cancel</button>
-    </div>
-  </form>;
+      {error && <p role="alert" className="rounded-xl bg-[#fff4ef] px-3 py-2 text-xs leading-5 text-[#8f3a2a]">{error}</p>}
+    </form>}
+  </InputDialog>;
 }
 
-function ConfirmDialog({ count, busy, onCancel, onConfirm }: { count: number; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
-  const titleId = useId();
-  const descriptionId = useId();
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { cancelRef.current?.focus(); }, []);
-
-  function onKeyDown(event: ReactKeyboardEvent) {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      if (!busy) onCancel();
-    } else if (event.key === "Tab") {
-      event.preventDefault();
-      (document.activeElement === cancelRef.current ? confirmRef.current : cancelRef.current)?.focus();
-    }
-  }
-
-  return <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#3a271e]/40 p-3 sm:items-center" onKeyDown={onKeyDown}>
-    <div role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} className="w-full max-w-sm rounded-[26px] border border-[#ead7ca] bg-[#fffaf5] p-5 text-[#35241c] shadow-[0_24px_60px_-30px_rgba(62,34,22,.6)]">
-      <h3 id={titleId} className="font-display text-lg font-semibold tracking-[-.03em]">Forget everything?</h3>
-      <p id={descriptionId} className="mt-2 text-sm leading-6 text-[#806f65]">{count} saved {count === 1 ? "item" : "items"} will be permanently deleted—preferences, nevers, rules and suggestions. This can&apos;t be undone.</p>
-      <div className="mt-5 grid grid-cols-2 gap-2">
-        <button ref={cancelRef} type="button" disabled={busy} onClick={onCancel} className={`min-h-11 rounded-xl border border-[#e4cabc] px-3 text-sm font-semibold text-[#68493c] disabled:opacity-50 ${ring}`}>Cancel</button>
-        <button ref={confirmRef} type="button" disabled={busy} onClick={onConfirm} className={`flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#a33d2c] px-3 text-sm font-semibold text-white disabled:opacity-60 ${ring}`}>{busy && <CircleNotch size={15} className="animate-spin" />}Forget everything</button>
-      </div>
-    </div>
-  </div>;
+function ForgetAllDialog({ open, count, busy, onCancel, onConfirm }: { open: boolean; count: number; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
+  return <ConfirmDialog
+    open={open}
+    tone="destructive"
+    title="Forget everything?"
+    message={<>{count} saved {count === 1 ? "item" : "items"} will be permanently deleted—preferences, nevers, rules and suggestions. This can&apos;t be undone.</>}
+    confirmLabel="Forget everything"
+    busyLabel="Forgetting…"
+    busy={busy}
+    onClose={onCancel}
+    onConfirm={onConfirm}
+  />;
 }

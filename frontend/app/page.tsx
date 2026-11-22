@@ -2,7 +2,7 @@
 
 import { useClerk, useUser } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Basket, ChatCircleDots, Check, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, Plus, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
+import { ArrowRight, Basket, ChatCircleDots, List, MagnifyingGlass, Microphone, NotePencil, PaperPlaneRight, ShieldCheck, ShoppingCartSimple, Storefront, X } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "./brand";
 import { BASKET_CHANGED_EVENT, BasketPanel, useAddBasketLine, useSetBasketLineQuantity, type Approval, type ApprovalRequest, type ProviderName, type ShoppingBasket } from "./basket/BasketPanel";
@@ -21,6 +21,9 @@ import { FirstRunOnboarding } from "./first-run-onboarding";
 import { AccountSettingsSheet } from "./account-settings-sheet";
 import type { ZeptoAddressPrefillRequest, ZeptoPrefillResult } from "./zepto-address-form";
 import { AddressFormSheet } from "./address-form-sheet";
+import { AddressPickerDialog, StoreAddressRow, type AddressPickerStore } from "./address-picker-dialog";
+import { disconnectCopy } from "./input-flows.mjs";
+import { ConfirmDialog } from "./ui/confirm-dialog";
 import type { AddressFormAck } from "./address-form-merge.mjs";
 import { API_BASE_URL, ApiError, useApiRequest } from "./authenticated-api";
 import { applyAssistantEvent } from "./assistant-events.mjs";
@@ -77,6 +80,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   // One Add delivery address popup for voice, typed chat and the manual button.
   const [addressPopupOpen, setAddressPopupOpen] = useState(false);
   const [addressPrefillRequest, setAddressPrefillRequest] = useState<ZeptoAddressPrefillRequest | null>(null);
+  // "Choose delivery address" popup (one store at a time) and the Disconnect confirmation.
+  const [addressPicker, setAddressPicker] = useState<AddressPickerStore | null>(null);
+  const [disconnectConfirm, setDisconnectConfirm] = useState<{ store: "swiggy" | "zepto"; open: boolean }>({ store: "swiggy", open: false });
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addressId, setAddressId] = useState("");
   const [query, setQuery] = useState("");
@@ -793,7 +799,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       await apiRequest<null>("/api/swiggy/disconnect", { method: "POST" });
       swiggyConnectionRequest = null;
       setConnected(false); setAddresses([]); setAddressId(""); setTimeline((current) => ({ ...current, groups: [] })); setMessage("Swiggy disconnected.");
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Could not disconnect Swiggy."); }
+      return true;
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Could not disconnect Swiggy."); return false; }
     finally { setLoading(null); }
   }
 
@@ -806,8 +813,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       setZeptoSearchReady(false);
       setZeptoAddresses([]);
       setZeptoAddressId("");
+      return true;
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Could not disconnect Zepto.");
+      return false;
     } finally {
       setZeptoBusy(false);
     }
@@ -844,6 +853,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const hasChat = Boolean(submittedQuery || chatMessages.length);
   const replyLanguage = String((user?.unsafeMetadata.gharsaathiProfile as { language?: string } | undefined)?.language ?? "hinglish");
   const filteredRecentChats = searchConversations(recentChats, chatSearch);
+  const disconnectText = disconnectCopy(disconnectConfirm.store);
   const newestGroupSeq = Math.max(0, ...timeline.groups.map((group) => group.seq));
   const renderResultGroup = (group: ResultGroup<Product>) => {
     if (group.status === "searching") return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 sm:mr-12"><div className="min-w-0 rounded-[8px_22px_22px_22px] bg-[#fffdf9] px-5 py-4 shadow-[0_16px_38px_-34px_rgba(74,43,27,.7)]"><div className="flex items-center gap-1.5" aria-label={`GharSaathi is searching for ${group.label}`}>{[0,1,2].map((dot) => <motion.i key={dot} animate={{ y: [0,-4,0] }} transition={{ duration: .8, repeat: Infinity, delay: dot * .13 }} className="size-1.5 rounded-full bg-[#c6531d]" />)}<span className="ml-2 text-sm text-[#806f65]">{commerceMode === "demo" ? "Searching the demo catalogue" : zeptoSearchReady ? "Searching Swiggy and Zepto" : "Searching Swiggy Instamart"}</span></div></div></motion.div>;
@@ -995,6 +1005,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       }}
       onManagePrivacy={() => { setAccountSettingsOpen(false); setSetupOpen(true); }}
       onManageAddresses={() => { setAccountSettingsOpen(false); setSetupOpen(true); }}
+      onChooseStoreAddress={(storeId) => setAddressPicker(storeId === "zepto" ? "zepto" : "swiggy")}
       onSelectAddress={(value) => {
         const [provider, ...idParts] = value.split(":");
         const id = idParts.join(":");
@@ -1005,6 +1016,44 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
       onSignOut={() => void signOut({ redirectUrl: "/" })}
     />
 
+    <AddressPickerDialog
+      open={addressPicker === "swiggy" && connected === true}
+      store="swiggy"
+      commerceMode={commerceMode}
+      addresses={addresses}
+      selectedId={addressId}
+      refreshing={loading === "addresses"}
+      emptyText={message}
+      onSelect={(id) => void selectAddress(id)}
+      onRefresh={() => void loadAddresses(true)}
+      onClose={() => setAddressPicker(null)}
+    />
+    <AddressPickerDialog
+      open={addressPicker === "zepto" && zeptoConnected === true}
+      store="zepto"
+      commerceMode={commerceMode}
+      addresses={zeptoAddresses}
+      selectedId={zeptoAddressId}
+      refreshing={zeptoBusy}
+      emptyText="Refresh once to save your Zepto addresses. Reloads after that stay local."
+      onSelect={(id) => void selectZeptoAddress(id)}
+      onRefresh={() => void loadZeptoAddresses(true)}
+      onAddNew={commerceMode === "live" ? () => setAddressPopupOpen(true) : undefined}
+      onClose={() => setAddressPicker(null)}
+    />
+    <ConfirmDialog
+      open={disconnectConfirm.open}
+      tone="destructive"
+      title={disconnectText.title}
+      message={disconnectText.body}
+      confirmLabel={disconnectText.confirmLabel}
+      busyLabel={disconnectText.busyLabel}
+      busy={disconnectConfirm.store === "zepto" ? zeptoBusy : loading === "disconnect"}
+      onClose={() => setDisconnectConfirm((current) => ({ ...current, open: false }))}
+      onConfirm={() => {
+        void (disconnectConfirm.store === "zepto" ? disconnectZepto() : disconnect()).then((done) => { if (done) setDisconnectConfirm((current) => ({ ...current, open: false })); });
+      }}
+    />
     <AddressFormSheet open={addressPopupOpen} prefillRequest={addressPrefillRequest} onAdded={applyAddedZeptoAddress} onClose={closeAddressPopup} onPrefillApplied={handleAddressPrefillApplied} />
     <AnimatePresence>
       {setupOpen && (
@@ -1019,17 +1068,20 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
             <div className="mt-6 space-y-3">
               <section className="rounded-2xl border border-[#e7d8cd] bg-[#fffaf5] p-4" aria-label="Swiggy Instamart connection">
                 <div className="flex gap-3"><span className={`mt-1 size-2.5 shrink-0 rounded-full ${connected ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Swiggy Instamart</h3><span className={`text-[10px] font-semibold ${connected ? "text-[#397144]" : "text-[#806f65]"}`}>{connected === null ? "Checking…" : commerceMode === "demo" ? "Demo data" : connected ? "Connected" : "Not connected"}</span></div><p className="mt-1 text-xs leading-5 text-[#806f65]">{commerceMode === "demo" ? "Static products and deterministic bills. Your Swiggy account and cart are untouched." : "Live search and final-bill review are available here."}</p></div></div>
-                {commerceMode === "demo" ? <p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">Provider calls are disabled. Launch <strong>make dev-live</strong> only when you intentionally want live data.</p> : connected ? <button onClick={disconnect} disabled={loading === "disconnect"} className="mt-3 text-xs font-semibold text-[#9e4536] disabled:opacity-45">{loading === "disconnect" ? "Disconnecting…" : "Disconnect Swiggy"}</button> : <button onClick={() => void beginProviderConnection("swiggy")} disabled={loading === "connection"} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3 text-sm font-semibold text-white active:scale-[.98] disabled:opacity-45">{loading === "connection" ? "Checking callback…" : "Connect Swiggy securely"} <ArrowRight size={17} /></button>}
+                {commerceMode === "demo" ? <p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">Provider calls are disabled. Launch <strong>make dev-live</strong> only when you intentionally want live data.</p> : connected ? <button type="button" onClick={() => setDisconnectConfirm({ store: "swiggy", open: true })} disabled={loading === "disconnect"} className="mt-3 text-xs font-semibold text-[#9e4536] disabled:opacity-45">{loading === "disconnect" ? "Disconnecting…" : "Disconnect Swiggy"}</button> : <button onClick={() => void beginProviderConnection("swiggy")} disabled={loading === "connection"} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 py-3 text-sm font-semibold text-white active:scale-[.98] disabled:opacity-45">{loading === "connection" ? "Checking callback…" : "Connect Swiggy securely"} <ArrowRight size={17} /></button>}
               </section>
 
               <section className="rounded-2xl border border-[#e7d8cd] bg-[#fffaf5] p-4" aria-label="Zepto connection">
                 <div className="flex gap-3"><span className={`mt-1 size-2.5 shrink-0 rounded-full ${zeptoConnected ? "bg-[#4d945d]" : "bg-[#c9a995]"}`} /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Zepto</h3><span className={`text-[10px] font-semibold ${zeptoConnected ? "text-[#397144]" : "text-[#806f65]"}`}>{zeptoConnected === null ? "Checking…" : commerceMode === "demo" ? "Demo safe" : zeptoSearchReady ? "Search ready" : zeptoConnected ? "Connected" : "Not connected"}</span></div><p className="mt-1 text-xs leading-5 text-[#806f65]">{commerceMode === "demo" ? "Static Zepto results are available without provider calls." : "Live product search uses one persistent MCP session and a cached tool catalogue."}</p></div></div>
-                {commerceMode === "demo" ? <p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">No Zepto OAuth, cart, payment, or order call is made in this mode.</p> : zeptoConnected ? <><p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">Search is ready. A live COD order is available only after an exact bill approval and a separate final confirmation.</p><button onClick={() => void disconnectZepto()} disabled={zeptoBusy} className="mt-3 text-xs font-semibold text-[#9e4536] disabled:opacity-45">{zeptoBusy ? "Disconnecting…" : "Disconnect Zepto"}</button></> : <button onClick={() => void beginProviderConnection("zepto")} disabled={zeptoBusy} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-[#d7a182] bg-white px-5 py-3 text-sm font-semibold text-[#8f421b] transition hover:bg-[#fff5ed] active:scale-[.98] disabled:opacity-45">{zeptoBusy ? "Checking callback…" : "Connect Zepto securely"} <ArrowRight size={17} /></button>}
+                {commerceMode === "demo" ? <p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">No Zepto OAuth, cart, payment, or order call is made in this mode.</p> : zeptoConnected ? <><p className="mt-3 rounded-xl bg-[#eef6ef] px-3 py-2 text-[11px] leading-5 text-[#397144]">Search is ready. A live COD order is available only after an exact bill approval and a separate final confirmation.</p><button type="button" onClick={() => setDisconnectConfirm({ store: "zepto", open: true })} disabled={zeptoBusy} className="mt-3 text-xs font-semibold text-[#9e4536] disabled:opacity-45">{zeptoBusy ? "Disconnecting…" : "Disconnect Zepto"}</button></> : <button onClick={() => void beginProviderConnection("zepto")} disabled={zeptoBusy} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-[#d7a182] bg-white px-5 py-3 text-sm font-semibold text-[#8f421b] transition hover:bg-[#fff5ed] active:scale-[.98] disabled:opacity-45">{zeptoBusy ? "Checking callback…" : "Connect Zepto securely"} <ArrowRight size={17} /></button>}
               </section>
             </div>
 
-            {connected && <section className="mt-7"><div className="flex items-center"><div><h3 className="font-display font-semibold">{commerceMode === "demo" ? "Demo delivery address" : "Swiggy delivery address"}</h3><p className="mt-1 text-[10px] text-[#8e796d]">{commerceMode === "demo" ? "Local fixture only" : "Reload uses the saved snapshot"}</p></div><button onClick={() => void loadAddresses(true)} disabled={loading === "addresses"} className="ml-auto text-xs font-semibold text-[#c6531d] disabled:cursor-not-allowed disabled:opacity-45">{loading === "addresses" ? "Refreshing…" : commerceMode === "demo" ? "Reset demo" : "Refresh from Swiggy"}</button></div>{loading === "addresses" ? <div className="mt-3 h-20 animate-pulse rounded-2xl bg-[#eee2d8]" /> : <div className="mt-3 divide-y divide-[#e9dbcf]">{addresses.map((address) => <label key={address.id} className="flex cursor-pointer items-start gap-3 py-4"><input type="radio" checked={addressId === address.id} onChange={() => void selectAddress(address.id)} className="mt-1 accent-[#c6531d]" /><span className="flex-1"><strong className="block text-sm">{address.tag || address.category || "Saved address"}</strong><small className="mt-1 block leading-relaxed text-[#806f65]">{address.address_line}</small></span>{addressId === address.id && <Check size={17} className="text-[#c6531d]" />}</label>)}</div>}{!addresses.length && loading !== "addresses" && <p className="mt-3 rounded-2xl bg-[#f7ede5] px-4 py-3 text-xs leading-5 text-[#806f65]">{message}</p>}<button onClick={() => setSetupOpen(false)} disabled={!addressId} className="mt-5 w-full rounded-full bg-[#c6531d] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Use this address</button></section>}
-            {zeptoConnected && <section className="mt-7 border-t border-[#eaded5] pt-6"><div className="flex items-center"><div><h3 className="font-display font-semibold">{commerceMode === "demo" ? "Zepto demo address" : "Zepto delivery address"}</h3><p className="mt-1 text-[10px] text-[#8e796d]">{commerceMode === "demo" ? "Local fixture only" : "Reload uses the saved snapshot—no MCP call"}</p></div><button onClick={() => void loadZeptoAddresses(true)} disabled={zeptoBusy} className="ml-auto text-xs font-semibold text-[#7b3fc4] disabled:cursor-not-allowed disabled:opacity-45">{zeptoBusy ? "Refreshing…" : commerceMode === "demo" ? "Reset demo" : "Refresh from Zepto"}</button></div>{zeptoBusy && !zeptoAddresses.length ? <div className="mt-3 h-20 animate-pulse rounded-2xl bg-[#eee2d8]" /> : <div className="mt-3 divide-y divide-[#e9dbcf]">{zeptoAddresses.map((address) => <label key={address.id} className="flex cursor-pointer items-start gap-3 py-4"><input type="radio" checked={zeptoAddressId === address.id} onChange={() => void selectZeptoAddress(address.id)} className="mt-1 accent-[#7b3fc4]" /><span className="flex-1"><strong className="block text-sm">{address.tag || address.category || "Saved address"}</strong><small className="mt-1 block leading-relaxed text-[#806f65]">{address.address_line}</small></span>{zeptoAddressId === address.id && <Check size={17} className="text-[#7b3fc4]" />}</label>)}</div>}{!zeptoAddresses.length && !zeptoBusy && <p className="mt-3 rounded-2xl bg-[#f7ede5] px-4 py-3 text-xs leading-5 text-[#806f65]">Refresh once to save your Zepto addresses. Reloads after that stay local.</p>}{commerceMode === "live" && <button type="button" onClick={() => setAddressPopupOpen(true)} className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-[#6f359f]"><Plus size={14} /> Add a new Zepto address</button>}<button onClick={() => setSetupOpen(false)} disabled={!zeptoAddressId} className="mt-5 w-full rounded-full bg-[#5f2e91] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Use Zepto address</button></section>}
+            {(connected || zeptoConnected) && <section className="mt-7 space-y-3" aria-label="Delivery addresses">
+              {connected && <StoreAddressRow store="swiggy" commerceMode={commerceMode} addresses={addresses} selectedId={addressId} loading={loading === "addresses"} onChoose={() => setAddressPicker("swiggy")} />}
+              {zeptoConnected && <StoreAddressRow store="zepto" commerceMode={commerceMode} addresses={zeptoAddresses} selectedId={zeptoAddressId} loading={zeptoBusy} onChoose={() => setAddressPicker("zepto")} />}
+              <button type="button" onClick={() => setSetupOpen(false)} disabled={!((connected && addressId) || (zeptoConnected && zeptoAddressId))} className="w-full rounded-full bg-[#c6531d] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Use these addresses</button>
+            </section>}
             <PersonalizationOnboarding commerceMode={commerceMode} swiggyConnected={connected === true} zeptoConnected={zeptoConnected === true} />
           </motion.section>
         </motion.div>

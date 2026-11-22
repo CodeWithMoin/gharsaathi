@@ -41,6 +41,8 @@ export type InputDialogProps = {
   closeLabel?: string;
   /** Max width of the centered presentation, as a Tailwind class. */
   widthClassName?: string;
+  /** "alertdialog" for confirmations that interrupt (e.g. destructive actions). */
+  role?: "dialog" | "alertdialog";
 };
 
 function useViewportWidth(): number {
@@ -55,7 +57,7 @@ function useViewportWidth(): number {
 }
 
 /** Modal dialog for any flow that needs user input: bottom sheet under 640px, centered above. */
-export function InputDialog({ open, title, description, children, footer, onClose, dirty = false, busy = false, discardMessage = "Discard your changes?", initialFocusRef, onShown, closeLabel = "Close", widthClassName = "sm:max-w-lg" }: InputDialogProps) {
+export function InputDialog({ open, title, description, children, footer, onClose, dirty = false, busy = false, discardMessage = "Discard your changes?", initialFocusRef, onShown, closeLabel = "Close", widthClassName = "sm:max-w-lg", role = "dialog" }: InputDialogProps) {
   const reduceMotion = useReducedMotion();
   const presentation = dialogPresentation(useViewportWidth());
   const titleId = useId();
@@ -79,10 +81,21 @@ export function InputDialog({ open, title, description, children, footer, onClos
     restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const panelHolder = panelRef;
     return () => {
       document.body.style.overflow = previousOverflow;
       const restore = restoreRef.current;
-      if (restore && document.contains(restore)) restore.focus({ preventScroll: true });
+      const panel = panelHolder.current;
+      // After React's commit: React re-focuses the element that had focus before
+      // the commit (still inside the exiting panel), which would undo an earlier restore.
+      queueMicrotask(() => {
+        if (restore && restore !== document.body && document.contains(restore)) restore.focus({ preventScroll: true });
+        // Stacked popups: with nothing to return to, focus the popup still open underneath.
+        if (!document.activeElement || document.activeElement === document.body || (panel && panel.contains(document.activeElement))) {
+          const below = [...document.querySelectorAll<HTMLElement>("[aria-modal='true']")].filter((element) => element !== panel).at(-1);
+          below?.focus({ preventScroll: true });
+        }
+      });
     };
   }, [open]);
 
@@ -129,7 +142,7 @@ export function InputDialog({ open, title, description, children, footer, onClos
           <div className="absolute inset-0 bg-[#2a1b14]/45 backdrop-blur-[2px]" aria-hidden="true" onMouseDown={() => requestClose("backdrop")} />
           <motion.div
             ref={panelRef}
-            role="dialog"
+            role={role}
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={description ? descriptionId : undefined}
