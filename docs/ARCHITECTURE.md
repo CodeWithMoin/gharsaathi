@@ -145,15 +145,17 @@ Nothing is taken from the browser.
 |---|---|---|
 | Current chat summary | `conversations.summary`, written in the background | 110 |
 | Last 6 turns, verbatim | saved messages | 170 |
-| On screen: results per item, each store's basket, pending bill | saved `result_groups` + basket/approval tables | 100 |
-| Previous chats (≤3, last 30 days): summary or first request, items searched, furthest basket step per store | archived conversations | 150 |
+| On screen: results per item; each store's basket; its latest pending/approved bill (item total, payable, store-confirmed offers, expiry), however it was opened | saved `result_groups` + basket/approval tables (`shopping_approvals.quote`) | 140 |
+| Previous chats (≤3, last 30 days): summary or first request, items searched, furthest basket step per store | archived conversations | 110 |
 
 The whole block is ≤ ~600 tokens (measured in `tests/unit/test_conversation_context.py`).
 GPT-Live gets the turns as `session.input` startup history
 ([docs](https://developers.openai.com/api/docs/guides/live-conversations#seed-a-session-with-prior-conversation))
 and the rest in its instructions. The backend model gets the whole block in its
 instructions. All of it is quoted as untrusted data. Prices, baskets, bills and
-orders come only from saved state. "Order confirmed" appears only when a chat's
+orders come only from saved state. Voice `view_basket` also reads the persisted
+bill (`Approval.quote`) when the session did not request it, e.g. after the
+on-screen "Get final bill" button; it never re-quotes. "Order confirmed" appears only when a chat's
 saved timeline reached the `ordered` stage.
 
 Rolling summaries (`backend/app/conversations/summarizer.py`) run off the request

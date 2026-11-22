@@ -15,7 +15,18 @@ from app.conversations.context import (
     sanitize_context_text,
     sanitize_summary,
 )
-from app.shopping.models import Basket, BasketLine, BasketStatus, ProductRef
+from datetime import timedelta
+
+from app.shopping.models import (
+    Approval,
+    ApprovalStatus,
+    Basket,
+    BasketLine,
+    BasketStatus,
+    OfferOpportunity,
+    ProductRef,
+    Quote,
+)
 from app.voice.tools import item_fields, item_key
 
 O200K = tiktoken.get_encoding("o200k_base")
@@ -115,14 +126,54 @@ def test_only_the_last_six_turns_are_kept() -> None:
     assert [turn.text for turn in context.turns] == [f"turn {i}" for i in range(14, 20)]
 
 
-def test_pending_bill_and_legacy_products_are_rendered_from_state() -> None:
+def approval(status: ApprovalStatus = ApprovalStatus.PENDING, minutes: int = 8, title: str = "Free delivery") -> Approval:
+    quote = Quote(
+        provider="zepto",
+        basket_id="b1",
+        basket_revision=0,
+        item_total_paise=13_800,
+        payable_paise=15_200,
+        offers=[
+            OfferOpportunity(
+                title=title, kind="free_delivery", minimum_order_paise=19_900, remaining_paise=6_100,
+                unlocked=False, applied=False, provider_confirmed=True,
+            ),
+            OfferOpportunity(
+                title="Unconfirmed 50% off", kind="promo", minimum_order_paise=0, remaining_paise=0,
+                unlocked=True, applied=False, provider_confirmed=False,
+            ),
+        ],
+        quoted_at=NOW,
+    )
+    return Approval(
+        id="a1", basket_id="b1", basket_revision=0, fingerprint="f", payable_paise=15_200,
+        status=status, created_at=NOW, expires_at=NOW + timedelta(minutes=minutes), quote=quote,
+    )
+
+
+def test_bill_opened_on_screen_is_rendered_with_totals_offers_and_expiry() -> None:
     legacy = {"submitted_query": "Fortune oil", "searched": True, "products": [product("Fortune Oil", 160)]}
     context = recent_context_from_state(
-        legacy, [BasketView("zepto", basket(BasketStatus.AWAITING_APPROVAL), pending_payable_paise=15_200)]
+        legacy, [BasketView("zepto", basket(BasketStatus.AWAITING_APPROVAL), approval())], now=NOW
     )
     screen = "\n".join(context.on_screen)
-    assert "bill ready payable ₹152, awaiting on-screen approval" in screen
+    assert (
+        "bill item total ₹138, payable ₹152, awaiting on-screen approval, expires in 8 min; "
+        "offers: Free delivery (not unlocked, add ₹61)"
+    ) in screen
+    assert "Unconfirmed" not in screen  # only store-confirmed offers
     assert 'Results "Fortune oil": Fortune Oil (₹160, Zepto)' in screen
+
+
+def test_approved_and_expired_bills_say_so() -> None:
+    approved = recent_context_from_state(
+        {}, [BasketView("zepto", basket(BasketStatus.APPROVED), approval(ApprovalStatus.APPROVED))], now=NOW
+    )
+    expired = recent_context_from_state(
+        {}, [BasketView("zepto", basket(BasketStatus.AWAITING_APPROVAL), approval(minutes=-1))], now=NOW
+    )
+    assert "approved, order not placed" in approved.on_screen[0]
+    assert "expired, needs a new bill" in expired.on_screen[0]
 
 
 def test_empty_state_gives_no_context_and_no_block() -> None:
@@ -194,7 +245,10 @@ def test_worst_case_context_block_stays_within_600_tokens(filler: str) -> None:
     previous = previous_chat_lines([(archived, NOW, {"text": long, "turn_count": 1})] * 3)
     context = recent_context_from_state(
         state,
-        [BasketView("zepto", basket()), BasketView("swiggy_instamart", basket())],
+        [
+            BasketView("zepto", basket(BasketStatus.AWAITING_APPROVAL), approval(title=long[:200])),
+            BasketView("swiggy_instamart", basket(BasketStatus.AWAITING_APPROVAL), approval(title=long[:200])),
+        ],
         summary={"text": long, "turn_count": 1},
         previous_chats=previous,
     )

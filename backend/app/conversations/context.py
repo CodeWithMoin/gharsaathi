@@ -44,6 +44,7 @@ from app.conversations.summary import (
     store_outcomes,
 )
 from app.memory.repository import MemoryRepository
+from app.shopping.approval import latest_open_approval
 from app.shopping.basket import format_rupees, item_total_paise
 from app.shopping.models import (
     Approval,
@@ -61,10 +62,11 @@ MAX_TURNS = 6
 MAX_TURN_TOKENS = 60
 MAX_TURNS_TOKENS = 170
 MAX_SUMMARY_TOKENS = 110
-MAX_ON_SCREEN_TOKENS = 100
+MAX_ON_SCREEN_TOKENS = 140
+MAX_ON_SCREEN_LINE_TOKENS = 80
 MAX_PREVIOUS_CHATS = 3
-MAX_PREVIOUS_CHAT_TOKENS = 50
-MAX_PREVIOUS_CHATS_TOKENS = 150
+MAX_PREVIOUS_CHAT_TOKENS = 40
+MAX_PREVIOUS_CHATS_TOKENS = 110
 PREVIOUS_CHATS_WINDOW = timedelta(days=30)
 MAX_RESULT_GROUPS = 4
 MAX_PRODUCTS_PER_GROUP = 3
@@ -155,11 +157,15 @@ class ContextTurn:
 
 @dataclass(frozen=True)
 class BasketView:
-    """What one store's basket card shows, as the context needs it."""
+    """What one store's basket card shows, as the context needs it.
+
+    ``approval`` is the latest pending/approved bill for the basket's current
+    revision, however it was opened (voice or the on-screen button).
+    """
 
     provider: ProviderName
     basket: Basket
-    pending_payable_paise: int | None = None
+    approval: Approval | None = None
 
 
 @dataclass(frozen=True)
@@ -274,7 +280,36 @@ def _results_lines(state: Mapping[str, Any]) -> list[str]:
     return lines
 
 
-def _basket_lines(views: Iterable[BasketView]) -> list[str]:
+def _offers_text(approval: Approval) -> str:
+    quote = approval.quote
+    if quote is None:
+        return ""
+    offers = []
+    for offer in quote.offers:
+        if not offer.provider_confirmed:
+            continue
+        status = "applied" if offer.applied else "unlocked" if offer.unlocked else "not unlocked"
+        if not offer.unlocked and offer.remaining_paise:
+            status += f", add {format_rupees(offer.remaining_paise)}"
+        offers.append(f"{sanitize_context_text(offer.title, 40)} ({status})")
+    return f"; offers: {'; '.join(offers[:3])}" if offers else "; no store offers"
+
+
+def _bill_text(approval: Approval, now: datetime) -> str:
+    state = "approved, order not placed" if approval.status == ApprovalStatus.APPROVED else "awaiting on-screen approval"
+    item_total = (
+        f" item total {format_rupees(approval.quote.item_total_paise)}," if approval.quote is not None else ""
+    )
+    remaining = _utc(approval.expires_at) - now
+    expiry = (
+        "expired, needs a new bill"
+        if remaining.total_seconds() <= 0
+        else f"expires in {max(1, round(remaining.total_seconds() / 60))} min"
+    )
+    return f"; bill{item_total} payable {format_rupees(approval.payable_paise)}, {state}, {expiry}{_offers_text(approval)}"
+
+
+def _basket_lines(views: Iterable[BasketView], now: datetime) -> list[str]:
     lines: list[str] = []
     for view in views:
         basket = view.basket
@@ -289,13 +324,10 @@ def _basket_lines(views: Iterable[BasketView]) -> list[str]:
         if len(basket.lines) > MAX_BASKET_LINES:
             items.append(f"+{len(basket.lines) - MAX_BASKET_LINES} more")
         line = f"{store} basket: {', '.join(items)}; items {format_rupees(item_total_paise(basket))}"
-        if basket.status == BasketStatus.AWAITING_APPROVAL:
-            payable = (
-                f" payable {format_rupees(view.pending_payable_paise)}"
-                if view.pending_payable_paise is not None
-                else ""
-            )
-            line += f"; bill ready{payable}, awaiting on-screen approval"
+        if view.approval is not None:
+            line += _bill_text(view.approval, now)
+        elif basket.status == BasketStatus.AWAITING_APPROVAL:
+            line += "; bill ready, awaiting on-screen approval"
         elif basket.status == BasketStatus.APPROVED:
             line += "; bill approved, order not placed"
         elif basket.status == BasketStatus.CHECKOUT_PENDING:
@@ -364,6 +396,7 @@ def recent_context_from_state(
     summary: object = None,
     previous_chats: Sequence[str] = (),
     max_turns: int = MAX_TURNS,
+    now: datetime | None = None,
 ) -> RecentConversationContext:
     """Context from the current chat's saved state, plus pre-rendered previous chats."""
 
@@ -371,7 +404,11 @@ def recent_context_from_state(
     return RecentConversationContext(
         summary=truncate_tokens(stored_summary_text(summary, state), MAX_SUMMARY_TOKENS),
         turns=_turns(state.get("messages"), max_turns),
-        on_screen=_bounded([*_basket_lines(baskets), *_results_lines(state)], MAX_ON_SCREEN_TOKENS),
+        on_screen=_bounded(
+            [*_basket_lines(baskets, now or datetime.now(UTC)), *_results_lines(state)],
+            MAX_ON_SCREEN_TOKENS,
+            MAX_ON_SCREEN_LINE_TOKENS,
+        ),
         previous_chats=tuple(previous_chats),
     )
 
@@ -459,7 +496,7 @@ async def basket_views(
     approvals: ApprovalReader | None,
     household_id: str,
 ) -> list[BasketView]:
-    """Each store's open basket, read without creating one."""
+    """Each store's open basket and its current bill, read without creating or quoting."""
 
     if baskets is None or not household_id:
         return []
@@ -468,17 +505,10 @@ async def basket_views(
         basket = await baskets.active_for(household_id, provider)
         if basket is None or basket.household_id != household_id or not basket.lines:
             continue
-        payable: int | None = None
-        if basket.status == BasketStatus.AWAITING_APPROVAL and approvals is not None:
-            pending = [
-                approval
-                for approval in await approvals.for_basket(basket.id)
-                if approval.status == ApprovalStatus.PENDING
-                and approval.basket_revision == basket.revision
-            ]
-            if pending:
-                payable = max(pending, key=lambda approval: approval.created_at).payable_paise
-        views.append(BasketView(provider=provider, basket=basket, pending_payable_paise=payable))
+        approval = None
+        if approvals is not None and basket.status in {BasketStatus.AWAITING_APPROVAL, BasketStatus.APPROVED}:
+            approval = latest_open_approval(await approvals.for_basket(basket.id), basket)
+        views.append(BasketView(provider=provider, basket=basket, approval=approval))
     return views
 
 
@@ -527,6 +557,10 @@ class ConversationContextLoader:
                 ]
         views = await basket_views(self.baskets, self.approvals, external_user_id)
         context = recent_context_from_state(
-            state, views, summary=summary, previous_chats=previous_chat_lines(previous)
+            state,
+            views,
+            summary=summary,
+            previous_chats=previous_chat_lines(previous),
+            now=self.clock(),
         )
         return None if context.empty else context

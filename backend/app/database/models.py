@@ -292,6 +292,8 @@ class ShoppingApprovalRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Quote snapshot for this exact approval (see Approval.quote).
+    quote: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
 class ZeptoCheckoutAttemptRecord(Base):

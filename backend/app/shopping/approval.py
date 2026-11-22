@@ -61,6 +61,25 @@ def check_quote(basket: Basket, quote: Quote) -> None:
         )
 
 
+def latest_open_approval(approvals: Collection[Approval], basket: Basket) -> Approval | None:
+    """The bill currently shown for this basket: newest pending/approved approval at its revision.
+
+    Read-only; it never re-quotes. Approvals are only open while the basket is
+    awaiting approval or approved.
+    """
+
+    if basket.status not in {BasketStatus.AWAITING_APPROVAL, BasketStatus.APPROVED}:
+        return None
+    open_now = [
+        approval
+        for approval in approvals
+        if approval.basket_id == basket.id
+        and approval.basket_revision == basket.revision
+        and approval.status in OPEN_APPROVAL_STATUSES
+    ]
+    return max(open_now, key=lambda approval: approval.created_at, default=None)
+
+
 class ApprovalService:
     def __init__(
         self,
@@ -139,6 +158,7 @@ class ApprovalService:
             payable_paise=quote.payable_paise,
             created_at=now,
             expires_at=now + APPROVAL_TTL,
+            quote=quote,
         )
         await self.approvals.save(approval)
         # The approval only becomes approvable once the basket moves to
