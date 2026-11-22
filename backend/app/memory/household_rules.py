@@ -3,7 +3,7 @@
 Pure functions over the consented ``HouseholdMemory`` (see ``app.memory.recall``):
 
 - ``avoid_store`` skips that store's search for matching items (all items when
-  the rule names no item);
+  the rule names no item), unless the query itself names that store;
 - ``avoid_product`` / ``avoid_brand`` drop matching options, or keep them flagged
   ``avoided`` when the user's own query asks for exactly that product or brand;
 - ``prefer_brand`` / ``prefer_pack_size`` / ``prefer_store`` flag matching options
@@ -72,7 +72,28 @@ def rules_from_memory(memory: HouseholdMemory | None) -> HouseholdRules:
     return HouseholdRules(rules)
 
 
+# Words that name a store in a query, so "Zepto se hi chocolate" overrides "never Zepto".
+STORE_NAME_WORDS: dict[str, frozenset[str]] = {
+    "zepto": frozenset({"zepto", "ज़ेप्टो", "जेप्टो"}),
+    "swiggy_instamart": frozenset({"swiggy", "instamart", "स्विगी", "इंस्टामार्ट"}),
+}
+
+
+def names_store(query: str, store_id: str) -> bool:
+    text = query.casefold()
+    return any(word in text for word in STORE_NAME_WORDS.get(store_id, frozenset()))
+
+
+def without_store_names(query: str) -> str:
+    """The query with store names removed, for the store's own product search."""
+    words = set().union(*STORE_NAME_WORDS.values())
+    kept = [word for word in query.split() if word.casefold().strip(".,!?") not in words]
+    return " ".join(kept) if len(" ".join(kept)) >= 2 else query
+
+
 def avoided_store_rule(rules: HouseholdRules, store_id: str, query: str) -> Rule | None:
+    if names_store(query, store_id):
+        return None
     for rule in rules.of("avoid_store"):
         if rule.value == store_id and rule.item_matches(query):
             return rule

@@ -302,7 +302,7 @@ async def test_avoid_store_skips_that_store_and_blocks_old_options(factory) -> N
     assert blocked["status"] == "blocked_by_household_rule"
 
 
-async def test_prefer_annotates_and_avoid_product_hides_even_when_asked(factory) -> None:
+async def test_prefer_annotates_and_avoid_product_hides_unless_asked(factory) -> None:
     await consent(factory)
     box = make_box(factory)
     await call(box, "remember_preference", **remember("prefer_brand", "milk", "Amul", "hum hamesha Amul hi lete hain"))
@@ -316,11 +316,11 @@ async def test_prefer_annotates_and_avoid_product_hides_even_when_asked(factory)
     assert milk["hidden_by_household_rules"] == 1
     assert "remembered" not in names["Mother Dairy Toned Milk"]
 
-    # An avoided option is never offered, so the model can't add what the screen hides.
+    # Named by the user: offered on both lists, flagged so the model asks once first.
     asked = await call(box, "search_products", query="chocolate")
-    assert not any(r["name"].startswith("Cadbury") for r in asked["results"])
-    assert asked["hidden_by_household_rules"] >= 1
-    assert asked["hidden_rules"]
+    cadbury = [r for r in asked["results"] if r["name"].startswith("Cadbury")]
+    assert cadbury and all(r["avoided"] is True and r["avoided_because"] for r in cadbury)
+    assert "hidden_by_household_rules" not in asked
 
 
 async def test_active_rules_appear_in_the_session_memory_summary(factory) -> None:

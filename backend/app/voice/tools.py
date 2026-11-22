@@ -27,6 +27,7 @@ from app.memory.household_rules import (
     product_decision,
     rules_from_memory,
     store_rule_label,
+    without_store_names,
 )
 from app.memory.remembered import remembered_for
 from app.shopping.models import ProviderName, rupees_to_paise
@@ -51,9 +52,13 @@ REMEMBERED_NOTE = (
 
 HOUSEHOLD_RULES_NOTE = (
     " This household's own saved rules were applied: skipped_stores were not searched, "
-    "hidden_by_household_rules options were left out (hidden_rules names the avoid rule "
-    "when the user asked for such an option), and 'preferred' marks a saved preference. "
-    "Mention a skipped store or hidden option once, briefly."
+    "hidden_by_household_rules options were left out, and 'preferred' marks a saved "
+    "preference. Mention a skipped store or hidden option once, briefly."
+)
+AVOIDED_NOTE = (
+    " An 'avoided' option is one the user named although their own saved rule "
+    "(avoided_because) avoids it. Before describing or adding it, ask once: "
+    "'Aapne <rule> kaha tha—phir bhi dikhaun/add karun?'"
 )
 
 SEARCH_PRODUCTS_TOOL: dict[str, Any] = {
@@ -178,6 +183,7 @@ class RankedOption:
     product: Product
     remembered: str | None = None
     preferred: bool = False
+    avoided: bool = False
 
 
 def _option_rank(option: RankedOption) -> int:
@@ -197,7 +203,8 @@ def order_options(
 
     Remembered first, then preferred, then the rest in provider order;
     unavailable options last. Duplicates and unnamed options are dropped.
-    Avoided options must already be removed. Index + 1 is the card's position.
+    Avoided options the user did not name must already be removed; named ones
+    keep provider order. Index + 1 is the card's position.
     """
 
     seen: set[tuple[str, str, str]] = set()
@@ -424,7 +431,7 @@ class MultiProviderShoppingToolExecutor:
             )
         ready = allowed
         outcomes = await asyncio.gather(
-            *(self._search_target(target, arguments.query) for target in ready)
+            *(self._search_target(target, without_store_names(arguments.query)) for target in ready)
         )
         successful = [outcome for outcome in outcomes if outcome["status"] == "ok"]
         if not successful:
@@ -455,7 +462,6 @@ class MultiProviderShoppingToolExecutor:
         per_store_limit = max(1, MAX_RESULTS_FOR_MODEL // len(successful))
         remembered_count = 0
         filtered_count = 0
-        hidden_rules: list[str] = []
         candidates: list[RankedOption] = []
         targets: dict[ProviderName, ProviderSearchTarget] = {}
         decisions: dict[int, dict[str, Any]] = {}
@@ -471,12 +477,9 @@ class MultiProviderShoppingToolExecutor:
                 kept: list[Product] = []
                 for product in products:
                     decision = product_decision(rules, product, target.provider, arguments.query)
-                    if decision is not None and (decision.get("drop") or decision.get("avoided")):
-                        # Avoided options are hidden from the model and the screen alike.
+                    if decision is not None and decision.get("drop"):
+                        # Avoided options the user did not name are hidden from the model and the screen alike.
                         filtered_count += 1
-                        label = decision.get("avoided_because")
-                        if label and label not in hidden_rules:
-                            hidden_rules.append(str(label))
                         continue
                     if decision is not None:
                         decisions[id(product)] = decision
@@ -493,6 +496,7 @@ class MultiProviderShoppingToolExecutor:
                         product,
                         remembered=str(remembered["source"]) if remembered is not None else None,
                         preferred=bool(decisions.get(id(product), {}).get("preferred")),
+                        avoided=bool(decisions.get(id(product), {}).get("avoided")),
                     )
                 )
 
@@ -523,6 +527,7 @@ class MultiProviderShoppingToolExecutor:
                     "provider_label": target.store,
                     "position": position,
                     **({"preferred": True} if option.preferred else {}),
+                    **({"avoided": True} if option.avoided else {}),
                     # The browser badges card 1 from these annotations.
                     **({"remembered": option.remembered} if option.remembered else {}),
                 }
@@ -552,14 +557,13 @@ class MultiProviderShoppingToolExecutor:
                     or any("preferred" in entry for entry in model_results)
                     else ""
                 )
+                + (AVOIDED_NOTE if any(entry.get("avoided") for entry in model_results) else "")
             ),
         }
         if skipped:
             model_output["skipped_stores"] = skipped
         if filtered_count:
             model_output["hidden_by_household_rules"] = filtered_count
-        if hidden_rules:
-            model_output["hidden_rules"] = hidden_rules
         return ToolOutcome(
             model_output=model_output,
             ui_event={

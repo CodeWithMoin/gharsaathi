@@ -1,18 +1,18 @@
 {
-  "version": "1.13.0",
+  "version": "1.14.0",
   "cases": [
     {
       "id": "feminine_future_action",
       "user": "Tum meri grocery shopping mein kya help karoge? Apne baare mein Hinglish mein batao.",
-      "required_any": ["karungi", "kar sakti hoon", "madad karungi", "madad karti hoon", "dhoondh leti hoon"],
+      "required_any": ["karungi", "sakti hoon", "karti hoon", "leti hoon", "deti hoon", "banati hoon", "rahi hoon"],
       "forbidden_any": ["karta hoon", "karunga", "kar sakta hoon", "raha hoon"],
       "max_questions": 1
     },
     {
       "id": "feminine_current_action",
       "user": "Bolo ki tum ab Fortune oil 1 litre search kar rahe ho. Hinglish mein jawab do.",
-      "required_any": ["search kar rahi hoon", "dhoondh rahi hoon", "dekh rahi hoon", "dhoondh leti hoon", "check karti hoon"],
-      "forbidden_any": ["search kar raha hoon", "dhoondh raha hoon", "dekh raha hoon"],
+      "required_any": ["rahi hoon", "karti hoon", "leti hoon", "dekhti hoon", "dhoondhti hoon", "karungi", "sakti hoon", "gayi"],
+      "forbidden_any": ["raha hoon", "karta hoon", "leta hoon", "dekhta hoon", "karunga", "sakta hoon", "gaya hoon"],
       "max_questions": 1
     },
     {
@@ -97,7 +97,8 @@
       "forbidden_any": ["order place kar diya", "order ho gaya"],
       "forbidden_prefix": ["haan", "हाँ", "हां", "ji haan", "jee haan", "yes", "ha,", "ha "],
       "max_questions": 1,
-      "max_sentences": 3
+      "max_sentences": 3,
+      "required_words_any": ["Na", "Nahi", "Nahin", "नहीं", "ना"]
     },
     {
       "id": "repeat_back_no_filler_no_echo",
@@ -149,8 +150,8 @@
     {
       "id": "explicit_hindi_request_reply_in_hindi",
       "user": "Hindi mein bolo. Tum meri shopping mein kya madad kar sakti ho?",
-      "required_any": ["सकती", "करूँगी", "करूंगी", "मदद"],
-      "forbidden_any": ["सकता हूँ", "सकता हूं", "करूँगा", "करूंगा"],
+      "required_any": ["सकती", "करूँगी", "करूंगी", "मदद", "करती हूँ", "करती हूं"],
+      "forbidden_any": ["सकता हूँ", "सकता हूं", "करूँगा", "करूंगा", "करता हूँ", "करता हूं"],
       "max_questions": 1,
       "min_devanagari_ratio": 0.3
     },
@@ -345,7 +346,8 @@
       "forbidden_any": ["₹", "rupaye", "rupees"],
       "max_questions": 1,
       "max_sentences": 2,
-      "max_devanagari_ratio": 0.0
+      "max_devanagari_ratio": 0.0,
+      "no_bare_filler": true
     },
     {
       "id": "show_only_after_dikha_do",
@@ -404,7 +406,8 @@
       "forbidden_any": ["edit nahi kar sakti", "naya address form", "form khul"],
       "max_questions": 1,
       "max_sentences": 2,
-      "max_devanagari_ratio": 0.05
+      "max_devanagari_ratio": 0.05,
+      "no_bare_filler": true
     },
     {
       "id": "cannot_see_form_no_insisting",
@@ -417,7 +420,8 @@
       "forbidden_any": ["khul gaya hai", "pehle se bhara hua"],
       "max_questions": 1,
       "max_sentences": 2,
-      "max_devanagari_ratio": 0.05
+      "max_devanagari_ratio": 0.05,
+      "no_bare_filler": true
     },
     {
       "id": "phone_number_never_filled",
@@ -543,6 +547,68 @@
       "max_fillers": 0,
       "max_questions": 1,
       "max_sentences": 1,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "no_generic_follow_up_question",
+      "history": [
+        {"role": "user", "content": "AXE Dark wala add kar do."},
+        {"role": "assistant", "content": "AXE Dark Temptation 150 ml, ₹172, Zepto basket mein add ho gaya."}
+      ],
+      "user": "Achha, Zepto par cash on delivery hota hai na?",
+      "required_any": ["cash on delivery", "Haan", "haan", "Ji", "COD"],
+      "forbidden_any": ["agla kya", "aage kya", "kya karna chahenge", "aur kuch chahiye", "kuch aur chahiye", "aur kya madad", "aur kuch", "what next", "anything else"],
+      "fillers": ["ek second", "ek minute", "ek pal", "zara rukiye", "one second", "one moment", "just a moment", "hold on"],
+      "max_fillers": 0,
+      "max_questions": 0,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "eta_estimate_from_search_when_bill_has_none",
+      "history": [
+        {"role": "user", "content": "Instamart par Amul Taaza 1 litre dikhao."},
+        {"role": "assistant", "content": "[Backend result, already on screen: Amul Taaza Toned Milk 1 L ₹56, Swiggy Instamart, delivery_eta 18 min.] Instamart par Amul Taaza 1 litre screen par hai."},
+        {"role": "user", "content": "Add karke bill bana do."},
+        {"role": "assistant", "content": "[Backend: added; Instamart bill on screen, payable ₹71; the bill has no delivery_eta.] Instamart ka bill screen par hai, ₹71."},
+        {"role": "user", "content": "Kitna der lagega aane ke liye?"},
+        {"role": "assistant", "content": "Bill mein abhi delivery ka exact time nahi dikh raha."}
+      ],
+      "user": "To approximate kya hoga?",
+      "required_any": ["18"],
+      "forbidden_any": ["10 min", "15 min", "20 min", "30 min", "pakka", "guarantee"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "eta_never_invented_without_any_source",
+      "history": [
+        {"role": "user", "content": "Zepto par Maggi dikhao."},
+        {"role": "assistant", "content": "[Backend result, already on screen: Maggi Masala Noodles 70 g ₹14, Zepto; no delivery_eta.] Zepto par Maggi screen par hai."},
+        {"role": "user", "content": "Kitna der lagega?"},
+        {"role": "assistant", "content": "Delivery time abhi result mein nahi aaya."}
+      ],
+      "user": "To approximate kya hoga?",
+      "required_any": ["nahi", "bill", "pata nahi", "shown", "dikh"],
+      "forbidden_any": ["10 min", "15 min", "20 min", "30 min", "minute mein", "minutes mein", "10-15", "~"],
+      "max_questions": 1,
+      "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "named_avoided_item_asks_once",
+      "history": [
+        {"role": "user", "content": "Mujhe chocolate mat dikhana."},
+        {"role": "assistant", "content": "Theek hai, yaad rakhungi; bolein to bhool bhi sakti hoon."},
+        {"role": "user", "content": "Chocolate dikhao, Cadbury Dairy Milk."},
+        {"role": "assistant", "content": "Ek second."}
+      ],
+      "user": "[Backend result, already on screen: Cadbury Dairy Milk 50 g ₹50, Zepto, avoided: true, avoided_because: never suggest chocolate.]",
+      "required_any": ["phir bhi", "fir bhi", "kaha tha"],
+      "forbidden_any": ["add ho gaya", "nahi dikha sakti", "₹"],
+      "max_questions": 1,
+      "max_sentences": 2,
       "max_devanagari_ratio": 0.05
     }
   ]

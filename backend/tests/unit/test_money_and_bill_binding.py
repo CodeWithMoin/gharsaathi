@@ -160,3 +160,11 @@ def test_check_quote_names_unavailable_items() -> None:
     unknown = ProductRef(provider="zepto", product_id="p-x", variant_id="x")
     with pytest.raises(ApprovalRefused, match="Some items"):
         check_quote(basket, _quote(basket, unavailable_refs=[unknown]))
+
+
+def test_bill_for_model_carries_the_bill_eta_only_when_the_store_gave_one() -> None:
+    from app.voice.basket_tools import bill_for_model
+
+    basket = _basket(_line("a"))
+    assert bill_for_model(_quote(basket, eta_text="12 min"))["delivery_eta"] == "12 min"
+    assert "delivery_eta" not in bill_for_model(_quote(basket))

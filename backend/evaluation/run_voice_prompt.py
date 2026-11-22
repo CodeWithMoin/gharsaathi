@@ -25,6 +25,15 @@ what you would say aloud at this moment.
 _SENTENCE_END = re.compile(r"[.!?\u0964\uff1f]+(?:\s|$)")
 _DEVANAGARI_LETTER = re.compile(r"[\u0900-\u097f]")
 _LATIN_LETTER = re.compile(r"[A-Za-z]")
+BARE_FILLERS = ("ek second", "ek minute", "bas ek pal", "ek pal", "zara rukiye", "one second", "one moment", "just a moment", "hold on")
+
+
+def is_bare_filler(text: str) -> bool:
+    """True when the reply is only filler words ("Ek second.", "Bas ek pal.")."""
+    rest = text.casefold()
+    for filler in BARE_FILLERS:
+        rest = rest.replace(filler, " ")
+    return not re.sub(r"[\W_]+", "", rest)
 
 
 def _matches_any(text: str, patterns: list[str]) -> bool:
@@ -70,7 +79,10 @@ def build_input(case: dict[str, Any]) -> str | list[dict[str, str]]:
 
 
 def score_case(case: dict[str, Any], output: str) -> dict[str, Any]:
-    required_ok = _matches_any(output, case["required_any"])
+    # required_words_any matches whole words only, for short words such as "Na".
+    required_ok = _matches_any(output, case["required_any"]) or bool(
+        _word_matches(output, case.get("required_words_any", []))
+    )
     forbidden = [item for item in case["forbidden_any"] if _matches_any(output, [item])]
     forbidden_prefix = _starts_with_any(output, case.get("forbidden_prefix", []))
     questions = _question_count(output)
@@ -84,6 +96,7 @@ def score_case(case: dict[str, Any], output: str) -> dict[str, Any]:
     fillers_ok = fillers <= case.get("max_fillers", fillers)
     words = len(output.split())
     words_ok = words <= case.get("max_words", words)
+    bare_filler = bool(case.get("no_bare_filler")) and is_bare_filler(output)
     ratio = devanagari_ratio(output)
     script_ok = ratio <= case.get("max_devanagari_ratio", 1.0) and ratio >= case.get(
         "min_devanagari_ratio", 0.0
@@ -98,6 +111,7 @@ def score_case(case: dict[str, Any], output: str) -> dict[str, Any]:
         and not forbidden_words
         and fillers_ok
         and words_ok
+        and not bare_filler
         and script_ok,
         "output": output,
         "required_match": required_ok,
@@ -108,6 +122,7 @@ def score_case(case: dict[str, Any], output: str) -> dict[str, Any]:
         "forbidden_word_matches": forbidden_words,
         "filler_count": fillers,
         "word_count": words,
+        "bare_filler": bare_filler,
         "devanagari_ratio": round(ratio, 3),
     }
 
