@@ -61,24 +61,27 @@ export function OnboardingHeader({ position, onBack, onSkip, onClose, stepLabel 
   onSkip?: () => void;
   onClose?: () => void;
 }) {
-  return <header className="flex h-12 items-center gap-3">
-    {onBack
+  // Row 1: back · step label · skip/close, all on one centre line. Row 2: the full-width progress bar.
+  return <header>
+    <div className="flex h-11 items-center gap-2">
+      <div className="flex w-[108px] shrink-0 justify-start">{onBack
       ? <button type="button" onClick={onBack} aria-label="Previous step" className={`grid size-10 shrink-0 place-items-center rounded-full border border-border-strong bg-surface text-ink-secondary transition-transform duration-150 ease-out active:scale-[.96] ${focusRing}`}><ArrowLeft size={18} weight="bold" /></button>
-      : <span className="size-10 shrink-0" aria-hidden="true" />}
-    <div className="min-w-0 flex-1">
+      : <span className="size-10 shrink-0" aria-hidden="true" />}</div>
+      <p className="min-w-0 flex-1 text-center text-[12px] font-semibold text-muted" aria-live="polite">{position.complete ? "Setup complete" : `Step ${position.current} / ${position.total}`}<span className="sr-only">: {stepLabel}</span></p>
+      <div className="flex w-[108px] shrink-0 justify-end">{onClose
+      ? <button type="button" onClick={onClose} aria-label="Close setup" className={`grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition-transform duration-150 ease-out hover:bg-surface-strong active:scale-[.96] ${focusRing}`}><X size={18} weight="bold" /></button>
+      : onSkip
+        ? <button type="button" onClick={onSkip} className={`min-h-10 shrink-0 whitespace-nowrap rounded-full border border-border-strong bg-surface px-3.5 text-[13px] font-semibold text-ink-secondary transition-colors hover:bg-surface-strong ${focusRing}`}>Skip for now</button>
+        : <span className="size-10 shrink-0" aria-hidden="true" />}</div>
+    </div>
+    <div className="mt-3">
       <div className="grid grid-cols-5 gap-1" aria-hidden="true">
         {Array.from({ length: position.total }, (_, index) => {
           const filled = position.complete || index < position.current;
           return <span key={index} className="h-1 overflow-hidden rounded-full bg-border-strong"><span className="block h-full origin-left rounded-full bg-accent transition-transform duration-300 ease-out" style={{ transform: `scaleX(${filled ? 1 : 0})` }} /></span>;
         })}
       </div>
-      <p className="mt-1.5 text-[11px] font-semibold text-muted" aria-live="polite">{position.complete ? "Setup complete" : `Step ${position.current} / ${position.total}`}<span className="sr-only">: {stepLabel}</span></p>
     </div>
-    {onClose
-      ? <button type="button" onClick={onClose} aria-label="Close setup" className={`grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition-transform duration-150 ease-out hover:bg-surface-strong active:scale-[.96] ${focusRing}`}><X size={18} weight="bold" /></button>
-      : onSkip
-        ? <button type="button" onClick={onSkip} className={`min-h-10 shrink-0 rounded-full px-3 text-[13px] font-semibold text-muted transition-colors hover:bg-surface-strong ${focusRing}`}>Skip for now</button>
-        : <span className="size-10 shrink-0" aria-hidden="true" />}
   </header>;
 }
 
