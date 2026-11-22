@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     live_model: str = "gpt-live-1.1"
     live_voice: str = "nira"
     live_backend_model: str = "gpt-6-luna"
+    # Reasoning effort for the delegated backend model (voice and typed chat).
+    # gpt-6-luna supports none|low|medium|high|xhigh|max and defaults to medium:
+    # https://developers.openai.com/api/docs/models/gpt-6-luna
+    # Empty omits the setting (model default).
+    live_backend_reasoning_effort: Literal["", "none", "low", "medium", "high"] = "low"
     # Typed chat runs the same backend model and tools as voice, one bounded turn per request.
     chat_turn_timeout_seconds: float = Field(default=60.0, ge=5.0, le=180.0)
     # native | tuned (option A) | smart_turn (option B); see docs/voice-turn-taking.md

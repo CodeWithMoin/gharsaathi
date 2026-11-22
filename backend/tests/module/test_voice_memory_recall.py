@@ -8,7 +8,7 @@ import pytest_asyncio
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.commerce.swiggy.models import ProductSearchResult
+from app.commerce.swiggy.models import Price, Product, ProductSearchResult
 from app.database.base import Base
 from app.database.models import MemorySubject, PurchaseOrderNode
 from app.memory import sample_seed
@@ -217,12 +217,34 @@ async def test_toolbox_routes_recall_with_session_identity() -> None:
     assert outcome.ui_event is None
 
 
+class MilkSearch:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    async def search(self, query: str, address_id: str, offset: int) -> ProductSearchResult:
+        self.queries.append(query)
+        return ProductSearchResult(
+            products=[
+                Product(product_id="m1", sku_id="m1", spin_id="m1", name="Amul Taaza Milk",
+                        pack_size="1 L", price=Price(mrp=70, offer_price=68), available=True)
+            ]
+        )
+
+
 @pytest.mark.asyncio
-async def test_toolbox_without_recaller_reports_no_memory() -> None:
+async def test_toolbox_without_recaller_reports_no_memory_and_searches_in_the_same_call() -> None:
     world = World()
-    box = VoiceToolbox(NoSearch(), world.baskets, world.approvals, "addr", household_id="h")
+    searcher = MilkSearch()
+    box = VoiceToolbox(searcher, world.baskets, world.approvals, "addr", household_id="h")
     outcome = await box.execute("recall_household_preferences", json.dumps({"item": "milk"}))
     assert outcome.model_output["status"] == "no_memory"
+    assert searcher.queries == ["milk"]
+    search = outcome.model_output["search"]
+    assert search["status"] == "ok" and search["results"][0]["option_id"] == "opt1"
+    assert "Do not search this item again" in outcome.model_output["note"]
+    assert outcome.ui_event is not None and outcome.ui_event["type"] == "tool.results"
+    added = await box.execute("add_to_basket", json.dumps({"option_id": "opt1", "quantity": 1}))
+    assert added.model_output["status"] == "added"
 
 
 @pytest.mark.asyncio

@@ -59,8 +59,8 @@ async def test_search_returns_provider_prices_and_ui_products() -> None:
     assert searcher.calls == [("Fortune oil 1 litre", "addr_home", 0)]
     first = outcome.model_output["results"][0]
     assert (first["price_paise"], first["price"]) == (15400, "₹154")
-    assert (first["mrp_paise"], first["mrp"]) == (18000, "₹180")
-    assert (first["saving_paise"], first["saving"]) == (2600, "₹26")
+    assert (first["mrp"], first["saving"]) == ("₹180", "₹26")
+    assert not {"mrp_paise", "saving_paise"} & set(first)
     assert not {"price_rupees", "mrp_rupees", "saving_rupees"} & set(first)
     assert "mrp" not in outcome.model_output["results"][1]
     assert outcome.model_output["results"][1]["available"] is False
@@ -153,7 +153,7 @@ async def test_multi_provider_search_labels_results_and_keeps_zepto_read_only() 
     assert outcome.model_output["stores_checked"] == ["Swiggy Instamart", "Zepto"]
     swiggy_result, zepto_result = outcome.model_output["results"]
     assert swiggy_result["option_id"] == "opt1"
-    assert swiggy_result["add_supported"] is True
+    assert "add_supported" not in swiggy_result
     assert "option_id" not in zepto_result
     assert zepto_result["add_supported"] is False
     assert list(options) == ["opt1"]

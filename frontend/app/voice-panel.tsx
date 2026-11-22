@@ -156,7 +156,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       try {
         const event = JSON.parse(data) as SessionEvent;
         eventRecorderRef.current?.record(event, "tools");
-        if (event.type === "tool.started" && event.name === "search_products") {
+        if (event.type === "tool.started" && (event.name === "search_products" || event.name === "recall_household_preferences")) {
           setBusy(true);
           setMessage("Searching your connected stores…");
         } else if (event.type === "tool.started" && event.name === "open_address_form") {

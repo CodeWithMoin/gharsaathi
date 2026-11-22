@@ -135,13 +135,7 @@ class ZeptoService:
             if cached is not None and time.monotonic() - cached[0] < 60:
                 result = cached[1].model_copy(deep=True)
             else:
-                generation = await self.client.prepare_session()
-                if self._selected_address != (generation, address_id):
-                    await self.client.call_tool(
-                        "select_saved_address", {"addressId": address_id}
-                    )
-                    self._selected_address = (self.client.session_generation, address_id)
-                    generation = self.client.session_generation
+                await self._ensure_address(address_id)
 
                 queries = _split_queries(normalized)
                 if len(queries) > 1:
@@ -162,6 +156,21 @@ class ZeptoService:
         if self.reranker is not None:
             return await self.reranker.rerank(normalized, result)
         return result
+
+    async def prewarm(self, address_id: str) -> None:
+        """Open the MCP session and select the address before the first search needs them.
+
+        Read-only setup; voice session start runs it in the background.
+        """
+
+        async with self._search_lock:
+            await self._ensure_address(address_id)
+
+    async def _ensure_address(self, address_id: str) -> None:
+        generation = await self.client.prepare_session()
+        if self._selected_address != (generation, address_id):
+            await self.client.call_tool("select_saved_address", {"addressId": address_id})
+            self._selected_address = (self.client.session_generation, address_id)
 
 
 def _split_queries(query: str) -> list[str]:
