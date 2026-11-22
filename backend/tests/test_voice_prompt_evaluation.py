@@ -3,6 +3,7 @@ import re
 
 import pytest
 
+from app.voice.saved_list_tools import SavedListArguments
 from app.shopping.money import format_rupees
 from app.voice.address_book_tools import ListArguments as AddressListArguments
 from app.voice.address_book_tools import SelectArguments as AddressSelectArguments
@@ -446,6 +447,7 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "read_attached_photo": PhotoArguments,
         "get_order_status": StatusArguments,
         "list_recent_orders": RecentArguments,
+        "add_saved_list": SavedListArguments,
     }
     assert set(validators) == set(definitions)
 

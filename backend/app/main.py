@@ -4,7 +4,10 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.basket import baskets_router
 from app.api.basket import router as basket_router
+from app.api.lists import router as lists_router
+from app.api.quick_actions import router as quick_actions_router
 from app.api.chat import router as chat_router
 from app.api.conversations import router as conversations_router
 from app.api.dev import router as dev_router
@@ -113,6 +116,9 @@ app.include_router(
 app.include_router(voice_router, prefix="/api/voice", tags=["Voice"])
 app.include_router(chat_router, prefix="/api/chat", tags=["Typed chat"])
 app.include_router(basket_router, prefix="/api/basket", tags=["Basket"])
+app.include_router(baskets_router, prefix="/api/baskets", tags=["Basket"])
+app.include_router(lists_router, prefix="/api/lists", tags=["Saved lists"])
+app.include_router(quick_actions_router, prefix="/api/quick-actions", tags=["Quick actions"])
 app.include_router(orders_router, prefix="/api/orders", tags=["Orders"])
 app.include_router(support_router, prefix="/api/support", tags=["Customer Support"])
 app.include_router(tracking_router, prefix="/api/tracking", tags=["Order Tracking"])

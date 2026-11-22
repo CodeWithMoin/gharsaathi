@@ -284,9 +284,77 @@ CAPABILITIES: tuple[Capability, ...] = (
             "bill and order card are cancelled; refused while an order outcome is unknown.",
         ),
         typed_chat=S(W, TYPED_VIA_ASSISTANT),
-        ui=S(IP, "Basket card 'Clear basket' button.", "codex/quick-actions-ui"),
-        backend=S(W, "BasketService.clear."),
+        ui=S(
+            W,
+            "Basket card 'Clear basket' opens a ConfirmDialog (destructive) naming the item "
+            "count; disabled with the reason shown while checkout is pending or the outcome is "
+            "unknown.",
+        ),
+        backend=S(
+            W,
+            "BasketService.clear (one revision-checked edit, supersedes the open bill and order "
+            "card); the route passes expected_revision = the basket the user saw (409 if it changed).",
+        ),
         voice_tools=("clear_basket",),
+        routes=("POST /api/baskets/{provider}/clear",),
+        ui_files=("frontend/app/basket/BasketPanel.tsx",),
+    ),
+    Capability(
+        id="saved_lists",
+        title="Saved lists the user creates ('Weekly list') and adding one to the basket",
+        voice=S(
+            W,
+            "add_saved_list(name): finds the user's own list by name and adds it; items not "
+            "added are reported with the reason.",
+        ),
+        typed_chat=S(W, TYPED_VIA_ASSISTANT),
+        ui=S(
+            W,
+            "Quick chip 'My lists' opens the lists popup: new list by name, save basket as "
+            "list, edit items/quantities, delete, and 'Add list to basket' with a report and a "
+            "'Get bill' offer.",
+        ),
+        backend=S(
+            W,
+            "User-scoped table (saved_shopping_lists, unique name per user, 20 lists x 40 "
+            "items). Adding re-checks each item at its store (same variant, available, today's "
+            "price) and adds per store in one revision-checked edit; never quotes or orders.",
+        ),
+        voice_tools=("add_saved_list",),
+        routes=(
+            "GET /api/lists",
+            "POST /api/lists",
+            "PATCH /api/lists/{list_id}",
+            "POST /api/lists/{list_id}/add-basket",
+            "DELETE /api/lists/{list_id}",
+            "POST /api/lists/{list_id}/add-to-basket",
+        ),
+        ui_files=("frontend/app/quick-chips.tsx", "frontend/app/saved-lists-dialog.tsx", "frontend/app/quick-actions.mjs"),
+    ),
+    Capability(
+        id="quick_actions",
+        title="Quick chips: reorder last order, recent items, live order chip",
+        voice=S(U, "Screen shortcuts; by voice the user just asks ('pichla order phir se')."),
+        typed_chat=S(U, "Screen shortcuts; 'Mera order kahan hai?' sends a normal typed turn."),
+        ui=S(
+            W,
+            "Chips on the home screen and above the composer (max 6, scrollable): Reorder last "
+            "order, Mera order kahan hai? (only while an order is active), the last 3 distinct "
+            "ordered products (toast + Undo), My lists. Header chip for an active order "
+            "(arriving / out for delivery / running late) scrolls to its status card.",
+        ),
+        backend=S(
+            W,
+            "Reads only this household's real orders (ordered basket + confirmed attempt with a "
+            "provider order id; synth- sample orders excluded); reorder and recent items re-check "
+            "each item at its store and add it; nothing is quoted or ordered.",
+        ),
+        routes=(
+            "GET /api/quick-actions",
+            "POST /api/quick-actions/repeat-last",
+            "POST /api/quick-actions/recent-item",
+        ),
+        ui_files=("frontend/app/quick-chips.tsx", "frontend/app/quick-actions.mjs", "frontend/app/page.tsx"),
     ),
     Capability(
         id="express_order",

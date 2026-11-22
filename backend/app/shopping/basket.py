@@ -132,6 +132,39 @@ class BasketService:
 
         return await self._edit(household_id, provider, change)
 
+    async def add_lines(
+        self, household_id: str, provider: ProviderName, lines: list[BasketLine]
+    ) -> Basket:
+        """Add several lines in one revision-checked edit (saved lists, reorder).
+
+        A line whose variant is already in the basket adds to its quantity, as
+        ``add_line`` does. Either every line is added or none is.
+        """
+
+        for line in lines:
+            _validate_quantity(line.quantity)
+
+        def change(basket: Basket) -> bool:
+            if not lines:
+                return False
+            for line in lines:
+                if line.ref.provider != basket.provider:
+                    raise InvalidBasketChange("This item belongs to a different store.")
+                existing = next(
+                    (item for item in basket.lines if same_variant(item.ref, line.ref)), None
+                )
+                if existing is None:
+                    basket.lines.append(line.model_copy(deep=True))
+                    continue
+                quantity = existing.quantity + line.quantity
+                _validate_quantity(quantity)
+                basket.lines[basket.lines.index(existing)] = line.model_copy(
+                    update={"quantity": quantity}, deep=True
+                )
+            return True
+
+        return await self._edit(household_id, provider, change)
+
     async def set_quantity(
         self, household_id: str, provider: ProviderName, variant_id: str, quantity: int
     ) -> Basket:
@@ -159,13 +192,24 @@ class BasketService:
 
         return await self._edit(household_id, provider, change)
 
-    async def clear(self, household_id: str, provider: ProviderName) -> Basket:
+    async def clear(
+        self,
+        household_id: str,
+        provider: ProviderName,
+        *,
+        expected_revision: int | None = None,
+    ) -> Basket:
         """Empty the open basket in one revision-checked edit (supersedes its bill).
 
         Refused like every edit while checkout is pending or its outcome is unknown.
+        With ``expected_revision`` (the on-screen "Clear basket") only the basket
+        the user saw is cleared: if anyone changed it since, ``BasketConflict`` is
+        raised and nothing is removed.
         """
 
         def change(basket: Basket) -> bool:
+            if expected_revision is not None and basket.revision != expected_revision:
+                raise BasketConflict("This basket changed. Review it and try again.")
             if not basket.lines:
                 return False
             basket.lines.clear()
