@@ -75,6 +75,21 @@ class ZeptoConfirmedOrder:
 def quote_from_cod_preview(basket: Basket, payload: dict[str, Any], quoted_at: datetime) -> Quote:
     """Validate an unconfirmed COD order preview for exactly ``basket``."""
 
+    return quote_from_preview(basket, payload, quoted_at)
+
+
+def quote_from_preview(
+    basket: Basket,
+    payload: dict[str, Any],
+    quoted_at: datetime,
+    *,
+    payment_method_value: str = "COD",
+) -> Quote:
+    """Validate an unconfirmed order preview whose ``paymentMethod`` is exactly
+    ``payment_method_value``. Prepaid previews use this only once their shape is
+    verified to match the COD preview (``payment_contract.VERIFIED_CONTRACT``).
+    """
+
     if basket.provider != PROVIDER:
         raise ApprovalRefused("This basket is not a Zepto basket.")
     if not basket.address_id:
@@ -91,9 +106,12 @@ def quote_from_cod_preview(basket: Basket, payload: dict[str, Any], quoted_at: d
         raise ZeptoPreviewCheckFailed(
             "Zepto preview is missing its confirmation boundary.", step="requiresConfirmation"
         )
-    if _required_str(data, "paymentMethod") != "COD":
+    if _required_str(data, "paymentMethod") != payment_method_value:
         raise ZeptoPreviewRefused(
-            "Zepto did not prepare a cash-on-delivery checkout.", step="paymentMethod"
+            "Zepto did not prepare a checkout for the chosen payment method."
+            if payment_method_value != "COD"
+            else "Zepto did not prepare a cash-on-delivery checkout.",
+            step="paymentMethod",
         )
 
     delivery_address = data.get("deliveryAddress")

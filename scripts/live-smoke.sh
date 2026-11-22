@@ -13,11 +13,13 @@ usage() {
 Usage: ./scripts/live-smoke.sh [--cart] [--yes]
 
 (default)  Tier 1, read-only: connection status, tool catalogue drift, saved
-           address shape, one "atta" search per provider. Zepto's selected
-           delivery address may be set server-side; nothing else changes.
+           address shape, one "atta" search per provider, and the shape of
+           Zepto's get_payment_methods. Zepto's selected delivery address may
+           be set server-side; nothing else changes.
 --cart     Tier 2, CART-MUTATING: replaces the Zepto cart with one cheap item,
            requests create_order(confirmOrder=false), parses the COD preview,
-           then removes the item. Never confirms an order.
+           asks the three prepaid order tools for unconfirmed previews (shapes
+           only), then removes the item. Never confirms, pays or polls.
 --yes      Skip the interactive acknowledgement (supervised use only).
 
 A content-free schema report is written to backend/.live-smoke/latest.json.
