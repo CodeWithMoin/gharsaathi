@@ -715,3 +715,4 @@ sequenceDiagram
 - Test layers and how to run them: [`TESTING.md`](TESTING.md)
 - Opt-in real-provider smoke tests: [`LIVE_SMOKE.md`](LIVE_SMOKE.md)
 - Voice turn-taking modes: [`voice-turn-taking.md`](voice-turn-taking.md)
+- Rider assist (beta, Vobiz → OpenAI Realtime phone assistant for delivery partners): [`RIDER_ASSIST.md`](RIDER_ASSIST.md)

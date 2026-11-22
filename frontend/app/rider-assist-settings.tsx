@@ -25,9 +25,9 @@ import { InputDialog } from "./ui/input-dialog";
 const ring = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
 const SETUP_STEPS = [
-  "Your server admin turns on RIDER_ASSIST_ENABLED and sets your account as the owner.",
-  "In Exotel, a call flow with the Voicebot applet points at GharSaathi's stream address.",
-  "On your phone, forward unanswered, busy and unreachable calls to your ExoPhone.",
+  "Get a Vobiz account (India KYC) and a Bengaluru 080 number.",
+  "Your server admin turns on RIDER_ASSIST_ENABLED, sets your account as the owner, and points the number's answer URL at GharSaathi.",
+  "On your phone, forward unanswered, busy and unreachable calls to that number (dial **61*, **67*, **62*; ##002# turns it off).",
   "Save delivery notes below, then turn Rider assist on.",
 ];
 

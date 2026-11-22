@@ -822,6 +822,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         ui_files=(
             "frontend/app/rider-assist-settings.tsx",
             "frontend/app/rider-assist.mjs",
+            "frontend/app/rider-calls.tsx",
+            "frontend/app/account-settings-sheet.tsx",
             "frontend/app/page.tsx",
         ),
     ),

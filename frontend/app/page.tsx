@@ -20,6 +20,8 @@ import { VoicePanel, useVoicePrewarm, type VoiceAddressFormRequest, type VoiceTr
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
 import { FirstRunOnboarding } from "./first-run-onboarding";
 import { AccountSettingsSheet } from "./account-settings-sheet";
+import { RiderCallCard, useRiderCalls } from "./rider-calls";
+import { placeRiderCalls } from "./rider-assist.mjs";
 import { OrderNotificationPrompt, useNotifications } from "./notification-settings";
 import { orderFromUrl } from "./push-notifications.mjs";
 import type { ZeptoAddressPrefillRequest, ZeptoPrefillResult } from "./zepto-address-form";
@@ -127,6 +129,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const conversationSaveTimerRef = useRef<number | null>(null);
   const pendingConversationSaveRef = useRef<(() => void) | null>(null);
   const chatMessagesRef = useRef<ChatMessage[]>([]);
+  // Rider assist (beta): calls the AI answered show as a toast and a chat card.
+  const latestMessageIdRef = useRef<string | null>(null);
+  latestMessageIdRef.current = latestMessageId(chatMessages);
+  const riderCalls = useRiderCalls({ latestMessageIdRef, onToast: setOrderToast });
   const conversationIdRef = useRef<string | null>(null);
   // Set when the saved chat could not be loaded, so the first save starts a new chat instead of overwriting it.
   const startFreshConversationRef = useRef(false);
@@ -1140,7 +1146,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         </motion.div>
 
         <AnimatePresence initial={false}>
-          {withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard).map((item) => {
+          {placeRiderCalls(withOrderCard(placeTimelineItems({ messages: chatMessages, timeline }), orderCard), riderCalls.cards).map((item) => {
+            if (item.kind === "rider-call") return <RiderCallCard key={`rider-call-${item.card.id}`} call={item.card} onDismiss={riderCalls.dismiss} />;
             if (item.kind === "order-card") {
               const { card } = item;
               if (card.superseded) return <motion.div key={orderCardKey(card)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 mr-8 flex min-w-0 sm:mr-12"><p role="status" className="flex max-w-full items-center gap-2 truncate rounded-full bg-surface-strong px-3 py-1.5 text-[11px] font-medium text-muted"><ShoppingCartSimple size={13} className="shrink-0 text-subtle" /><span className="truncate">{supersededOrderText(card)}</span></p></motion.div>;
