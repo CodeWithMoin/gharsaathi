@@ -10,13 +10,13 @@ from app.legal_consent import ConsentedUserIdDependency
 from app.shopping.approval import ApprovalRequest
 from app.shopping.basket import (
     MAX_QUANTITY,
-    format_rupees,
     item_total_paise,
     line_savings_paise,
     line_total_paise,
     quote_item_total_matches,
     savings_vs_mrp_paise,
 )
+from app.shopping.money import format_rupees
 from app.shopping.errors import (
     ApprovalRefused,
     InvalidBasketChange,

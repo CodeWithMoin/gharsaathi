@@ -1,6 +1,7 @@
 import pytest
 
-from app.shopping.basket import format_rupees, item_total_paise, savings_vs_mrp_paise
+from app.shopping.basket import item_total_paise, savings_vs_mrp_paise
+from app.shopping.money import format_rupees
 from app.shopping.errors import InvalidBasketChange, NotFound
 from app.shopping.models import ApprovalStatus, BasketStatus, ProductRef
 from tests.shopping_fakes import HOUSEHOLD, PROVIDER, World, line

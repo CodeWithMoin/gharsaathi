@@ -56,8 +56,7 @@ CHANNEL_CONTEXT = {
     "typed": (
         "\n## Channel: typed\n"
         "This turn was typed and your reply is shown as text, not spoken. Only the "
-        "speech-formatting rules change: write prices as the tool returned them, for "
-        "example \"₹172\", instead of in words, and when you list several items or "
+        "speech-formatting rules change: when you list several items or "
         "options you may use short bullet lines such as \"- AXE Dark Temptation 150 ml, "
         "₹172, Zepto\". Every other rule stays the same, including the reply language, "
         "address form, tool use and keeping replies short.\n"

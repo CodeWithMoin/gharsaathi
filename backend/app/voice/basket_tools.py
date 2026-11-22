@@ -16,7 +16,8 @@ from pydantic import BaseModel, Field, ValidationError
 from app.commerce.provider_state import SavedAddressSummary
 from app.commerce.swiggy.models import Product
 from app.shopping.approval import ApprovalService, latest_open_approval
-from app.shopping.basket import BasketService, format_rupees, item_total_paise
+from app.shopping.basket import BasketService, item_total_paise
+from app.shopping.money import format_rupees, money_fields
 from app.shopping.errors import ShoppingError
 from app.shopping.models import (
     Basket,
@@ -175,16 +176,16 @@ def basket_for_model(
                 "name": line.name,
                 "pack_size": line.pack_size,
                 "quantity": line.quantity,
-                "line_total": format_rupees(line.unit_price_paise * line.quantity),
+                **money_fields("line_total", line.unit_price_paise * line.quantity),
                 "available": line.available,
             }
             for line in basket.lines
         ],
-        "item_total": format_rupees(item_total_paise(basket)),
+        **money_fields("item_total", item_total_paise(basket)),
     }
 
 
-BASKET_NOTE = "Item totals only. Fees and the final payable amount require an approval quote. Nothing was ordered."
+BASKET_NOTE = "Item totals only; quote amount strings exactly. Fees and the final payable amount require an approval quote. Nothing was ordered."
 OFFERS_NOTE = (
     "bill_offers are the only offers the store confirmed for this exact bill; discounts are "
     "already in charges. There is no tool to enter a promo or coupon code. Never invent "
@@ -211,18 +212,18 @@ def offers_for_model(quote: Quote) -> list[dict[str, Any]]:
             "status": _offer_status(offer),
         }
         if offer.potential_saving_paise:
-            entry["possible_saving"] = format_rupees(offer.potential_saving_paise)
+            entry.update(money_fields("possible_saving", offer.potential_saving_paise))
         if not offer.unlocked and offer.remaining_paise:
-            entry["add_more_to_unlock"] = format_rupees(offer.remaining_paise)
+            entry.update(money_fields("add_more_to_unlock", offer.remaining_paise))
         offers.append(entry)
     return offers
 
 
 def bill_for_model(quote: Quote) -> dict[str, Any]:
     return {
-        "payable": format_rupees(quote.payable_paise),
+        **money_fields("payable", quote.payable_paise),
         "charges": [
-            {"label": charge.label, "amount": format_rupees(charge.amount_paise)}
+            {"label": charge.label, **money_fields("amount", charge.amount_paise)}
             for charge in quote.charges
         ],
         "bill_offers": offers_for_model(quote),
@@ -350,7 +351,7 @@ class BasketToolExecutor:
         return {
             "current_bill": {
                 **bill_for_model(approval.quote),
-                "item_total": format_rupees(approval.quote.item_total_paise),
+                **money_fields("item_total", approval.quote.item_total_paise),
                 "approval_status": "expired" if expired else approval.status.value,
                 "expires_at": expires_at.isoformat(),
             }

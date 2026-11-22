@@ -436,7 +436,7 @@ def check_turn(
                 "name": option.get("name"),
                 "pack_size": option.get("pack_size"),
                 "store_id": option.get("store_id"),
-                "price_rupees": option.get("price_rupees"),
+                "price": option.get("price"),
             }
         )
         if "add_store" in expect and option.get("store_id") != expect["add_store"]:
