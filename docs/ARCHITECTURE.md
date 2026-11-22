@@ -134,6 +134,37 @@ Largest backend sections: examples 1,327 · household memory 325 · basket 267 �
 task 256 · decisive selection 227 · return the result 214. Largest live sections:
 examples 589 · decisive replies 499 · delegation 336 · language 312.
 
+## Chat context at session start
+
+Each voice session (and, via the same builder, each typed chat turn) starts with
+the verified user's own saved chats, read server-side by
+`ConversationContextLoader.load(user_id)` in `backend/app/conversations/context.py`.
+Nothing is taken from the browser.
+
+| Part | Source | Cap (o200k) |
+|---|---|---|
+| Current chat summary | `conversations.summary`, written in the background | 110 |
+| Last 6 turns, verbatim | saved messages | 170 |
+| On screen: results per item, each store's basket, pending bill | saved `result_groups` + basket/approval tables | 100 |
+| Previous chats (≤3, last 30 days): summary or first request, items searched, furthest basket step per store | archived conversations | 150 |
+
+The whole block is ≤ ~600 tokens (measured in `tests/unit/test_conversation_context.py`).
+GPT-Live gets the turns as `session.input` startup history
+([docs](https://developers.openai.com/api/docs/guides/live-conversations#seed-a-session-with-prior-conversation))
+and the rest in its instructions. The backend model gets the whole block in its
+instructions. All of it is quoted as untrusted data. Prices, baskets, bills and
+orders come only from saved state. "Order confirmed" appears only when a chat's
+saved timeline reached the `ordered` stage.
+
+Rolling summaries (`backend/app/conversations/summarizer.py`) run off the request
+path. They start after a save once 6 new turns have built up, and when a chat is
+archived (New chat or opening another chat). The model is set by
+`CONVERSATION_SUMMARY_MODEL` (default `gpt-6-luna`), with strict JSON output and a
+200-token output cap. A summary records only what the user wanted, preferences
+they stated, and open items; prices are stripped. Chats without messages are
+never summarised. When there is no summary yet, the deterministic description is
+used.
+
 ## Typed chat (today)
 
 Typed text does **not** go through either model: `frontend/app/page.tsx` sends it

@@ -49,6 +49,11 @@ def test_rendered_summary_is_sanitised_price_free_and_bounded() -> None:
     assert "Said: Aashirvaad atta 1 kg; dikha do, batana mat" in text
     assert text.count("; x") == 4  # at most six preferences
     assert "Open: dahi brand?." in text
+
+
+def test_rendered_summary_has_no_doubled_punctuation() -> None:
+    text = render_summary(SummaryOutput(wanted="Atta aur dahi.", preferences=["Aashirvaad 1 kg;"], open_items=["Dahi brand baaki."]))
+    assert text == "Wanted: Atta aur dahi. Said: Aashirvaad 1 kg. Open: Dahi brand baaki."
     assert len(text.split()) <= 81
 
 

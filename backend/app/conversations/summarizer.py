@@ -57,15 +57,19 @@ class SummaryOutput(BaseModel):
     open_items: list[str]
 
 
+def _clean(value: str, limit: int) -> str:
+    return sanitize_context_text(value, limit).rstrip(" .;,")
+
+
 def render_summary(output: SummaryOutput) -> str:
     parts = []
-    wanted = sanitize_context_text(output.wanted, 300)
+    wanted = _clean(output.wanted, 300)
     if wanted:
         parts.append(f"Wanted: {wanted}.")
-    preferences = [text for text in (sanitize_context_text(item, 120) for item in output.preferences[:6]) if text]
+    preferences = [text for text in (_clean(item, 120) for item in output.preferences[:6]) if text]
     if preferences:
         parts.append(f"Said: {'; '.join(preferences)}.")
-    open_items = [text for text in (sanitize_context_text(item, 120) for item in output.open_items[:4]) if text]
+    open_items = [text for text in (_clean(item, 120) for item in output.open_items[:4]) if text]
     if open_items:
         parts.append(f"Open: {'; '.join(open_items)}.")
     return sanitize_summary(" ".join(parts))
