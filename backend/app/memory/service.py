@@ -78,6 +78,12 @@ class MemoryService:
         self._require_status(memory, MemoryStatus.PROPOSED)
         memory.status = MemoryStatus.CONFIRMED
         memory.confirmed_at = datetime.now(UTC)
+        # A proposed replacement supersedes the memory it corrects once confirmed.
+        if memory.supersedes_memory_id is not None:
+            previous = await self.repository.get_memory(memory.supersedes_memory_id, actor.id)
+            if previous is not None and previous.status == MemoryStatus.CONFIRMED:
+                previous.status = MemoryStatus.SUPERSEDED
+                self.repository.add_event(previous, MemoryEventType.SUPERSEDED, actor.id)
         self.repository.add_event(memory, MemoryEventType.CONFIRMED, actor.id)
         await self.session.commit()
         await self.session.refresh(memory)

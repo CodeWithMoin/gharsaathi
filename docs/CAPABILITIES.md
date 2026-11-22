@@ -56,7 +56,7 @@ Prompt wording, typed-chat and UI statuses are verified by review, not by the te
 | Free-delivery / offer threshold suggestions (`offers`) | **🟡 partial** Read-only: request_approval and view_basket report the store-confirmed offers on the current bill; no promo-code entry and no threshold suggestions by voice. | **🟡 partial** Same as voice: store-confirmed offers on the bill only, read-only. | **🟡 partial** Zepto basket only (BasketPanel), using consented usual items. | **🟡 partial** Zepto only. | `request_approval`, `view_basket` |
 | Suggest the household's usual items from purchase history (`usual_items`) | **🟡 partial** On request only: recall_household_preferences and search_products results marked 'remembered' use consented past purchases of the item the user asked for; a short consented summary is in the session context. No proactive suggestions by voice. | **🟡 partial** Same as voice: recall tool, remembered annotations and consented summary; read-only. | **🟡 partial** Listed inside Zepto offer suggestions; dismiss/review routes have no frontend caller. | **✅ works** | `recall_household_preferences` |
 | Import purchase history and personalise search (consented) (`purchase_history_personalization`) | **❌ missing** Permissions and import are on-screen only. | **❌ missing** No assistant tool (same as voice); typed chat can only answer in text. | **✅ works** PersonalizationOnboarding in the setup sheet. | **✅ works** | — |
-| Remember explicit household preferences (brand, size, corrections) (`preference_memory`) | **🟡 partial** Recall only: recall_household_preferences and 'remembered' search annotations read confirmed preferences. Saving or correcting a preference by voice is not supported. | **🟡 partial** Same as voice: recall tool, remembered annotations and consented summary; read-only. | **❌ missing** No frontend file calls these memory routes. | **✅ works** Extract/propose, confirm/correct/reject, retrieve, delete. | `recall_household_preferences` |
+| Remember, update and forget household preferences and rules (brand, size, store, avoid) (`preference_memory`) | **🚧 in progress** Tier 1: a habit stated in passing ('hum hamesha Amul lete hain') is saved at once with an acknowledgement and undo; 'yaad rakhna' reads back, saves on a clear yes. remember_preference / update_preference / forget_preference (forget-all needs a confirm token) / list_preferences / confirm_memory. Tier 2: repeated choices become a pending proposal offered at most once per session. Active avoid/prefer memories filter or annotate search_products results in code. Branch: `codex/memory-write-manage`. | **✅ works** Same tools and rules through /api/chat/turn, which shares the voice toolbox. | **✅ works** Settings 'Yaad rakhi baatein': grouped list, inline edit (correct), delete, undo for 'abhi seekha', pending suggestions confirm/reject, forget-all, permission toggle. | **✅ works** Structured kinds, sensitive-data policy in code, consent switch, supersede on update, undo, forget-all with a confirm token, repeated-choice proposals. | `recall_household_preferences`, `remember_preference`, `update_preference`, `forget_preference`, `list_preferences`, `confirm_memory` |
 | See past orders (`order_history`) | **❌ missing** No voice tool. | **❌ missing** No assistant tool (same as voice); typed chat can only answer in text. | **❌ missing** No frontend caller. | **🟡 partial** Zepto only. app/api/swiggy_orders.py exists but is not mounted in app.main, so /api/swiggy/orders does not exist. | — |
 | Track a delivery (`order_tracking`) | **❌ missing** No voice tool. | **❌ missing** No assistant tool (same as voice); typed chat can only answer in text. | **✅ works** LiveOrderTracking panel (also reachable from support). | **✅ works** Read-only provider status polling. | — |
 | Prepare a support complaint with evidence (`support_complaint`) | **❌ missing** Support agent tools exist (app/support/agent_tools.py, /api/support/agent/*) but are not wired into the voice session. | **❌ missing** No assistant tool (same as voice); typed chat can only answer in text. | **✅ works** SupportPanel: create, attach evidence, prepare, approve. | **✅ works** | — |
@@ -83,7 +83,7 @@ Prompt wording, typed-chat and UI statuses are verified by review, not by the te
 - `offers`: `POST /api/zepto/offer-suggestions`
 - `usual_items`: `GET /api/memory/usual-suggestions`, `POST /api/memory/usual-suggestions/{product_id}/dismiss`, `POST /api/memory/usual-suggestions/{product_id}/review`
 - `purchase_history_personalization`: `GET /api/memory/permissions`, `PUT /api/memory/permissions/{data_category}/{purpose}`, `POST /api/memory/purchase-history/sync`, `DELETE /api/memory/purchase-history`
-- `preference_memory`: `GET /api/memory`, `POST /api/memory/extract`, `POST /api/memory/proposals`, `POST /api/memory/retrieve`, `POST /api/memory/{memory_id}/confirm`, `POST /api/memory/{memory_id}/correct`, `POST /api/memory/{memory_id}/reject`, `DELETE /api/memory/{memory_id}`
+- `preference_memory`: `GET /api/memory`, `POST /api/memory/extract`, `POST /api/memory/proposals`, `POST /api/memory/retrieve`, `POST /api/memory/forget-all/token`, `POST /api/memory/forget-all`, `POST /api/memory/{memory_id}/confirm`, `POST /api/memory/{memory_id}/correct`, `POST /api/memory/{memory_id}/undo`, `POST /api/memory/{memory_id}/reject`, `DELETE /api/memory/{memory_id}`
 - `order_history`: `GET /api/zepto/orders`, `GET /api/zepto/orders/{order_id}`
 - `order_tracking`: `POST /api/tracking/monitors`, `GET /api/tracking/monitors`, `GET /api/tracking/monitors/{monitor_id}`, `POST /api/tracking/monitors/{monitor_id}/refresh`, `DELETE /api/tracking/monitors/{monitor_id}`
 - `support_complaint`: `POST /api/support/complaints`, `GET /api/support/complaints/{complaint_id}`, `POST /api/support/complaints/{complaint_id}/evidence`, `POST /api/support/complaints/{complaint_id}/prepare`, `POST /api/support/complaints/{complaint_id}/approve`, `GET /api/support/agent/tools`, `POST /api/support/agent/execute`
@@ -105,11 +105,39 @@ Prompt wording, typed-chat and UI statuses are verified by review, not by the te
 
 ### API contracts
 
+- `GET /api/memory`
+  - Auth: Clerk bearer token; only the verified person's memories. Query: status=proposed|confirmed|superseded|rejected (optional), include_deleted=false.
+  - Response 200: MemoryResponse[] newest first. Settings shows status confirmed (active) and proposed (pending suggestions).
+  - MemoryResponse adds derived read-only fields: origin (explicit|stated|inferred), learned_at (ISO; confirmed_at or created_at), kind (prefer_brand|prefer_pack_size|prefer_store|avoid_store|avoid_product|avoid_brand|rule|null), group (pasand|kabhi_nahi|niyam|null), item, display_value, user_words.
+  - `{"id": "uuid", "memory_type": "brand_preference", "value": {"kind": "prefer_brand", "product_category": "milk", "brand": "Amul Taaza", "origin": "stated", "user_words": "hum hamesha Amul Taaza lete hain"}, "text": "milk: hamesha Amul Taaza", "source_type": "explicit_statement", "status": "confirmed", "origin": "stated", "learned_at": "2026-11-22T10:00:00Z", "supersedes_memory_id": null, "...": "other fields"}`
+  - origin stated = learned in passing without a read-back (undo-able for 24 h); inferred = a repeated-choice suggestion (status proposed until confirmed); explicit = everything else.
+  - Store values are store ids (swiggy_instamart|zepto); rule values are prefer_cheapest, prefer_fastest_delivery, prefer_larger_packs, prefer_smaller_packs, ask_before_substitute.
+- `POST /api/memory/{memory_id}/confirm`
+  - Auth: Clerk bearer token. Pending (proposed) -> confirmed. If the proposal has supersedes_memory_id, that confirmed memory becomes superseded.
+  - Response 200: MemoryResponse. 404 not this person's; 409 not proposed.
+- `POST /api/memory/{memory_id}/reject`
+  - Auth: Clerk bearer token. Request: {"reason": null | "text <= 500"}. Pending -> rejected; a rejected suggestion is never re-proposed from repeated choices.
+  - Response 200: MemoryResponse. 409 not proposed.
+- `POST /api/memory/{memory_id}/correct`
+  - Auth: Clerk bearer token. Settings inline edit. Request: MemoryProposal fields + reason, normally source_type correction with the full edited value object.
+  - Creates the replacement (confirmed; supersedes_memory_id = old id; value.origin stated becomes explicit); the old one becomes superseded and is kept for audit.
+  - Response 201: MemoryResponse. 409 the memory is not confirmed; 422 the text or a value falls under the sensitive-data policy.
+- `POST /api/memory/{memory_id}/undo`
+  - Auth: Clerk bearer token. Reverts a memory learned in passing (origin stated, status confirmed, learned_at within 24 h): it is deleted, and the memory it superseded, if any, is restored to confirmed.
+  - Response 200: the restored MemoryResponse, or null. 404 memory not found for this person; 409 outside the undo window or not undo-able.
+- `DELETE /api/memory/{memory_id}`
+  - Auth: Clerk bearer token. Forget one memory (status deleted; excluded from every list and from search). Response 204; idempotent.
+- `POST /api/memory/forget-all/token`
+  - Auth: Clerk bearer token. Step 1 of 'Sab bhool jao': issues a 5-minute, single-use token bound to this person. Nothing is deleted.
+  - `{"confirm_token": "1764000000.abc...", "count": 4, "expires_at": "2026-11-22T10:05:00Z"}`
+- `POST /api/memory/forget-all`
+  - Auth: Clerk bearer token. Step 2, after the user confirms. Request: {"confirm_token": "..."}. Deletes every memory and pending suggestion of this person; permissions are kept. Purchase history has its own DELETE /api/memory/purchase-history.
+  - Response 204. 400 invalid, expired, already used, or another person's token.
 - `POST /api/chat/turn`
   - Auth: Clerk bearer token and accepted current terms (403 legal_consent_required otherwise).
   - Request: {"conversation_id": "<uuid>" | null, "message": "AXE Dark sabse chhota add karo", "swiggy_address_id": "<id>" | null, "zepto_address_id": "<id>" | null}
   - conversation_id null means the current conversation; another user's id is 404. message: 1-2000 characters; unknown keys are 422.
-  - Response 200: {"conversation_id": "<uuid>" | null, "reply": "Roman-script Hinglish text", "ui_events": [{"type": "tool.results" | "basket.updated" | "basket.approval_requested" | "address_form.open" | "address_form.unavailable" | "tool.not_connected" | "tool.error", ...}]}
+  - Response 200: {"conversation_id": "<uuid>" | null, "reply": "Roman-script Hinglish text", "ui_events": [{"type": "tool.results" | "basket.updated" | "basket.approval_requested" | "address_form.open" | "address_form.unavailable" | "tool.not_connected" | "tool.error" | "memory.changed", ...}]}
   - ui_events use the voice sideband shapes. Caps per turn: 6 tool rounds, 2 searches. Errors: 503 no OpenAI key, 502 model failure, 504 turn timeout (CHAT_TURN_TIMEOUT_SECONDS).
 - `GET /api/profile`
   - Auth: Clerk bearer token; the record belongs to the verified user only.
