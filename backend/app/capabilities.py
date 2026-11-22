@@ -766,6 +766,11 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "eta_minutes",
         "last_updated_minutes_ago",
         "no_order",
+        # Store-reported order times (codex/tracking-times).
+        "eta_passed",
+        "eta_time_india",
+        "delivered_time_india",
+        "took_minutes",
         # Unknown-outcome reconciliation status (codex/order-confirm-reconcile).
         "not_confirmed",
         "cancel_supported",

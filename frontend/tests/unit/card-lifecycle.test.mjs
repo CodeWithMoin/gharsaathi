@@ -180,7 +180,8 @@ test("a delivered or store-cancelled order collapses to one line, and the line s
 
   const delivered = applyTrackingRead(placed, read("delivered")).card;
   const line = finishedOrderSummary(delivered);
-  assert.match(line, /^Delivered ✓ · Amul Sweet Lassi · ₹55 · \d{1,2}:\d{2}/);
+  // Items and total move to the expanded card; the line is the delivered time.
+  assert.match(line, /^Delivered ✓ · \d{1,2}:\d{2}/);
   let timeline = recordOrderCard(emptyTimeline(), delivered);
   const restored = restoreTimeline(JSON.parse(JSON.stringify(timelineSnapshot(timeline))));
   assert.equal(finishedOrderSummary(restored.orders[0]), line);

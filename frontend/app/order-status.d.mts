@@ -17,6 +17,9 @@ export type OrderStatusCard = {
   lastNotificationId: string | null;
   itemNames: string[];
   finishedAt: string | null;
+  placedAt: string | null;
+  tookMinutes: number | null;
+  estimateMinutes: number | null;
 };
 
 export type OrderStep = { id: string; label: string; state: "done" | "current" | "todo" | "cancelled" };
@@ -38,6 +41,9 @@ export type OrderCardSnapshot = {
   last_notification_id: string | null;
   item_names: string[];
   finished_at: string | null;
+  placed_at: string | null;
+  took_minutes: number | null;
+  estimate_minutes: number | null;
 };
 
 export const ORDER_STEPS: readonly ["confirmed", "preparing", "out_for_delivery", "delivered"];
@@ -53,6 +59,8 @@ export function finishedOrderSummary(card: OrderStatusCard): string | null;
 export function applyTrackingRead(card: OrderStatusCard, raw: unknown): { card: OrderStatusCard; changed: boolean; toast: string | null };
 export function pollDelayMs(raw: unknown, nowMs: number): number | null;
 export function etaText(card: Pick<OrderStatusCard, "etaAt" | "status" | "store">, nowMs: number): string | null;
+export function placedText(card: Pick<OrderStatusCard, "placedAt">): string | null;
+export function deliveredText(card: Pick<OrderStatusCard, "status" | "finishedAt" | "tookMinutes" | "estimateMinutes">): string | null;
 export function updatedText(checkedAt: string | null, nowMs: number): string | null;
 export function orderCardSnapshot(card: OrderStatusCard): OrderCardSnapshot;
 export function restoreOrderCard(raw: unknown): OrderStatusCard | null;

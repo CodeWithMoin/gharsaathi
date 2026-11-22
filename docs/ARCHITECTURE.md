@@ -203,8 +203,9 @@ out of date — get a fresh bill". The next card replaces the old one at the new
 point in the chat, keyed by basket id, revision and confirmation id. A card whose
 order may exist (placing, unknown, payment in progress) is never collapsed. A
 delivered or store-cancelled order's status card collapses to one line
-("Delivered ✓ · Amul Sweet Lassi · ₹55 · 8:41 am" / "Cancelled by Zepto · …");
-tapping it shows the details. Reloading keeps the line.
+("Delivered ✓ · 8:26 am · took 9 min (estimate 8 min)", from Zepto's delivered time /
+"Cancelled by Zepto · Amul Sweet Lassi · ₹55 · 8:41 am"); tapping it shows the
+details, including items and total. Reloading keeps the line.
 
 ## After the tap: order status
 
@@ -240,9 +241,14 @@ sequenceDiagram
   shipment's status maps to placed / packed / out for delivery / delivered / cancelled
   by exact status words only (anything else is shown as Zepto's own text, never
   guessed). The ETA is Zepto's committed ETA (placed time + `committedEtaInMins`).
+  The snapshot also keeps Zepto's `placed_at`, `arrived_at`, `delivered_at` (delivered
+  shipments only), `committed_eta_minutes`, `total_arrival_minutes` and a derived
+  `took_minutes`; all optional (older watch files load unchanged, a missing or zone-less
+  time stays empty), and a delivered monitor's `status_at` is Zepto's delivery time.
   It polls every 90 s (no provider hint) and never repurposes `list_order_history`.
-- **Status card.** `order-status-card.tsx` shows the steps, the latest Zepto ETA, when
-  it was last updated, **Track order** (LiveOrderTracking in an `InputDialog`) and
+- **Status card.** `order-status-card.tsx` shows the steps, "Arriving by 8:26 am · about
+  4 min" (or "Running late — Zepto estimated 8:26 am"), the placed time, when it was
+  last updated, **Track order** (LiveOrderTracking in an `InputDialog`) and
   "Open the Zepto app" as text (no documented deep link). It is a timeline item
   (`timeline.orders`, saved with the conversation), so reload keeps it and later
   messages appear below it. It polls only while the tab is visible and stops when
