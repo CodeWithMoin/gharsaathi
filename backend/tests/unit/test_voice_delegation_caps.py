@@ -76,7 +76,7 @@ async def run(events: list[dict[str, Any]]) -> tuple[FakeConnection, RecordingEx
 
 
 def test_caps_are_small() -> None:
-    assert (MAX_CONTINUATION_ROUNDS, MAX_SEARCHES_PER_DELEGATION) == (6, 2)
+    assert (MAX_CONTINUATION_ROUNDS, MAX_SEARCHES_PER_DELEGATION) == (6, 4)
 
 
 @pytest.mark.asyncio

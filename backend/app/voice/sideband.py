@@ -33,7 +33,7 @@ _EVENT_TIMING_FIELDS = ("start_ms", "end_ms", "offset_ms")
 # Per delegation: tool-continuation rounds and product searches the backend
 # model may use before it must answer with what it already has.
 MAX_CONTINUATION_ROUNDS = 6
-MAX_SEARCHES_PER_DELEGATION = 2
+MAX_SEARCHES_PER_DELEGATION = 4
 SEARCH_TOOL = "search_products"
 SEARCH_LIMIT_OUTPUT = {
     "status": "limit_reached",

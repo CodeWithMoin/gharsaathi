@@ -78,7 +78,7 @@ flowchart TD
 
   ADD --> RES
   ADD2 --> RES
-  RES["Tool results → backend model → short reply"] --> D5{"D5 · Another tool?<br/>(loop; cap 6 rounds, 2 searches<br/>⟨in progress⟩)"}
+  RES["Tool results → backend model → short reply"] --> D5{"D5 · Another tool?<br/>(loop; cap 6 rounds, 4 searches)"}
   D5 -- "yes" --> SEARCH
   D5 -- "no" --> SPEAK
 
@@ -97,7 +97,7 @@ flowchart TD
 | D2 | Is the request clear? Ask for more context? | Backend model (instructions) | No — rules: at most one question, never re-ask what was said |
 | D3 | Check memory first | Backend model calls `recall_household_preferences` | **Today: no** (model may skip it — the Diet Coke miss). **In progress:** memory summary at session start + memory-annotated search results, so remembered items are always in front of the model |
 | D4 | Add vs ask which variant/store | Backend model (instructions + few-shot examples) | Partly — store ambiguity on bills returns `needs_store` from code |
-| D5 | Call another tool or answer | Backend model | **In progress:** hard cap of 6 rounds / 2 searches per turn |
+| D5 | Call another tool or answer | Backend model | Hard cap: 6 rounds / 4 searches per turn (code, `sideband.py`) |
 
 ### Deterministic checks (code, every call)
 
