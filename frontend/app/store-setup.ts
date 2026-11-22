@@ -117,7 +117,7 @@ export function useStoreSetup(enabled: boolean) {
       });
       patch(provider, { selecting: false });
     } catch (cause) {
-      patch(provider, { selecting: false, selectedAddressId: previous, addressError: cause instanceof Error ? cause.message : "Address save nahi hua. Phir try kijiye." });
+      patch(provider, { selecting: false, selectedAddressId: previous, addressError: cause instanceof Error ? cause.message : "Could not save this address. Please try again." });
     }
   }, [patch, request]);
 
@@ -127,12 +127,12 @@ export function useStoreSetup(enabled: boolean) {
     try {
       const readiness = await request<{ ready: boolean; message: string }>(`/api/${provider}/oauth/readiness`);
       if (!readiness.ready) {
-        patch(provider, { connecting: false, connectError: readiness.message || `${storeName(provider)} login abhi ready nahi hai.` });
+        patch(provider, { connecting: false, connectError: readiness.message || `${storeName(provider)} sign-in is not ready yet.` });
         return;
       }
       window.location.assign(`${API_BASE_URL}/api/${provider}/oauth/start`);
     } catch (cause) {
-      patch(provider, { connecting: false, connectError: cause instanceof Error ? cause.message : `${storeName(provider)} login ready nahi ho paaya.` });
+      patch(provider, { connecting: false, connectError: cause instanceof Error ? cause.message : `Could not prepare ${storeName(provider)} sign-in.` });
     }
   }, [patch, request]);
 

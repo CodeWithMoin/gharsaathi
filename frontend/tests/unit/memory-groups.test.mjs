@@ -48,28 +48,28 @@ test("groups preferences, avoidances and rules", () => {
   assert.equal(groupFor({ memory_type: "something_new" }), "niyam");
 });
 
-test("writes readable Hinglish sentences", () => {
-  assert.equal(memorySentence(memory()), "Doodh: hamesha Amul Taaza");
-  assert.equal(memorySentence(memory({ value: { brand: "Fortune", product_category: "cooking oil", pack_size: "1 litre" } })), "Tel: hamesha Fortune, 1 litre");
-  assert.equal(memorySentence(memory({ value: { brand: "Aavin", alternative_brand: "Nandini", product_category: "milk" } })), "Doodh: hamesha Aavin ya Nandini");
-  assert.equal(memorySentence(memory({ memory_type: "pack_size_preference", value: { pack_size: "5 kg", product_category: "atta" } })), "Atta: hamesha 5 kg");
-  assert.equal(memorySentence(memory({ memory_type: "quantity_preference", value: { quantity: 2, unit: "packet", product_category: "bread" } })), "Bread: aam taur par 2 packet");
-  assert.equal(memorySentence(memory({ memory_type: "product_avoidance", value: { product: "Maggi" } })), "Maggi: kabhi nahi lena");
-  assert.equal(memorySentence(memory({ memory_type: "product_avoidance", value: { brand: "Mother Dairy", product_category: "milk" } })), "Doodh: Mother Dairy kabhi nahi");
-  assert.equal(memorySentence(memory({ memory_type: "store_preference", value: { store: "zepto", product_category: "milk" } })), "Doodh: hamesha Zepto se");
-  assert.equal(memorySentence(memory({ memory_type: "store_avoidance", value: { store: "swiggy" } })), "Swiggy Instamart: kabhi nahi");
-  assert.equal(memorySentence(memory({ memory_type: "dietary_preference", value: { preference: "sirf veg" } })), "Khaana: sirf veg");
+test("writes readable English sentences", () => {
+  assert.equal(memorySentence(memory()), "Milk: always Amul Taaza");
+  assert.equal(memorySentence(memory({ value: { brand: "Fortune", product_category: "cooking oil", pack_size: "1 litre" } })), "Cooking oil: always Fortune, 1 litre");
+  assert.equal(memorySentence(memory({ value: { brand: "Aavin", alternative_brand: "Nandini", product_category: "milk" } })), "Milk: always Aavin or Nandini");
+  assert.equal(memorySentence(memory({ memory_type: "pack_size_preference", value: { pack_size: "5 kg", product_category: "atta" } })), "Atta: always 5 kg");
+  assert.equal(memorySentence(memory({ memory_type: "quantity_preference", value: { quantity: 2, unit: "packet", product_category: "bread" } })), "Bread: usually 2 packet");
+  assert.equal(memorySentence(memory({ memory_type: "product_avoidance", value: { product: "Maggi" } })), "Maggi: never buy");
+  assert.equal(memorySentence(memory({ memory_type: "product_avoidance", value: { brand: "Mother Dairy", product_category: "milk" } })), "Milk: never Mother Dairy");
+  assert.equal(memorySentence(memory({ memory_type: "store_preference", value: { store: "zepto", product_category: "milk" } })), "Milk: always from Zepto");
+  assert.equal(memorySentence(memory({ memory_type: "store_avoidance", value: { store: "swiggy" } })), "Swiggy Instamart: never");
+  assert.equal(memorySentence(memory({ memory_type: "dietary_preference", value: { preference: "veg only" } })), "Diet: veg only");
   assert.equal(memorySentence(memory({ memory_type: "household_rule", value: {}, text: "deliveries after 7pm only" })), "Deliveries after 7pm only");
 });
 
-test("origin badges, defaulting a missing origin to 'aapne bataya'", () => {
+test("origin badges, defaulting a missing origin to 'You told us'", () => {
   assert.equal(originOf(memory()), "explicit");
-  assert.equal(badgeFor(memory(), NOW), "aapne bataya");
-  assert.equal(badgeFor(memory({ origin: "explicit" }), NOW), "aapne bataya");
-  assert.equal(badgeFor(memory({ origin: "inferred" }), NOW), "suggestion");
-  assert.equal(badgeFor(memory({ origin: "stated", learned_at: hoursAgo(2) }), NOW), "abhi seekha");
-  assert.equal(badgeFor(memory({ origin: "stated", learned_at: hoursAgo(30) }), NOW), "aapne bataya");
-  assert.equal(badgeFor(memory({ origin: "bogus" }), NOW), "aapne bataya");
+  assert.equal(badgeFor(memory(), NOW), "You told us");
+  assert.equal(badgeFor(memory({ origin: "explicit" }), NOW), "You told us");
+  assert.equal(badgeFor(memory({ origin: "inferred" }), NOW), "Suggested");
+  assert.equal(badgeFor(memory({ origin: "stated", learned_at: hoursAgo(2) }), NOW), "Just learned");
+  assert.equal(badgeFor(memory({ origin: "stated", learned_at: hoursAgo(30) }), NOW), "You told us");
+  assert.equal(badgeFor(memory({ origin: "bogus" }), NOW), "You told us");
 });
 
 test("undo only for confirmed stated memories inside 24 hours", () => {
@@ -114,7 +114,7 @@ test("editable fields and correction payloads", () => {
 
   const payload = correctionPayload(original, { brand: "Amul Gold" });
   assert.deepEqual(payload.value, { brand: "Amul Gold", product_category: "milk" });
-  assert.equal(payload.text, "Doodh: hamesha Amul Gold");
+  assert.equal(payload.text, "Milk: always Amul Gold");
   assert.equal(payload.source_type, "correction");
   assert.equal(payload.memory_type, "brand_preference");
   assert.deepEqual(payload.allowed_purposes, ["personalize_search"]);
@@ -124,7 +124,7 @@ test("editable fields and correction payloads", () => {
   assert.deepEqual(dropped.value, { brand: "Amul Taaza" });
 
   const freeText = memory({ memory_type: "household_rule", value: {}, text: "Deliveries after 7pm" });
-  assert.deepEqual(editableFields(freeText), [{ key: "text", label: "Yaad", value: "Deliveries after 7pm" }]);
+  assert.deepEqual(editableFields(freeText), [{ key: "text", label: "Note", value: "Deliveries after 7pm" }]);
   assert.equal(correctionPayload(freeText, { text: "Deliveries after 8pm" }).text, "Deliveries after 8pm");
   assert.equal(correctionPayload(freeText, { text: "x" }), null);
 });

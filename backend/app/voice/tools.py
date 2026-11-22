@@ -22,6 +22,12 @@ from app.commerce.zepto.errors import (
     ZeptoRateLimited,
 )
 from app.memory.recall import HouseholdMemory, HouseholdMemoryReader
+from app.memory.household_rules import (
+    avoided_store_rule,
+    product_decision,
+    rules_from_memory,
+    store_rule_label,
+)
 from app.memory.remembered import remembered_for
 from app.shopping.models import ProviderName, rupees_to_paise
 
@@ -34,6 +40,13 @@ REMEMBERED_NOTE = (
     " A 'remembered' option matches this household's own past purchase or confirmed "
     "preference (same name and pack size; bought_on names another store). It is a past "
     "choice, not current need or stock."
+)
+
+HOUSEHOLD_RULES_NOTE = (
+    " This household's own saved rules were applied: skipped_stores were not searched, "
+    "hidden_by_household_rules options were left out, 'avoided' marks an option the "
+    "user asked for despite a rule, and 'preferred' marks a saved preference. Mention a "
+    "skipped store or avoided option once, briefly."
 )
 
 SEARCH_PRODUCTS_TOOL: dict[str, Any] = {
@@ -323,11 +336,39 @@ class MultiProviderShoppingToolExecutor:
                 ui_event={"type": "tool.not_connected", "query": arguments.query, **item_fields(arguments.query)},
             )
 
-        memory_task = asyncio.create_task(self._household_memory())
+        # Household memory first: an active avoid_store rule skips that store's call.
+        memory = await self._household_memory()
+        rules = rules_from_memory(memory)
+        skipped: list[dict[str, str]] = []
+        allowed: list[ProviderSearchTarget] = []
+        for target in ready:
+            rule = avoided_store_rule(rules, target.provider, arguments.query)
+            if rule is None:
+                allowed.append(target)
+            else:
+                skipped.append({"store": target.store, "household_rule": store_rule_label(rule)})
+        if not allowed:
+            return ToolOutcome(
+                model_output={
+                    "status": "skipped_by_household_rule",
+                    "query": arguments.query,
+                    "skipped_stores": skipped,
+                    "message": (
+                        "Every ready store is excluded by this household's own saved rule, so "
+                        "nothing was searched. Say so in one line and offer to forget or "
+                        "change that rule (forget_preference / update_preference)."
+                    ),
+                },
+                ui_event={
+                    "type": "tool.error",
+                    "query": arguments.query,
+                    "message": "Skipped by your saved store rule.",
+                },
+            )
+        ready = allowed
         outcomes = await asyncio.gather(
             *(self._search_target(target, arguments.query) for target in ready)
         )
-        memory = await memory_task
         successful = [outcome for outcome in outcomes if outcome["status"] == "ok"]
         if not successful:
             statuses = {str(outcome["status"]) for outcome in outcomes}
@@ -356,12 +397,25 @@ class MultiProviderShoppingToolExecutor:
         stores: list[str] = []
         per_store_limit = max(1, MAX_RESULTS_FOR_MODEL // len(successful))
         remembered_count = 0
+        filtered_count = 0
         for outcome in successful:
             target = outcome["target"]
             assert isinstance(target, ProviderSearchTarget)
             products = outcome["products"]
             assert isinstance(products, list)
             stores.append(target.store)
+            decisions: dict[int, dict[str, Any]] = {}
+            if rules:
+                kept: list[Product] = []
+                for product in products:
+                    decision = product_decision(rules, product, target.provider, arguments.query)
+                    if decision is not None and decision.get("drop"):
+                        filtered_count += 1
+                        continue
+                    if decision is not None:
+                        decisions[id(product)] = decision
+                    kept.append(product)
+                products = kept
             for product in products[:per_store_limit]:
                 assert isinstance(product, Product)
                 entry = {
@@ -369,6 +423,7 @@ class MultiProviderShoppingToolExecutor:
                     "store_id": target.provider,
                     "add_supported": target.add_supported,
                     **_product_for_model(product),
+                    **decisions.get(id(product), {}),
                 }
                 if memory is not None:
                     remembered = remembered_for(product, target.provider, memory)
@@ -385,28 +440,45 @@ class MultiProviderShoppingToolExecutor:
                     **product.model_dump(),
                     "provider": target.provider,
                     "provider_label": target.store,
+                    **{
+                        key: value
+                        for key, value in decisions.get(id(product), {}).items()
+                        if key in {"preferred", "avoided"}
+                    },
                 }
                 for product in products[:per_store_limit]
             )
 
+        model_output: dict[str, Any] = {
+            "status": "ok",
+            "stores_checked": stores,
+            "query": arguments.query,
+            **item_fields(arguments.query),
+            "total_variants": len(ui_products),
+            "results": model_results,
+            "provider_statuses": [
+                {key: value for key, value in outcome.items() if key not in {"target", "products"}}
+                for outcome in outcomes
+            ],
+            "note": (
+                "Current item prices only; nothing was added. Only results with an "
+                "option_id can be added, to that store's own local basket."
+                + (REMEMBERED_NOTE if remembered_count else "")
+                + (
+                    HOUSEHOLD_RULES_NOTE
+                    if skipped
+                    or filtered_count
+                    or any("preferred" in entry or "avoided" in entry for entry in model_results)
+                    else ""
+                )
+            ),
+        }
+        if skipped:
+            model_output["skipped_stores"] = skipped
+        if filtered_count:
+            model_output["hidden_by_household_rules"] = filtered_count
         return ToolOutcome(
-            model_output={
-                "status": "ok",
-                "stores_checked": stores,
-                "query": arguments.query,
-                **item_fields(arguments.query),
-                "total_variants": len(ui_products),
-                "results": model_results,
-                "provider_statuses": [
-                    {key: value for key, value in outcome.items() if key not in {"target", "products"}}
-                    for outcome in outcomes
-                ],
-                "note": (
-                    "Current item prices only; nothing was added. Only results with an "
-                    "option_id can be added, to that store's own local basket."
-                    + (REMEMBERED_NOTE if remembered_count else "")
-                ),
-            },
+            model_output=model_output,
             ui_event={
                 "type": "tool.results",
                 "query": arguments.query,

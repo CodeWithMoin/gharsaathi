@@ -122,7 +122,7 @@ export function AccountSettingsSheet({
     : section === "preferences"
       ? "Preferences"
       : section === "memory"
-        ? "Yaad rakhi baatein"
+        ? "Saved preferences"
         : section === "privacy"
           ? "Privacy & memory"
           : section === "addresses"
@@ -160,7 +160,7 @@ export function AccountSettingsSheet({
                 <nav aria-label="Account settings" className="mt-4 overflow-hidden rounded-[22px] border border-[#ead9cd] bg-[#fffdf9]">
                   <SettingsRow icon={<Storefront size={21} weight="duotone" />} title="Stores" subtitle={connectedStoreCount ? `${connectedStoreCount} store${connectedStoreCount === 1 ? "" : "s"} connected` : "Connect a shopping store"} onClick={() => setSection("stores")} />
                   <SettingsRow icon={<Translate size={21} weight="duotone" />} title="Preferences" subtitle={languageLabel} onClick={() => setSection("preferences")} />
-                  <SettingsRow icon={<Brain size={21} weight="duotone" />} title="Yaad rakhi baatein" subtitle="Pasand, kabhi nahi, niyam" onClick={() => setSection("memory")} />
+                  <SettingsRow icon={<Brain size={21} weight="duotone" />} title="Saved preferences" subtitle="Preferences, never, rules" onClick={() => setSection("memory")} />
                   <SettingsRow icon={<ShieldCheck size={21} weight="duotone" />} title="Privacy & memory" subtitle={privacySummary} onClick={() => setSection("privacy")} />
                   <SettingsRow icon={<MapPin size={21} weight="duotone" />} title="Addresses" subtitle={addressSummary} onClick={() => setSection("addresses")} last />
                 </nav>
@@ -247,7 +247,7 @@ function AddressPreference() {
     let active = true;
     void request<VoiceProfile>("/api/profile")
       .then((loaded) => { if (active) { setProfile(loaded); setName(loaded.first_name ?? ""); } })
-      .catch(() => { if (active) { setProfile({ first_name: null, address_form: "neutral", language: "hinglish" }); setStatus("error"); setError("Abhi profile load nahi ho paaya."); } });
+      .catch(() => { if (active) { setProfile({ first_name: null, address_form: "neutral", language: "hinglish" }); setStatus("error"); setError("Could not load your profile."); } });
     return () => { active = false; };
   }, [request]);
 
@@ -261,28 +261,28 @@ function AddressPreference() {
       setStatus("saved");
     } catch (cause) {
       setStatus("error");
-      setError(cause instanceof Error && cause.message !== "Request failed." ? cause.message : "Save nahi ho paaya. Naam mein sirf letters rakhiye.");
+      setError(cause instanceof Error && cause.message !== "Request failed." ? cause.message : "Could not save. Use only letters in your name.");
     }
   }
 
   if (!profile) return <div className="mt-5 h-28 animate-pulse rounded-xl bg-[#f3e6dc]" aria-label="Loading profile" />;
   const nameChanged = name.trim() !== (profile.first_name ?? "");
-  return <section className="mt-5 border-t border-[#f0e2d8] pt-4" aria-label="Aapko kaise address karein?">
-    <h3 className="text-base font-semibold tracking-[-.02em]">Aapko kaise address karein?</h3>
-    <p className="mt-1 text-xs leading-5 text-[#806f65]">GharSaathi aapse baat karte waqt yahi use karegi. Aap kabhi bhi badal sakte hain.</p>
+  return <section className="mt-5 border-t border-[#f0e2d8] pt-4" aria-label="How should GharSaathi address you?">
+    <h3 className="text-base font-semibold tracking-[-.02em]">How should GharSaathi address you?</h3>
+    <p className="mt-1 text-xs leading-5 text-[#806f65]">GharSaathi uses this when talking to you. You can change it at any time.</p>
     <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Address form">
       {ADDRESS_FORMS.map((form) => {
         const selected = profile.address_form === form.id;
         return <button key={form.id} type="button" aria-pressed={selected} disabled={status === "saving"} onClick={() => void save({ address_form: form.id })} className={`min-h-11 rounded-xl px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] disabled:opacity-60 ${selected ? "bg-[#c6531d] text-white" : "border border-[#e4cabc] text-[#68493c]"}`}>{form.label}</button>;
       })}
     </div>
-    <p className="mt-2 text-[11px] text-[#8d766a]">Jaise: “{ADDRESS_FORMS.find((form) => form.id === profile.address_form)?.example}”</p>
-    <label htmlFor={nameId} className="mt-4 block text-[11px] font-semibold text-[#5f4a3f]">Aapko kis naam se bulayein? (optional)</label>
+    <p className="mt-2 text-[11px] text-[#8d766a]">For example: “{ADDRESS_FORMS.find((form) => form.id === profile.address_form)?.example}”</p>
+    <label htmlFor={nameId} className="mt-4 block text-[11px] font-semibold text-[#5f4a3f]">What should GharSaathi call you? (optional)</label>
     <div className="mt-2 flex gap-2">
-      <input id={nameId} value={name} maxLength={40} onChange={(event) => { setName(event.target.value); setStatus("idle"); }} placeholder="Jaise: Moin" className="min-h-11 min-w-0 flex-1 rounded-xl border border-[#deccbf] bg-white px-3 text-sm outline-none focus:border-[#c6531d]" />
+      <input id={nameId} value={name} maxLength={40} onChange={(event) => { setName(event.target.value); setStatus("idle"); }} placeholder="e.g. Moin" className="min-h-11 min-w-0 flex-1 rounded-xl border border-[#deccbf] bg-white px-3 text-sm outline-none focus:border-[#c6531d]" />
       <button type="button" disabled={!nameChanged || status === "saving"} onClick={() => void save({ first_name: name.trim() || null })} className="min-h-11 rounded-xl bg-[#3b2a22] px-4 text-xs font-semibold text-white disabled:opacity-40">{status === "saving" ? "Saving…" : "Save"}</button>
     </div>
-    <p aria-live="polite" className={`mt-2 min-h-4 text-[11px] ${status === "error" ? "text-[#a33d2c]" : "text-[#55745c]"}`}>{status === "saved" ? "Save ho gaya. Agli voice baat se lagu hoga." : status === "error" ? error : ""}</p>
+    <p aria-live="polite" className={`mt-2 min-h-4 text-[11px] ${status === "error" ? "text-[#a33d2c]" : "text-[#55745c]"}`}>{status === "saved" ? "Saved. This applies from your next voice chat." : status === "error" ? error : ""}</p>
   </section>;
 }
 

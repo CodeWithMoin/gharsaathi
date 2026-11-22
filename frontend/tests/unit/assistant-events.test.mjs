@@ -47,7 +47,7 @@ test("basket updates name the provider and summarise the basket", () => {
   );
   assert.deepEqual(calls, [["basket", "zepto"]]);
   assert.equal(outcome.notice, "Zepto · 2 items · ₹398");
-  assert.equal(outcome.message, "Basket update ho gaya.");
+  assert.equal(outcome.message, "Basket updated.");
 });
 
 test("an unknown provider is not forwarded", () => {
@@ -77,7 +77,7 @@ test("address form prefill is sanitised and unavailable reasons are explained", 
   applyAssistantEvent({ type: "address_form.open", provider: "zepto", prefill: { flat_details: " 302 ", phone: "999", type: "PALACE" } }, handlers);
   const unavailable = applyAssistantEvent({ type: "address_form.unavailable", reason: "demo_mode" }, handlers);
   assert.deepEqual(calls, [["address", { prefill: { flat_details: "302" } }], ["address", { unavailable: "demo_mode" }]]);
-  assert.equal(unavailable.message, "Demo mode mein naya address add nahi hota.");
+  assert.equal(unavailable.message, "New addresses can't be added in demo mode.");
 });
 
 test("errors and not-connected only return a status", () => {

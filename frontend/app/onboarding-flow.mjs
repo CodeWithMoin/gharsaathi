@@ -26,12 +26,12 @@ function isLanguage(value) {
 export function validateProfileDraft(draft) {
   const firstName = normalizeFirstName(draft?.firstName);
   const errors = {};
-  if (!firstName) errors.firstName = "Apna naam likhiye. Main isi naam se bulaungi.";
-  else if (firstName.length > FIRST_NAME_MAX_LENGTH) errors.firstName = `Naam ${FIRST_NAME_MAX_LENGTH} akshar se chhota rakhiye.`;
-  else if (/[\d@/\\:]/.test(firstName)) errors.firstName = "Sirf naam likhiye. Number ya email ki zaroorat nahi.";
-  else if (!/^[\p{L}\p{M}][\p{L}\p{M} .'-]*$/u.test(firstName)) errors.firstName = "Naam mein sirf letters rakhiye.";
-  if (!isAddressForm(draft?.addressForm)) errors.addressForm = "Bataiye main aapse kaise baat karun.";
-  if (!isLanguage(draft?.language)) errors.language = "Reply language chuniye.";
+  if (!firstName) errors.firstName = "Enter your first name. GharSaathi will use it to address you.";
+  else if (firstName.length > FIRST_NAME_MAX_LENGTH) errors.firstName = `Keep your name under ${FIRST_NAME_MAX_LENGTH} characters.`;
+  else if (/[\d@/\\:]/.test(firstName)) errors.firstName = "Enter just your name, without numbers or an email address.";
+  else if (!/^[\p{L}\p{M}][\p{L}\p{M} .'-]*$/u.test(firstName)) errors.firstName = "Use only letters in your name.";
+  if (!isAddressForm(draft?.addressForm)) errors.addressForm = "Choose how GharSaathi should address you.";
+  if (!isLanguage(draft?.language)) errors.language = "Choose a reply language.";
   const ok = Object.keys(errors).length === 0;
   return {
     ok,

@@ -4,9 +4,9 @@ import { voiceApprovalFromToolEvent } from "./voice-approval.mjs";
 const PROVIDERS = new Set(["swiggy_instamart", "zepto"]);
 
 const ADDRESS_UNAVAILABLE_MESSAGES = {
-  zepto_not_connected: "Pehle Zepto connect kijiye, phir naya address add hoga.",
-  demo_mode: "Demo mode mein naya address add nahi hota.",
-  swiggy_unsupported: "Swiggy address Swiggy app mein add kijiye.",
+  zepto_not_connected: "Connect Zepto first to add a new address.",
+  demo_mode: "New addresses can't be added in demo mode.",
+  swiggy_unsupported: "Add Swiggy addresses in the Swiggy app.",
 };
 
 /**
@@ -33,13 +33,13 @@ export function applyAssistantEvent(raw, handlers) {
       itemKey: typeof event.item_key === "string" && event.item_key ? event.item_key : undefined,
       itemLabel: typeof event.item_label === "string" && event.item_label ? event.item_label : undefined,
     });
-    return { kind: "results", message: "Options mil gaye. Main best choices bata rahi hoon." };
+    return { kind: "results", message: "Found options. Showing the best choices." };
   }
   if (event.type === "tool.not_connected") {
-    return { kind: "not_connected", message: "Ek store connect karke delivery address choose kijiye." };
+    return { kind: "not_connected", message: "Connect a store and choose a delivery address." };
   }
   if (event.type === "tool.error") {
-    return { kind: "error", message: typeof event.message === "string" && event.message ? event.message : "Kuch gadbad ho gayi. Ek baar phir try kijiye." };
+    return { kind: "error", message: typeof event.message === "string" && event.message ? event.message : "Something went wrong. Please try again." };
   }
   if (event.type === "basket.updated") {
     const basket = event.basket && typeof event.basket === "object" ? event.basket : {};
@@ -49,7 +49,7 @@ export function applyAssistantEvent(raw, handlers) {
     handlers.onBasketTouched?.(provider);
     return {
       kind: "basket",
-      message: items ? "Basket update ho gaya." : "Basket ab khaali hai.",
+      message: items ? "Basket updated." : "Basket is now empty.",
       notice: `${store}${items} ${items === 1 ? "item" : "items"}${total ? ` · ${total}` : ""}`,
     };
   }
@@ -60,17 +60,17 @@ export function applyAssistantEvent(raw, handlers) {
     const payable = typeof event.approval?.payable === "string" ? event.approval.payable : "";
     return {
       kind: "bill",
-      message: "Final bill ready hai—screen par review kijiye.",
+      message: "Final bill is ready—review it on screen.",
       notice: `${typeof event.store === "string" && event.store ? `${event.store} · ` : ""}Final bill${payable ? ` · ${payable}` : ""}`,
     };
   }
   if (event.type === "address_form.open" && event.provider === "zepto") {
     handlers.onAddressForm?.({ prefill: sanitizeAddressPrefill(event.prefill) });
-    return { kind: "address_form", message: "Address form screen par hai—details check karke Save kijiye." };
+    return { kind: "address_form", message: "The address form is open—check the details and tap Save." };
   }
   if (event.type === "address_form.unavailable" && typeof event.reason === "string") {
     handlers.onAddressForm?.({ unavailable: event.reason });
-    return { kind: "address_form", message: ADDRESS_UNAVAILABLE_MESSAGES[event.reason] ?? "Naya address abhi add nahi ho sakta." };
+    return { kind: "address_form", message: ADDRESS_UNAVAILABLE_MESSAGES[event.reason] ?? "A new address can't be added right now." };
   }
   return null;
 }

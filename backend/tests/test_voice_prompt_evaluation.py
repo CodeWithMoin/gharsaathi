@@ -6,6 +6,13 @@ import pytest
 from app.voice.address_tools import OpenAddressFormArguments
 from app.voice.basket_tools import AddArguments, QuantityArguments, StoreArguments
 from app.voice.memory_tools import RecallArguments
+from app.voice.memory_write_tools import (
+    DecisionArguments,
+    ForgetArguments,
+    ListArguments,
+    RememberArguments,
+    UpdateArguments,
+)
 from app.voice.prompts import (
     BACKEND_INSTRUCTIONS,
     LIVE_INSTRUCTIONS,
@@ -409,6 +416,11 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "request_approval": StoreArguments,
         "open_address_form": OpenAddressFormArguments,
         "recall_household_preferences": RecallArguments,
+        "remember_preference": RememberArguments,
+        "update_preference": UpdateArguments,
+        "forget_preference": ForgetArguments,
+        "list_preferences": ListArguments,
+        "confirm_memory": DecisionArguments,
         "prepare_order": StoreArguments,
     }
     assert set(validators) == set(definitions)
