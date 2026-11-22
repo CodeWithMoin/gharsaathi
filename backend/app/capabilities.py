@@ -592,6 +592,7 @@ INFRASTRUCTURE_ROUTES: dict[str, str] = {
     "POST /api/voice/session": "Starts a Realtime voice session (carries every voice capability).",
     "POST /api/chat/turn": "Runs one typed chat turn through the voice backend model and tools (carries every typed-chat capability).",
     "GET /api/voice/sessions/{session_id}/events": "Server-sent voice tool events for the browser UI.",
+    "POST /api/voice/prewarm": "Opens the OpenAI connection when the user reaches for the mic; no session, no user data.",
     "GET /api/swiggy/tools": "Diagnostic: live Swiggy MCP tool catalogue.",
     "GET /api/zepto/tools": "Diagnostic: live Zepto MCP tool catalogue.",
     "GET /api/zepto/capabilities": "Diagnostic: Zepto tool-policy summary.",
