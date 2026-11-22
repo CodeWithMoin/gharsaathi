@@ -510,12 +510,12 @@ export function PersonalizeStep({ swiggyConnected, zeptoConnected, commerceMode,
     {history.permission === undefined
       ? <div className="space-y-3" aria-label="Loading">{[0, 1, 2].map((item) => <div key={item} className="h-14 animate-pulse rounded-2xl bg-surface-strong" />)}</div>
       : <>
-        <ul className="space-y-3">
+        <ul className="space-y-5">
           {[
             { icon: <Eye size={20} weight="duotone" />, title: "Read-only", text: "Recent orders from connected stores, read-only. Nothing is added or ordered." },
             { icon: <Sparkle size={20} weight="duotone" />, title: "“The usual?” suggestions", text: "Repeat items are spotted and suggested. GharSaathi never guesses what has run out at home." },
             { icon: <Trash size={20} weight="duotone" />, title: "Delete any time", text: "Turning this off in settings removes the imported data." },
-          ].map((item) => <li key={item.title} className="flex items-start gap-3 py-3.5"><span className="mt-0.5 shrink-0 text-accent-ink">{item.icon}</span><span><span className="block text-[14px] font-semibold text-ink">{item.title}</span><span className="mt-0.5 block text-[13px] leading-5 text-muted">{item.text}</span></span></li>)}
+          ].map((item) => <li key={item.title} className="flex items-start gap-4"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent-ink">{item.icon}</span><span><span className="block text-[14px] font-semibold text-ink">{item.title}</span><span className="mt-0.5 block text-[13px] leading-5 text-muted">{item.text}</span></span></li>)}
         </ul>
 
         {demo && <div className="mt-5"><Note icon={<ShieldCheck size={17} weight="duotone" />}>Import is off in demo mode. No real order history is read.</Note></div>}
