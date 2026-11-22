@@ -783,9 +783,10 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       const height = section.offsetHeight;
       // Content that grows after it was added (a card finishing its layout, images loading)
       // keeps the reader at the bottom while they are following the conversation.
-      if (height > lastSectionHeight && followScrollRef.current && !pushRef.current) {
-        scrollAnimatingRef.current = false;
-        window.scrollTo({ top: Math.max(0, document.documentElement.scrollHeight - window.innerHeight), behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      // A running auto-scroll aims at the live bottom every frame, so it already covers this;
+      // otherwise jump straight there (an instant scroll keeps "following" true).
+      if (height > lastSectionHeight && followScrollRef.current && !pushRef.current && !scrollAnimatingRef.current) {
+        window.scrollTo(0, Math.max(0, document.documentElement.scrollHeight - window.innerHeight));
       }
       lastSectionHeight = height;
     });
@@ -825,7 +826,6 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       }
 
       const origin = window.scrollY;
-      const distance = destination - origin;
       const duration = 700;
       const startedAt = window.performance.now();
       scrollAnimatingRef.current = true;
@@ -835,7 +835,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         const eased = progress < 0.5
           ? 4 * progress * progress * progress
           : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-        window.scrollTo(0, origin + distance * eased);
+        // Re-read the bottom each frame: cards keep growing while the scroll runs.
+        const liveDestination = Math.max(destination, document.documentElement.scrollHeight - window.innerHeight);
+        window.scrollTo(0, origin + (liveDestination - origin) * eased);
         if (progress < 1) frame = window.requestAnimationFrame(animate);
         else scrollAnimatingRef.current = false;
       };
