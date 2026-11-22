@@ -226,7 +226,6 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
           return <label key={option.value} className={`relative flex min-h-[52px] cursor-pointer flex-col items-center justify-center rounded-2xl border px-2 py-2 text-center transition-colors duration-150 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus ${selected ? "border-accent bg-accent-soft" : "border-border-strong bg-surface hover:bg-surface-muted"}`}>
             <input type="radio" name="address-form" value={option.value} checked={selected} onChange={() => setAddressForm(option.value)} className="sr-only" />
             <span className={`block text-[14px] font-semibold ${selected ? "text-accent-ink" : "text-ink"}`}>{option.label}</span>
-            {selected && <Check size={14} weight="bold" className="absolute right-2.5 top-2.5 text-accent-ink" aria-hidden="true" />}
           </label>;
         })}
       </div>
@@ -258,7 +257,6 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
             <input type="radio" name="reply-language" value={option.value} checked={selected} onChange={() => setLanguage(option.value)} className="sr-only" />
             <span className={`text-[14px] font-semibold ${selected ? "text-accent-strong" : "text-ink-secondary"}`}>{option.label}</span>
             <span className="mt-0.5 text-[11px] text-muted" lang={option.value === "hindi" ? "hi" : undefined}>{option.note}</span>
-            {selected && <Check size={14} weight="bold" className="absolute right-2.5 top-2.5 text-accent-ink" aria-hidden="true" />}
           </label>;
         })}
       </div>
