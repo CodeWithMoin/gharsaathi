@@ -3,6 +3,7 @@
 No OpenAI calls: the vision extractor and the Responses client are fakes.
 """
 
+import base64
 import io
 import json
 from typing import Any
@@ -308,6 +309,14 @@ async def test_upload_strips_metadata_downscales_and_is_user_scoped(api) -> None
     assert stored is not None and store.get("bob", body["attachment_id"]) is None
     with Image.open(io.BytesIO(stored.jpeg)) as image:
         assert len(image.getexif()) == 0 and "exif" not in image.info
+    # The bubble thumbnail: small, metadata-free, and made from the stripped image.
+    thumbnail = body["thumbnail"]
+    assert thumbnail.startswith("data:image/jpeg;base64,")
+    thumb_bytes = base64.b64decode(thumbnail.split(",", 1)[1])
+    assert len(thumb_bytes) <= 40 * 1024
+    with Image.open(io.BytesIO(thumb_bytes)) as image:
+        assert max(image.size) == 320 and len(image.getexif()) == 0
+        assert not {"exif", "comment", "icc_profile"} & set(image.info)
 
     removed = await client.delete(f"/api/chat/attachments/{body['attachment_id']}", headers={"X-Test-User-Id": "bob"})
     assert removed.status_code == 204 and store.get("alice", body["attachment_id"]) is not None

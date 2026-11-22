@@ -2,8 +2,10 @@
 
 The owner chose "discard after reading": an image is deleted as soon as its
 items are extracted, and anything unread expires after ``TTL_SECONDS``.
-Image bytes are never written to disk or the database. A backend restart
-drops every pending photo; the user attaches it again.
+Full image bytes are never written to disk or the database; only the small
+metadata-free chat thumbnail (``images.make_thumbnail``) is saved, inside the
+user's conversation. A backend restart drops every pending photo; the user
+attaches it again.
 """
 
 from __future__ import annotations

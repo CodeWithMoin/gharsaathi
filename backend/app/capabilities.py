@@ -210,20 +210,30 @@ CAPABILITIES: tuple[Capability, ...] = (
         ),
         ui=S(
             W,
-            "Composer photo button: Take photo (camera) or Choose from gallery; client-side "
-            "downscale to 1600 px JPEG (drops EXIF); thumbnail chip with remove; send with or "
-            "without text; the saved chat keeps only a 'Photo' placeholder.",
+            "Composer photo button: Take photo (native camera input on phones, webcam dialog on "
+            "desktops) or Choose from gallery; client-side downscale to 1600 px JPEG (drops "
+            "EXIF); thumbnail chip with remove; send with or without text; the user's bubble "
+            "shows the photo thumbnail (tap for a larger view) and the saved chat keeps only "
+            "the 'Photo' placeholder plus a <=320 px, <=40 KB server-made thumbnail.",
         ),
         backend=S(
             W,
             "Magic-byte type check, 8 MB cap, Pillow decode, all metadata stripped, re-encoded "
-            "JPEG kept in memory per user for at most 15 min and deleted right after reading. "
-            "Strict-JSON vision extraction (PHOTO_EXTRACTION_MODEL), image text treated as data, "
-            "prices stripped, at most 15 items.",
+            "JPEG kept in memory per user for at most 15 min and deleted right after reading; "
+            "the upload returns a metadata-free thumbnail data URL that saved chats re-validate. "
+            "Strict-JSON vision extraction (PHOTO_EXTRACTION_MODEL) reads printed pack names "
+            "verbatim (printed_name, search_query), image text treated as data, prices "
+            "stripped, at most 15 items.",
         ),
         voice_tools=("read_attached_photo",),
         routes=("POST /api/chat/attachments", "DELETE /api/chat/attachments/{attachment_id}"),
-        ui_files=("frontend/app/page.tsx", "frontend/app/photo-attachment-ui.tsx", "frontend/app/photo-attachment.mjs"),
+        ui_files=(
+            "frontend/app/page.tsx",
+            "frontend/app/photo-attachment-ui.tsx",
+            "frontend/app/photo-attachment.mjs",
+            "frontend/app/camera-dialog.tsx",
+            "frontend/app/camera-capture.mjs",
+        ),
     ),
     Capability(
         id="add_to_basket",
@@ -738,6 +748,10 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
     {
         # Bill/order failure status (codex/voice-reliability).
         "bill_failed",
+        # read_attached_photo item fields and photo kinds.
+        "printed_name",
+        "search_query",
+        "product_photo",
         # Order status tool fields and statuses (codex/order-tracking-status).
         "order_ref",
         "order_status",
@@ -888,7 +902,11 @@ API_CONTRACTS: dict[str, tuple[str, ...]] = {
         "The image is decoded, EXIF orientation applied, every metadata block (EXIF/GPS/XMP/ICC) dropped, "
         "downscaled to 1600 px and re-encoded as JPEG; kept in memory for this user only, at most 15 minutes, "
         "and deleted as soon as its items are read. Never written to disk or the database.",
-        'Response 201: {"attachment_id": "ph_...", "expires_in_seconds": 900, "width": 1200, "height": 1600}',
+        'Response 201: {"attachment_id": "ph_...", "expires_in_seconds": 900, "width": 1200, "height": 1600, '
+        '"thumbnail": "data:image/jpeg;base64,..." | null}',
+        "thumbnail: a new <=320 px, <=40 KB JPEG made from the stripped pixels (no metadata). The browser "
+        "saves it on the user's chat message as photo_thumbnail; PUT /api/conversations/current re-checks "
+        "it (JPEG, size, dimensions, no metadata), drops invalid ones and keeps the newest 20 per chat.",
         "Send it with POST /api/chat/turn as attachment_id (message may then be empty).",
     ),
     "DELETE /api/chat/attachments/{attachment_id}": (
