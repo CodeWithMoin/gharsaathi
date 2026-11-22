@@ -17,7 +17,7 @@ type VoiceStatus = "connecting" | "live" | "closing" | "error";
 type VoiceStore = "swiggy_instamart" | "zepto";
 type VoiceProduct = { provider?: VoiceStore; provider_label?: string; product_id: string; sku_id: string; spin_id?: string; name: string; brand?: string; pack_size?: string; price: { mrp: number; offer_price: number }; available: boolean; image_url?: string; rating_value?: string };
 type LiveEvent = { type: string; error?: { message?: string; client_event_id?: string }; [key: string]: unknown };
-export type VoiceTranscriptTurn = { id: string; role: "user" | "assistant"; content: string };
+export type VoiceTranscriptTurn = { id: string; role: "user" | "assistant"; content: string; captionScript?: "roman" | "native" };
 type ToolEvent =
   | { type: "tool.started"; name: string }
   | { type: "tool.results"; query: string; store: string; products: VoiceProduct[] }
@@ -90,6 +90,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const eventsRef = useRef<EventSource | null>(null);
   const transcriptTurnsRef = useRef(createTranscriptTurnTracker());
+  const assistantScriptRef = useRef<"roman" | "native">("roman");
   const eventRecorderRef = useRef<ReturnType<typeof voiceEventRecorder> | null>(null);
   const attemptRef = useRef(0);
 
@@ -116,7 +117,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     const transcript = mapRealtimeTranscriptEvent(event);
     if (!transcript) return false;
     const turn = transcriptTurnsRef.current.apply(transcript);
-    if (turn) onTranscriptTurn(turn);
+    if (turn) onTranscriptTurn({ ...turn, captionScript: assistantScriptRef.current });
     return true;
   }, [onTranscriptTurn]);
 
@@ -276,6 +277,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       if (attempt !== attemptRef.current) return;
       if (!response.ok) throw new Error(payload && typeof payload.detail === "string" ? payload.detail : "GharSaathi voice shuru nahi ho paya. Phir se try kijiye.");
       await peer.setRemoteDescription({ type: "answer", sdp: payload.sdp });
+      assistantScriptRef.current = payload.assistant_transcript_script === "native" ? "native" : "roman";
       listenForToolEvents(payload.session_id, payload.events_token);
       if (payload.turn_taking?.mode === "smart_turn" && typeof payload.turn_taking.yield_instruction === "string") {
         void startSmartTurn(attempt, mic, payload.turn_taking.yield_instruction);

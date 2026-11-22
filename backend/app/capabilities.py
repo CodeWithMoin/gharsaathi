@@ -269,7 +269,12 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         id="offers",
         title="Free-delivery / offer threshold suggestions",
-        voice=S(M, "No voice tool."),
+        voice=S(
+            P,
+            "Read-only: request_approval and view_basket report the store-confirmed offers "
+            "on the current bill; no promo-code entry and no threshold suggestions by voice.",
+        ),
+        voice_tools=("request_approval", "view_basket"),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
         ui=S(P, "Zepto basket only (BasketPanel), using consented usual items."),
         backend=S(P, "Zepto only."),
@@ -281,8 +286,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         title="Suggest the household's usual items from purchase history",
         voice=S(
             P,
-            "Only on request: recall_household_preferences returns consented past purchases "
-            "of the item the user asked for; no proactive suggestions by voice.",
+            "On request only: recall_household_preferences and search_products results "
+            "marked 'remembered' use consented past purchases of the item the user asked "
+            "for; a short consented summary is in the session context. No proactive "
+            "suggestions by voice.",
         ),
         voice_tools=("recall_household_preferences",),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
@@ -315,8 +322,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         title="Remember explicit household preferences (brand, size, corrections)",
         voice=S(
             P,
-            "Recall only: recall_household_preferences reads confirmed preferences before a "
-            "broad item search. Saving or correcting a preference by voice is not supported.",
+            "Recall only: recall_household_preferences and 'remembered' search annotations "
+            "read confirmed preferences. Saving or correcting a preference by voice is not "
+            "supported.",
         ),
         voice_tools=("recall_household_preferences",),
         typed_chat=S(M, TYPED_NO_ASSISTANT),
@@ -534,6 +542,17 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "building_name",
         "formatted_address",
         "contact_name",
+        # Bill offers, memory annotations and recall result fields.
+        "bill_offers",
+        "current_bill",
+        "promo_code_entry",
+        "not_available",
+        "free_delivery",
+        "bought_on",
+        "product_name",
+        "last_purchased_on",
+        "purchase_count",
+        "saved_preferences",
     }
 )
 

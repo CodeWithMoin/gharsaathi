@@ -17,7 +17,16 @@ from app.commerce.swiggy.models import Product
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService, format_rupees, item_total_paise
 from app.shopping.errors import ShoppingError
-from app.shopping.models import Basket, BasketLine, ProductRef, ProviderName, rupees_to_paise
+from app.shopping.models import (
+    Basket,
+    BasketLine,
+    BasketStatus,
+    OfferOpportunity,
+    ProductRef,
+    ProviderName,
+    Quote,
+    rupees_to_paise,
+)
 from app.voice.tools import SearchOption, ToolOutcome
 
 
@@ -175,6 +184,49 @@ def basket_for_model(
 
 
 BASKET_NOTE = "Item totals only. Fees and the final payable amount require an approval quote. Nothing was ordered."
+OFFERS_NOTE = (
+    "bill_offers are the only offers the store confirmed for this exact bill; discounts are "
+    "already in charges. There is no tool to enter a promo or coupon code. Never invent "
+    "offers, codes or savings."
+)
+
+
+def _offer_status(offer: OfferOpportunity) -> str:
+    if offer.applied:
+        return "applied"
+    return "unlocked" if offer.unlocked else "not_unlocked"
+
+
+def offers_for_model(quote: Quote) -> list[dict[str, Any]]:
+    """Provider-confirmed offers on a quote, with amounts formatted from integer paise."""
+
+    offers: list[dict[str, Any]] = []
+    for offer in quote.offers:
+        if not offer.provider_confirmed:
+            continue
+        entry: dict[str, Any] = {
+            "title": offer.title,
+            "kind": offer.kind,
+            "status": _offer_status(offer),
+        }
+        if offer.potential_saving_paise:
+            entry["possible_saving"] = format_rupees(offer.potential_saving_paise)
+        if not offer.unlocked and offer.remaining_paise:
+            entry["add_more_to_unlock"] = format_rupees(offer.remaining_paise)
+        offers.append(entry)
+    return offers
+
+
+def bill_for_model(quote: Quote) -> dict[str, Any]:
+    return {
+        "payable": format_rupees(quote.payable_paise),
+        "charges": [
+            {"label": charge.label, "amount": format_rupees(charge.amount_paise)}
+            for charge in quote.charges
+        ],
+        "bill_offers": offers_for_model(quote),
+        "promo_code_entry": "not_available",
+    }
 
 
 def _line_from_product(provider: ProviderName, product: Product, quantity: int) -> BasketLine:
@@ -216,6 +268,9 @@ class BasketToolExecutor:
         self.household_id = household_id
         self.addresses = addresses
         self._address_cache: dict[tuple[str, str], SavedAddressSummary | None] = {}
+        # The latest bill this session requested per store, so view_basket can
+        # answer offer questions without re-quoting (which would supersede it).
+        self._quotes: dict[ProviderName, Quote] = {}
 
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
         try:
@@ -261,8 +316,21 @@ class BasketToolExecutor:
                 return None
         return self._address_cache[key]
 
+    def _current_bill(self, basket: Basket) -> dict[str, Any]:
+        quote = self._quotes.get(basket.provider)
+        if (
+            quote is None
+            or quote.basket_id != basket.id
+            or quote.basket_revision != basket.revision
+            or basket.status != BasketStatus.AWAITING_APPROVAL
+        ):
+            return {}
+        return {"current_bill": bill_for_model(quote)}
+
     async def _outcome(self, basket: Basket, store: BasketStore, status: str) -> ToolOutcome:
-        return _basket_outcome(basket, store, status, await self._address(store))
+        return _basket_outcome(
+            basket, store, status, await self._address(store), self._current_bill(basket)
+        )
 
     async def _add(self, arguments: AddArguments) -> ToolOutcome:
         option = self.options.get(arguments.option_id)
@@ -309,20 +377,24 @@ class BasketToolExecutor:
             store = self._store(arguments.store)
             if store is None:
                 return _not_connected(arguments.store)
-            return await self._outcome(await self._active(store), store, "ok")
+            return await self._view_one(store)
         if len(self.stores) == 1:
-            store = next(iter(self.stores.values()))
-            return await self._outcome(await self._active(store), store, "ok")
+            return await self._view_one(next(iter(self.stores.values())))
         views = [(store, await self._active(store)) for store in self.stores.values()]
         filled = [(store, basket) for store, basket in views if basket.lines]
         return ToolOutcome(
             model_output={
                 "status": "ok",
                 "baskets": [
-                    basket_for_model(basket, store, await self._address(store))
+                    {
+                        **basket_for_model(basket, store, await self._address(store)),
+                        **self._current_bill(basket),
+                    }
                     for store, basket in views
                 ],
-                "note": BASKET_NOTE + " Each store has its own basket and bill.",
+                "note": BASKET_NOTE
+                + " Each store has its own basket and bill."
+                + (f" {OFFERS_NOTE}" if any(self._current_bill(b) for _, b in views) else ""),
             },
             ui_event=(
                 {
@@ -334,6 +406,13 @@ class BasketToolExecutor:
                 else None
             ),
         )
+
+    async def _view_one(self, store: BasketStore) -> ToolOutcome:
+        basket = await self._active(store)
+        outcome = await self._outcome(basket, store, "ok")
+        if "current_bill" in outcome.model_output:
+            outcome.model_output["note"] = f"{BASKET_NOTE} {OFFERS_NOTE}"
+        return outcome
 
     async def _request_approval(self, arguments: StoreArguments) -> ToolOutcome:
         if arguments.store is not None:
@@ -358,6 +437,7 @@ class BasketToolExecutor:
             return _error(f"The {store.label} basket is empty.")
         result = await self.approvals.request(basket.id)
         quote = result.quote
+        self._quotes[store.provider] = quote
         # Imported here: app.api.basket -> app.dependencies -> app.voice is a cycle.
         from app.api.basket import approval_request_out
 
@@ -367,14 +447,10 @@ class BasketToolExecutor:
                 "store": store.label,
                 "store_id": store.provider,
                 **address_for_model(await self._address(store)),
-                "payable": format_rupees(quote.payable_paise),
-                "charges": [
-                    {"label": charge.label, "amount": format_rupees(charge.amount_paise)}
-                    for charge in quote.charges
-                ],
+                **bill_for_model(quote),
                 "note": (
                     "The exact bill is on screen. Ask the user to review it and choose an action there. "
-                    "No order has been approved or placed."
+                    f"No order has been approved or placed. {OFFERS_NOTE}"
                 ),
             },
             ui_event={
@@ -427,11 +503,13 @@ def _basket_outcome(
     store: BasketStore,
     status: str,
     address: SavedAddressSummary | None = None,
+    current_bill: dict[str, Any] | None = None,
 ) -> ToolOutcome:
     return ToolOutcome(
         model_output={
             "status": status,
             **basket_for_model(basket, store, address),
+            **(current_bill or {}),
             "note": BASKET_NOTE,
         },
         ui_event={"type": "basket.updated", "provider": store.provider, "basket": _basket_ui(basket, store)},

@@ -33,9 +33,20 @@ from app.commerce.demo import (
 )
 from app.commerce.swiggy.models import Price, Product, ProductSearchResult
 from app.core.config import get_settings
+from app.memory.recall import (
+    HouseholdMemory,
+    HouseholdRecall,
+    PreferenceCandidate,
+    RecallConsent,
+    RememberedItem,
+    item_terms,
+    term_matcher,
+)
 from app.shopping.approval import ApprovalService
 from app.shopping.basket import BasketService
 from app.shopping.memory import InMemoryApprovalRepository, InMemoryBasketRepository
+from app.shopping.models import Basket, Charge, OfferOpportunity, Quote
+from app.memory.remembered import memory_summary_block
 from app.voice.prompts import BACKEND_INSTRUCTIONS, VOICE_PROMPT_VERSION
 from app.voice.service import build_session_config
 from app.voice.toolbox import VOICE_TOOL_DEFINITIONS, VoiceToolbox
@@ -136,7 +147,77 @@ class FixtureOverlaySearcher:
         return await self.base.search(query, address_id, offset)
 
 
-def build_toolbox(catalogue: str, catalogues: dict[str, Any]) -> VoiceToolbox:
+STORE_LABELS = {"swiggy_instamart": "Swiggy Instamart", "zepto": "Zepto"}
+
+
+class ScenarioMemory:
+    """Harness-only consented household memory, read the same way as the database reader."""
+
+    def __init__(self, items: list[dict[str, Any]]) -> None:
+        self.memory = HouseholdMemory(
+            consent=RecallConsent(saved_preferences="on", purchase_history="on"),
+            items=[RememberedItem.model_validate(item) for item in items],
+        )
+
+    async def household_memory(self, household_id: str) -> HouseholdMemory:
+        return self.memory
+
+    async def recall(self, household_id: str, item: str) -> HouseholdRecall:
+        matches = term_matcher(item_terms(item))
+        candidates = [
+            PreferenceCandidate(
+                source="purchase_history",
+                product_name=remembered.name,
+                store=STORE_LABELS.get(remembered.store_id or ""),
+                last_purchased_on=remembered.last_bought,
+                purchase_count=remembered.times,
+            )
+            if remembered.source == "purchase_history"
+            else PreferenceCandidate(
+                source="confirmed_preference",
+                preference=remembered.preference,
+                brand=remembered.brand,
+                pack_size=remembered.pack_size,
+                summary=remembered.name,
+            )
+            for remembered in self.memory.items
+            if matches(remembered.name)
+        ][:4]
+        return HouseholdRecall(consent=self.memory.consent, candidates=candidates)
+
+
+class OfferQuoteProvider(DemoZeptoQuoteProvider):
+    """Demo Zepto bill with Zepto-shaped offers: free delivery and a promo applied, plus an
+    unconfirmed bank card that the voice tools must not report."""
+
+    async def quote(self, basket: Basket) -> Quote:
+        base = await super().quote(basket)
+        discount = min(2000, base.item_total_paise // 10)
+        charges = [
+            Charge(label="Delivery fee", amount_paise=0),
+            Charge(label="Packaging fee", amount_paise=500),
+            Charge(label="Discount", amount_paise=-discount),
+        ]
+        return base.model_copy(
+            update={
+                "charges": charges,
+                "payable_paise": base.item_total_paise + sum(c.amount_paise for c in charges),
+                "offers": [
+                    OfferOpportunity(title="Free Delivery", kind="free_delivery", minimum_order_paise=9900,
+                                     remaining_paise=0, unlocked=True, applied=True, provider_confirmed=True),
+                    OfferOpportunity(title="Welcome Saver", kind="promo", minimum_order_paise=0,
+                                     remaining_paise=0, unlocked=True, applied=True, provider_confirmed=True),
+                    OfferOpportunity(title="HDFC card 10% off", kind="bank_offer", minimum_order_paise=0,
+                                     remaining_paise=0, unlocked=True, applied=False, provider_confirmed=False),
+                ],
+            }
+        )
+
+
+def build_toolbox(
+    catalogue: str, catalogues: dict[str, Any], scenario: dict[str, Any] | None = None
+) -> VoiceToolbox:
+    scenario = scenario or {}
     swiggy: ProductSearcher = DemoSwiggyService()
     zepto: ProductSearcher = DemoZeptoService()
     if catalogue != "demo":
@@ -149,7 +230,11 @@ def build_toolbox(catalogue: str, catalogues: dict[str, Any]) -> VoiceToolbox:
         )
     basket_repo = InMemoryBasketRepository()
     approval_repo = InMemoryApprovalRepository()
-    quotes = {"swiggy_instamart": DemoQuoteProvider(), "zepto": DemoZeptoQuoteProvider()}
+    quotes = {
+        "swiggy_instamart": DemoQuoteProvider(),
+        "zepto": OfferQuoteProvider() if scenario.get("quote_offers") else DemoZeptoQuoteProvider(),
+    }
+    memory = ScenarioMemory(scenario["memory"]) if scenario.get("memory") else None
     return VoiceToolbox(
         swiggy,
         BasketService(basket_repo, approval_repo),
@@ -159,6 +244,7 @@ def build_toolbox(catalogue: str, catalogues: dict[str, Any]) -> VoiceToolbox:
         DEMO_ADDRESS_ID,
         HOUSEHOLD_ID,
         zepto_connection=DemoZeptoService(),
+        preference_recall=memory,
     )
 
 
@@ -405,6 +491,31 @@ def check_turn(
                 failures.append(f"open_address_form invented {key}={arguments.get(key)!r}.")
     if expect.get("no_saved_claim") and _claim_sentences(SAVED_CLAIM_PATTERN, reply):
         failures.append(f"Reply claims the address was saved: {_claim_sentences(SAVED_CLAIM_PATTERN, reply)}.")
+    if "add_pack_size" in expect:
+        sizes = [item.get("pack_size") for item in facts.get("added", [])]
+        if sizes != [expect["add_pack_size"]] * len(sizes) or not sizes:
+            failures.append(f"Added pack sizes {sizes}, expected {expect['add_pack_size']}.")
+    if expect.get("recall_before_search"):
+        if "recall_household_preferences" not in names:
+            failures.append(f"recall_household_preferences was not called (called: {names}).")
+        elif "search_products" in names and names.index("search_products") < names.index(
+            "recall_household_preferences"
+        ):
+            failures.append("search_products ran before recall_household_preferences.")
+    queries = [str(call["arguments"].get("query", "")).lower() for call in calls if call["name"] == "search_products" and isinstance(call["arguments"], dict)]
+    if "min_searches" in expect and len(queries) < expect["min_searches"]:
+        failures.append(f"Expected at least {expect['min_searches']} searches, got {queries}.")
+    cancelled = [word for word in expect.get("search_queries_forbid", []) if any(word in query for query in queries)]
+    if cancelled:
+        failures.append(f"Searched a cancelled item {cancelled} (queries: {queries}).")
+    for name in expect.get("tools_forbidden", []):
+        if name in names:
+            failures.append(f"Tool {name} must not be called this turn (called: {names}).")
+    forbidden = [word for word in expect.get("reply_forbids_any", []) if word.lower() in reply.lower()]
+    if forbidden:
+        failures.append(f"Reply mentions forbidden {forbidden}.")
+    if expect.get("roman_only") and facts["script"]["devanagari_ratio"] > 0:
+        failures.append("Reply contains Devanagari in a Roman Hinglish turn.")
     mentions = expect.get("reply_mentions_any")
     if mentions and not any(word.lower() in reply.lower() for word in mentions):
         failures.append(f"Reply does not mention any of {mentions}.")
@@ -424,7 +535,19 @@ async def run_scenario(
     scenario: dict[str, Any],
     catalogues: dict[str, Any],
 ) -> dict[str, Any]:
-    toolbox = build_toolbox(scenario["catalogue"], catalogues)
+    toolbox = build_toolbox(scenario["catalogue"], catalogues, scenario)
+    withheld = set(scenario.get("withhold_tools", []))
+    if withheld or scenario.get("memory"):
+        delegation = {
+            **delegation,
+            "tools": [tool for tool in delegation["tools"] if tool["name"] not in withheld],
+            "instructions": delegation["instructions"]
+            + (
+                memory_summary_block(toolbox.memory.recaller.memory)  # type: ignore[union-attr]
+                if scenario.get("memory") and scenario.get("memory_summary", True)
+                else ""
+            ),
+        }
     previous: str | None = None
     session_calls: list[dict[str, Any]] = []
     turns: list[dict[str, Any]] = []

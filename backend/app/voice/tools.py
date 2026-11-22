@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import unicodedata
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -20,10 +21,20 @@ from app.commerce.zepto.errors import (
     ZeptoError,
     ZeptoRateLimited,
 )
+from app.memory.recall import HouseholdMemory, HouseholdMemoryReader
+from app.memory.remembered import remembered_for
 from app.shopping.models import ProviderName, rupees_to_paise
 
 
+logger = logging.getLogger(__name__)
+
+
 MAX_RESULTS_FOR_MODEL = 6
+REMEMBERED_NOTE = (
+    " A 'remembered' option matches this household's own past purchase or confirmed "
+    "preference (same name and pack size; bought_on names another store). It is a past "
+    "choice, not current need or stock."
+)
 
 SEARCH_PRODUCTS_TOOL: dict[str, Any] = {
     "type": "function",
@@ -260,9 +271,23 @@ class MultiProviderShoppingToolExecutor:
         self,
         targets: list[ProviderSearchTarget],
         options: dict[str, SearchOption] | None = None,
+        *,
+        memory: HouseholdMemoryReader | None = None,
+        household_id: str = "",
     ) -> None:
         self.targets = targets
         self.options = options if options is not None else {}
+        self.memory = memory
+        self.household_id = household_id
+
+    async def _household_memory(self) -> HouseholdMemory | None:
+        if self.memory is None or not self.household_id:
+            return None
+        try:
+            return await self.memory.household_memory(self.household_id)
+        except Exception as exc:  # noqa: BLE001 - memory must never break a search
+            logger.warning("event=voice_search_memory_failed error=%s", type(exc).__name__)
+            return None
 
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
         if name != "search_products":
@@ -298,9 +323,11 @@ class MultiProviderShoppingToolExecutor:
                 ui_event={"type": "tool.not_connected", "query": arguments.query, **item_fields(arguments.query)},
             )
 
+        memory_task = asyncio.create_task(self._household_memory())
         outcomes = await asyncio.gather(
             *(self._search_target(target, arguments.query) for target in ready)
         )
+        memory = await memory_task
         successful = [outcome for outcome in outcomes if outcome["status"] == "ok"]
         if not successful:
             statuses = {str(outcome["status"]) for outcome in outcomes}
@@ -328,6 +355,7 @@ class MultiProviderShoppingToolExecutor:
         ui_products: list[dict[str, Any]] = []
         stores: list[str] = []
         per_store_limit = max(1, MAX_RESULTS_FOR_MODEL // len(successful))
+        remembered_count = 0
         for outcome in successful:
             target = outcome["target"]
             assert isinstance(target, ProviderSearchTarget)
@@ -342,6 +370,11 @@ class MultiProviderShoppingToolExecutor:
                     "add_supported": target.add_supported,
                     **_product_for_model(product),
                 }
+                if memory is not None:
+                    remembered = remembered_for(product, target.provider, memory)
+                    if remembered is not None:
+                        entry["remembered"] = remembered
+                        remembered_count += 1
                 if target.add_supported:
                     option_id = f"opt{len(self.options) + 1}"
                     self.options[option_id] = SearchOption(target.provider, target.store, product)
@@ -371,6 +404,7 @@ class MultiProviderShoppingToolExecutor:
                 "note": (
                     "Current item prices only; nothing was added. Only results with an "
                     "option_id can be added, to that store's own local basket."
+                    + (REMEMBERED_NOTE if remembered_count else "")
                 ),
             },
             ui_event={
