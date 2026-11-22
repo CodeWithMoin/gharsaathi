@@ -53,15 +53,15 @@ function LoadingSplash() {
     <div className="flex flex-col items-center">
       <LogoMark />
       <p className="font-display mt-5 text-2xl font-semibold tracking-[-.04em]">GharSaathi</p>
-      <span className="mt-5 h-1 w-12 overflow-hidden rounded-full bg-[#ead8ca]" role="progressbar" aria-label="GharSaathi load ho raha hai"><span className="block h-full w-1/2 animate-pulse rounded-full bg-[#c6531d]" /></span>
+      <span className="mt-5 h-1 w-12 overflow-hidden rounded-full bg-[#ead8ca]" role="progressbar" aria-label="Loading GharSaathi"><span className="block h-full w-1/2 animate-pulse rounded-full bg-[#c6531d]" /></span>
     </div>
   </main>;
 }
 
 const PROMISES = [
-  { icon: <Microphone size={20} weight="duotone" />, title: "Bolkar mangwaiye", text: "Hinglish, Hindi ya English, jo aasaan lage." },
-  { icon: <Scales size={20} weight="duotone" />, title: "Har store ka asli total", text: "Price, fees aur delivery time ek saath." },
-  { icon: <ShieldCheck size={20} weight="duotone" />, title: "Aapki approval ke bina kuch order nahi", text: "Har basket aur bill pehle aapko dikhaungi." },
+  { icon: <Microphone size={20} weight="duotone" />, title: "Order by voice", text: "Hinglish, Hindi or English, whatever feels easiest." },
+  { icon: <Scales size={20} weight="duotone" />, title: "The real total at every store", text: "Price, fees and delivery time side by side." },
+  { icon: <ShieldCheck size={20} weight="duotone" />, title: "Nothing is ordered without your approval", text: "You see every basket and bill first." },
 ];
 
 /** Signed-out welcome: what GharSaathi does, the safety promise, then Clerk sign-up/in. */
@@ -75,8 +75,8 @@ export function PublicOnboarding() {
   return <main className="grain min-h-[100dvh] bg-[#f8f2ea] px-5 text-[#35241c]">
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(2.5rem,env(safe-area-inset-top))]">
       <motion.div {...rise(0)}><LogoMark /></motion.div>
-      <motion.h1 {...rise(1)} className="font-display mt-7 text-[34px] font-semibold leading-[1.08] tracking-[-.05em]">Ghar ka shopping,<br />ab bas bolkar.</motion.h1>
-      <motion.p {...rise(2)} className="mt-3 max-w-[32ch] text-[15px] leading-6 text-[#806f65]">Main GharSaathi hoon. Zepto aur Swiggy par dhoondhti, compare karti aur basket taiyaar rakhti hoon.</motion.p>
+      <motion.h1 {...rise(1)} className="font-display mt-7 text-[34px] font-semibold leading-[1.08] tracking-[-.05em]">Household shopping,<br />just by asking.</motion.h1>
+      <motion.p {...rise(2)} className="mt-3 max-w-[32ch] text-[15px] leading-6 text-[#806f65]">GharSaathi searches Zepto and Swiggy, compares options and keeps your basket ready.</motion.p>
 
       <motion.ul {...rise(3)} className="mt-7 divide-y divide-[#eaded5] border-y border-[#eaded5]">
         {PROMISES.map((item) => <li key={item.title} className="flex items-start gap-3 py-3.5">
@@ -91,12 +91,12 @@ export function PublicOnboarding() {
           <span>I agree to GharSaathi&apos;s <a href="/terms" className="font-semibold text-[#9d421a] underline underline-offset-2">Terms</a> and <a href="/privacy" className="font-semibold text-[#9d421a] underline underline-offset-2">Privacy Policy</a>.</span>
         </label>
         <SignUpButton mode="redirect" forceRedirectUrl="/">
-          <button type="button" disabled={!legalAccepted} className="mt-3 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 text-[15px] font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition-[transform,background-color,opacity] duration-150 ease-out hover:bg-[#b94a18] active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f8f2ea] disabled:cursor-not-allowed disabled:opacity-50">Account banaiye <ArrowRight size={17} weight="bold" /></button>
+          <button type="button" disabled={!legalAccepted} className="mt-3 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#c6531d] px-5 text-[15px] font-semibold text-white shadow-[0_18px_38px_-20px_rgba(158,65,24,.8)] transition-[transform,background-color,opacity] duration-150 ease-out hover:bg-[#b94a18] active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f8f2ea] disabled:cursor-not-allowed disabled:opacity-50">Create account <ArrowRight size={17} weight="bold" /></button>
         </SignUpButton>
         <SignInButton mode="redirect" forceRedirectUrl="/">
-          <button type="button" className="mt-2.5 min-h-[52px] w-full rounded-full border border-[#ddc8ba] bg-[#fffdf9] px-5 text-[15px] font-semibold text-[#5c463b] transition-[transform,background-color] duration-150 ease-out hover:bg-[#fff7f1] active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f8f2ea]">Mera account pehle se hai</button>
+          <button type="button" className="mt-2.5 min-h-[52px] w-full rounded-full border border-[#ddc8ba] bg-[#fffdf9] px-5 text-[15px] font-semibold text-[#5c463b] transition-[transform,background-color] duration-150 ease-out hover:bg-[#fff7f1] active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f8f2ea]">I already have an account</button>
         </SignInButton>
-        <p className="mt-3 text-center text-[12px] leading-5 text-[#8e796d]">Secure sign-in. Password aur OTP kabhi chat mein nahi.</p>
+        <p className="mt-3 text-center text-[12px] leading-5 text-[#8e796d]">Secure sign-in. Never share passwords or OTPs in chat.</p>
       </motion.div>
     </div>
   </main>;
@@ -299,9 +299,9 @@ export function FirstRunOnboarding({ children }: { children: (context: AppContex
   if (consentError) {
     return <main className="grain grid min-h-[100dvh] place-items-center bg-[#f8f2ea] px-5 text-center text-[#35241c]">
       <section role="alert" className="max-w-sm rounded-3xl border border-[#e1d0c4] bg-[#fffdf9] p-6 shadow-[0_22px_55px_-32px_rgba(101,52,27,.45)]">
-        <h1 className="font-display text-2xl font-semibold">Consent status nahi mila</h1>
+        <h1 className="font-display text-2xl font-semibold">Could not load consent status</h1>
         <p className="mt-3 text-sm leading-6 text-[#806f65]">{consentError}</p>
-        <button type="button" onClick={() => setConsentRetry((value) => value + 1)} className="mt-6 min-h-11 rounded-full bg-[#c6531d] px-5 text-sm font-semibold text-white transition-transform duration-150 ease-out active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] focus-visible:ring-offset-2">Phir try karein</button>
+        <button type="button" onClick={() => setConsentRetry((value) => value + 1)} className="mt-6 min-h-11 rounded-full bg-[#c6531d] px-5 text-sm font-semibold text-white transition-transform duration-150 ease-out active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6531d] focus-visible:ring-offset-2">Try again</button>
       </section>
     </main>;
   }
