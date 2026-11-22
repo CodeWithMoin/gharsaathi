@@ -26,6 +26,7 @@ const ADDRESS_UNAVAILABLE_MESSAGES = {
  *   onAddressForm?: (request: { prefill: Record<string, string> } | { unavailable: string }) => void,
  *   onOrderConfirmation?: (confirmation: import("./order-confirmation.mjs").OrderConfirmation) => void,
  *   onAddressSelected?: (selection: { provider: "swiggy_instamart" | "zepto", addressId: string, label?: string, billCancelled: boolean }) => void,
+ *   onSupportOpen?: () => void,
  * }} handlers
  */
 export function applyAssistantEvent(raw, handlers) {
@@ -105,6 +106,12 @@ export function applyAssistantEvent(raw, handlers) {
       kind: "address",
       message: `${store} will deliver to ${label ?? "the selected address"}.${billCancelled ? " The open bill was cancelled—get a new one." : ""}`,
     };
+  }
+  if (event.type === "support.open") {
+    // Only shows the Order help popup; preparing or sending anything still needs the user.
+    if (!handlers.onSupportOpen) return null;
+    handlers.onSupportOpen();
+    return { kind: "support", message: "Opened Order help—tell me what went wrong." };
   }
   if (event.type === "address_form.unavailable" && typeof event.reason === "string") {
     handlers.onAddressForm?.({ unavailable: event.reason });
