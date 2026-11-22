@@ -282,6 +282,36 @@ def _results_lines(state: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+_ORDER_CARD_STATES = {
+    "confirmed": "placed",
+    "preparing": "being packed",
+    "out_for_delivery": "out for delivery",
+    "delivered": "delivered",
+    "cancelled": "cancelled",
+}
+
+
+def _order_lines(state: Mapping[str, Any]) -> list[str]:
+    """Placed-order status cards in this chat, newest first (display state only)."""
+
+    timeline = state.get("timeline")
+    if not isinstance(timeline, Mapping):
+        return []
+    cards = [
+        card for card in timeline.get("orders") or []
+        if isinstance(card, Mapping) and isinstance(card.get("seq"), int)
+    ]
+    lines = []
+    for card in sorted(cards, key=lambda card: card["seq"], reverse=True)[:2]:
+        store = sanitize_context_text(str(card.get("store") or "Zepto"), 20)
+        shown = _ORDER_CARD_STATES.get(str(card.get("status")), "status not reported yet")
+        lines.append(
+            f"{store} order placed in this chat; status card shows: {shown}. "
+            "Call get_order_status for the latest status."
+        )
+    return lines
+
+
 def _offers_text(approval: Approval) -> str:
     quote = approval.quote
     if quote is None:
@@ -407,7 +437,11 @@ def recent_context_from_state(
         summary=truncate_tokens(stored_summary_text(summary, state), MAX_SUMMARY_TOKENS),
         turns=_turns(state.get("messages"), max_turns),
         on_screen=_bounded(
-            [*_basket_lines(baskets, now or datetime.now(UTC)), *_results_lines(state)],
+            [
+                *_basket_lines(baskets, now or datetime.now(UTC)),
+                *_order_lines(state),
+                *_results_lines(state),
+            ],
             MAX_ON_SCREEN_TOKENS,
             MAX_ON_SCREEN_LINE_TOKENS,
         ),

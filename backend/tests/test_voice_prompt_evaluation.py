@@ -9,6 +9,7 @@ from app.voice.address_book_tools import SelectArguments as AddressSelectArgumen
 from app.voice.address_tools import OpenAddressFormArguments
 from app.voice.basket_tools import AddArguments, QuantityArguments, StoreArguments
 from app.voice.memory_tools import RecallArguments
+from app.voice.order_status_tools import RecentArguments, StatusArguments
 from app.voice.memory_write_tools import (
     DecisionArguments,
     ForgetArguments,
@@ -427,6 +428,8 @@ def test_backend_examples_use_real_tools_with_valid_arguments() -> None:
         "prepare_order": StoreArguments,
         "list_delivery_addresses": AddressListArguments,
         "select_delivery_address": AddressSelectArguments,
+        "get_order_status": StatusArguments,
+        "list_recent_orders": RecentArguments,
     }
     assert set(validators) == set(definitions)
 

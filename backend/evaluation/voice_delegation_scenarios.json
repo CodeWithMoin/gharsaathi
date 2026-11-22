@@ -1076,6 +1076,101 @@
           }
         }
       ]
+    },
+    {
+      "id": "t1-order-status-where",
+      "title": "'Mera order kahan hai' reads the household's tracking monitor and answers in one line with the store's ETA; no guessing, no new order card.",
+      "catalogue": "demo",
+      "tracking": {
+        "order_id": "ZEP-QA-1",
+        "status": "out_for_delivery",
+        "provider_status": "Out for delivery",
+        "eta_minutes": 6,
+        "order_code": "Z123"
+      },
+      "turns": [
+        {
+          "user": "mera order kahan hai",
+          "expect": {
+            "tools_required": [
+              "get_order_status"
+            ],
+            "tools_forbidden": [
+              "prepare_order",
+              "search_products"
+            ],
+            "reply_mentions_any": [
+              "out for delivery"
+            ],
+            "max_questions": 0,
+            "max_sentences": 2,
+            "roman_only": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "t2-order-cancel-zepto-app",
+      "title": "'Order cancel kar do' is not done here: she points to the Zepto app before packing and never claims a cancellation.",
+      "catalogue": "demo",
+      "tracking": {
+        "order_id": "ZEP-QA-2",
+        "status": "preparing",
+        "provider_status": "Packing"
+      },
+      "turns": [
+        {
+          "user": "order cancel kar do",
+          "expect": {
+            "tools_forbidden": [
+              "prepare_order",
+              "search_products"
+            ],
+            "reply_mentions_any": [
+              "Zepto app"
+            ],
+            "reply_forbids_any": [
+              "cancel ho gaya",
+              "cancel kar diya",
+              "cancel kar di",
+              "cancelled"
+            ],
+            "max_questions": 0,
+            "max_sentences": 2,
+            "roman_only": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "t3-payment-phone-cod-only",
+      "title": "'Payment phone se?' gets: only cash on delivery here; no UPI-at-door promise.",
+      "catalogue": "demo",
+      "turns": [
+        {
+          "user": "payment mere phone pe se kar sakte ho?",
+          "expect": {
+            "tools_forbidden": [
+              "prepare_order",
+              "search_products"
+            ],
+            "reply_mentions_any": [
+              "cash on delivery"
+            ],
+            "reply_forbids_any": [
+              "upi se kar sakte",
+              "upi kar sakte",
+              "card se kar sakte",
+              "delivery par upi",
+              "door par upi",
+              "online pay kar sakte"
+            ],
+            "max_questions": 1,
+            "max_sentences": 2,
+            "roman_only": true
+          }
+        }
+      ]
     }
   ]
 }

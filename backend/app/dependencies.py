@@ -248,6 +248,8 @@ def get_voice_service() -> LiveSessionService:
             if get_settings().commerce_mode == "demo"
             else SavedAddressBook(get_session_factory())
         ),
+        order_tracking=get_order_tracking_service(),
+        order_history=get_zepto_service(),
     )
 
 

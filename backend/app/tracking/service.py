@@ -12,17 +12,21 @@ from app.tracking.models import (
     OrderWatch,
     StartTrackingRequest,
     TrackingEvent,
+    TrackingNotification,
     TrackingProvider,
     TrackingRead,
     TrackingSnapshot,
     TrackingStatus,
 )
+from app.tracking.notifications import meaningful_update, notification_message
 from app.tracking.ports import OrderTrackingProvider
 from app.tracking.store import OrderTrackingStore
 
 
 MIN_POLL_INTERVAL_SECONDS = 10
 MAX_TRANSIENT_BACKOFF_SECONDS = 30
+MAX_NOTIFICATIONS = 20
+STORE_LABELS = {TrackingProvider.SWIGGY: "Swiggy Instamart", TrackingProvider.ZEPTO: "Zepto"}
 
 
 def utc_now() -> datetime:
@@ -81,6 +85,57 @@ class OrderTrackingService:
         # An immediate read is safe: this boundary exposes read-only operations only.
         return await self.refresh(user_id, watch.id)
 
+    async def ensure(self, user_id: str, request: StartTrackingRequest) -> TrackingRead:
+        """Start tracking an order once; a second call returns the existing watch.
+
+        Used after a provider-confirmed order: replaying the confirmation, a
+        retried request or two tabs never create a second watch, and an existing
+        watch (active, finished or stopped by the user) is left as it is.
+        """
+
+        async with self._lock_for(user_id, request.provider, request.order_id):
+            try:
+                watch = self.store.get(user_id, request.provider, request.order_id)
+            except TrackingNotFound:
+                watch = None
+            if watch is None:
+                now = self.now()
+                watch = OrderWatch(
+                    id=str(uuid4()),
+                    user_id=user_id,
+                    provider=request.provider,
+                    order_id=request.order_id,
+                    address_id=request.address_id,
+                    next_check_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+                self.store.save(watch)
+                created = True
+            else:
+                created = False
+        if created:
+            return await self.refresh(user_id, watch.id)
+        return TrackingRead(
+            order=watch, checked_at=watch.checked_at, next_check_at=watch.next_check_at
+        )
+
+    def find(self, user_id: str, order_ref: str) -> OrderWatch | None:
+        """This household's watch for an order id or store order code ("#Z123"), or
+        its most recently created watch for "latest"."""
+
+        watches = self.store.list(user_id)
+        if not watches:
+            return None
+        reference = order_ref.strip().lstrip("#").strip().casefold()
+        if reference in {"", "latest"}:
+            return max(watches, key=lambda item: item.created_at)
+        for watch in watches:
+            code = watch.snapshot.order_code if watch.snapshot else None
+            if watch.order_id.casefold() == reference or (code and code.casefold() == reference):
+                return watch
+        return None
+
     def list(self, user_id: str, *, active_only: bool = False) -> list[OrderWatch]:
         return self.store.list(user_id, active_only=active_only)
 
@@ -123,9 +178,24 @@ class OrderTrackingService:
                 return self._record_provider_failure(watch, exc, now)
 
             changed = _meaningfully_changed(watch.snapshot, snapshot)
+            kind = meaningful_update(watch.snapshot, snapshot)
+            if kind is not None:
+                watch.notifications = (
+                    watch.notifications
+                    + [
+                        TrackingNotification(
+                            id=str(uuid4()),
+                            kind=kind,
+                            occurred_at=now,
+                            message=notification_message(kind, STORE_LABELS[watch.provider]),
+                            eta_at=snapshot.eta_at,
+                        )
+                    ]
+                )[-MAX_NOTIFICATIONS:]
             watch.snapshot = snapshot
             watch.status = _effective_status(snapshot)
             watch.checked_at = now
+            watch.status_at = now
             watch.updated_at = now
             watch.last_error = None
             watch.consecutive_failures = 0

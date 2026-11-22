@@ -23,7 +23,7 @@ const ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
  * }} OrderConfirmation
  */
 /**
- * @typedef {{ status: "open" } | { status: "placing" } | { status: "placed", orderId: string }
+ * @typedef {{ status: "open" } | { status: "placing" } | { status: "placed", orderId: string, tracking?: unknown }
  *   | { status: "unknown" } | { status: "failed", reason: string } | { status: "cancelling" }
  *   | { status: "cancelled" } | { status: "expired" }} OrderCardState
  */
@@ -117,7 +117,8 @@ export function orderCardResultText(state, store) {
 export function orderCardStateFromResponse(outcome) {
   if (outcome.ok) {
     const orderId = text(outcome.body?.provider_order_id);
-    if (outcome.body?.status === "confirmed" && orderId) return { status: "placed", orderId };
+    // `tracking` is the read-only status monitor the backend started for this order, if any.
+    if (outcome.body?.status === "confirmed" && orderId) return { status: "placed", orderId, tracking: outcome.body?.tracking ?? null };
     return { status: "unknown" };
   }
   // A dropped connection or server error is an uncertain outcome, never a reason to tap again.

@@ -9,6 +9,7 @@
  * the card it leaves behind becomes a one-line, non-interactive summary.
  */
 
+import { MAX_ORDER_CARDS, orderCardSnapshot, restoreOrderCard } from "./order-status.mjs";
 import { removeResultGroup, updateResultGroup, upsertResultGroup } from "./result-groups.mjs";
 
 export const STORES = /** @type {const} */ (["swiggy_instamart", "zepto"]);
@@ -26,12 +27,46 @@ export const MAX_SUMMARIES = 50;
  * group and the basket cards share one sequence and update atomically; they
  * are saved separately (see conversation-snapshot.mjs).
  *
- * @typedef {{ seq: number, resultsSeq: number, live: BasketCard[], summaries: SummaryCard[], groups: ResultGroup[] }} ChatTimeline
+ * `orders` are placed orders' live status cards (order-status.mjs); they are
+ * saved with the timeline.
+ *
+ * @typedef {import("./order-status.mjs").OrderStatusCard} OrderStatusCard
+ * @typedef {{ seq: number, resultsSeq: number, live: BasketCard[], summaries: SummaryCard[], groups: ResultGroup[], orders: OrderStatusCard[] }} ChatTimeline
  */
 
 /** @returns {ChatTimeline} */
 export function emptyTimeline() {
-  return { seq: 0, resultsSeq: 0, live: [], summaries: [], groups: [] };
+  return { seq: 0, resultsSeq: 0, live: [], summaries: [], groups: [], orders: [] };
+}
+
+/**
+ * A placed order's status card joins the timeline as its newest item (one card
+ * per order; a repeat replaces it in place).
+ *
+ * @param {ChatTimeline} timeline
+ * @param {Omit<OrderStatusCard, "seq">} card
+ * @returns {ChatTimeline}
+ */
+export function recordOrderCard(timeline, card) {
+  const orders = timeline.orders ?? [];
+  const existing = orders.find((item) => item.orderId === card.orderId);
+  if (existing) return { ...timeline, orders: orders.map((item) => item === existing ? { ...card, seq: existing.seq, afterMessageId: existing.afterMessageId } : item) };
+  const seq = timeline.seq + 1;
+  return { ...timeline, seq, orders: [...orders, { ...card, seq }].slice(-MAX_ORDER_CARDS) };
+}
+
+/**
+ * Updates one order card in place; later messages stay below it.
+ *
+ * @param {ChatTimeline} timeline
+ * @param {string} orderId
+ * @param {OrderStatusCard} card
+ * @returns {ChatTimeline}
+ */
+export function updateOrderCard(timeline, orderId, card) {
+  const orders = timeline.orders ?? [];
+  if (!orders.some((item) => item.orderId === orderId)) return timeline;
+  return { ...timeline, orders: orders.map((item) => item.orderId === orderId ? { ...card, seq: item.seq, afterMessageId: item.afterMessageId } : item) };
 }
 
 /**
@@ -156,7 +191,7 @@ export function collapseBasketCard(timeline, provider, summary) {
 
 /**
  * @template {{ id: string }} M
- * @typedef {{ kind: "message", message: M } | { kind: "results", group?: ResultGroup } | { kind: "basket", card: BasketCard } | { kind: "basket-summary", card: SummaryCard }} TimelineItem
+ * @typedef {{ kind: "message", message: M } | { kind: "results", group?: ResultGroup } | { kind: "basket", card: BasketCard } | { kind: "basket-summary", card: SummaryCard } | { kind: "order-status", card: OrderStatusCard }} TimelineItem
  */
 
 /**
@@ -177,6 +212,7 @@ export function placeTimelineItems({ messages, resultsAfterMessageId = null, tim
     ...(timeline.groups ?? []).map((group) => ({ anchor: group.afterMessageId, seq: group.seq, order: 0, item: /** @type {TimelineItem<M>} */ ({ kind: "results", group }) })),
     ...timeline.summaries.map((card, index) => ({ anchor: card.afterMessageId, seq: card.seq, order: 1 + index, item: /** @type {TimelineItem<M>} */ ({ kind: "basket-summary", card }) })),
     ...timeline.live.map((card) => ({ anchor: card.afterMessageId, seq: card.seq, order: 1 + MAX_SUMMARIES, item: /** @type {TimelineItem<M>} */ ({ kind: "basket", card }) })),
+    ...(timeline.orders ?? []).map((card) => ({ anchor: card.afterMessageId, seq: card.seq, order: 2 + MAX_SUMMARIES, item: /** @type {TimelineItem<M>} */ ({ kind: "order-status", card }) })),
   ];
   /** @type {Map<string | null, typeof inserted>} */
   const groups = new Map();
@@ -233,11 +269,13 @@ export function summaryText(summary) {
 export function timelineSnapshot(timeline) {
   /** @param {BasketCard} card */
   const anchor = (card) => ({ provider: card.provider, after_message_id: card.afterMessageId, seq: card.seq });
+  const orders = (timeline.orders ?? []).slice(-MAX_ORDER_CARDS).map(orderCardSnapshot);
   return {
     seq: timeline.seq,
     results_seq: timeline.resultsSeq,
     live: timeline.live.map(anchor),
     summaries: timeline.summaries.slice(-MAX_SUMMARIES).map((card) => ({ ...anchor(card), stage: card.stage, item_count: card.itemCount, item_total_paise: card.itemTotalPaise })),
+    ...(orders.length ? { orders } : {}),
   };
 }
 
@@ -282,8 +320,14 @@ export function restoreTimeline(raw) {
     const stage = SUMMARY_STAGES.find((item) => item === fields.stage);
     if (card && stage) summaries.push({ ...card, stage, itemCount: count(fields.item_count), itemTotalPaise: count(fields.item_total_paise) });
   }
-  const seqs = [count(value.seq) ?? 0, count(value.results_seq) ?? 0, ...live.map((card) => card.seq), ...summaries.map((card) => card.seq)];
-  return { seq: Math.max(...seqs), resultsSeq: count(value.results_seq) ?? 0, live, summaries: summaries.slice(-MAX_SUMMARIES), groups: [] };
+  /** @type {OrderStatusCard[]} */
+  const orders = [];
+  for (const entry of Array.isArray(value.orders) ? value.orders : []) {
+    const card = restoreOrderCard(entry);
+    if (card && !orders.some((item) => item.orderId === card.orderId)) orders.push(card);
+  }
+  const seqs = [count(value.seq) ?? 0, count(value.results_seq) ?? 0, ...live.map((card) => card.seq), ...summaries.map((card) => card.seq), ...orders.map((card) => card.seq)];
+  return { seq: Math.max(...seqs), resultsSeq: count(value.results_seq) ?? 0, live, summaries: summaries.slice(-MAX_SUMMARIES), groups: [], orders: orders.slice(-MAX_ORDER_CARDS) };
 }
 
 export const NEAR_BOTTOM_PX = 160;
