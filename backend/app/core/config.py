@@ -78,6 +78,15 @@ class Settings(BaseSettings):
     # Send route_directions and handover_instructions. The live agent (v7) declares
     # both (default NOT_AVAILABLE); set false only for an older agent such as v5.
     sarvam_route_directions_enabled: bool = True
+    # Live delivery context: the Sarvam agent's API tool get_delivery_context calls
+    # POST /api/sarvam/delivery-context during a call (specs/inbound-delivery-assist.md).
+    # Off by default; when on, every request needs X-GharSaathi-Tool-Token equal to
+    # SARVAM_TOOL_TOKEN (at least 32 characters, e.g. `openssl rand -hex 32`).
+    sarvam_live_context_enabled: bool = False
+    sarvam_tool_token: SecretStr = SecretStr("")
+    # Public HTTPS origin the Sarvam tool calls (a dev tunnel or the AWS stack), used
+    # only to print the tool URL (`make sarvam-tunnel`), e.g. https://x.trycloudflare.com
+    rider_public_base_url: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     live_model: str = "gpt-live-1.1"
     live_voice: str = "nira"

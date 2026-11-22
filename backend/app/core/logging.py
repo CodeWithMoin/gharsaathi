@@ -10,6 +10,8 @@ OAUTH_CALLBACK_PATHS = {
 }
 # Voice event streams carry a per-session capability token in the query string.
 VOICE_EVENTS_PATH = re.compile(r"^(/api/voice/sessions/[^/?]+/events)\?")
+# The Sarvam tool may carry its token as ?tool_token= (app/api/sarvam_tool.py).
+SARVAM_TOOL_PATH = re.compile(r"^(/api/sarvam/delivery-context)\?")
 # Backwards-compatible name used by existing tests and integrations.
 OAUTH_CALLBACK_PATH = "/api/swiggy/oauth/callback"
 
@@ -35,6 +37,9 @@ class RedactOAuthCallbackFilter(logging.Filter):
         if callback_path is None:
             voice_events = VOICE_EVENTS_PATH.match(request_path)
             callback_path = voice_events.group(1) if voice_events else None
+        if callback_path is None:
+            sarvam_tool = SARVAM_TOOL_PATH.match(request_path)
+            callback_path = sarvam_tool.group(1) if sarvam_tool else None
         if callback_path is not None:
             mutable: list[Any] = list(arguments)
             mutable[2] = f"{callback_path}?[REDACTED]"

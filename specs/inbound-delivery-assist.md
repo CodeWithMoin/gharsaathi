@@ -143,3 +143,74 @@ the order status card says "Rider has your directions" after a confirmed route.
 
 Details: `docs/ARCHITECTURE.md` ("Inbound delivery line: call outcomes"); failure rows
 FM-IC01–FM-IC04 in `docs/FAILURE_MODES.md`.
+
+## Live delivery context (Sarvam API tool `get_delivery_context`)
+
+Real riders call from masked numbers, so the per-number cohort record cannot match
+them. During a call the agent instead asks GharSaathi:
+`POST /api/sarvam/delivery-context` (`app/api/sarvam_tool.py`,
+`app/inbound_delivery/live_context.py`). The cohort path above keeps working for the
+demo number; the agent uses the tool result first and the cohort variables as a
+fallback.
+
+- **Off by default.** 404 unless `SARVAM_LIVE_CONTEXT_ENABLED=true`, `SARVAM_TOOL_TOKEN`
+  is at least 32 characters (`openssl rand -hex 32`) and `SARVAM_INBOUND_OWNER_USER_ID` is set.
+- **Auth.** No Clerk session. Static header `X-GharSaathi-Tool-Token` (or, for tool
+  builders without headers, query `?tool_token=`; redacted from access logs), compared
+  in constant time. Wrong or missing → 401 `{active: "no", message_for_agent: …}`.
+  20 requests/min, then 429.
+- **Active** only while the owner's tracked order is placed, packed or out for delivery
+  (last provider reading, watch still running, started within 12 h), or was delivered
+  in the last 15 min. Cancelled, unknown, paused or unavailable → `active: "no"`.
+- **Address**: the order's address id (the watch, else the Zepto checkout basket, else the
+  selected store address) → saved directions for it; missing parts are `NOT_AVAILABLE`.
+- **Output** (strings only): `active`, `provider`, `provider_mismatch` (`yes` when the caller
+  named the other store; still active), `order_status`, `recipient_name`,
+  `delivery_address`, `landmark`, `route_directions`, `handover_instructions`, `eta`
+  (India time, e.g. `8:26 pm`), `message_for_agent`. Runs of 8+ digits (phone numbers)
+  and codes after OTP/PIN words are removed. Never a phone number, OTP, payment detail
+  or whether anyone is home. `rider_location_hint` is accepted, never used or logged.
+- **Logs**: `event=sarvam_live_context active=… provider=… mismatch=…` only.
+
+### Tool spec (create on the agent)
+
+Print it with the URL filled in: `cd backend && PYTHONPATH=. uv run --with-requirements
+requirements.txt python -m app.inbound_delivery.live_context tool-spec https://<public origin>`.
+Paste the real token as the header value in Sarvam; never commit it.
+
+```json
+{
+  "name": "get_delivery_context",
+  "tool_type": "http",
+  "description": "Call this first when the caller says they are from Zepto, Swiggy or a delivery. Returns whether an order is on its way to Moin and the delivery directions.",
+  "lifecycle": "run",
+  "method": "POST",
+  "url": "https://<public origin>/api/sarvam/delivery-context",
+  "headers": [
+    {"name": "X-GharSaathi-Tool-Token", "type": "static", "value": "<SARVAM_TOOL_TOKEN>"},
+    {"name": "Content-Type", "type": "static", "value": "application/json"}
+  ],
+  "body_params": [
+    {"name": "provider", "type": "llm_prompt", "data_type": "Text", "required": false,
+     "description": "The store the caller named: one of zepto, swiggy or unknown."},
+    {"name": "rider_location_hint", "type": "llm_prompt", "data_type": "Text", "required": false,
+     "description": "Optional: where the caller says they are now, in a few words."}
+  ]
+}
+```
+
+Fallback if static headers fail: `url` = `https://<public origin>/api/sarvam/delivery-context?tool_token=<SARVAM_TOOL_TOKEN>`, no token header.
+
+Prompt lines to add to the agent:
+
+> When a caller says Zepto, Swiggy or delivery, call tool:get_delivery_context first.
+> Use only its fields. If `active` is `no`, say no delivery is expected right now and
+> offer to connect Moin. If `provider_mismatch` is `yes`, confirm which store they are
+> from before guiding. If the tool fails or times out, say the details are unavailable
+> and offer to connect Moin. Never share phone numbers, OTPs, payment details or
+> whether anyone is home.
+
+**Public URL.** Dev: a tunnel to `http://localhost:8000` (e.g. `cloudflared tunnel --url
+http://localhost:8000`, not installed by this repo); set `RIDER_PUBLIC_BASE_URL` to the
+https origin and print the tool URL with `python -m app.inbound_delivery.live_context
+tool-url`. Production: the AWS stack in ap-south-1.

@@ -23,6 +23,7 @@ from app.api.legal_consent import router as legal_consent_router
 from app.api.profile import router as profile_router
 from app.api.purchase_memory import router as purchase_memory_router
 from app.api.rider import router as rider_router
+from app.api.sarvam_tool import router as sarvam_tool_router
 from app.api.inbound_delivery import router as inbound_delivery_router
 from app.api.voice import router as voice_router
 from app.auth import PrivateDeploymentForbidden
@@ -146,6 +147,8 @@ app.include_router(orders_router, prefix="/api/orders", tags=["Orders"])
 app.include_router(support_router, prefix="/api/support", tags=["Customer Support"])
 app.include_router(tracking_router, prefix="/api/tracking", tags=["Order Tracking"])
 app.include_router(rider_router, prefix="/api/rider", tags=["Rider assist"])
+# Sarvam agent API tool: token-bound, no Clerk session (app/api/sarvam_tool.py).
+app.include_router(sarvam_tool_router, prefix="/api/sarvam", tags=["Sarvam tool"])
 app.include_router(
     notifications_router, prefix="/api/notifications", tags=["Browser notifications"]
 )
