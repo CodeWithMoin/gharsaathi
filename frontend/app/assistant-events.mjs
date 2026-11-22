@@ -40,7 +40,11 @@ export function applyAssistantEvent(raw, handlers) {
       itemKey: typeof event.item_key === "string" && event.item_key ? event.item_key : undefined,
       itemLabel: typeof event.item_label === "string" && event.item_label ? event.item_label : undefined,
     });
-    return { kind: "results", message: "Found options. Showing the best choices." };
+    // A store that could not be reached is a connection problem, not an empty result.
+    const unreachable = typeof event.notice === "string" && event.notice ? event.notice : "";
+    return unreachable
+      ? { kind: "results", message: `Found options. ${unreachable}`, notice: unreachable }
+      : { kind: "results", message: "Found options. Showing the best choices." };
   }
   if (event.type === "tool.not_connected") {
     return { kind: "not_connected", message: "Connect a store and choose a delivery address." };

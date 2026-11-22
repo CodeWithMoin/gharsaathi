@@ -15,6 +15,7 @@ from app.commerce.zepto.errors import (
     ZeptoProviderError,
     ZeptoRateLimited,
     ZeptoSchemaError,
+    ZeptoSessionExpired,
 )
 from app.commerce.zepto.models import ToolDescription
 from app.commerce.zepto.oauth import ZeptoOAuthClient
@@ -118,7 +119,7 @@ class ZeptoMcpClient:
             if _is_rate_limited(retry_exc):
                 await self._record_rate_limit()
                 raise ZeptoRateLimited(RATE_LIMIT_MESSAGE) from retry_exc
-            raise ZeptoProviderError(
+            raise ZeptoSessionExpired(
                 "Zepto rejected the refreshed session. Connect again."
             ) from retry_exc
 
@@ -222,6 +223,11 @@ class ZeptoMcpClient:
         async with self._operation_lock:
             await self._invalidate_session()
 
+    async def reset_session(self) -> None:
+        """Drop the persistent MCP session; the next call opens a fresh one."""
+
+        await self.aclose()
+
     async def _record_rate_limit(self) -> None:
         self._rate_limited_until = max(
             self._rate_limited_until,
@@ -313,7 +319,12 @@ class ZeptoMcpClient:
                 raise ZeptoProviderError(_safe_error_message(structured))
             return structured
 
-        return await self._with_session(run, retry_on_auth=retry_on_auth)
+        try:
+            return await self._with_session(run, retry_on_auth=retry_on_auth)
+        except ZeptoError as exc:
+            # The tool name only; recovery logs never carry provider text.
+            exc.tool = name  # type: ignore[attr-defined]
+            raise
 
 
 def _safe_error_message(payload: object) -> str:

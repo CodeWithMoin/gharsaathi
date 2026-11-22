@@ -629,6 +629,10 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "not_saved_one_off",
         "skipped_stores",
         "user_words",
+        # Search statuses for a store that could not be reached (not "not found").
+        "provider_error",
+        "unreachable_stores",
+        "address_invalid",
         # Household-rule annotations and the delivery ETA field (search options, bill).
         "avoid_store",
         "avoided_because",
