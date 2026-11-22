@@ -120,7 +120,7 @@ consent:
    read those with the owner in a supervised session, never into the report.
 4. The shapes of a *confirmed* prepaid order and of `check_payment_status` can
    only be seen by paying for a real order. That needs the owner's explicit
-   go-ahead for that exact order (docs/MVP_CHECKLIST.md step 16).
+   go-ahead for that exact order (docs/MVP_CHECKLIST.md step 17).
 
 ## Rate limits
 

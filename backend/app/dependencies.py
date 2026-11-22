@@ -58,6 +58,8 @@ from app.conversations.summarizer import (
     OpenAIConversationSummarizer,
 )
 from app.memory.recall import DatabasePreferenceRecaller
+from app.photos.extraction import OpenAIPhotoExtractor, PhotoReader
+from app.photos.store import PhotoAttachmentStore
 from app.user_profile import DatabaseProfileReader
 from app.chat.service import ChatTurnService
 from app.voice.service import LiveSessionService
@@ -225,6 +227,26 @@ ConversationSummariesDependency = Annotated[
 
 
 @lru_cache
+def get_photo_store() -> PhotoAttachmentStore:
+    return PhotoAttachmentStore()
+
+
+@lru_cache
+def get_photo_reader() -> PhotoReader:
+    settings = get_settings()
+    api_key = settings.openai_api_key.get_secret_value().strip()
+    extractor = (
+        OpenAIPhotoExtractor(api_key, settings.openai_base_url, settings.photo_extraction_model)
+        if api_key
+        else None
+    )
+    return PhotoReader(get_photo_store(), extractor)
+
+
+PhotoStoreDependency = Annotated[PhotoAttachmentStore, Depends(get_photo_store)]
+
+
+@lru_cache
 def get_sideband_hub() -> SidebandHub:
     return SidebandHub(get_settings())
 
@@ -249,6 +271,7 @@ def get_voice_service() -> LiveSessionService:
             if get_settings().commerce_mode == "demo"
             else SavedAddressBook(get_session_factory())
         ),
+        photo_reader=get_photo_reader(),
         order_tracking=get_order_tracking_service(),
         order_history=get_zepto_service(),
     )

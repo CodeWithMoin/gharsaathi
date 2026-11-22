@@ -17,3 +17,5 @@ openai>=2.8,<4
 tiktoken>=0.8,<1
 websockets>=15,<17
 clerk-backend-api>=6,<7
+pillow>=11,<13
+pillow-heif>=0.18,<2
