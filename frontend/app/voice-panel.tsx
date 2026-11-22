@@ -20,7 +20,7 @@ type LiveEvent = { type: string; error?: { message?: string; client_event_id?: s
 export type VoiceTranscriptTurn = { id: string; role: "user" | "assistant"; content: string };
 type ToolEvent =
   | { type: "tool.started"; name: string }
-  | { type: "tool.results"; query: string; store: string; products: VoiceProduct[] }
+  | { type: "tool.results"; query: string; store: string; products: VoiceProduct[]; item_key?: string; item_label?: string }
   | { type: "tool.not_connected"; query: string }
   | { type: "tool.error"; message: string }
   | { type: "basket.updated"; provider?: VoiceStore; basket: { item_count: number; item_total: string; store?: string } }
@@ -75,7 +75,7 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   });
 }
 
-export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[]) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void; onApprovalRequested?: (provider: VoiceStore, request: ApprovalRequest) => void; onAddressForm?: (request: VoiceAddressFormRequest) => void }) {
+export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[], item: { itemKey?: string; itemLabel?: string }) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void; onApprovalRequested?: (provider: VoiceStore, request: ApprovalRequest) => void; onAddressForm?: (request: VoiceAddressFormRequest) => void }) {
   const authenticatedFetch = useAuthenticatedFetch();
   const [status, setStatus] = useState<VoiceStatus>("connecting");
   const [message, setMessage] = useState("Voice connect ho raha hai…");
@@ -139,7 +139,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
           setSearching(false);
           setHasResults(true);
           setMessage("Options mil gaye. Main best choices bata rahi hoon.");
-          onResults(event.query, event.products);
+          onResults(event.query, event.products, { itemKey: event.item_key, itemLabel: event.item_label });
         } else if (event.type === "tool.not_connected") {
           setSearching(false);
           setMessage("Ek store connect karke delivery address choose kijiye.");

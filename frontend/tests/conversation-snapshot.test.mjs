@@ -13,6 +13,7 @@ test("passes a normal voice conversation through unchanged", () => {
     messages,
     results_after_message_id: "voice-1",
     timeline: { seq: 0, results_seq: 0, live: [], summaries: [] },
+    result_groups: [],
   });
 });
 
