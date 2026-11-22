@@ -228,6 +228,7 @@ def bill_for_model(quote: Quote) -> dict[str, Any]:
         ],
         "bill_offers": offers_for_model(quote),
         "promo_code_entry": "not_available",
+        **({"delivery_eta": quote.eta_text} if quote.eta_text else {}),
     }
 
 

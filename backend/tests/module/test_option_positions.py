@@ -104,14 +104,80 @@ async def test_doosra_wala_option_id_is_the_product_on_card_two() -> None:
 
 
 @pytest.mark.asyncio
-async def test_avoided_options_are_hidden_from_model_and_screen_even_when_named() -> None:
+async def test_avoided_options_are_hidden_from_model_and_screen_when_not_named() -> None:
     memory = Memory([rule("avoid_brand", brand="Pillsbury")])
-    results, cards = await search(one_store(ATTA, memory), "Pillsbury atta")
+    outcome = await one_store(ATTA, memory).execute("search_products", json.dumps({"query": "atta"}))
+    results, cards = outcome.model_output["results"], outcome.ui_event["products"]  # type: ignore[index]
     assert "Pillsbury Chakki Atta" not in {r["name"] for r in results} | {c["name"] for c in cards}
     assert [c["position"] for c in cards] == [1, 2, 3, 4]
-    outcome = await one_store(ATTA, memory).execute("search_products", json.dumps({"query": "Pillsbury atta"}))
     assert outcome.model_output["hidden_by_household_rules"] == 1
-    assert not any("avoided" in item for item in outcome.ui_event["products"])  # type: ignore[index]
+
+
+@pytest.mark.asyncio
+async def test_named_avoided_option_stays_flagged_with_one_numbering() -> None:
+    memory = Memory([rule("avoid_brand", brand="Pillsbury")])
+    outcome = await one_store(ATTA, memory).execute("search_products", json.dumps({"query": "Pillsbury atta"}))
+    results, cards = outcome.model_output["results"], outcome.ui_event["products"]  # type: ignore[index]
+    model = next(r for r in results if r["name"] == "Pillsbury Chakki Atta")
+    card = next(c for c in cards if c["name"] == "Pillsbury Chakki Atta")
+    assert model["avoided"] is True and card["avoided"] is True
+    assert model["avoided_because"] == "avoids Pillsbury"
+    assert model["position"] == card["position"] == 2
+    assert [r["position"] for r in results] == [c["position"] for c in cards] == [1, 2, 3, 4, 5]
+    assert "hidden_by_household_rules" not in outcome.model_output
+    assert "phir bhi dikhaun" in outcome.model_output["note"]
+    assert sum(1 for c in cards if c.get("avoided")) == 1
+
+
+@pytest.mark.asyncio
+async def test_named_avoided_product_is_offered_flagged() -> None:
+    sweets = [product("Cadbury Dairy Milk Chocolate", brand="Cadbury"), product("Amul Milk")]
+    memory = Memory([rule("avoid_product", product="chocolate")])
+    hidden = await one_store(sweets, memory).execute("search_products", json.dumps({"query": "milk"}))
+    assert [r["name"] for r in hidden.model_output["results"]] == ["Amul Milk"]
+    asked, cards = await search(one_store(sweets, memory), "chocolate dikhao")
+    assert asked[0]["name"] == cards[0]["name"] == "Cadbury Dairy Milk Chocolate"
+    assert asked[0]["avoided"] is True and cards[0]["avoided"] is True
+    assert "option_id" in asked[0]
+
+
+def two_stores(memory: Memory) -> tuple[MultiProviderShoppingToolExecutor, "Recording"]:
+    zepto = Recording([product("Aashirvaad Shudh Chakki Atta", brand="Aashirvaad")])
+    executor = MultiProviderShoppingToolExecutor(
+        [
+            ProviderSearchTarget("swiggy_instamart", "Swiggy Instamart", Searcher([product("Daily Good Sharbati Atta")]), "a1", True),
+            ProviderSearchTarget("zepto", "Zepto", zepto, "z1", True),
+        ],
+        memory=memory,
+        household_id="house",
+    )
+    return executor, zepto
+
+
+class Recording(Searcher):
+    def __init__(self, products: list[Product]) -> None:
+        super().__init__(products)
+        self.queries: list[str] = []
+
+    async def search(self, query: str, address_id: str, offset: int) -> ProductSearchResult:
+        self.queries.append(query)
+        return await super().search(query, address_id, offset)
+
+
+@pytest.mark.asyncio
+async def test_avoided_store_is_skipped_even_when_its_product_is_named() -> None:
+    executor, zepto = two_stores(Memory([rule("avoid_store", store_id="zepto")]))
+    results, cards = await search(executor, "Aashirvaad atta")
+    assert {r["store_id"] for r in results} == {c["provider"] for c in cards} == {"swiggy_instamart"}
+    assert zepto.queries == []
+
+
+@pytest.mark.asyncio
+async def test_avoided_store_is_searched_when_the_user_names_the_store() -> None:
+    executor, zepto = two_stores(Memory([rule("avoid_store", store_id="zepto")]))
+    results, _ = await search(executor, "Zepto atta")
+    assert "zepto" in {r["store_id"] for r in results}
+    assert zepto.queries == ["atta"]
 
 
 @pytest.mark.asyncio

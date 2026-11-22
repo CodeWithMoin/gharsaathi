@@ -628,6 +628,10 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "not_saved_one_off",
         "skipped_stores",
         "user_words",
+        # Household-rule annotations and the delivery ETA field (search options, bill).
+        "avoid_store",
+        "avoided_because",
+        "delivery_eta",
         # Fields, statuses and enum values shown in the backend few-shot examples.
         "swiggy_instamart",
         "price_paise",

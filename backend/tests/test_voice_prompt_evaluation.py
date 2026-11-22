@@ -542,6 +542,17 @@ BREVITY_CASES = [
     ("brevity_capability_one_sentence", "Main products dhoondh kar compare karti hoon aur basket bana deti hoon.", "Theek hai, main products dhoondh sakti hoon. Basket bhi bana sakti hoon."),
     ("brevity_refusal_one_sentence", "Cricket score main nahi bata sakti; shopping mein kuch chahiye toh bataiye.", "Theek hai, cricket score main nahi bata sakti."),
     ("brevity_yes_no_answer_one_sentence", "Haan, Zepto par cash on delivery hota hai.", "Haan, hota hai. Main dekh rahi hoon ki aapke liye kya ho sakta hai."),
+    # A reply that is only a filler fails where the user asked something or reported a problem.
+    ("address_change_lists_saved_first", "Ek second, saved addresses dekh leti hoon.", "Ek second."),
+    ("cannot_see_form_no_insisting", "Form dobara dikhati hoon.", "Bas ek pal."),
+    ("mixed_hinglish_numbers_and_verbs_stay_roman", "Teen can wale pack ka price screen par hai; pichli baar ka check karti hoon.", "Zara rukiye."),
+    ("feminine_current_action", "Ek second, Fortune oil 1 litre dhoondh rahi hoon.", "Fortune oil 1 litre search kar raha hoon."),
+    ("no_haan_before_refusal", "Na, Instamart ka order yahan se place nahi hota.", "Haan, Instamart order ho gaya."),
+    ("no_haan_before_refusal", "Na.", "Ji haan."),
+    ("no_generic_follow_up_question", "Haan, Zepto par cash on delivery hota hai.", "Haan, Zepto par cash on delivery hota hai; agla kya karna chahenge?"),
+    ("eta_estimate_from_search_when_bill_has_none", "Search mein Instamart ~18 min dikha raha tha; exact time bill confirm karega.", "Lagbhag 10 min lagenge."),
+    ("eta_never_invented_without_any_source", "Abhi koi delivery time nahi dikh raha; bill banne par pata chalega.", "Lagbhag 15 min lagenge."),
+    ("named_avoided_item_asks_once", "Aapne chocolate mat dikhane ko kaha tha—phir bhi dikhaun?", "Cadbury Dairy Milk 50 g ₹50 ka hai."),
 ]
 
 
@@ -555,7 +566,9 @@ def test_brevity_cases_score_good_and_bad_replies(case_id: str, good: str, bad: 
 
 def test_live_prompt_has_a_separate_brevity_section() -> None:
     brevity = LIVE_INSTRUCTIONS.split("\n# Brevity\n", 1)[1].split("\n# ", 1)[0]
-    assert "at most once per\n  turn" in brevity
+    assert "never a reply by itself" in brevity
+    assert "At most\n  one per turn" in brevity
+    assert "generic follow-up question" in brevity
     assert "Never say the same filler twice" in brevity
     assert "Never narrate" in brevity
     assert "## Brevity" in BACKEND_INSTRUCTIONS
