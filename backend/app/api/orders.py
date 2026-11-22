@@ -18,6 +18,7 @@ from app.dependencies import CheckoutServiceDependency, OrderConfirmationsDepend
 from app.legal_consent import ConsentedUserIdDependency
 from app.shopping.models import PaymentMethod
 from app.shopping.money import format_rupees
+from app.shopping.order_confirmation import result_from_reconciliation
 from app.shopping.order_confirmation import OrderConfirmation, OrderResult, OrderStatus
 from app.shopping.payments import payment_label
 from app.shopping.errors import (
@@ -67,6 +68,11 @@ class OrderConfirmOut(BaseModel):
     status: OrderStatus
     store: str
     provider_order_id: str | None
+    # The store's order code, when known (shown as "#CODE").
+    provider_order_code: str | None = None
+    # For an unknown outcome: the last read-only order-history check.
+    check: Literal["matched", "not_found", "ambiguous", "unavailable", "not_unknown"] | None = None
+    candidates: list[str] = []
     payable: OrderMoney
     checkout_id: str | None = None
     payment: PaymentOut
@@ -100,6 +106,9 @@ def _result_out(result: OrderResult, *, tracking: TrackingRead | None = None) ->
         provider_order_id=result.provider_order_id,
         payable=OrderMoney(paise=result.payable_paise, display=format_rupees(result.payable_paise)),
         checkout_id=result.checkout_id,
+        provider_order_code=result.order_code,
+        check=result.check,
+        candidates=list(result.candidates),
         payment=PaymentOut(
             method=result.payment_method,
             label=payment_label(result.payment_method),
@@ -183,6 +192,59 @@ async def check_payment_status(
         response.status_code = status.HTTP_202_ACCEPTED
     # A prepaid order confirmed by a status check is tracked like any other.
     return _result_out(result, tracking=await _start_tracking(request, user_id, result))
+
+
+@router.post("/check", response_model=OrderConfirmOut)
+async def check_order(
+    body: PaymentStatusRequest,
+    request: Request,
+    response: Response,
+    confirmations: OrderConfirmationsDependency,
+    user_id: ConsentedUserIdDependency,
+) -> OrderConfirmOut:
+    """The card's "Check with Zepto": one read-only order-history check.
+
+    Never calls an order tool; repeated taps reuse the last answer for a while.
+    """
+
+    try:
+        result = await confirmations.check_order(user_id, body.checkout_id)
+    except ShoppingError as exc:
+        _raise_http(exc)
+    if result.status != "confirmed":
+        response.status_code = status.HTTP_202_ACCEPTED
+    return _result_out(result, tracking=await _start_tracking(request, user_id, result))
+
+
+class PendingOrdersOut(BaseModel):
+    orders: list[OrderConfirmOut]
+
+
+@router.post("/reconcile-pending", response_model=PendingOrdersOut)
+async def reconcile_pending(
+    request: Request,
+    confirmations: OrderConfirmationsDependency,
+    user_id: ConsentedUserIdDependency,
+) -> PendingOrdersOut:
+    """On app load: one read-only check for each recent unknown checkout.
+
+    Returns every still-unknown checkout and each one this call settled.
+    """
+
+    reconciler = confirmations.reconciler
+    if reconciler is None:
+        return PendingOrdersOut(orders=[])
+    out: list[OrderConfirmOut] = []
+    for outcome in await reconciler.reconcile_household(user_id):
+        if outcome.attempt is None:
+            continue
+        if outcome.newly_reconciled:
+            await confirmations.notify_reconciled(outcome)
+        elif outcome.check == "not_unknown":
+            continue
+        result = result_from_reconciliation("", "Zepto", outcome)
+        out.append(_result_out(result, tracking=await _start_tracking(request, user_id, result)))
+    return PendingOrdersOut(orders=out)
 
 
 async def _start_tracking(request: Request, user_id: str, result: OrderResult) -> TrackingRead | None:

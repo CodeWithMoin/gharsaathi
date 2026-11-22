@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, useApiRequest } from "../authenticated-api";
 import { offerOpportunityCopy, visibleOfferOpportunities } from "./offer-opportunity.mjs";
 import { canConfirmZeptoCodOrder, checkoutStatusCopy } from "./zepto-checkout-state.mjs";
+import { STALE_BILL_TEXT, billIsStale } from "../card-lifecycle.mjs";
 
 const MAX_QUANTITY = 50;
 
@@ -250,6 +251,8 @@ export function BasketPanel({
   const [usuals, setUsuals] = useState<UsualSuggestion[] | null>(null);
   const [usualCandidate, setUsualCandidate] = useState<LiveUsualCandidate | null>(null);
   const [usualNotice, setUsualNotice] = useState<string | null>(null);
+  // Set when the basket changed under a bill shown here: the old bill is gone, not reusable.
+  const [billOutdated, setBillOutdated] = useState(false);
   const query = useMemo(() => providerQuery(provider), [provider]);
 
   const applyBasket = useCallback((next: ShoppingBasket) => {
@@ -286,11 +289,23 @@ export function BasketPanel({
   useEffect(() => {
     if (!incomingRequest) return;
     applyBasket(incomingRequest.basket);
+    setBillOutdated(false);
     setRequest(incomingRequest);
     setApproval(incomingRequest.approval);
     onApprovalChange?.(incomingRequest.approval);
     setNotice(null);
   }, [applyBasket, incomingRequest, onApprovalChange]);
+
+  // A bill is bound to one basket revision. Once the basket changes (an edit here,
+  // by voice or typed chat, or an order closing it), the bill is replaced at once.
+  const billStale = !checkout && billIsStale(basket, request);
+  useEffect(() => {
+    if (!billStale) return;
+    setRequest(null);
+    setApproval(null);
+    onApprovalChange?.(null);
+    setBillOutdated(true);
+  }, [billStale, onApprovalChange]);
 
   // A final-order result is valid only for the exact approved bill that created it.
   useEffect(() => {
@@ -342,6 +357,7 @@ export function BasketPanel({
       const next = await basketRequest<ApprovalRequest>(`/approval${query}`, { method: "POST" });
       onBillStep?.(provider, "bill_ready");
       applyBasket(next.basket);
+      setBillOutdated(false);
       setRequest(next);
       setApproval(next.approval);
       onApprovalChange?.(next.approval);
@@ -428,7 +444,8 @@ export function BasketPanel({
     }
   }, [apiRequest, approval, checkout, commerceMode, provider]);
 
-  const actionableFreeDelivery = request?.quote.offers?.find((offer) =>
+  const shownRequest = billStale ? null : request;
+  const actionableFreeDelivery = shownRequest?.quote.offers?.find((offer) =>
     offer.kind === "free_delivery"
     && !offer.unlocked
     && offer.remaining_paise > 0
@@ -528,7 +545,7 @@ export function BasketPanel({
   const isApproved = approval?.status === "approved";
   const canConfirmZeptoCod = Boolean(approval && canConfirmZeptoCodOrder({ provider, commerceMode, approvalStatus: approval.status }));
   const providerLabel = provider === "swiggy_instamart" ? "Swiggy Instamart" : "Zepto";
-  const visibleOffers = request ? visibleOfferOpportunities(request.quote.offers ?? []) as OfferOpportunity[] : [];
+  const visibleOffers = shownRequest ? visibleOfferOpportunities(shownRequest.quote.offers ?? []) as OfferOpportunity[] : [];
 
   return (
     <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`overflow-hidden rounded-[26px] border border-border-strong bg-surface shadow-[0_18px_45px_-34px_rgb(var(--shadow)/.7)] ${className}`} aria-label="Your basket" aria-busy={locked}>
@@ -583,8 +600,9 @@ export function BasketPanel({
             })}
           </ul>
 
-          {!request && (
+          {!shownRequest && (
             <div className="border-t border-border py-4">
+              {billOutdated && <p role="status" className="mb-3 flex gap-2 rounded-xl border border-warning-border bg-warning-soft px-3 py-2.5 text-xs font-semibold leading-5 text-warning"><WarningCircle size={16} className="mt-0.5 shrink-0" weight="fill" />{STALE_BILL_TEXT}</p>}
               <div className="flex items-baseline justify-between gap-3 text-sm"><span className="text-muted">Items total</span><strong className="tabular-nums text-ink">{basket?.item_total.display}</strong></div>
               {basket && basket.savings_vs_mrp.paise > 0 && <div className="mt-1 flex items-baseline justify-between gap-3 text-xs"><span className="text-muted">Savings vs MRP</span><strong className="tabular-nums text-success">{basket.savings_vs_mrp.display}</strong></div>}
               {!addressId && <p className="mt-3 rounded-xl bg-surface-muted px-3 py-2.5 text-xs leading-5 text-muted">Choose a delivery address to request the final bill.</p>}
@@ -598,7 +616,7 @@ export function BasketPanel({
       )}
 
       <AnimatePresence initial={false}>
-        {request && approval && (
+        {shownRequest && approval && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-warning-border bg-warning-soft">
             <div className="p-5 sm:p-6">
               <div className="flex items-start gap-3">
@@ -607,10 +625,10 @@ export function BasketPanel({
               </div>
 
               <ul className="mt-4 space-y-2 border-y border-border py-3 text-xs leading-5">
-                {request.basket.lines.map((line) => <li key={line.ref.variant_id} className="flex justify-between gap-4"><span className="min-w-0 text-ink-secondary"><b className="font-semibold text-ink">{line.quantity}×</b> {line.name}</span><span className="shrink-0 tabular-nums text-ink">{line.line_total.display}</span></li>)}
-                <li className="flex justify-between gap-4 pt-2 text-muted"><span>Store item total</span><span className="tabular-nums">{request.quote.item_total.display}</span></li>
-                {request.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`} className="flex justify-between gap-4 text-muted"><span>{charge.label}</span><span className="tabular-nums">{charge.amount.display}</span></li>)}
-                <li className="flex justify-between gap-4 pt-2 text-sm font-semibold text-ink"><span>Final payable</span><strong className="tabular-nums">{request.quote.payable.display}</strong></li>
+                {shownRequest.basket.lines.map((line) => <li key={line.ref.variant_id} className="flex justify-between gap-4"><span className="min-w-0 text-ink-secondary"><b className="font-semibold text-ink">{line.quantity}×</b> {line.name}</span><span className="shrink-0 tabular-nums text-ink">{line.line_total.display}</span></li>)}
+                <li className="flex justify-between gap-4 pt-2 text-muted"><span>Store item total</span><span className="tabular-nums">{shownRequest.quote.item_total.display}</span></li>
+                {shownRequest.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`} className="flex justify-between gap-4 text-muted"><span>{charge.label}</span><span className="tabular-nums">{charge.amount.display}</span></li>)}
+                <li className="flex justify-between gap-4 pt-2 text-sm font-semibold text-ink"><span>Final payable</span><strong className="tabular-nums">{shownRequest.quote.payable.display}</strong></li>
               </ul>
 
               {visibleOffers.length > 0 && (
@@ -638,12 +656,12 @@ export function BasketPanel({
                 </div>
               )}
 
-              {!request.item_total_matches && <p className="mt-3 flex gap-2 rounded-xl bg-warning-soft px-3 py-2.5 text-xs leading-5 text-warning"><WarningCircle size={16} className="mt-0.5 shrink-0" />Store item prices changed. The final bill above is the amount you would approve.</p>}
-              <p className="mt-3 text-[11px] leading-5 text-muted">{request.quote.eta_text ? `Delivery ${request.quote.eta_text} · ` : ""}Valid {expiryText(approval.expires_at)}.</p>
+              {!shownRequest.item_total_matches && <p className="mt-3 flex gap-2 rounded-xl bg-warning-soft px-3 py-2.5 text-xs leading-5 text-warning"><WarningCircle size={16} className="mt-0.5 shrink-0" />Store item prices changed. The final bill above is the amount you would approve.</p>}
+              <p className="mt-3 text-[11px] leading-5 text-muted">{shownRequest.quote.eta_text ? `Delivery ${shownRequest.quote.eta_text} · ` : ""}Valid {expiryText(approval.expires_at)}.</p>
 
               {isApproved ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-2xl border border-success-border bg-success-soft px-3.5 py-3 text-sm text-success-strong"><CheckCircle size={20} weight="fill" /><span><strong>Bill approved.</strong> {canConfirmZeptoCod ? "Review the final COD action below." : "No order has been placed."}</span></div>{canConfirmZeptoCod ? (
-                checkout ? <ZeptoCheckoutOutcome checkout={checkout.result} /> : <div className="space-y-2 rounded-2xl border border-accent-border bg-accent-soft p-3.5"><p className="text-sm font-semibold text-ink-secondary">One final step: place a Zepto cash-on-delivery order</p><p className="text-xs leading-5 text-warning">This submits the exact approved bill to Zepto. It cannot be undone here.</p><button type="button" onClick={() => void confirmZeptoCodOrder()} disabled={locked} className="flex w-full items-center justify-center gap-2 rounded-full bg-accent-strong px-5 py-3 text-sm font-semibold text-on-accent shadow-[0_10px_24px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">{action === "checkout" ? <><CircleNotch size={17} className="animate-spin" /> Submitting COD order…</> : `Place Zepto COD order · ${request.quote.payable.display}`}</button></div>
-              ) : <div className="flex gap-2 rounded-xl bg-warning-soft px-3 py-2.5 text-[11px] leading-5 text-warning" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0" /><p>A separate, explicit order confirmation would still be required before anything can be submitted to {providerLabel}. That final action is not enabled here.</p></div>}</div> : <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => void reject()} disabled={locked} className="rounded-full border border-accent-border bg-white px-4 py-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-muted active:scale-[.98] disabled:opacity-45">{action === "reject" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : "Reject"}</button><button type="button" onClick={() => void approve()} disabled={locked} className="rounded-full bg-accent px-4 py-3 text-sm font-semibold text-on-accent shadow-[0_10px_24px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.98] disabled:opacity-45">{action === "approve" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : `Approve bill · ${request.quote.payable.display}`}</button></div>}
+                checkout ? <ZeptoCheckoutOutcome checkout={checkout.result} /> : <div className="space-y-2 rounded-2xl border border-accent-border bg-accent-soft p-3.5"><p className="text-sm font-semibold text-ink-secondary">One final step: place a Zepto cash-on-delivery order</p><p className="text-xs leading-5 text-warning">This submits the exact approved bill to Zepto. It cannot be undone here.</p><button type="button" onClick={() => void confirmZeptoCodOrder()} disabled={locked} className="flex w-full items-center justify-center gap-2 rounded-full bg-accent-strong px-5 py-3 text-sm font-semibold text-on-accent shadow-[0_10px_24px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45">{action === "checkout" ? <><CircleNotch size={17} className="animate-spin" /> Submitting COD order…</> : `Place Zepto COD order · ${shownRequest.quote.payable.display}`}</button></div>
+              ) : <div className="flex gap-2 rounded-xl bg-warning-soft px-3 py-2.5 text-[11px] leading-5 text-warning" role="note"><WarningCircle size={16} className="mt-0.5 shrink-0" /><p>A separate, explicit order confirmation would still be required before anything can be submitted to {providerLabel}. That final action is not enabled here.</p></div>}</div> : <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => void reject()} disabled={locked} className="rounded-full border border-accent-border bg-white px-4 py-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-muted active:scale-[.98] disabled:opacity-45">{action === "reject" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : "Reject"}</button><button type="button" onClick={() => void approve()} disabled={locked} className="rounded-full bg-accent px-4 py-3 text-sm font-semibold text-on-accent shadow-[0_10px_24px_-14px_rgb(var(--accent-shadow)/.8)] transition hover:bg-accent-hover active:scale-[.98] disabled:opacity-45">{action === "approve" ? <CircleNotch className="mx-auto animate-spin" size={17} /> : `Approve bill · ${shownRequest.quote.payable.display}`}</button></div>}
               {!isApproved && <p className="mt-3 text-center text-[10px] leading-4 text-muted">This approves only the bill shown above—it doesn&apos;t check out. Placing the order needs a separate final confirmation.</p>}
             </div>
           </motion.div>

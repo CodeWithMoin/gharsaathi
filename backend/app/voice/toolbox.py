@@ -171,7 +171,17 @@ class VoiceToolbox:
         )
         self.order = OrderToolExecutor(self.basket, order_confirmations)
         self.photo = PhotoToolExecutor(photo_reader, household_id)
-        self.order_status = OrderStatusToolExecutor(order_tracking, order_history, household_id)
+        self.order_status = OrderStatusToolExecutor(
+            order_tracking,
+            order_history,
+            household_id,
+            checkouts=getattr(order_confirmations, "reconciler", None),
+            on_reconciled=(
+                (lambda outcome: order_confirmations.notify_reconciled(outcome, announce=False))
+                if order_confirmations is not None
+                else None
+            ),
+        )
 
     def has_store(self, provider: ProviderName) -> bool:
         return provider in self.basket.stores
@@ -235,7 +245,11 @@ class VoiceToolbox:
         if name in BASKET_TOOL_NAMES:
             return await self.basket.execute(name, raw_arguments)
         self.choices.saw_search(raw_arguments)
-        return await self.search.execute(name, raw_arguments)
+        outcome = await self.search.execute(name, raw_arguments)
+        if name == "search_products":
+            # A search for an item read from a product photo is compared with that photo.
+            outcome = await self.photo.after_search(raw_arguments, outcome)
+        return outcome
 
     async def _recall_then_search(self, name: str, raw_arguments: str) -> ToolOutcome:
         """Recall; when nothing is remembered, search the item in the same tool call.
@@ -251,7 +265,9 @@ class VoiceToolbox:
             return recalled
         query = json.dumps({"query": item})
         self.choices.saw_search(query)
-        searched = await self.search.execute(SEARCH_TOOL_NAME, query)
+        searched = await self.photo.after_search(
+            query, await self.search.execute(SEARCH_TOOL_NAME, query)
+        )
         searched_ok = searched.model_output.get("status") == "ok"
         note = recalled.model_output.get("note", "")
         return ToolOutcome(

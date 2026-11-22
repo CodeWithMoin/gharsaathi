@@ -36,6 +36,7 @@ from app.shopping.checkout import (
 )
 from app.database.session import get_session_factory
 from app.shopping.order_confirmation import OrderConfirmations
+from app.shopping.reconciliation import CheckoutReconciler
 from app.shopping.payments import PrepaidGateway
 from app.shopping.errors import ProviderUnavailable
 from app.shopping.models import Basket, ProviderName, Quote
@@ -61,6 +62,7 @@ from app.conversations.summarizer import (
 from app.memory.recall import DatabasePreferenceRecaller
 from app.photos.extraction import OpenAIPhotoExtractor, PhotoReader
 from app.photos.store import PhotoAttachmentStore
+from app.photos.visual_match import HttpImageFetcher, OpenAIVisualMatchModel, PhotoVisualMatcher
 from app.user_profile import DatabaseProfileReader
 from app.chat.service import ChatTurnService
 from app.voice.service import LiveSessionService
@@ -264,7 +266,19 @@ def get_photo_reader() -> PhotoReader:
         if api_key
         else None
     )
-    return PhotoReader(get_photo_store(), extractor)
+    matcher = (
+        PhotoVisualMatcher(
+            OpenAIVisualMatchModel(
+                api_key,
+                settings.openai_base_url,
+                settings.photo_visual_match_model.strip() or settings.photo_extraction_model,
+            ),
+            HttpImageFetcher(),
+        )
+        if api_key and settings.photo_visual_match_enabled
+        else None
+    )
+    return PhotoReader(get_photo_store(), extractor, visual_matcher=matcher)
 
 
 PhotoStoreDependency = Annotated[PhotoAttachmentStore, Depends(get_photo_store)]
@@ -372,7 +386,23 @@ def get_order_confirmations() -> OrderConfirmations:
         get_basket_repository(),
         get_approval_service(),
         payments=get_zepto_payment_gateway(),
+        reconciler=get_checkout_reconciler(),
     )
+
+
+@lru_cache
+def get_checkout_reconciler() -> CheckoutReconciler:
+    """Read-only order-history checks for checkouts whose outcome is unknown."""
+
+    return CheckoutReconciler(
+        DatabaseCheckoutAttemptRepository(get_session_factory()),
+        get_basket_repository(),
+        get_zepto_service(),
+        tracking=get_order_tracking_service(),
+    )
+
+
+CheckoutReconcilerDependency = Annotated[CheckoutReconciler, Depends(get_checkout_reconciler)]
 
 
 OrderConfirmationsDependency = Annotated[OrderConfirmations, Depends(get_order_confirmations)]

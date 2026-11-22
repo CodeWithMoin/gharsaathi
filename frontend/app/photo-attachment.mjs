@@ -8,6 +8,9 @@ export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 export const GALLERY_ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif";
 export const CAMERA_ACCEPT = "image/*";
 export const PHOTO_PLACEHOLDER = "📷 Photo";
+// Shop from a photo is in beta: the photo menu, camera dialog and chip show this tag.
+export const PHOTO_BETA_LABEL = "Beta";
+export const PHOTO_BETA_NOTE = "Photo shopping is in beta, so check the items it finds.";
 // The server-made bubble thumbnail (backend app/photos/images.py: <=320 px, <=40 KB JPEG).
 export const THUMBNAIL_PREFIX = "data:image/jpeg;base64,";
 export const MAX_THUMBNAIL_CHARS = THUMBNAIL_PREFIX.length + Math.ceil((40 * 1024) / 3) * 4;

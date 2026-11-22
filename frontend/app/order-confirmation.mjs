@@ -16,6 +16,8 @@ const PAYMENT_ORDER = ["cod", "upi_reserve", "wallet", "online"];
 const CHECKABLE = new Set(["awaiting_payment", "payment_succeeded", "payment_unknown"]);
 const AUTO_CHECK_INTERVAL_MS = 15000;
 const AUTO_CHECK_LIMIT = 20;
+/** "Check with Zepto" after an unknown outcome: three automatic checks over about two minutes. */
+const ORDER_CHECK_DELAYS_MS = [20_000, 45_000, 60_000];
 
 /** @typedef {{ name: string, packSize: string | null, quantity: number }} OrderItem */
 /** @typedef {"cod" | "upi_reserve" | "wallet" | "online"} PaymentMethod */
@@ -34,11 +36,15 @@ const AUTO_CHECK_LIMIT = 20;
  *   address: string | null,
  *   paymentMethod: PaymentMethod,
  *   paymentMethods: PaymentOption[],
+ *   basketId: string | null,
+ *   basketRevision: number | null,
  * }} OrderConfirmation
  */
+/** @typedef {"matched" | "not_found" | "ambiguous" | "unavailable" | "not_unknown"} OrderCheck */
 /**
- * @typedef {{ status: "open" } | { status: "placing" } | { status: "placed", orderId: string, tracking?: unknown }
- *   | { status: "unknown" } | { status: "failed", reason: string } | { status: "cancelling" }
+ * @typedef {{ status: "open" } | { status: "placing" } | { status: "placed", orderId: string, orderCode?: string | null, tracking?: unknown }
+ *   | { status: "unknown", checkoutId?: string | null, check?: OrderCheck | null, candidates?: string[] }
+ *   | { status: "checking_order", checkoutId: string } | { status: "failed", reason: string } | { status: "cancelling" }
  *   | { status: "cancelled" } | { status: "expired" } | { status: "switching" }
  *   | { status: "awaiting_payment", checkoutId: string, url: string | null }
  *   | { status: "checking", checkoutId: string, url: string | null }
@@ -120,6 +126,8 @@ export function orderConfirmationFromEvent(raw) {
     address: text(address.address),
     paymentMethod,
     paymentMethods,
+    basketId: text(event.basket?.id),
+    basketRevision: Number.isInteger(event.basket?.revision) ? event.basket.revision : null,
   };
 }
 
@@ -174,6 +182,31 @@ export function autoCheckDelayMs(checksSoFar) {
 }
 
 /**
+ * The checkout id a "Check with Zepto" tap may use (unknown outcome only), or null.
+ *
+ * @param {OrderCardState} state
+ * @returns {string | null}
+ */
+export function checkableOrderId(state) {
+  return state.status === "unknown" && state.checkoutId ? state.checkoutId : null;
+}
+
+/**
+ * Delay before the next automatic read-only order check, or null to stop.
+ * The backend runs the same bounded checks and rate-limits them.
+ *
+ * @param {number} checksSoFar
+ */
+export function orderCheckDelayMs(checksSoFar) {
+  return ORDER_CHECK_DELAYS_MS[checksSoFar] ?? null;
+}
+
+/** @param {unknown} raw @returns {OrderCheck | null} */
+function orderCheck(raw) {
+  return raw === "matched" || raw === "not_found" || raw === "ambiguous" || raw === "unavailable" || raw === "not_unknown" ? raw : null;
+}
+
+/**
  * "Expires in 4:59", or null once expired.
  *
  * @param {string} expiresAt
@@ -200,8 +233,12 @@ export function deliverToLabel(confirmation) {
  */
 export function orderCardResultText(state, store) {
   switch (state.status) {
-    case "placed": return `Order placed · #${state.orderId}`;
-    case "unknown": return `${store} hasn't confirmed this order yet. Check order tracking before trying again.`;
+    case "placed": return `Order placed · #${state.orderCode ?? state.orderId}`;
+    case "checking_order": return `Checking ${store}'s order history…`;
+    case "unknown":
+      if (state.check === "ambiguous") return `Several ${store} orders could match${state.candidates?.length ? ` (${state.candidates.slice(0, 3).map((code) => `#${code}`).join(", ")})` : ""}. GharSaathi won't guess. Check the ${store} app; don't order again.`;
+      if (state.check === "not_found") return `${store} hasn't confirmed this order. Its order history doesn't show it yet. Check the ${store} app before trying again.`;
+      return `${store} hasn't confirmed this order yet. Don't order again; check with ${store} first.`;
     case "failed": return `Order not placed: ${state.reason}`;
     case "cancelled": return "Cancelled. Nothing was ordered.";
     case "expired": return "Expired. Nothing was ordered. Ask for the order again.";
@@ -229,13 +266,18 @@ export function orderCardStateFromResponse(outcome) {
     const checkoutId = text(body?.checkout_id);
     switch (body?.status) {
       // `tracking` is the read-only status monitor the backend started for this order, if any.
-      case "confirmed": return orderId ? { status: "placed", orderId, tracking: body?.tracking ?? null } : { status: "unknown" };
+      case "confirmed": return orderId ? { status: "placed", orderId, orderCode: text(body?.provider_order_code), tracking: body?.tracking ?? null } : { status: "unknown", checkoutId };
       case "awaiting_payment": return checkoutId ? { status: "awaiting_payment", checkoutId, url: safePaymentUrl(body?.payment?.url) } : { status: "payment_unknown", checkoutId: null };
       case "payment_succeeded": return checkoutId ? { status: "payment_succeeded", checkoutId } : { status: "payment_unknown", checkoutId: null };
       case "payment_unknown": return { status: "payment_unknown", checkoutId };
       case "payment_failed": return { status: "payment_failed" };
       case "paid_order_failed": return { status: "paid_order_failed" };
-      default: return { status: "unknown" };
+      default: return {
+        status: "unknown",
+        checkoutId,
+        check: orderCheck(body?.check),
+        candidates: Array.isArray(body?.candidates) ? body.candidates.map(text).filter((code) => code !== null).slice(0, 5) : [],
+      };
     }
   }
   // A dropped connection or server error is an uncertain outcome, never a reason to tap again.

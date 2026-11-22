@@ -344,7 +344,6 @@ def test_confirmed_order_requires_explicit_non_preview_cod_order_id() -> None:
         {"data": {"isPreview": True, "paymentMethod": "COD", "orderId": "order_123"}},
         {"data": {"isPreview": False, "paymentMethod": "COD"}},
         {"data": {"isPreview": False, "paymentMethod": "UPI", "orderId": "order_123"}},
-        {"data": {"isPreview": False, "paymentMethod": "COD", "orderId": "order_123"}},
     ):
         with pytest.raises(ZeptoSchemaError):
             parse_confirmed_cod_order(value)

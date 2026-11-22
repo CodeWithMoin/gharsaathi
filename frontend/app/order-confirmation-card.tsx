@@ -8,10 +8,12 @@ import { BASKET_CHANGED_EVENT } from "./basket/BasketPanel";
 import {
   autoCheckDelayMs,
   checkableCheckoutId,
+  checkableOrderId,
   countdownLabel,
   deliverToLabel,
   orderCardResultText,
   orderCardStateFromResponse,
+  orderCheckDelayMs,
   paymentMethodLabel,
   placeButtonLabel,
   withPaymentMethodCard,
@@ -20,7 +22,7 @@ import {
   type PaymentMethod,
 } from "./order-confirmation.mjs";
 
-type OrderResponse = { status: string; provider_order_id: string | null; checkout_id?: string | null; payment?: { url?: string | null } };
+type OrderResponse = { status: string; provider_order_id: string | null; provider_order_code?: string | null; checkout_id?: string | null; check?: string | null; candidates?: string[]; payment?: { url?: string | null } };
 
 /**
  * The only control that places an order prepared by voice or typed chat. The
@@ -35,10 +37,12 @@ export function OrderConfirmationCard({ confirmation: initial, onResult }: { con
   const [notice, setNotice] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const checks = useRef(0);
+  const orderChecks = useRef(0);
   const countdown = countdownLabel(confirmation.expiresAt, now);
   const open = state.status === "open";
   const prepaid = confirmation.paymentMethod !== "cod";
   const checkoutId = checkableCheckoutId(state);
+  const unknownCheckoutId = checkableOrderId(state);
 
   useEffect(() => {
     if (!open) return;
@@ -115,6 +119,39 @@ export function OrderConfirmationCard({ confirmation: initial, onResult }: { con
     }
   }, [apiRequest, finish, state]);
 
+  // "Check with Zepto": one read-only order-history check; never another order call.
+  const checkOrder = useCallback(async () => {
+    const id = checkableOrderId(state);
+    if (!id) return;
+    const previous = state;
+    orderChecks.current += 1;
+    setNotice(null);
+    setState({ status: "checking_order", checkoutId: id });
+    try {
+      const body = await apiRequest<OrderResponse>("/api/orders/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checkout_id: id }),
+      });
+      const next = orderCardStateFromResponse({ ok: true, body });
+      finish(next.status === "unknown" && !next.checkoutId ? { ...next, checkoutId: id } : next);
+    } catch (cause) {
+      setState(previous);
+      setNotice(cause instanceof ApiError ? cause.message : `Couldn't reach ${confirmation.store}. Try again in a moment.`);
+    } finally {
+      window.dispatchEvent(new Event(BASKET_CHANGED_EVENT));
+    }
+  }, [apiRequest, confirmation.store, finish, state]);
+
+  // After an unknown outcome: three automatic checks over about two minutes, then only on tap.
+  useEffect(() => {
+    if (!unknownCheckoutId) return;
+    const delay = orderCheckDelayMs(orderChecks.current);
+    if (delay === null) return;
+    const timer = window.setTimeout(() => void checkOrder(), delay);
+    return () => window.clearTimeout(timer);
+  }, [checkOrder, unknownCheckoutId]);
+
   // While waiting for payment: one status check when the user comes back to the tab, and a slow schedule.
   useEffect(() => {
     if (!checkoutId) return;
@@ -148,6 +185,7 @@ export function OrderConfirmationCard({ confirmation: initial, onResult }: { con
   const busy = state.status === "placing" || state.status === "cancelling" || state.status === "switching";
   const paymentUrl = state.status === "awaiting_payment" || state.status === "checking" ? state.url : null;
   const good = state.status === "placed";
+  const unconfirmed = state.status === "unknown" || state.status === "checking_order";
   const waiting = state.status === "awaiting_payment" || state.status === "checking" || state.status === "payment_succeeded" || state.status === "payment_unknown";
   const chips = open || state.status === "switching";
 
@@ -175,10 +213,15 @@ export function OrderConfirmationCard({ confirmation: initial, onResult }: { con
       <p className="mt-3 text-base font-semibold text-ink">Total {confirmation.payable}</p>
       {result ? (
         <>
-          <p role="status" className={`mt-4 flex items-start gap-2 rounded-2xl px-3.5 py-3 text-sm ${good ? "bg-success-soft text-success-strong" : waiting ? "bg-warning-soft text-warning" : "bg-surface-muted text-danger-hover"}`}>
+          <p role="status" className={`mt-4 flex items-start gap-2 rounded-2xl px-3.5 py-3 text-sm ${good ? "bg-success-soft text-success-strong" : waiting || unconfirmed ? "bg-warning-soft text-warning" : "bg-surface-muted text-danger-hover"}`}>
             {good ? <CheckCircle size={18} weight="fill" className="mt-0.5 shrink-0" /> : <WarningCircle size={18} className="mt-0.5 shrink-0" />}
             <span>{result}</span>
           </p>
+          {unconfirmed && (unknownCheckoutId || state.status === "checking_order") && (
+            <button type="button" onClick={() => void checkOrder()} disabled={state.status === "checking_order"} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border border-border-strong px-5 py-3 text-sm font-semibold text-ink-secondary transition hover:bg-surface-muted active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-55">
+              {state.status === "checking_order" ? <><CircleNotch size={17} className="animate-spin" /> Checking with {confirmation.store}…</> : `Check with ${confirmation.store}`}
+            </button>
+          )}
           {waiting && (
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               {paymentUrl && <a href={paymentUrl} target={paymentUrl.startsWith("https:") ? "_blank" : undefined} rel="noopener noreferrer" className="flex flex-1 items-center justify-center gap-2 rounded-full bg-accent-strong px-5 py-3 text-sm font-semibold text-on-accent transition hover:bg-accent-hover active:scale-[.98]"><ArrowSquareOut size={16} /> Open payment</a>}

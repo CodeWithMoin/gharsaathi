@@ -36,3 +36,5 @@ export function attachmentIdFor(state: PhotoState): string | null;
 export function isPhotoThumbnail(value: unknown): value is string;
 export function photoBubbleText(content: string | null | undefined): string;
 export function savedPhotoFields<M extends { role: string; photo_thumbnail?: string | null; photo_preview?: string | null }>(messages: M[]): Omit<M, "photo_preview">[];
+export const PHOTO_BETA_LABEL: string;
+export const PHOTO_BETA_NOTE: string;
