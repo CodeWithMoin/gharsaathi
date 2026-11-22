@@ -92,31 +92,31 @@ dark onboarding card. Zepto keeps its own purple only where Zepto is the actor.
 
 | Tailwind colour | CSS variable | Value | Use |
 |---|---|---|---|
-| `canvas` | `--color-bg` | `#faf8f5` | Page background, quiet hover on white |
-| `surface` | `--color-surface` | `#ffffff` | Cards, sheets, inputs |
-| `surface-muted` | `--color-surface-muted` | `#f6f3ef` | Grouped rows, secondary panels, skeletons |
-| `surface-strong` | `--color-surface-strong` | `#eee9e3` | Pressed/hover fill on muted surfaces |
-| `border` | `--color-border` | `#e8e2db` | Hairlines, dividers |
-| `border-strong` | `--color-border-strong` | `#d9d1c8` | Input and button outlines, disabled fills |
-| `ink` | `--color-text` | `#1f1c1a` | Primary text |
-| `ink-secondary` | `--color-text-secondary` | `#45403b` | Body copy, secondary labels |
-| `muted` | `--color-text-muted` | `#6b645d` | Helper text, metadata |
-| `subtle` | `--color-text-subtle` | `#736b64` | Smallest captions, placeholders (still AA) |
-| `accent` | `--color-accent` | `#b64a18` | Primary buttons, links, selected state |
-| `accent-hover` | `--color-accent-hover` | `#9d3e15` | Hover/pressed primary |
-| `accent-strong` | `--color-accent-strong` | `#8f3812` | Accent text on tints, Place order |
-| `accent-soft` | `--color-accent-soft` | `#fbeee6` | Selected rows, accent chips and icon wells |
-| `accent-border` | `--color-accent-border` | `#f0d3c2` | Borders on accent-tinted or warm controls |
+| `canvas` | `--color-bg` | `#f4efe8` | Page background, quiet hover on white |
+| `surface` | `--color-surface` | `#fffdfa` | Cards, sheets, inputs |
+| `surface-muted` | `--color-surface-muted` | `#efe8df` | Grouped rows, secondary panels, skeletons |
+| `surface-strong` | `--color-surface-strong` | `#e6ddd2` | Pressed/hover fill on muted surfaces |
+| `border` | `--color-border` | `#e0d6ca` | Hairlines, dividers |
+| `border-strong` | `--color-border-strong` | `#cbbfb1` | Input and button outlines, disabled fills |
+| `ink` | `--color-text` | `#1a1613` | Primary text |
+| `ink-secondary` | `--color-text-secondary` | `#3b342e` | Body copy, secondary labels |
+| `muted` | `--color-text-muted` | `#574e46` | Helper text, metadata |
+| `subtle` | `--color-text-subtle` | `#5f564e` | Smallest captions, placeholders (still AA) |
+| `accent` | `--color-accent` | `#a3401a` | Primary buttons, links, selected state |
+| `accent-hover` | `--color-accent-hover` | `#8a3614` | Hover/pressed primary |
+| `accent-strong` | `--color-accent-strong` | `#7a2f11` | Accent text on tints, Place order |
+| `accent-soft` | `--color-accent-soft` | `#f8e6da` | Selected rows, accent chips and icon wells |
+| `accent-border` | `--color-accent-border` | `#e8c4ae` | Borders on accent-tinted or warm controls |
 | `on-accent` | `--color-on-accent` | `#ffffff` | Text on any saturated fill (accent, danger, success, Zepto) |
-| `user-bubble` / `on-user-bubble` | `--color-user-bubble` … | `#fbe9de` / `#1f1c1a` | User chat bubble |
-| `inverse` / `inverse-hover` / `on-inverse` | `--color-inverse` … | `#2a2623` / `#3a3531` / `#ffffff` | Charcoal secondary buttons, toast |
+| `user-bubble` / `on-user-bubble` | `--color-user-bubble` … | `#f3d9c6` / `#1a1613` | User chat bubble |
+| `inverse` / `inverse-hover` / `on-inverse` | `--color-inverse` … | `#231f1c` / `#35302b` / `#ffffff` | Charcoal secondary buttons, toast |
 | `success` / `success-strong` / `success-soft` / `success-border` | | `#3a7347` / `#2f6040` / `#edf6ef` / `#cfe5d5` | Connected, confirmed, savings |
 | `warning` / `warning-soft` / `warning-border` | | `#8a5a1c` / `#fdf3e3` / `#f1dcb8` | Demo mode, price changes, cautions |
 | `danger` / `danger-hover` / `danger-soft` / `danger-border` | | `#b3261e` / `#8f1f19` / `#fdecea` / `#f3c9c5` | Errors and destructive actions |
-| `focus` | `--color-focus` | `#b64a18` | Focus rings |
+| `focus` | `--color-focus` | `#a3401a` | Focus rings |
 | `zepto*` | `--color-zepto*` | unchanged purples | Zepto-branded controls only |
-| `scrim` | `--color-scrim` | `#1f1c1a` | Modal backdrops (always with opacity) |
-| `meter-user` / `meter-assistant` / `meter-idle` | `--color-meter-*` | `#2a2623` / `#b64a18` / `#ddd6ce` | Voice pill meter (read by `voice-meter.ts`) and its legend dots |
+| `scrim` | `--color-scrim` | `#1a1613` | Modal backdrops (always with opacity) |
+| `meter-user` / `meter-assistant` / `meter-idle` | `--color-meter-*` | `#231f1c` / `#a3401a` / `#d3c8bb` | Voice pill meter (read by `voice-meter.ts`) and its legend dots |
 
 Shadows use `rgb(var(--shadow)/a)` (warm neutral) or `rgb(var(--accent-shadow)/a)`
 inside arbitrary `shadow-[…]` values so they follow the palette.
