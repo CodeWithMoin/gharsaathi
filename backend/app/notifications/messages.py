@@ -202,6 +202,20 @@ def rider_called(
     )
 
 
+def delivery_line(title: str, body: str) -> PushPayload:
+    """The delivery line was shared or cleared automatically. Code-authored text
+    only: never the address, directions or a phone number."""
+
+    return PushPayload(
+        kind="delivery_line",
+        title=title[:48],
+        body=body[:160],
+        url="/",
+        tag="delivery-line",
+        suppress_when_visible=True,
+    )
+
+
 def quote_url(value: str) -> str:
     return quote(value, safe="")
 

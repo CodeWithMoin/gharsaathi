@@ -275,6 +275,17 @@ class InboundCallStore:
                 ["cohort_id"],
             )
 
+    async def clear_contexts(self, user_id: str) -> int:
+        """The delivery line was cleared: stop the context-gated call window for this user.
+
+        An order that is still moving keeps its own window (``active_orders``)."""
+
+        async with self.sessions() as session, session.begin():
+            result = await session.execute(
+                delete(InboundDeliveryContextRecord).where(InboundDeliveryContextRecord.user_id == user_id)
+            )
+            return int(result.rowcount or 0)  # type: ignore[attr-defined]
+
     async def contexts_since(self, since: datetime) -> list[PreparedContext]:
         async with self.sessions() as session:
             rows = (

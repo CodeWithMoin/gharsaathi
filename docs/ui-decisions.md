@@ -196,3 +196,20 @@ in hue; the pill also names the speaker in text.
   order's status card. It truncates on a 390 px header.
 - Reduced motion: chips and the toast keep only colour/opacity changes (no press scale or
   slide); spinners stop. Every chip and action has a visible focus ring.
+
+## Delivery line panel (`frontend/app/delivery-line-panel.tsx`)
+
+- Lives in **Track an order**. The address is the store address selected in the app,
+  shown **read-only**; **Change address** opens the same address picker. The panel never
+  offers a free-text address, so what the line says always matches the selected address.
+- **Recipient** comes from the profile name; **Edit** saves it to the profile once.
+- **Directions for this address** (landmark, up to 8 short steps, optional gate note,
+  optional handover with quick-pick chips) are edited in an `InputDialog` and reused for
+  that address next time; the bin in the popup deletes them (confirm popup).
+- **Share with delivery line** appears only when an address, a name and a landmark exist,
+  and stays disabled until the approval box is ticked. States shown: Sharing… /
+  Ready (with the inbound number and “Sir, Zepto”) / rejected / not known / Clearing… /
+  “Delivery line cleared” with the reason / clear failed. Ready is the server's decision.
+- **Share automatically when an order is on its way** is a switch, off by default; turning
+  it on asks for confirmation in a popup.
+- **Clear delivery line** is shown whenever something may still be shared.

@@ -13,6 +13,7 @@ import { VOICE_START_TIMEOUT_MS, startDeadline, voiceFailureView, voiceSupport }
 import { zeptoAddressSelection } from "../../app/zepto-address-refresh.mjs";
 import { MESSAGES as PUSH_MESSAGES, detectSupport, notificationState, turnOn } from "../../app/push-notifications.mjs";
 import { riderCallCardText, riderStatus } from "../../app/rider-assist.mjs";
+import { deliveryLineView } from "../../app/delivery-line.mjs";
 import { CLEAR_CONFLICT_TEXT, addReportText, basketEditState } from "../../app/quick-actions.mjs";
 
 /**
@@ -281,4 +282,27 @@ test("FM-L03: a store that is down is named as unreachable, never as not found",
   assert.match(summary.text, /Swiggy Instamart isn't connected/);
   assert.doesNotMatch(summary.text, /not (found|listed)/i);
   assert.equal(summary.offerBill, false);
+});
+
+const lineConfig = { enabled: true, reason: null, inbound_phone_number: "+918064264240", approved_caller_hint: "•••• 3210", route_directions_enabled: false };
+const lineAddress = { id: "z-office", text: "Prestige Tech Park, Bengaluru" };
+const lineDirections = { provider: "zepto", address_id: "z-office", landmark: "Gate 3", route_directions: [], gate_note: null, handover_instructions: null };
+const lineState = (overrides) => ({ phase: "none", provider: "zepto", address_id: "z-home", cohort_id: null, monitor_id: null, reason: null, error: null, auto_share: false, inbound_phone_number: null, updated_at: null, ...overrides });
+const lineView = (overrides) => deliveryLineView({ config: lineConfig, address: lineAddress, recipientName: "Moin", directions: lineDirections, line: lineState({}), store: "Zepto", ...overrides });
+
+test("FM-DL01: after an address change the old share is never shown as ready, and the clear is announced", () => {
+  assert.notEqual(lineView({ line: lineState({ phase: "ready" }) }).kind, "ready");
+  assert.equal(lineView({ line: lineState({ phase: "cleared", reason: "address_changed" }) }).message, "Delivery line cleared. You changed the delivery address.");
+});
+
+test("FM-DL04: without directions, a name or an address there is nothing to share", () => {
+  assert.equal(lineView({ directions: null }).canShare, false);
+  assert.equal(lineView({ recipientName: "" }).canShare, false);
+  assert.equal(lineView({ address: null }).canShare, false);
+});
+
+test("FM-DL06: a clear that failed is shown as a problem and blocks a new share", () => {
+  const failed = lineView({ line: lineState({ phase: "clear_failed", address_id: "z-office" }) });
+  assert.equal(failed.tone, "danger");
+  assert.equal(failed.canShare, false);
 });

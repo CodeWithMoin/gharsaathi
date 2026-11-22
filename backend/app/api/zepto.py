@@ -40,6 +40,7 @@ from app.commerce.zepto.models import (
     ToolDescription,
 )
 from app.core.config import get_settings
+from app.inbound_delivery import InboundDeliveryServiceDependency
 from app.commerce.zepto.address_refresh import PICKER_MAX_AGE_SECONDS
 from app.dependencies import (
     BasketServiceDependency,
@@ -426,6 +427,8 @@ async def select_address(
     body: SelectedAddressRequest,
     session: DbSessionDependency,
     actor: MemoryActorDependency,
+    user_id: UserIdDependency,
+    delivery_line: InboundDeliveryServiceDependency,
     service: ZeptoServiceDependency,
 ) -> AddressList:
     state = await ProviderAddressRepository(session).select(
@@ -438,6 +441,8 @@ async def select_address(
         )
     if not isinstance(service, DemoZeptoService):
         service.address_selected()
+    # Details shared for the previous address are cleared from the delivery line.
+    await delivery_line.address_selection_changed(user_id, "zepto", state.selected_address_id or "")
     return cached_address_list(state)
 
 

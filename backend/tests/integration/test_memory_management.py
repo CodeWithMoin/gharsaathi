@@ -251,3 +251,18 @@ async def test_forget_all_also_removes_inbound_delivery_calls(api: TestClient, s
     assert api.get("/api/inbound-delivery/calls", headers=gita).json()["calls"] == []
     assert len(await store.list_calls("hari-memory")) == 1
     assert {context.user_id for context in await store.contexts_since(started - timedelta(minutes=1))} == {"hari-memory"}
+
+
+@pytest.mark.asyncio
+async def test_forget_all_also_removes_saved_delivery_directions(api: TestClient, session_factory) -> None:
+    from app.inbound_delivery.models import DirectionsUpdate
+    from app.inbound_delivery.store import DeliveryLineStore
+
+    store = DeliveryLineStore(session_factory)
+    for user in ("gita-dirs", "hari-dirs"):
+        await store.save_directions(user, DirectionsUpdate(provider="zepto", address_id="a1", landmark="Opposite the park"))
+    gita = as_user("gita-dirs")
+    token = api.post("/api/memory/forget-all/token", headers=gita).json()["confirm_token"]
+    assert api.post("/api/memory/forget-all", headers=gita, json={"confirm_token": token}).status_code == 204
+    assert await store.directions("gita-dirs", "zepto", "a1") is None
+    assert await store.directions("hari-dirs", "zepto", "a1") is not None

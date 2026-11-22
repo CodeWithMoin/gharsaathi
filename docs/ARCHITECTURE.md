@@ -440,7 +440,8 @@ sequenceDiagram
   (`start_datetime` … `end_datetime`), `filter_conditions` `channel_direction = inbound`,
   `sort_by=start_datetime desc`, `limit=100`; never `include_transcript`.
 - **Gating and rate.** `app/inbound_calls.py` `RiderCallMonitor.tick`: no request unless a
-  user prepared a context in the last 2 h (`inbound_delivery_contexts`) or has a tracked
+  user shared with the delivery line in the last 2 h (`inbound_delivery_contexts`, written
+  by `InboundDeliveryService` on a share and cleared on a revoke) or has a tracked
   order that is not delivered/cancelled (placed < 6 h ago). One request per tick, at most
   one per 30 s per deployment (the app has one monitor). Errors back off 60 s → 15 min;
   429 honours `Retry-After`; 401/403 wait 15 min. `SARVAM_CALL_MONITOR_ENABLED=false`

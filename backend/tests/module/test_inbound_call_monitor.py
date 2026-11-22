@@ -32,7 +32,10 @@ from app.inbound_calls import (
     RiderCallMonitor,
     delete_user_inbound_calls,
 )
-from app.inbound_delivery import DeliveryContextRequest, InboundDeliveryService
+from app.commerce.demo import DemoAddressBook
+from app.inbound_delivery import InboundDeliveryService
+from app.inbound_delivery.models import DirectionsUpdate, PrepareRequest
+from app.inbound_delivery.store import DeliveryLineStore
 from app.main import app
 from app.notifications.models import SubscriptionIn
 from app.notifications.service import PushNotifier
@@ -409,20 +412,37 @@ async def test_logs_carry_no_call_content(world: World, caplog: pytest.LogCaptur
 # Context recording, API and deletion --------------------------------------------
 
 
-async def test_preparing_a_context_starts_the_two_hour_window(store: InboundCallStore) -> None:
+class Profiles:
+    async def read(self, user_id: str) -> Any:
+        return type("Profile", (), {"first_name": "Moin"})()
+
+
+async def test_sharing_starts_the_two_hour_window_and_clearing_ends_it(
+    store: InboundCallStore, factory: async_sessionmaker[AsyncSession]
+) -> None:
+    count = 0
+
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"cohort_id": "cohort-9", "status": "processing"})
+        nonlocal count
+        count += 1
+        return httpx.Response(200, json={"cohort_id": f"cohort-{count}", "status": "processing"})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        service = InboundDeliveryService(settings(), client, contexts=store)
-        await service.prepare(
-            USER,
-            DeliveryContextRequest(
-                recipient_name="Moin", delivery_address="12 Test Street, HSR Layout", landmark="Near the park", confirmed=True
-            ),
+        line = InboundDeliveryService(
+            settings(sarvam_inbound_owner_user_id=USER),
+            DeliveryLineStore(factory),
+            DemoAddressBook(),
+            Profiles(),
+            client=client,
+            contexts=store,
         )
-    [context] = await store.contexts_since(datetime.now(UTC) - timedelta(minutes=1))
-    assert (context.user_id, context.cohort_id) == (USER, "cohort-9")
+        await line.save_directions(USER, DirectionsUpdate(provider="zepto", address_id="demo-home", landmark="Near the park"))
+        await line.prepare(USER, PrepareRequest(provider="zepto", address_id="demo-home", confirmed=True))
+        [context] = await store.contexts_since(datetime.now(UTC) - timedelta(minutes=1))
+        assert (context.user_id, context.cohort_id) == (USER, "cohort-1")
+        await line.revoke(USER, "user_cleared")
+    # The clear record is not a context: it authorises nothing.
+    assert await store.contexts_since(datetime.now(UTC) - timedelta(minutes=1)) == []
 
 
 @pytest_asyncio.fixture

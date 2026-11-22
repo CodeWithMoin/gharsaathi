@@ -793,18 +793,33 @@ CAPABILITIES: tuple[Capability, ...] = (
             "Not part of the browser voice session. A separately deployed Sarvam inbound "
             "agent handles recognized Zepto/Swiggy callers.",
         ),
-        typed_chat=S(U, "Preparation requires explicit review and confirmation in the UI."),
-        ui=S(W, "LiveOrderTracking includes recipient, address and landmark review."),
+        typed_chat=S(U, "Sharing requires the explicit approval tick and tap in the UI."),
+        ui=S(
+            W,
+            "LiveOrderTracking shows the selected store address read-only (Change address opens "
+            "the picker), the profile name, saved per-address directions and handover "
+            "instructions (edited in a popup), Share with delivery line, an opt-in auto-share "
+            "switch, and Clear delivery line.",
+        ),
         backend=S(
             W,
-            "Streams one server-configured caller context to Sarvam; never initiates a call.",
+            "Reads the selected address, profile name and saved directions server-side and "
+            "streams one record for the server-configured caller to Sarvam; clears it (a "
+            "caller_authorized=no record) on address change, delivered or cancelled. Owner "
+            "only (SARVAM_INBOUND_OWNER_USER_ID or ALLOWED_USER_IDS). Never initiates a call.",
         ),
         routes=(
             "GET /api/inbound-delivery/config",
+            "GET /api/inbound-delivery/directions",
+            "PUT /api/inbound-delivery/directions",
+            "DELETE /api/inbound-delivery/directions",
+            "GET /api/inbound-delivery/line",
+            "PUT /api/inbound-delivery/line/settings",
+            "DELETE /api/inbound-delivery/line",
             "POST /api/inbound-delivery/contexts",
             "GET /api/inbound-delivery/contexts/{cohort_id}",
         ),
-        ui_files=("frontend/app/order-tracking.tsx",),
+        ui_files=("frontend/app/order-tracking.tsx", "frontend/app/delivery-line-panel.tsx"),
     ),
     Capability(
         id="inbound_rider_call_summary",

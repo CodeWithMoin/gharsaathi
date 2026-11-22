@@ -37,6 +37,7 @@ import app.dependencies as dependencies_module
 import app.main as main_module
 import app.memory.dependencies as memory_dependencies_module
 import app.rider.service as rider_service_module
+import app.inbound_delivery as inbound_delivery_module
 import app.shopping.providers as providers_module
 from app.main import app
 
@@ -49,6 +50,7 @@ CACHED_MODULES = (
     memory_dependencies_module,
     providers_module,
     rider_service_module,
+    inbound_delivery_module,
 )
 
 

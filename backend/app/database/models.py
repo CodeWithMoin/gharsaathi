@@ -812,3 +812,49 @@ class SavedShoppingListRecord(Base):
     items: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class DeliveryDirectionsRecord(Base):
+    """How to reach one saved store address, written by the user (docs: specs/inbound-delivery-assist.md)."""
+
+    __tablename__ = "delivery_directions"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "provider", "address_id", name="uq_delivery_directions_user_address"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128))
+    provider: Mapped[str] = mapped_column(String(16))
+    address_id: Mapped[str] = mapped_column(String(128))
+    landmark: Mapped[str] = mapped_column(String(120))
+    route_directions: Mapped[list[str]] = mapped_column(JSON)
+    gate_note: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    handover_instructions: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class DeliveryLineRecord(Base):
+    """What the inbound delivery line was last told for this user, and the auto-share switch."""
+
+    __tablename__ = "delivery_line_states"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(String(128), unique=True)
+    auto_share: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    phase: Mapped[str] = mapped_column(String(16), default="none", server_default="none")
+    provider: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    address_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    cohort_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    monitor_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    error: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

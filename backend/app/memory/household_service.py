@@ -343,6 +343,10 @@ class HouseholdPreferenceService:
         from app.inbound_calls import delete_user_inbound_calls
 
         await delete_user_inbound_calls(self.session, actor.external_id)
+        # Saved delivery directions too. The line's state stays so a live share can still be cleared.
+        from app.inbound_delivery.store import delete_user_directions
+
+        await delete_user_directions(self.session, actor.external_id)
         await self.session.commit()
         return len(items)
 
