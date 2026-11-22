@@ -36,6 +36,9 @@ STATE_BOUND_ROUTES = {
     # Vobiz signature: the carrier's webhooks, checked by HMAC, not a Clerk session.
     "POST /api/rider/vobiz/answer",
     "POST /api/rider/vobiz/after-stream",
+    # Sarvam API tool: a static tool token (SARVAM_TOOL_TOKEN), not a Clerk session;
+    # 404 unless SARVAM_LIVE_CONTEXT_ENABLED (test below).
+    "POST /api/sarvam/delivery-context",
 }
 
 
@@ -195,3 +198,35 @@ def test_signed_in_oauth_start_still_checks_the_callback(store: str, monkeypatch
     assert response.status_code == 503
     assert service.started == 0
 
+
+
+def test_sarvam_tool_route_is_token_bound_even_when_private(monkeypatch) -> None:
+    """Exempt from the Clerk check, so it must refuse anyone without the tool token."""
+
+    from app.api.sarvam_tool import get_live_context_service
+    from app.inbound_delivery.live_context import LiveDeliveryContextService
+
+    signed_in_as(monkeypatch, INTRUDER)
+    client = TestClient(app)
+    for enabled, expected in ((False, 404), (True, 401)):
+        settings = private_settings(
+            sarvam_live_context_enabled=enabled,
+            sarvam_tool_token="t" * 40,
+            sarvam_inbound_owner_user_id=OWNER,
+        )
+        service = LiveDeliveryContextService(
+            settings, object(), object(), object(), object()  # type: ignore[arg-type]
+        )
+        app.dependency_overrides[get_live_context_service] = lambda service=service: service
+        try:
+            response = client.post("/api/sarvam/delivery-context", json={"provider": "zepto"})
+            wrong = client.post(
+                "/api/sarvam/delivery-context",
+                json={"provider": "zepto"},
+                headers={"X-GharSaathi-Tool-Token": "x" * 40},
+            )
+        finally:
+            app.dependency_overrides.pop(get_live_context_service, None)
+        assert response.status_code == expected
+        assert wrong.status_code == expected
+        assert "delivery_address" not in response.text
