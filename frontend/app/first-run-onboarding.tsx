@@ -86,8 +86,9 @@ export function PublicOnboarding() {
       </motion.ul>
 
       <motion.div {...rise(4)} className="mt-auto pt-8">
-        <label className="flex cursor-pointer items-start gap-2.5 rounded-2xl bg-surface-strong px-3.5 py-3 text-left text-[13px] leading-5 text-ink-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus">
-          <input type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-accent" />
+        <label className="relative flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 text-left text-[13px] leading-5 text-ink-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus">
+          <input type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} className="peer size-[22px] shrink-0 cursor-pointer appearance-none rounded-[7px] border-[1.5px] border-border-strong bg-surface transition-colors checked:border-accent checked:bg-accent focus-visible:outline-none" />
+          <svg aria-hidden="true" viewBox="0 0 16 16" className="pointer-events-none absolute left-[20px] top-1/2 size-[14px] -translate-y-1/2 text-on-accent opacity-0 peer-checked:opacity-100"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
           <span>I agree to GharSaathi&apos;s <a href="/terms" className="font-semibold text-accent-strong underline underline-offset-2">Terms</a> and <a href="/privacy" className="font-semibold text-accent-strong underline underline-offset-2">Privacy Policy</a>.</span>
         </label>
         <SignUpButton mode="redirect" forceRedirectUrl="/">
