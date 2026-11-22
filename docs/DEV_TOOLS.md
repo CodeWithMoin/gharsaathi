@@ -18,7 +18,9 @@ command, at least 1 s apart. It makes no call when no order outcome is unknown.
 | `make doctor-offline` / `scripts/gs doctor --offline` | Same, no network beyond this Mac | 0 |
 | `make demo-check` | Pre-demo checklist (below); offline unless `ARGS=--online` | 0 |
 | `scripts/gs memory list [--all]` · `show <id>` · `delete <id>` · `export [--out f]` | Household memory; delete is the same soft delete + audit event as Settings | 0 |
-| `scripts/gs memory add` · `edit` · `import` | TODO hook: lands with `codex/memory-setup` (writer + `demo_seed`). Exit 3 with a pointer meanwhile | – |
+| `scripts/gs memory import` | = `make memory-seed`: load an answers file through the memory writer (dry run unless `--apply`; `--remove-seeded --apply` undoes it) | – |
+| `scripts/gs memory synth` | = `make memory-synth`: synthetic demo order history from the same answers (dry run unless `--apply`; live mode needs `--i-understand-synthetic`) | – |
+| `scripts/gs memory add` · `edit` | Not a command: exit 3 with a pointer to the app or `memory import` | – |
 | `scripts/gs basket show [--provider P]` · `clear [--provider P]` | Open baskets (amounts via the app formatter); clear empties lines, never a locked (`checkout_pending`) basket | 0 |
 | `scripts/gs orders recent` · `status <code>` | Checkout attempts and the tracking watch | 0 |
 | `scripts/gs orders reconcile --dry-run` | Read-only check of unknown outcomes; `--apply` stays `make reconcile-unknown ARGS=--apply` | ≤5 Zepto reads, asks first |
@@ -90,9 +92,11 @@ model searched and the option count; `scripts/gs convo last` shows which result
 group and basket card followed. Check remembered/avoided rules with
 `scripts/gs memory list`. Offline regressions: `scripts/gs eval run relevance`.
 
-**Seed demo memory.** Today: `make seed-sample-household` (fictional data,
-demo mode) and `make unseed-sample-household`. `gs memory add/import` arrive with
-`codex/memory-setup`. Verify with `scripts/gs memory list`; back up first with
+**Seed demo memory.** The owner's own answers: `make memory-seed ARGS="--file
+.run/demo-memory.yaml --dry-run"`, then `--apply` (format: `docs/demo-memory.example.yaml`).
+Synthetic history from the same answers: `make memory-synth ARGS="--file
+.run/demo-memory.yaml --months 12 --seed 42 --dry-run"`. Fictional data:
+`make seed-sample-household` (demo mode). Verify with `scripts/gs memory list`; back up first with
 `scripts/gs memory export --out ~/gs-memory.json`.
 
 **Check before a demo.** `make demo-check`.

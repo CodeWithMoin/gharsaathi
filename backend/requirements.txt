@@ -21,3 +21,4 @@ clerk-backend-api>=6,<7
 pillow>=11,<13
 pillow-heif>=0.18,<2
 pywebpush>=2.3,<3
+pyyaml>=6,<7

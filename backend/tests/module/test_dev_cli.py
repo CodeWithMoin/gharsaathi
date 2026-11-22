@@ -147,10 +147,21 @@ async def test_memory_list_show_export_delete(tmp_path: Path, factory) -> None:
     assert json.loads(out) == []
 
 
-async def test_memory_add_edit_import_are_clear_todo_hooks(tmp_path: Path, factory) -> None:
-    for verb in ("add", "edit", "import"):
+async def test_memory_add_edit_are_clear_todo_hooks(tmp_path: Path, factory) -> None:
+    for verb in ("add", "edit"):
         code, _, err = await gs(context(tmp_path, factory), "memory", verb, "anything")
-        assert code == cli.EXIT_TODO and "codex/memory-setup" in err
+        assert code == cli.EXIT_TODO and "gs memory import" in err
+
+
+async def test_memory_import_and_synth_run_the_seed_tools(tmp_path: Path, factory) -> None:
+    answers = tmp_path / "answers.json"
+    answers.write_text(json.dumps({"diet": "non-veg", "usual_buys": [{"category": "milk", "brand": "Amul", "size": "500 ml"}]}), encoding="utf-8")
+    code, out, _ = await gs(context(tmp_path, factory), "memory", "import", "--file", str(answers), "--user-id", USER)
+    assert code == 0 and "Dry run: nothing written." in out and "create 2," in out
+    code, out, _ = await gs(context(tmp_path, factory), "memory", "synth", "--file", str(answers), "--months", "1", "--user-id", USER)
+    assert code == 0 and "Dry run: nothing written." in out
+    code, _, err = await gs(context(tmp_path, factory), "memory", "import", "--user-id", USER)
+    assert code == 1 and "Pass --file" in err
 
 
 async def test_the_one_real_clerk_user_is_the_default_next_to_local_test_identities(tmp_path: Path, factory) -> None:

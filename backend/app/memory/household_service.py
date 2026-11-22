@@ -43,6 +43,7 @@ from app.memory.household import (
     origin_of,
     sensitive_category,
     spec_of,
+    text_for_value,
 )
 from app.memory.repository import MemoryRepository
 from app.memory.schemas import MemoryCorrection, MemoryPermissionUpsert, MemoryProposal
@@ -92,7 +93,7 @@ def _fingerprint(memory_type: str, value: dict[str, object]) -> tuple[str, str, 
 
 
 def check_policy(spec: PreferenceSpec) -> None:
-    category = sensitive_category(*spec.texts())
+    category = sensitive_category(*spec.policy_texts())
     if category is not None:
         raise MemoryPolicyError(category)
 
@@ -195,13 +196,11 @@ class HouseholdPreferenceService:
         extra_value: dict[str, str] | None = None,
     ) -> MemoryProposal:
         extra = {key: value for key, value in (extra_value or {}).items() if value}
-        text = spec.summary()
-        if extra.get("pack_size"):
-            text = f"{text}, {extra['pack_size']}"
+        value = {**spec.to_value(origin), **extra}
         return MemoryProposal(
             memory_type=spec.memory_type,
-            value={**spec.to_value(origin), **extra},
-            text=text,
+            value=value,
+            text=text_for_value(spec.kind, value),
             source_type=source,
             source_conversation_id=conversation_id,
             sensitivity="low",
@@ -285,11 +284,14 @@ class HouseholdPreferenceService:
         *,
         origin: MemoryOrigin,
         reason: str = "User corrected this preference.",
+        conversation_id: str | None = None,
+        extra_value: dict[str, str] | None = None,
+        source: MemorySourceType = MemorySourceType.CORRECTION,
     ) -> MemoryItem:
         """Supersede an active memory now; the old one is kept as superseded."""
         check_policy(spec)
         await self._require_consent(actor, spec.memory_type)
-        base = await self._proposal(spec, origin, None, MemorySourceType.CORRECTION)
+        base = await self._proposal(spec, origin, conversation_id, source, extra_value)
         return await self.memory.correct(
             actor,
             previous.id,

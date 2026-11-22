@@ -84,18 +84,18 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   });
 }
 
-export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onAddressSelected, onAddressRemoved, onOrderConfirmation, onSupportOpen, onPhotoRead, beforeSessionStart }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[], item: { itemKey?: string; itemLabel?: string }) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void; onApprovalRequested?: (provider: VoiceStore, request: ApprovalRequest) => void; onAddressForm?: (request: VoiceAddressFormRequest) => void | Promise<{ form_visible: boolean; reason?: string; filled_fields?: string[]; kept_user_fields?: string[] }>; onAddressSelected?: (selection: { provider: VoiceStore; addressId: string; label?: string; billCancelled: boolean }) => void; onAddressRemoved?: (provider: VoiceStore) => void; onOrderConfirmation?: (confirmation: OrderConfirmation) => void; onSupportOpen?: () => void; onPhotoRead?: (read: { attachmentId: string; itemCount: number }) => void; beforeSessionStart?: () => Promise<void> }) {
+export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onAddressSelected, onAddressRemoved, onOrderConfirmation, onSupportOpen, onPhotoRead, onMemorySummary, beforeSessionStart }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[], item: { itemKey?: string; itemLabel?: string }) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void; onApprovalRequested?: (provider: VoiceStore, request: ApprovalRequest) => void; onAddressForm?: (request: VoiceAddressFormRequest) => void | Promise<{ form_visible: boolean; reason?: string; filled_fields?: string[]; kept_user_fields?: string[] }>; onAddressSelected?: (selection: { provider: VoiceStore; addressId: string; label?: string; billCancelled: boolean }) => void; onAddressRemoved?: (provider: VoiceStore) => void; onOrderConfirmation?: (confirmation: OrderConfirmation) => void; onSupportOpen?: () => void; onPhotoRead?: (read: { attachmentId: string; itemCount: number }) => void; onMemorySummary?: () => void; beforeSessionStart?: () => Promise<void> }) {
   const authenticatedFetch = useAuthenticatedFetch();
   // Parent callbacks change identity on unrelated re-renders (e.g. commerceMode);
   // reading them through a ref keeps the live session from restarting.
-  const callbacksRef = useRef({ onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onAddressSelected, onAddressRemoved, onOrderConfirmation, onSupportOpen, onPhotoRead, beforeSessionStart, authenticatedFetch });
+  const callbacksRef = useRef({ onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onAddressSelected, onAddressRemoved, onOrderConfirmation, onSupportOpen, onPhotoRead, onMemorySummary, beforeSessionStart, authenticatedFetch });
   // Addresses the server-side session is using. A switch made by the assistant
   // updates this first, so it does not restart the session; a manual change does.
   const latestAddressesRef = useRef({ swiggy: addressId, zepto: zeptoAddressId });
   latestAddressesRef.current = { swiggy: addressId, zepto: zeptoAddressId };
   const sessionAddressesRef = useRef<{ swiggy: string; zepto: string } | null>(null);
   useEffect(() => {
-    callbacksRef.current = { onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onAddressSelected, onAddressRemoved, onOrderConfirmation, onSupportOpen, onPhotoRead, beforeSessionStart, authenticatedFetch };
+    callbacksRef.current = { onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onAddressSelected, onAddressRemoved, onOrderConfirmation, onSupportOpen, onPhotoRead, onMemorySummary, beforeSessionStart, authenticatedFetch };
   });
   const [status, setStatus] = useState<VoiceStatus>("connecting");
   const [message, setMessage] = useState("Connecting voice…");

@@ -77,9 +77,11 @@ export type AccountSettingsSheetProps = {
   signOutPending?: boolean;
   /** Browser notifications; the page owns the controller so the order prompt shares it. */
   notifications?: NotificationsController;
+  /** Open straight on one section, e.g. "memory" after "what do you know about me?". */
+  initialSection?: SettingsSection;
 };
 
-type SettingsSection = "stores" | "preferences" | "memory" | "privacy" | "addresses" | "notifications" | "rider" | null;
+export type SettingsSection = "stores" | "preferences" | "memory" | "privacy" | "addresses" | "notifications" | "rider" | null;
 
 /**
  * A controlled, mobile-first account panel. It intentionally has only an overview
@@ -106,6 +108,7 @@ export function AccountSettingsSheet({
   onSignOut,
   signOutPending = false,
   notifications,
+  initialSection = null,
 }: AccountSettingsSheetProps) {
   const [section, setSection] = useState<SettingsSection>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -115,6 +118,10 @@ export function AccountSettingsSheet({
   const addressSummary = addresses.length === 0
     ? "Add a delivery address"
     : addresses.find((address) => address.selected)?.label ?? `${addresses.length} saved ${addresses.length === 1 ? "address" : "addresses"}`;
+
+  useEffect(() => {
+    if (open && initialSection) setSection(initialSection);
+  }, [open, initialSection]);
 
   useEffect(() => {
     if (!open) {
@@ -141,7 +148,7 @@ export function AccountSettingsSheet({
     : section === "preferences"
       ? "Preferences"
       : section === "memory"
-        ? "Saved preferences"
+        ? "What GharSaathi knows"
         : section === "privacy"
           ? "Privacy & memory"
           : section === "addresses"
@@ -183,7 +190,7 @@ export function AccountSettingsSheet({
                 <nav aria-label="Account settings" className="mt-4 overflow-hidden rounded-[22px] border border-border bg-surface">
                   <SettingsRow icon={<Storefront size={21} weight="duotone" />} title="Stores" subtitle={connectedStoreCount ? `${connectedStoreCount} store${connectedStoreCount === 1 ? "" : "s"} connected` : "Connect a shopping store"} onClick={() => setSection("stores")} />
                   <SettingsRow icon={<Translate size={21} weight="duotone" />} title="Preferences" subtitle={languageLabel} onClick={() => setSection("preferences")} />
-                  <SettingsRow icon={<Brain size={21} weight="duotone" />} title="Saved preferences" subtitle="Preferences, never, rules" onClick={() => setSection("memory")} />
+                  <SettingsRow icon={<Brain size={21} weight="duotone" />} title="What GharSaathi knows" subtitle="Home, food, usual buys, avoid" onClick={() => setSection("memory")} />
                   <SettingsRow icon={<ShieldCheck size={21} weight="duotone" />} title="Privacy & memory" subtitle={privacySummary} onClick={() => setSection("privacy")} />
                   {notifications && <SettingsRow icon={<Bell size={21} weight="duotone" />} title="Notifications" subtitle={notificationsSubtitle(notifications.view)} onClick={() => setSection("notifications")} />}
                   <SettingsRow icon={<Phone size={21} weight="duotone" />} title="Rider assist (Beta)" subtitle="An AI answers missed delivery calls" onClick={() => setSection("rider")} />
@@ -198,7 +205,7 @@ export function AccountSettingsSheet({
               : <motion.div key={section} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 14 }} transition={{ duration: .16 }}>
                 {section === "stores" && <StoresDetail stores={stores} commerceMode={commerceMode} onConnectStore={onConnectStore} onDisconnectStore={onDisconnectStore} />}
                 {section === "preferences" && <PreferencesDetail languageLabel={languageLabel} onLanguageChange={onLanguageChange} onManagePreferences={onManagePreferences} />}
-                {section === "memory" && <MemorySettings />}
+                {section === "memory" && <MemorySettings onEditProfile={() => setSection("preferences")} />}
                 {section === "privacy" && <SimpleDetail icon={<Eye size={24} weight="duotone" />} title={privacySummary} description="You choose what GharSaathi remembers. Shopping history alone never becomes a stock prediction." action="Review privacy & memory" onAction={onManagePrivacy} />}
                 {section === "notifications" && notifications && <NotificationsDetail controller={notifications} />}
                 {section === "rider" && <RiderAssistSettings />}

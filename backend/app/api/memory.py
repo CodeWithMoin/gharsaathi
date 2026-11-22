@@ -15,7 +15,13 @@ from app.memory.errors import (
     MemoryProhibitedUseError,
     MemoryTransitionError,
 )
-from app.memory.household import sensitive_category
+from app.memory.household import (
+    SensitiveValueError,
+    checked_correction,
+    sensitive_category,
+    structured_kind,
+    text_for_value,
+)
 from app.memory.household_service import (
     ForgetAllTokenError,
     HouseholdPreferenceService,
@@ -36,6 +42,8 @@ from app.memory.schemas import (
     MemoryRetrieveResponse,
 )
 from app.memory.prompts import MEMORY_EXTRACTION_PROMPT_VERSION
+from app.memory.summary import MemorySummary, summarize_memory
+from app.auth import UserIdDependency
 from app.memory.service import MemoryService
 
 
@@ -191,6 +199,16 @@ async def extract_memory_proposals(
     )
 
 
+@router.get("/summary", response_model=MemorySummary)
+async def memory_summary(
+    session: DbSessionDependency,
+    user_id: UserIdDependency,
+) -> MemorySummary:
+    """'What do you know about me?': saved memories by group, each with its source."""
+    await MemoryService(session).actor_for_external_id(user_id)
+    return await summarize_memory(session, user_id)
+
+
 @router.get("", response_model=list[MemoryResponse])
 async def list_memories(
     session: DbSessionDependency,
@@ -261,11 +279,24 @@ async def correct_memory(
     session: DbSessionDependency,
     actor: MemoryActorDependency,
 ) -> MemoryResponse:
-    category = sensitive_category(
-        body.text, *(str(value) for value in body.value.values() if isinstance(value, str))
-    )
-    if category is not None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(MemoryPolicyError(category)))
+    kind = structured_kind(body.memory_type, body.value)
+    if kind is not None:
+        try:
+            cleaned = checked_correction(body.memory_type, body.value)
+        except SensitiveValueError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, str(MemoryPolicyError(exc.category))
+            ) from exc
+        except ValueError as exc:
+            message = exc.errors()[0].get("msg", str(exc)) if hasattr(exc, "errors") else str(exc)
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, message) from exc
+        body = body.model_copy(update={"value": cleaned, "text": text_for_value(kind, cleaned)})
+    else:
+        category = sensitive_category(
+            body.text, *(str(value) for value in body.value.values() if isinstance(value, str))
+        )
+        if category is not None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(MemoryPolicyError(category)))
     if body.value.get("origin") == "stated":
         # An on-screen edit is an explicit statement, not something learned in passing.
         body = body.model_copy(update={"value": {**body.value, "origin": "explicit"}})

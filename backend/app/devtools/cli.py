@@ -40,9 +40,9 @@ VERSION = "gs 1.0"
 EXIT_USAGE = 2
 EXIT_TODO = 3
 MEMORY_SETUP_TODO = (
-    "`gs memory {verb}` lands with codex/memory-setup (memory writer + demo_seed). "
-    "Until then: add or change preferences in the app (Settings → Memory, or say "
-    "\"yaad rakhna …\"), or seed fictional demo data with `make seed-sample-household`."
+    "`gs memory {verb}` is not a command yet (codex/memory-setup ships import and synth). "
+    "Add or change one preference in the app (Settings → What GharSaathi knows, or say "
+    "\"yaad rakhna …\"), or load a whole answers file with `gs memory import --file <path>`."
 )
 
 
@@ -208,9 +208,11 @@ async def cmd_doctor(ctx: Context, args: argparse.Namespace) -> int:
 
 
 async def cmd_memory(ctx: Context, args: argparse.Namespace) -> int:
-    if args.verb in {"add", "edit", "import"}:
+    if args.verb in {"add", "edit"}:
         print(MEMORY_SETUP_TODO.format(verb=args.verb), file=ctx.err)
         return EXIT_TODO
+    if args.verb in {"import", "synth"}:
+        return await _memory_file_command(ctx, args)
     data = ctx.data()
     actor = await data.person(args.user_id)
     if args.verb == "list":
@@ -242,6 +244,34 @@ async def cmd_memory(ctx: Context, args: argparse.Namespace) -> int:
             dump(exported, ctx.out)
         return 0
     raise AssertionError(args.verb)
+
+
+async def _memory_file_command(ctx: Context, args: argparse.Namespace) -> int:
+    """`gs memory import` = make memory-seed, `gs memory synth` = make memory-synth (same flags)."""
+    from app.memory import demo_seed, demo_synth
+
+    rest = [part for part in args.rest if part != "--"]
+    try:
+        if args.verb == "import":
+            parsed = demo_seed.parser().parse_args(rest)
+            runner = demo_seed.run
+        else:
+            parsed = demo_synth.parse_args(rest)
+            runner = demo_synth.run
+    except SystemExit as exc:
+        return int(exc.code or 0)
+    if getattr(args, "user_id", None) and not parsed.user_id:
+        parsed.user_id = args.user_id
+    ctx.data()
+    assert ctx.session_factory_provider is not None
+    try:
+        async with ctx.session_factory_provider()() as session:
+            for line in await runner(parsed, session):
+                print(line, file=ctx.out)
+    except demo_seed.SeedError as exc:
+        print(str(exc), file=ctx.err)
+        return 1
+    return 0
 
 
 async def cmd_basket(ctx: Context, args: argparse.Namespace) -> int:
@@ -507,9 +537,15 @@ def build_parser() -> argparse.ArgumentParser:
     delete.add_argument("ref")
     delete.add_argument("--yes", action="store_true")
     memory.add_parser("export", parents=[common], help="JSON export").add_argument("--out", help="write to this file (0600)")
-    for verb in ("add", "edit", "import"):
-        hook = memory.add_parser(verb, parents=[common], help="(lands with codex/memory-setup)")
+    for verb in ("add", "edit"):
+        hook = memory.add_parser(verb, parents=[common], help="(not yet: use the app, or memory import)")
         hook.add_argument("rest", nargs=argparse.REMAINDER)
+    for verb, text in (
+        ("import", "load an answers file (= make memory-seed; dry run unless --apply)"),
+        ("synth", "synthetic demo order history (= make memory-synth; dry run unless --apply)"),
+    ):
+        # Their own flags are passed through (see run) to the seed tools' parsers.
+        memory.add_parser(verb, parents=[common], help=text).set_defaults(rest=[])
 
     basket = commands.add_parser("basket", help="open baskets").add_subparsers(dest="verb", required=True)
     for verb, text in (("show", "show open baskets"), ("clear", "empty a basket (never a locked one)")):
@@ -560,7 +596,13 @@ HANDLERS = {
 
 
 async def run(argv: Sequence[str], ctx: Context | None = None) -> int:
-    args = build_parser().parse_args(list(argv))
+    parser = build_parser()
+    args, extra = parser.parse_known_args(list(argv))
+    if getattr(args, "command", None) == "memory" and getattr(args, "verb", None) in {"import", "synth"}:
+        # Their own flags (--file, --apply, ...) are parsed by the seed tools.
+        args.rest = [*getattr(args, "rest", []), *extra]
+    elif extra:
+        parser.error(f"unrecognized arguments: {' '.join(extra)}")
     if ctx is None:
         ctx = Context(settings=get_settings())
         ctx.color = sys.stdout.isatty() and not args.no_color and "NO_COLOR" not in os.environ

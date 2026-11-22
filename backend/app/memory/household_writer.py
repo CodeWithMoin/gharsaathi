@@ -27,6 +27,7 @@ from app.memory.household import (
 from app.memory.household_service import HouseholdPreferenceService
 from app.memory.repository import MemoryRepository
 from app.memory.service import MemoryService
+from app.memory.summary import MemorySummary, summarize_memory
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,7 @@ class HouseholdPreferenceWriter(Protocol):
     async def list(self, household_id: str) -> list[MemoryView]: ...
     async def record_choice(self, household_id: str, choice: ChoiceRecord) -> None: ...
     async def current_conversation(self, household_id: str) -> str | None: ...
+    async def summary(self, household_id: str) -> MemorySummary: ...
 
 
 class DatabaseHouseholdPreferences:
@@ -215,3 +217,7 @@ class DatabaseHouseholdPreferences:
                 return None
             conversation = await ConversationRepository(session).current(actor.id)
             return str(conversation.id) if conversation is not None else None
+
+    async def summary(self, household_id: str) -> MemorySummary:
+        async with self.session_factory() as session:
+            return await summarize_memory(session, household_id)
