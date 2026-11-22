@@ -319,6 +319,27 @@ fixture; no provider call), the model names them in one line, then
 4. `address.selected` updates the on-screen selection. The voice panel does not
    restart for a switch the assistant made; typed chat keeps its session.
 
+**Zepto snapshot refresh (the exception to manual-only refresh).** Swiggy address
+snapshots refresh only on the user's tap. `ZeptoAddressRefresher`
+(`app/commerce/zepto/address_refresh.py`) refreshes Zepto's snapshot with the
+read-only `list_saved_addresses` when it is stale at app load (`auto=load`) or at a
+voice/typed-chat start (older than `ZEPTO_ADDRESS_REFRESH_MAX_AGE_MIN`, default 30
+min), when the picker opens (`auto=picker`, older than 5 min), and when
+`select_saved_address` fails and the id is missing from a fresh list. Bounds: one
+refresh in flight per user, one start per 2 minutes, callers wait at most ~1.5 s and
+otherwise use the cached snapshot. A deleted selection is cleared, never replaced
+(`selection_removed`); the Zepto basket keeps its lines but its address is cleared,
+which supersedes the open bill and order card. Search then reports
+`provider_error` with reason `address_invalid`, the browser shows "Your Zepto
+address changed — choose a delivery address" and opens the picker.
+
+**Store errors are not "not found".** A store that cannot be searched yields
+`provider_error` (reason `unavailable`, `rate_limited`, `session_expired` or
+`address_invalid`), or `unreachable_stores` next to other stores' results. Zepto's
+persistent MCP session is reset and a read-only tool retried once after a provider
+error (`RECOVERABLE_READ_TOOLS`); cart, address-adding, payment and order tools are
+never replayed.
+
 **Add a new (Zepto) address.**
 
 ```mermaid

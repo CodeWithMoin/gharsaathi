@@ -11,11 +11,22 @@ class ZeptoAuthenticationRequired(ZeptoError):
 
 
 class ZeptoProviderError(ZeptoError):
-    pass
+    # A content-free category the assistant may act on; never provider text.
+    reason = "unavailable"
 
 
 class ZeptoRateLimited(ZeptoProviderError):
-    pass
+    reason = "rate_limited"
+
+
+class ZeptoSessionExpired(ZeptoProviderError):
+    reason = "session_expired"
+
+
+class ZeptoAddressInvalid(ZeptoProviderError):
+    """The selected saved address is no longer in the Zepto account."""
+
+    reason = "address_invalid"
 
 
 class ZeptoSchemaError(ZeptoError):

@@ -1420,6 +1420,7 @@
           }
         }
       ]
-    }
+    },
+    {"id": "s-zepto-unreachable", "title": "Only Zepto is ready and it cannot be reached: say it is not responding, never 'not found'", "catalogue": "demo", "zepto_unreachable": true, "turns": [{"user": "Amul lassi 200 ml dikhao", "expect": {"tools_required": ["search_products"], "add_count": 0, "max_sentences": 2, "reply_forbids_any": ["nahi mila", "nahin mila", "not found", "nahi hai", "available nahi", "stock mein nahi"], "reply_mentions_any": ["connect", "respond", "dobara", "try", "baad mein", "thodi der"]}}]}
   ]
 }

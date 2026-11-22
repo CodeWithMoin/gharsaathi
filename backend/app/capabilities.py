@@ -118,7 +118,9 @@ CAPABILITIES: tuple[Capability, ...] = (
             "with select_delivery_address: validated against the user's own snapshot, saved "
             "like PUT .../addresses/selected, moved onto the store's basket (an open bill is "
             "superseded), used by later tools in the same session, and shown on screen "
-            "(address.selected).",
+            "(address.selected). Zepto's snapshot also refreshes automatically when stale "
+            "(30 min at load/session start, 5 min at picker open, debounced); a selection "
+            "deleted in Zepto is cleared, never replaced, and the user is asked to pick again.",
         ),
         typed_chat=S(W, "Same list/select tools as voice; the switched address is kept for later turns. " + TYPED_VIA_ASSISTANT),
         ui=S(W, "Radio list per store in the setup sheet; a voice/typed switch updates it without restarting voice."),
@@ -789,6 +791,10 @@ PROMPT_NON_TOOL_IDENTIFIERS: frozenset[str] = frozenset(
         "not_saved_one_off",
         "skipped_stores",
         "user_words",
+        # Search statuses for a store that could not be reached (not "not found").
+        "provider_error",
+        "unreachable_stores",
+        "address_invalid",
         # Household-rule annotations and the delivery ETA field (search options, bill).
         "avoid_store",
         "avoided_because",

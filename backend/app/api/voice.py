@@ -8,7 +8,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import get_settings
-from app.dependencies import SidebandHubDependency, VoiceServiceDependency
+from app.dependencies import (
+    SidebandHubDependency,
+    VoiceServiceDependency,
+    ZeptoAddressRefresherDependency,
+)
 from app.voice.sideband import FINISHED
 from app.voice.ui_ack import UiAck
 from app.voice.service import LiveSession, VoiceConfigurationError, VoiceProviderError
@@ -50,16 +54,26 @@ async def create_session(
     body: SessionRequest,
     request: Request,
     service: VoiceServiceDependency,
+    refresher: ZeptoAddressRefresherDependency,
     # Voice sessions can edit baskets and request bills.
     user_id: ConsentedUserIdDependency,
 
 ) -> LiveSession:
     _check_origin(request)
+    # Bounded (<= ~1.5 s): a stale Zepto snapshot is refreshed before voice starts.
+    refreshed = (
+        await refresher.refresh_if_stale(user_id, reason="voice_start")
+        if refresher is not None
+        else None
+    )
+    zepto_address_id = (
+        None if refreshed is not None and refreshed.selection_removed else body.zepto_address_id
+    )
     try:
         return await service.create(
             body.sdp,
             body.swiggy_address_id,
-            body.zepto_address_id,
+            zepto_address_id,
             user_id,
             data_channel_id=body.dcid,
         )

@@ -19,7 +19,7 @@ from app.commerce.zepto.errors import (
     ZeptoAuthenticationRequired,
     ZeptoConfigurationError,
     ZeptoError,
-    ZeptoRateLimited,
+    ZeptoProviderError,
 )
 from app.memory.recall import HouseholdMemory, HouseholdMemoryReader
 from app.memory.household_rules import (
@@ -70,7 +70,10 @@ SEARCH_PRODUCTS_TOOL: dict[str, Any] = {
         "toys, small electronics and accessories. Read-only: it never changes a provider cart "
         "or places an order. Use a short product query in English or Hinglish, "
         "including brand and pack size when the user gave them, for example "
-        "'Fortune sunflower oil 1 litre', 'Aashirvaad atta 5 kg', or 'USB-C cable'."
+        "'Fortune sunflower oil 1 litre', 'Aashirvaad atta 5 kg', or 'USB-C cable'. "
+        "status provider_error (or a store listed in unreachable_stores) means that "
+        "store could not be reached: it says nothing about whether the product exists, "
+        "so never report it as not found."
     ),
     "parameters": {
         "type": "object",
@@ -391,7 +394,20 @@ class MultiProviderShoppingToolExecutor:
             )
 
         ready = [target for target in self.targets if target.address_id]
-        if not ready:
+        # A store whose saved address vanished is reported, not silently skipped.
+        address_problems = [
+            {
+                "status": "provider_error",
+                "reason": problem,
+                "store": target.store,
+                "store_id": target.provider,
+                "target": target,
+                "products": [],
+            }
+            for target in self.targets
+            if not target.address_id and (problem := _address_problem(target)) is not None
+        ]
+        if not ready and not address_problems:
             return ToolOutcome(
                 model_output={
                     "status": "not_connected",
@@ -411,7 +427,7 @@ class MultiProviderShoppingToolExecutor:
                 allowed.append(target)
             else:
                 skipped.append({"store": target.store, "household_rule": store_rule_label(rule)})
-        if not allowed:
+        if not allowed and not address_problems:
             return ToolOutcome(
                 model_output={
                     "status": "skipped_by_household_rule",
@@ -430,29 +446,43 @@ class MultiProviderShoppingToolExecutor:
                 },
             )
         ready = allowed
-        outcomes = await asyncio.gather(
-            *(self._search_target(target, without_store_names(arguments.query)) for target in ready)
-        )
+        outcomes = list(
+            await asyncio.gather(
+                *(self._search_target(target, without_store_names(arguments.query)) for target in ready)
+            )
+        ) + address_problems
         successful = [outcome for outcome in outcomes if outcome["status"] == "ok"]
+        unreachable = [
+            {"store": outcome["store"], "store_id": outcome["store_id"], "reason": outcome["reason"]}
+            for outcome in outcomes
+            if outcome["status"] == "provider_error"
+        ]
         if not successful:
             statuses = {str(outcome["status"]) for outcome in outcomes}
-            status = "rate_limited" if "rate_limited" in statuses else "not_connected" if statuses == {"not_connected"} else "error"
+            status = "not_connected" if statuses == {"not_connected"} else "provider_error"
+            model_output: dict[str, Any] = {
+                "status": status,
+                "query": arguments.query,
+                **item_fields(arguments.query),
+                "providers": [_provider_status(outcome) for outcome in outcomes],
+            }
+            if status == "provider_error":
+                model_output["unreachable_stores"] = unreachable
+                model_output["message"] = provider_error_message(unreachable)
+            else:
+                model_output["message"] = (
+                    "No store is connected. Do not guess price or availability."
+                )
             return ToolOutcome(
-                model_output={
-                    "status": status,
-                    "query": arguments.query,
-                    **item_fields(arguments.query),
-                    "providers": [
-                        {key: value for key, value in outcome.items() if key not in {"target", "products"}}
-                        for outcome in outcomes
-                    ],
-                    "message": "No connected store returned product results. Do not guess price or availability.",
-                },
+                model_output=model_output,
                 ui_event={
                     "type": "tool.not_connected" if status == "not_connected" else "tool.error",
                     "query": arguments.query,
                     **item_fields(arguments.query),
-                    "message": "Connected stores could not be searched right now.",
+                    "message": unreachable_ui_message(unreachable)
+                    if unreachable
+                    else "Connected stores could not be searched right now.",
+                    **_address_removed(unreachable),
                 },
             )
 
@@ -540,10 +570,7 @@ class MultiProviderShoppingToolExecutor:
             **item_fields(arguments.query),
             "total_variants": len(ui_products),
             "results": model_results,
-            "provider_statuses": [
-                {key: value for key, value in outcome.items() if key not in {"target", "products"}}
-                for outcome in outcomes
-            ],
+            "provider_statuses": [_provider_status(outcome) for outcome in outcomes],
             "note": (
                 "Current item prices only; quote the price strings exactly. Nothing was added. "
                 "Only results with an "
@@ -564,35 +591,94 @@ class MultiProviderShoppingToolExecutor:
             model_output["skipped_stores"] = skipped
         if filtered_count:
             model_output["hidden_by_household_rules"] = filtered_count
-        return ToolOutcome(
-            model_output=model_output,
-            ui_event={
-                "type": "tool.results",
-                "query": arguments.query,
-                **item_fields(arguments.query),
-                "store": " + ".join(stores),
-                "products": ui_products,
-            },
-        )
+        ui_event: dict[str, Any] = {
+            "type": "tool.results",
+            "query": arguments.query,
+            **item_fields(arguments.query),
+            "store": " + ".join(stores),
+            "products": ui_products,
+        }
+        if unreachable:
+            model_output["unreachable_stores"] = unreachable
+            model_output["note"] += " " + provider_error_message(unreachable)
+            ui_event["unreachable_stores"] = [entry["store"] for entry in unreachable]
+            ui_event["notice"] = unreachable_ui_message(unreachable)
+            ui_event.update(_address_removed(unreachable))
+        return ToolOutcome(model_output=model_output, ui_event=ui_event)
 
     async def _search_target(
         self, target: ProviderSearchTarget, query: str
     ) -> dict[str, Any]:
         assert target.address_id is not None
+        base = {"store": target.store, "store_id": target.provider, "target": target, "products": []}
         try:
             result = await target.searcher.search(query, target.address_id, 0)
         except (SwiggyAuthenticationRequired, SwiggyConfigurationError, ZeptoAuthenticationRequired, ZeptoConfigurationError):
-            return {"status": "not_connected", "store": target.store, "target": target, "products": []}
+            return {**base, "status": "not_connected"}
         except SwiggyRateLimited as exc:
             return {
-                "status": "rate_limited",
-                "store": target.store,
+                **base,
+                "status": "provider_error",
+                "reason": "rate_limited",
                 "retry_after_seconds": exc.retry_after_seconds,
-                "target": target,
-                "products": [],
             }
-        except ZeptoRateLimited:
-            return {"status": "rate_limited", "store": target.store, "target": target, "products": []}
+        except ZeptoProviderError as exc:
+            return {**base, "status": "provider_error", "reason": exc.reason}
         except (SwiggyError, ZeptoError):
-            return {"status": "error", "store": target.store, "target": target, "products": []}
-        return {"status": "ok", "store": target.store, "target": target, "products": result.products}
+            return {**base, "status": "provider_error", "reason": "unavailable"}
+        return {**base, "status": "ok", "products": result.products}
+
+
+def _address_problem(target: ProviderSearchTarget) -> str | None:
+    problem = getattr(target.searcher, "address_problem", None)
+    if not callable(problem):
+        return None
+    value = problem()
+    return value if isinstance(value, str) else None
+
+
+def _address_removed(unreachable: list[dict[str, Any]]) -> dict[str, str]:
+    """Tells the browser to open that store's address picker."""
+
+    store_id = next(
+        (entry["store_id"] for entry in unreachable if entry["reason"] == "address_invalid"), None
+    )
+    return {"address_removed": store_id} if store_id else {}
+
+
+def _provider_status(outcome: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in outcome.items() if key not in {"target", "products"}}
+
+
+PROVIDER_ERROR_REASONS = {
+    "unavailable": "is not responding right now",
+    "rate_limited": "is briefly limiting requests",
+    "session_expired": "needs to be reconnected on screen",
+    "address_invalid": (
+        "no longer has the selected saved address (it was changed or deleted in the "
+        "store app); ask the user to pick a delivery address again "
+        "(list_delivery_addresses, then select_delivery_address)"
+    ),
+}
+
+
+def provider_error_message(unreachable: list[dict[str, Any]]) -> str:
+    """Model-facing explanation of a store that could not be searched."""
+
+    parts = [
+        f"{entry['store']} {PROVIDER_ERROR_REASONS.get(entry['reason'], PROVIDER_ERROR_REASONS['unavailable'])}"
+        for entry in unreachable
+    ]
+    return (
+        "Could not search: " + "; ".join(parts) + ". This is a connection problem, not a "
+        "search result: never say the item was not found or is unavailable there. Say, "
+        "for example, 'Zepto se abhi connect nahi ho paya, thodi der mein dobara try karte hain.'"
+    )
+
+
+def unreachable_ui_message(unreachable: list[dict[str, Any]]) -> str:
+    if any(entry["reason"] == "address_invalid" for entry in unreachable):
+        store = next(entry["store"] for entry in unreachable if entry["reason"] == "address_invalid")
+        return f"Your {store} saved address changed—choose a delivery address again."
+    stores = " and ".join(dict.fromkeys(entry["store"] for entry in unreachable))
+    return f"{stores} isn't responding—try again."
