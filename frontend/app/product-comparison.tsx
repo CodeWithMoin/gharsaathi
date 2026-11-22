@@ -29,6 +29,8 @@ export type Product = {
   remembered?: string | null;
   preferred?: boolean | null;
   avoided?: boolean | null;
+  /** Card number from the assistant's search; the model uses the same number. */
+  position?: number | null;
 };
 
 type ProductOptionsProps = {

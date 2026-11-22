@@ -59,6 +59,39 @@ test("options are capped and unnamed entries are skipped", () => {
   assert.equal(orderOptions([option("")]).length, 0);
 });
 
+test("backend positions decide the order and the card numbers; nothing is re-sorted or hidden", () => {
+  // The backend already put the remembered option first; the model calls it position 1.
+  const sent = [
+    option("Remembered", { remembered: "purchase_history", position: 1 }),
+    option("Provider first", { position: 2 }),
+    option("Preferred later", { preferred: true, position: 3 }),
+    option("Gone", { available: false, position: 4 }),
+  ];
+  const shown = orderOptions(sent);
+  assert.deepEqual(names(shown), ["Remembered", "Provider first", "Preferred later", "Gone"]);
+  assert.deepEqual(shown.map((item) => item.number), [1, 2, 3, 4]);
+  assert.deepEqual(shown.map((item) => item.badge), ["You bought this before", null, null, null]);
+});
+
+test("card N is the product the backend sent as position N, even out of array order", () => {
+  const shown = orderOptions([option("Second", { position: 2 }), option("Third", { preferred: true, position: 3 }), option("First", { position: 1 })]);
+  assert.deepEqual(shown.map((item) => [item.number, item.product.name]), [[1, "First"], [2, "Second"], [3, "Third"]]);
+  assert.equal(shown[0].badge, "Best match");
+});
+
+test("positioned results show an avoided flag as-is instead of renumbering around it", () => {
+  const shown = orderOptions([option("A", { position: 1 }), option("B", { avoided: true, position: 2 })]);
+  assert.deepEqual(shown.map((item) => [item.number, item.product.name]), [[1, "A"], [2, "B"]]);
+});
+
+test("results without positions (old chats, typed search) keep the fallback order", () => {
+  const ordered = orderOptions([option("A"), option("B", { preferred: true }), option("Gone", { available: false }), option("Avoid", { avoided: true })]);
+  assert.deepEqual(names(ordered), ["B", "A", "Gone"]);
+  assert.deepEqual(ordered.map((item) => item.number), [1, 2, 3]);
+  // A partial set of positions is not trusted; the whole group falls back.
+  assert.deepEqual(names(orderOptions([option("A", { position: 2 }), option("B", { remembered: "purchase_history" })])), ["B", "A"]);
+});
+
 test("position and accessible labels", () => {
   assert.equal(positionLabel(0, 3), "1/3");
   assert.equal(positionLabel(5, 3), "3/3");

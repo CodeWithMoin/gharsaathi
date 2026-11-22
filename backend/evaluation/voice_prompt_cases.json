@@ -1,5 +1,5 @@
 {
-  "version": "1.12.0",
+  "version": "1.13.0",
   "cases": [
     {
       "id": "feminine_future_action",
@@ -54,12 +54,12 @@
       "id": "pick_variant_single_word",
       "history": [
         {"role": "user", "content": "Mujhe ek deodorant chahiye."},
-        {"role": "assistant", "content": "Ek second, dekh rahi hoon."},
+        {"role": "assistant", "content": "Ek second."},
         {"role": "user", "content": "AXE wala."},
         {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml, ₹299; AXE Apollo 150 ml, ₹299; AXE Signature 215 ml, ₹350. Sab Instamart par available hain."}
       ],
       "user": "Dark",
-      "required_any": ["Dark"],
+      "required_any": ["Dark", "Ek second", "Bas ek pal", "Zara rukiye"],
       "forbidden_any": ["Apollo", "Signature", "kaunsa chahiye", "kaun sa chahiye", "which one", "add ho gaya", "add kar diya", "added", "bahattar", "₹172", "Zepto"],
       "max_questions": 0,
       "max_sentences": 2
@@ -68,12 +68,12 @@
       "id": "impatience_one_line",
       "history": [
         {"role": "user", "content": "Mujhe ek deodorant chahiye."},
-        {"role": "assistant", "content": "Ek second, dekh rahi hoon."},
+        {"role": "assistant", "content": "Ek second."},
         {"role": "user", "content": "AXE wala."},
         {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml, ₹299; AXE Apollo 150 ml, ₹299; AXE Signature 215 ml, ₹350. Sab Instamart par available hain."}
       ],
       "user": "इतना तामझाम नहीं… सीधा जो बोला है, फटाक से करके बता देते। दस सवाल मत पूछना। AXE Dark wala.",
-      "required_any": ["Dark"],
+      "required_any": ["Dark", "Ek second", "Bas ek pal", "Zara rukiye"],
       "forbidden_any": ["Apollo", "Signature", "kaunsa", "कौन सा", "which one", "add ho gaya", "add kar diya", "added", "bahattar", "₹172", "Zepto"],
       "max_questions": 0,
       "max_sentences": 2
@@ -187,7 +187,7 @@
         {"role": "assistant", "content": "Zepto ka final bill screen par hai, ₹222. Wahin review kijiye."}
       ],
       "user": "हाँ ठीक है, order place कर दो।",
-      "required_any": ["Ek second", "ready kar rahi", "kar rahi hoon", "Place order"],
+      "required_any": ["Ek second", "ready kar rahi", "kar rahi hoon", "Place order", "Bas ek pal", "Zara rukiye"],
       "forbidden_any": ["nahi kar sakti", "place nahi", "cannot place", "order ho gaya", "order place kar diya", "order place ho gaya", "approve kar diya"],
       "max_questions": 1,
       "max_sentences": 2,
@@ -200,7 +200,7 @@
         {"role": "assistant", "content": "Zepto ka final bill screen par hai, ₹222. Wahin review kijiye."}
       ],
       "user": "Approve kar do.",
-      "required_any": ["Ek second", "ready kar rahi", "kar rahi hoon", "Place order"],
+      "required_any": ["Ek second", "ready kar rahi", "kar rahi hoon", "Place order", "Bas ek pal", "Zara rukiye"],
       "forbidden_any": ["nahi kar sakti", "approve nahi", "cannot", "order ho gaya", "order place kar diya", "approve kar diya", "approve ho gaya"],
       "max_questions": 1,
       "max_sentences": 2,
@@ -231,7 +231,7 @@
     {
       "id": "new_address_roman_no_saved_claim",
       "user": "नया address add करो, घर वाला, flat 302, Green Park society.",
-      "required_any": ["form", "address"],
+      "required_any": ["form", "address", "Ek second", "Bas ek pal", "Zara rukiye"],
       "forbidden_any": ["save ho gaya", "add ho gaya", "saved", "save kar diya", "add kar diya", "phone number bataiye", "number bataiye"],
       "max_questions": 1,
       "max_sentences": 2,
@@ -297,7 +297,7 @@
         {"role": "assistant", "content": "Surf Excel Matic 2 kg Instamart par ₹549 aur Zepto par ₹565 hai."}
       ],
       "user": "इतना तामझाम नहीं, सीधा Surf Excel 2 kg add करो।",
-      "required_any": ["Surf Excel", "Instamart", "Swiggy"],
+      "required_any": ["Surf Excel", "Instamart", "Swiggy", "Ek second", "Bas ek pal", "Zara rukiye"],
       "forbidden_any": ["kaunse store", "kaun se store", "kis store", "Instamart ya Zepto", "Zepto ya Instamart", "which store", "add ho gaya", "add kar diya", "added"],
       "max_questions": 0,
       "max_sentences": 2,
@@ -306,7 +306,7 @@
     {
       "id": "branded_item_delegates_without_confirm",
       "user": "Diet Coke chahiye.",
-      "required_any": ["dekh rahi", "check kar rahi", "dhoondh rahi", "Ek second", "Pichli baar", "330"],
+      "required_any": ["dekh rahi", "check kar rahi", "dhoondh rahi", "Ek second", "Pichli baar", "330", "Bas ek pal", "Zara rukiye"],
       "forbidden_any": ["chahiye kya", "chahiye na?", "Diet Coke chahiye?", "₹"],
       "max_questions": 1,
       "max_sentences": 2,
@@ -351,7 +351,7 @@
       "id": "show_only_after_dikha_do",
       "history": [
         {"role": "user", "content": "Dahi dikha dena, bas; batana mat, dikha dena."},
-        {"role": "assistant", "content": "Ek second, dekh rahi hoon."}
+        {"role": "assistant", "content": "Ek second."}
       ],
       "user": "[Backend result, already on screen: Desi Farms Malai Dahi 200 g ₹31; Amul Masti Dahi 400 g ₹35; Mother Dairy Classic Dahi 400 g ₹40. Zepto.]",
       "required_any": ["screen"],
@@ -363,7 +363,7 @@
     {
       "id": "staples_delegate_without_brand_size_question",
       "user": "Atta aur dahi chahiye.",
-      "required_any": ["dekh rahi", "dhoondh rahi", "check kar rahi", "Ek second", "screen"],
+      "required_any": ["dekh rahi", "dhoondh rahi", "check kar rahi", "Ek second", "screen", "Bas ek pal", "Zara rukiye"],
       "forbidden_any": ["brand aur size", "kaunsa brand", "Kaunsa brand", "size chahiye"],
       "max_questions": 1,
       "max_sentences": 2,
@@ -372,7 +372,7 @@
     {
       "id": "self_correction_drops_cancelled_item",
       "user": "आटा चाहिए, और थोड़ा दूध चाहिए; छोड़ो, दूध मत करना, आटा और दही कर दो।",
-      "required_any": ["atta", "Atta", "aata"],
+      "required_any": ["atta", "Atta", "aata", "Ek second", "Bas ek pal", "Zara rukiye"],
       "forbidden_any": ["aur doodh", "doodh bhi", "milk", "Milk"],
       "max_questions": 1,
       "max_sentences": 2,
@@ -390,7 +390,7 @@
     {
       "id": "named_request_never_bare_acknowledgement",
       "user": "अमूल दही ढूँढना और आशिर्वाद आटा।",
-      "required_any": ["dekh rahi", "dhoondh rahi", "check kar rahi", "Ek second"],
+      "required_any": ["dekh rahi", "dhoondh rahi", "check kar rahi", "Ek second", "Bas ek pal", "Zara rukiye"],
       "forbidden_any": ["Kis cheez", "kya chahiye"],
       "forbidden_prefix": ["haan.", "haan,", "theek hai."],
       "max_questions": 0,
@@ -430,6 +430,119 @@
       "forbidden_any": ["number bhar diya", "bhar diya hai", "number daal diya"],
       "max_questions": 1,
       "max_sentences": 2,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "brevity_add_filler_no_narration",
+      "history": [
+        {"role": "user", "content": "Mujhe ek deodorant chahiye, AXE wala."},
+        {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml, ₹299; AXE Apollo 150 ml, ₹299; AXE Signature 215 ml, ₹350. Sab Instamart par hain."}
+      ],
+      "user": "Dark wala add kar do.",
+      "required_any": ["Ek second", "Ek pal", "Zara rukiye", "Ek minute"],
+      "forbidden_any": ["try kar rahi", "karne ka try", "koshish kar rahi", "dekh rahi hoon ki", "main dekh rahi hoon", "kar rahi hoon", "dhoondh rahi hoon", "search kar rahi", "check kar rahi", "khol rahi hoon", "add karne", "add ho gaya", "add kar diya", "added", "Apollo", "Signature"],
+      "forbidden_prefix": ["theek hai", "thik hai", "ठीक है", "okay", "ok,", "ok.", "ok ", "achha", "acha,", "sure"],
+      "fillers": ["ek second", "ek minute", "ek pal", "zara rukiye", "one second", "one moment", "just a moment", "hold on"],
+      "max_fillers": 1,
+      "max_questions": 0,
+      "max_sentences": 1,
+      "max_devanagari_ratio": 0.05,
+      "max_words": 3
+    },
+    {
+      "id": "brevity_search_filler_two_words",
+      "user": "Fortune sunflower oil 1 litre dhoondh do.",
+      "required_any": ["Ek second", "Ek pal", "Zara rukiye", "Ek minute"],
+      "forbidden_any": ["try kar rahi", "karne ka try", "koshish kar rahi", "dekh rahi hoon ki", "main dekh rahi hoon", "kar rahi hoon", "dhoondh rahi hoon", "search kar rahi", "check kar rahi", "khol rahi hoon"],
+      "forbidden_prefix": ["theek hai", "thik hai", "ठीक है", "okay", "ok,", "ok.", "ok ", "achha", "acha,", "sure"],
+      "fillers": ["ek second", "ek minute", "ek pal", "zara rukiye", "one second", "one moment", "just a moment", "hold on"],
+      "max_fillers": 1,
+      "max_questions": 0,
+      "max_sentences": 1,
+      "max_devanagari_ratio": 0.05,
+      "max_words": 3
+    },
+    {
+      "id": "brevity_no_repeated_filler",
+      "history": [
+        {"role": "user", "content": "Atta chahiye."},
+        {"role": "assistant", "content": "Ek second."},
+        {"role": "user", "content": "[Backend result, already on screen: atta options.]"},
+        {"role": "assistant", "content": "Atta ke options screen par hain."}
+      ],
+      "user": "Dahi bhi dhoondh do.",
+      "required_any": ["Ek pal", "Zara rukiye", "Ek minute", "Bas ek pal", "Dahi", "dahi"],
+      "forbidden_any": ["try kar rahi", "karne ka try", "koshish kar rahi", "dekh rahi hoon ki", "main dekh rahi hoon", "kar rahi hoon", "dhoondh rahi hoon", "search kar rahi", "check kar rahi", "khol rahi hoon", "Ek second"],
+      "forbidden_prefix": ["theek hai", "thik hai", "ठीक है", "okay", "ok,", "ok.", "ok ", "achha", "acha,", "sure"],
+      "fillers": ["ek second", "ek minute", "ek pal", "zara rukiye", "one second", "one moment", "just a moment", "hold on"],
+      "max_fillers": 1,
+      "max_questions": 0,
+      "max_sentences": 1,
+      "max_devanagari_ratio": 0.05,
+      "max_words": 3
+    },
+    {
+      "id": "brevity_basket_request_no_opener",
+      "user": "Mera Zepto basket dikha do.",
+      "required_any": ["Ek second", "Ek pal", "Zara rukiye", "Ek minute", "basket"],
+      "forbidden_any": ["try kar rahi", "karne ka try", "koshish kar rahi", "dekh rahi hoon ki", "main dekh rahi hoon", "kar rahi hoon", "dhoondh rahi hoon", "search kar rahi", "check kar rahi", "khol rahi hoon"],
+      "forbidden_prefix": ["theek hai", "thik hai", "ठीक है", "okay", "ok,", "ok.", "ok ", "achha", "acha,", "sure"],
+      "fillers": ["ek second", "ek minute", "ek pal", "zara rukiye", "one second", "one moment", "just a moment", "hold on"],
+      "max_fillers": 1,
+      "max_questions": 0,
+      "max_sentences": 1,
+      "max_devanagari_ratio": 0.05,
+      "max_words": 3
+    },
+    {
+      "id": "brevity_direct_answer_no_filler",
+      "history": [
+        {"role": "user", "content": "Mujhe ek deodorant chahiye, AXE wala."},
+        {"role": "assistant", "content": "Screen par options hain: AXE Dark Temptation 150 ml, ₹299; AXE Apollo 150 ml, ₹299; AXE Signature 215 ml, ₹350. Sab Instamart par hain."}
+      ],
+      "user": "Apollo kitne ka hai?",
+      "required_any": ["₹299"],
+      "forbidden_any": ["try kar rahi", "karne ka try", "koshish kar rahi", "dekh rahi hoon ki", "main dekh rahi hoon", "kar rahi hoon", "dhoondh rahi hoon", "search kar rahi", "check kar rahi", "khol rahi hoon", "dekh rahi", "check kar"],
+      "forbidden_prefix": ["theek hai", "thik hai", "ठीक है", "okay", "ok,", "ok.", "ok ", "achha", "acha,", "sure"],
+      "fillers": ["ek second", "ek minute", "ek pal", "zara rukiye", "one second", "one moment", "just a moment", "hold on"],
+      "max_fillers": 0,
+      "max_questions": 0,
+      "max_sentences": 1,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "brevity_capability_one_sentence",
+      "user": "Tum kya kya kar sakti ho?",
+      "required_any": ["dhoondh", "compare", "basket", "order"],
+      "forbidden_any": ["try kar rahi", "karne ka try", "koshish kar rahi", "dekh rahi hoon ki", "main dekh rahi hoon", "kar rahi hoon", "dhoondh rahi hoon", "search kar rahi", "check kar rahi", "khol rahi hoon"],
+      "forbidden_prefix": ["theek hai", "thik hai", "ठीक है", "okay", "ok,", "ok.", "ok ", "achha", "acha,", "sure", "haan", "ji haan"],
+      "fillers": ["ek second", "ek minute", "ek pal", "zara rukiye", "one second", "one moment", "just a moment", "hold on"],
+      "max_fillers": 0,
+      "max_questions": 1,
+      "max_sentences": 1,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "brevity_refusal_one_sentence",
+      "user": "Aaj ka cricket score bata do.",
+      "required_any": ["nahi", "shopping"],
+      "forbidden_any": ["try kar rahi", "karne ka try", "koshish kar rahi", "dekh rahi hoon ki", "main dekh rahi hoon", "kar rahi hoon", "dhoondh rahi hoon", "search kar rahi", "check kar rahi", "khol rahi hoon"],
+      "forbidden_prefix": ["theek hai", "thik hai", "ठीक है", "okay", "ok,", "ok.", "ok ", "achha", "acha,", "sure", "haan", "sorry"],
+      "fillers": ["ek second", "ek minute", "ek pal", "zara rukiye", "one second", "one moment", "just a moment", "hold on"],
+      "max_fillers": 0,
+      "max_questions": 1,
+      "max_sentences": 1,
+      "max_devanagari_ratio": 0.05
+    },
+    {
+      "id": "brevity_yes_no_answer_one_sentence",
+      "user": "Zepto par cash on delivery hota hai kya?",
+      "required_any": ["Haan", "haan", "Ji", "cash on delivery"],
+      "forbidden_any": ["try kar rahi", "karne ka try", "koshish kar rahi", "dekh rahi hoon ki", "main dekh rahi hoon", "kar rahi hoon", "dhoondh rahi hoon", "search kar rahi", "check kar rahi", "khol rahi hoon"],
+      "fillers": ["ek second", "ek minute", "ek pal", "zara rukiye", "one second", "one moment", "just a moment", "hold on"],
+      "max_fillers": 0,
+      "max_questions": 1,
+      "max_sentences": 1,
       "max_devanagari_ratio": 0.05
     }
   ]

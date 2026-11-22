@@ -36,6 +36,8 @@ class ProductSnapshot(BaseModel):
     remembered: str | None = Field(default=None, max_length=40)
     preferred: bool | None = None
     avoided: bool | None = None
+    # Card number from the assistant's search, the same one the model refers to.
+    position: int | None = Field(default=None, ge=1, le=50)
 
 
 class ChatMessageSnapshot(BaseModel):
