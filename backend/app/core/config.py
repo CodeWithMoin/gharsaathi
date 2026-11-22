@@ -189,6 +189,24 @@ class Settings(BaseSettings):
         )
         return self
 
+    @model_validator(mode="after")
+    def clerk_secret_from_frontend_env(self) -> "Settings":
+        # The frontend and backend use the same Clerk instance. If the backend was started
+        # without CLERK_SECRET_KEY, read it from frontend/.env.local so sign-in never breaks
+        # with "Authentication is not configured" on a fresh setup.
+        if self.clerk_secret_key.get_secret_value().strip():
+            return self
+        env_local = REPOSITORY_ROOT / "frontend" / ".env.local"
+        try:
+            for line in env_local.read_text(encoding="utf-8").splitlines():
+                key, sep, value = line.partition("=")
+                if sep and key.strip() == "CLERK_SECRET_KEY" and value.strip():
+                    self.clerk_secret_key = SecretStr(value.strip().strip('"').strip("'"))
+                    break
+        except OSError:
+            pass
+        return self
+
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

@@ -327,7 +327,7 @@ export function FirstRunOnboarding({ children }: { children: (context: AppContex
       />
       <StepTransition stepKey={step} direction={direction}>
         {step === "profile" && <ProfileStep initial={resolved.draft} focusHeading={focusHeading} onSave={saveProfileStep} />}
-        {step === "consent" && <ConsentStep updatedTerms={isOnboardingComplete(currentProgress)} focusHeading={focusHeading} onAccept={acceptConsent} />}
+        {step === "consent" && <ConsentStep updatedTerms={isOnboardingComplete(currentProgress) && Boolean(consent?.accepted_at)} focusHeading={focusHeading} onAccept={acceptConsent} />}
         {step === "stores" && <StoresStep
           stores={stores}
           commerceMode={commerceMode}
