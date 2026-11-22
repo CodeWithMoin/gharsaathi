@@ -90,4 +90,6 @@ async def test_history_adapter_calls_only_get_orders() -> None:
     result = await adapter.orders(count=5, active_only=True)
 
     assert len(result.orders) == 1
-    assert client.calls == [("get_orders", {"count": 5, "activeOnly": True})]
+    assert client.calls == [
+        ("get_orders", {"orderType": "INSTAMART", "count": 5, "activeOnly": True})
+    ]

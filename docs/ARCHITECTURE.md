@@ -403,6 +403,49 @@ sequenceDiagram
   fetch handler and no cache. A web app manifest (`/manifest.webmanifest`) makes the
   app installable; iOS/iPadOS deliver web push only to the installed Home Screen app.
 
+## Purchase-history import (consented, read-only)
+
+Imports run only with `purchase_history/proactive_reorder` consent and only when the
+user asks (Settings → "Refresh usuals" / "Re-import full history"), or, if the user
+turned on "Keep my … history up to date", lazily when the app opens. There is no
+background scheduler. Code: `app/memory/purchase_graph.py` (`sync`, `auto_sync`),
+`app/memory/history_reading.py` (reader contract, call pacer),
+`app/commerce/zepto/purchase_history.py`, `app/commerce/swiggy/history.py`.
+
+Avoiding provider rate limits is the design constraint:
+
+- **Never retried.** Readers call the tool once per step (Zepto uses
+  `recover=False`, so no session-reset retry). The first rate limit or session
+  error stops the sync; orders already read are kept, `last_error_code` is recorded
+  and a rate limit sets `rate_limited_until` (provider `Retry-After`, else 1 h).
+  Until then a sync is refused (HTTP 429) without a provider call.
+- **Zepto** returns full history. `list_order_history` (10 per page, newest first),
+  then `get_order_detail` for each delivered order not yet imported (known orders are
+  matched by the list id stored as `provider_lookup_id`). One call at a time, ≥1 s
+  apart, ≤30 detail reads and ≤100 orders per sync. Out of budget, the sync records
+  `resume_page` and the next sync continues there; once the window has been walked
+  (`backfill_complete`), later syncs stop at the first known order. A malformed detail
+  is skipped and counted (`detail_failures`).
+- **Swiggy** `get_orders` only returns **orders from the last 15 days** (live tool
+  description). We send `orderType: "INSTAMART"`, `count: 20` and follow
+  `data.nextCursor` (or a top-level `nextCursor`) for at most 2 pages, ≥2 s apart,
+  after checking the client's known cooldown. Older Instamart history exists here only
+  if earlier syncs saw it, which is why the weekly opt-in sync exists. The UI labels
+  Swiggy coverage "last 15 days".
+- **Window.** Orders older than `PURCHASE_HISTORY_LOOKBACK_DAYS` (default 365) or the
+  user's retention period, whichever is shorter, are never imported; a newest-first
+  walk stops at the first such order.
+- **Cadence.** A sync within 10 minutes of the last success returns `cached`. "Re-import
+  full history" (`full=true`) skips that cache and restarts the walk from page 1, at
+  most once per 24 h per store (HTTP 409 otherwise; `GET
+  /api/memory/purchase-history/sync-state` returns `full_resync_available_at`). The
+  weekly opt-in sync (`POST …/auto-sync/run`, called once per app open) runs only when
+  enabled, consent is current, no cooldown is recorded and the last attempt was ≥7 days
+  ago.
+- **Logs.** `event=purchase_history_sync provider= list_calls= detail_calls=
+  stopped_reason= fetched= skipped_known= detail_failures= full=`; no order or item
+  content.
+
 ## Delivery addresses (switch, add)
 
 **Switch to a saved address.** "Address change karo" calls `list_delivery_addresses`

@@ -15,6 +15,7 @@ import { conversationTitle, relativeChatDate, searchConversations, visibleConver
 import { stripNonSpeechAnnotations, voiceTurnDisplayText } from "./transcript-annotations.mjs";
 import { LiveOrderTracking } from "./order-tracking";
 import { PersonalizationOnboarding } from "./personalization-onboarding";
+import { useWeeklyHistoryAutoSync } from "./purchase-history-import";
 import { SupportDialog } from "./support-panel";
 import { VoicePanel, useVoicePrewarm, type VoiceAddressFormRequest, type VoiceTranscriptTurn } from "./voice-panel";
 import { conversationIntent, conversationReply } from "./conversation-intent.mjs";
@@ -96,6 +97,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
   const [connected, setConnected] = useState<boolean | null>(null);
   const [commerceMode, setCommerceMode] = useState<CommerceMode>("demo");
   const [zeptoConnected, setZeptoConnected] = useState<boolean | null>(null);
+  useWeeklyHistoryAutoSync({ enabled: commerceMode === "live", swiggyConnected: connected === true, zeptoConnected: zeptoConnected === true });
   const [zeptoSearchReady, setZeptoSearchReady] = useState(false);
   const [zeptoBusy, setZeptoBusy] = useState(false);
   const [zeptoAddresses, setZeptoAddresses] = useState<Address[]>([]);

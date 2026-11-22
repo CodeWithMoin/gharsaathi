@@ -1,26 +1,95 @@
+"""Read-only Swiggy Instamart order history.
+
+``get_orders`` only returns orders from the last 15 days (per its live tool
+description), newest first, ``count`` up to 20, with ``data.nextCursor`` for
+the next older page. Import reads at most two pages per sync, at least two
+seconds apart, honours the client's known rate-limit cooldown and never
+retries. History older than 15 days accumulates only through repeated syncs.
+"""
+
+import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+import time
 from typing import Any
 
 from pydantic import ValidationError
 
 from app.commerce.swiggy.adapter import _data, _optional_str, _required_str
-from app.commerce.swiggy.client import SwiggyMcpClient
+from app.commerce.swiggy.client import SwiggyMcpClient, _rate_limit_error
 from app.commerce.swiggy.errors import SwiggySchemaError
 from app.commerce.swiggy.models import OrderItem, OrderList, OrderSummary
+from app.memory.history_reading import (
+    CallPacer,
+    HistoryRead,
+    HistoryReadPlan,
+    stop_reason_for,
+)
+
+
+ORDER_TYPE = "INSTAMART"
+PAGE_COUNT = 20
+MAX_PAGES = 2
+MIN_CALL_INTERVAL_SECONDS = 2.0
 
 
 class SwiggyOrderHistoryAdapter:
     """Read-only adapter for the authenticated user's recent Instamart orders."""
 
-    def __init__(self, client: SwiggyMcpClient) -> None:
+    def __init__(
+        self,
+        client: SwiggyMcpClient,
+        *,
+        max_pages: int = MAX_PAGES,
+        min_interval: float = MIN_CALL_INTERVAL_SECONDS,
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
+    ) -> None:
         self.client = client
+        self.max_pages = max_pages
+        self.pacer = CallPacer(min_interval, monotonic=monotonic, sleep=sleep)
 
     async def orders(self, count: int = 10, active_only: bool = False) -> OrderList:
-        arguments: dict[str, object] = {"count": count}
+        arguments: dict[str, object] = {"orderType": ORDER_TYPE, "count": count}
         if active_only:
             arguments["activeOnly"] = True
         return parse_orders(await self.client.call_tool("get_orders", arguments))
+
+    async def read_history(self, plan: HistoryReadPlan) -> HistoryRead:
+        read = HistoryRead(coverage="last_15_days")
+        cursor: str | None = None
+        for _ in range(self.max_pages):
+            cooldown = getattr(self.client, "cooldown_remaining", None)
+            remaining = await cooldown() if cooldown is not None else 0
+            if remaining > 0:
+                read.error = _rate_limit_error(remaining)
+                read.stopped_reason = "rate_limited"
+                return read
+            await self.pacer.wait()
+            arguments: dict[str, object] = {"orderType": ORDER_TYPE, "count": PAGE_COUNT}
+            if cursor:
+                arguments["cursor"] = cursor
+            read.list_calls += 1
+            try:
+                page = parse_orders(await self.client.call_tool("get_orders", arguments))
+            except Exception as exc:  # noqa: BLE001 - handed back, never retried
+                read.error = exc
+                read.stopped_reason = stop_reason_for(exc)
+                return read
+            for order in page.orders:
+                if order.created_at < plan.cutoff:
+                    read.stopped_reason = plan.cutoff_reason
+                    return read
+                if order.order_id in plan.known_ids:
+                    read.skipped_known += 1
+                read.orders.append(order)
+            cursor = page.next_cursor
+            if not cursor:
+                read.stopped_reason = "complete"
+                return read
+        read.stopped_reason = "page_limit"
+        return read
 
 
 def parse_orders(payload: dict[str, Any]) -> OrderList:
@@ -66,7 +135,19 @@ def parse_orders(payload: dict[str, Any]) -> OrderList:
         except ValidationError as exc:
             raise SwiggySchemaError("Swiggy returned an invalid order.") from exc
 
-    return OrderList(orders=orders, has_more=data.get("hasMore") is True)
+    return OrderList(
+        orders=orders,
+        has_more=data.get("hasMore") is True,
+        next_cursor=_next_cursor(data, payload),
+    )
+
+
+def _next_cursor(data: dict[str, Any], payload: dict[str, Any]) -> str | None:
+    for source in (data, payload):
+        value = source.get("nextCursor")
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
 
 
 def _parse_item(raw: object) -> OrderItem:

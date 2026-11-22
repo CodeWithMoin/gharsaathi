@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # by Zepto's get_payment_methods. Cash on delivery is always offered.
     zepto_online_payments_enabled: bool = False
     zepto_payment_methods_allowed: str = "upi_reserve,wallet,online"
+    # Consented order-history import never reads orders placed before this many
+    # days ago (and never before the user's chosen retention period).
+    purchase_history_lookback_days: int = Field(default=365, ge=1, le=3 * 365)
     frontend_url: str = "http://localhost:3003"
     cors_origins: str = "http://localhost:3003,http://127.0.0.1:3003"
     app_encryption_key: str = ""
