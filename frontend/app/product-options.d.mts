@@ -1,7 +1,7 @@
 export type BestPickBadge = "You bought this before" | "Your usual" | "Best match";
 
 export type OptionAnnotations = { remembered?: string | null; preferred?: boolean | null; avoided?: boolean | null; available?: boolean };
-export type OrderableOption = OptionAnnotations & { provider?: string; product_id: string; sku_id: string; name?: string };
+export type OrderableOption = OptionAnnotations & { provider?: string; product_id: string; sku_id: string; name?: string; position?: number | null };
 export type OrderedOption<P> = { key: string; product: P; number: number; badge: BestPickBadge | null };
 export type BasketLike = { lines: { ref: { provider: string; variant_id: string }; quantity: number }[] };
 

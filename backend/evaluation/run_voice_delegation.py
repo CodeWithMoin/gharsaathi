@@ -446,11 +446,14 @@ def check_turn(
                 "name": option.get("name"),
                 "pack_size": option.get("pack_size"),
                 "store_id": option.get("store_id"),
+                "position": option.get("position"),
                 "price": option.get("price"),
             }
         )
         if "add_store" in expect and option.get("store_id") != expect["add_store"]:
             failures.append(f"Added to {option.get('store_id')}, expected {expect['add_store']}.")
+        if "add_position" in expect and option.get("position") != expect["add_position"]:
+            failures.append(f"Added card {option.get('position')}, expected card {expect['add_position']}.")
         needle = expect.get("add_product_contains")
         if needle and needle.lower() not in str(option.get("name", "")).lower():
             failures.append(f"Added {option.get('name')!r}, expected a product containing {needle!r}.")

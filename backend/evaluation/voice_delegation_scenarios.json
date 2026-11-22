@@ -1038,6 +1038,42 @@
           }
         }
       ]
+    },
+    {
+      "id": "s17-memory-reordered-doosra-wala",
+      "title": "Memory moves the remembered Surf Excel Easy Wash to card 1; 'doosra wala' adds card 2 (Swiggy Matic), not the provider's second result.",
+      "catalogue": "surf_fixture",
+      "memory": [
+        {
+          "source": "purchase_history",
+          "name": "Surf Excel Easy Wash Detergent Powder 1 kg",
+          "store_id": "swiggy_instamart",
+          "last_bought": "2026-11-01",
+          "times": 3
+        }
+      ],
+      "turns": [
+        {
+          "user": "Surf Excel detergent ke options dikha do",
+          "expect": {
+            "add_count": 0,
+            "max_questions": 1
+          }
+        },
+        {
+          "user": "doosra wala daal do",
+          "expect": {
+            "tools_required": [
+              "add_to_basket"
+            ],
+            "add_count": 1,
+            "add_position": 2,
+            "add_product_contains": "Matic",
+            "add_store": "swiggy_instamart",
+            "max_sentences": 2
+          }
+        }
+      ]
     }
   ]
 }
