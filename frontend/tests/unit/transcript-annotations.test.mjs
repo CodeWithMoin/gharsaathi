@@ -25,3 +25,10 @@ test("keeps brackets that belong to product text", () => {
 test("leaves ordinary text untouched", () => {
   assert.equal(stripNonSpeechAnnotations("  Atta 5 kg  "), "  Atta 5 kg  ");
 });
+
+test("voice turn text strips annotations and romanizes only assistant Hinglish", async () => {
+  const { voiceTurnDisplayText } = await import("../../app/transcript-annotations.mjs");
+  assert.equal(voiceTurnDisplayText({ role: "assistant", content: "[sniff] Aapne pichhli baar 330 ml ki single can ली थी" }), "Aapne pichhli baar 330 ml ki single can li thi");
+  assert.equal(voiceTurnDisplayText({ role: "assistant", content: "can ली थी", captionScript: "native" }), "can ली थी");
+  assert.equal(voiceTurnDisplayText({ role: "user", content: "मुझे Diet Coke चाहिए" }), "मुझे Diet Coke चाहिए");
+});

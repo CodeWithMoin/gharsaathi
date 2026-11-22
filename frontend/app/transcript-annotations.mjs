@@ -8,6 +8,8 @@
  * or "(Pack of 2)" is kept.
  */
 
+import { romanizeAssistantCaption } from "./hinglish-romanize.mjs";
+
 const KNOWN = new Set([
   "applause", "breath", "breathing", "breathes", "chuckle", "chuckles", "clears throat", "cough", "coughs",
   "crosstalk", "gasp", "gasps", "inaudible", "inhales", "exhales", "laugh", "laughs", "laughter", "music",
@@ -37,4 +39,18 @@ export function stripNonSpeechAnnotations(text) {
     .replace(/ +([.,!?;:…।])/g, "$1")
     .replace(/^[ \t]*[.,;:]+[ \t]*/, "")
     .trim();
+}
+
+/**
+ * The text shown and saved for one live voice transcript turn: annotations are
+ * removed, and an assistant turn's stray Devanagari words are written in Roman
+ * Hinglish unless the session's caption script is native (Hindi profile).
+ * User turns are never transliterated.
+ *
+ * @param {{ role: "user" | "assistant", content: string, captionScript?: "roman" | "native" }} turn
+ * @returns {string}
+ */
+export function voiceTurnDisplayText(turn) {
+  const text = stripNonSpeechAnnotations(turn.content);
+  return turn.role === "assistant" ? romanizeAssistantCaption(text, { script: turn.captionScript ?? "roman" }) : text;
 }

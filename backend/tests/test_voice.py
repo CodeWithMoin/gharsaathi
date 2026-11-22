@@ -207,6 +207,7 @@ def test_session_endpoint_returns_answer_for_allowed_origin() -> None:
         "sdp": "answer",
         "turn_taking": {"mode": "native"},
         "events_token": "token-fake",
+        "assistant_transcript_script": "roman",
     }
 
 
