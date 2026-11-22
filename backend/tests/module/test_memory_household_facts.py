@@ -263,3 +263,44 @@ async def test_best_unit_value_orders_by_price_per_unit(factory, tmp_path: Path)
         product("Maggi Masala Noodles 12 Pack", "Maggi", "840 g", 168, "twelve"),
     ]), "search_products", query="maggi noodles")
     assert [entry["name"] for entry in result["results"]][0] == "Maggi Masala Noodles 4 Pack"
+
+
+USUAL = {
+    "usual_buys": [
+        {"category": "milk", "brand": "Amul", "product": "Taaza toned milk", "size": "500 ml"},
+        {"category": "instant breakfast", "brand": "Nestle", "product": "Maggi Masala noodles", "size": "4-pack"},
+        {"category": "snacks", "brand": "Malkist", "product": "Cheese crackers"},
+    ],
+}
+SHELF = [
+    product("Mother Dairy Toned Milk", "Mother Dairy", "500 ml", 28, "md500"),
+    product("Amul Taaza Toned Fresh Milk", "Amul", "500 ml", 27, "taaza500"),
+    product("Amul Taaza Toned Fresh Milk", "Amul", "1 L", 54, "taaza1l"),
+    product("Maggi 2-Minute Masala Instant Noodles", "Maggi", "70 g", 14, "maggi1"),
+    product("Maggi 2-Minute Masala Instant Noodles 4 Pack", "Maggi", "280 g", 56, "maggi4"),
+    product("Malkist Cheese Cracker Biscuits", "Malkist", "138 g", 30, "malkist"),
+    product("Britannia Cheese Crackers", "Britannia", "100 g", 25, "brit"),
+]
+
+
+async def test_seeded_usual_buys_are_the_remembered_pick_for_quick_add(factory, tmp_path: Path) -> None:
+    await seed(factory, tmp_path, USUAL)
+    world = World()
+    toolbox = box(factory, SHELF, world=world)
+    for query, expected in [
+        ("milk", "taaza500"),            # brand + product + size
+        ("maggi noodles", "maggi4"),     # brand named by the product, "4-pack" count
+        ("cheese crackers", "malkist"),  # told product, no size, one size on the shelf
+    ]:
+        result = (await toolbox.execute("quick_add", json.dumps({"items": [{"query": query, "quantity": 1}], "store": "swiggy_instamart"}))).model_output
+        assert result["status"] == "added", (query, result)
+        (added,) = result["added"]
+        assert added["picked_because"] == "remembered", query
+        option = next(o for o in toolbox.options.values() if o.product.name == added["name"] and o.product.pack_size == added["pack_size"])
+        assert option.product.product_id == expected
+
+
+async def test_without_the_seed_quick_add_asks(factory, tmp_path: Path) -> None:
+    await seed(factory, tmp_path, {"diet": "non_vegetarian"})
+    result = (await box(factory, SHELF).execute("quick_add", json.dumps({"items": [{"query": "milk", "quantity": 1}], "store": "swiggy_instamart"}))).model_output
+    assert result["status"] == "needs_choice"

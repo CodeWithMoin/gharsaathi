@@ -1,0 +1,893 @@
+{
+  "runs": {
+    "before": {
+      "generated_at": "2026-11-22T05:13:01.859485+00:00",
+      "model": "gpt-6-luna",
+      "prompt_version": "1.30.0",
+      "tools": [
+        "search_products",
+        "add_to_basket",
+        "set_basket_quantity",
+        "view_basket",
+        "request_approval",
+        "open_address_form",
+        "recall_household_preferences",
+        "remember_preference",
+        "update_preference",
+        "forget_preference",
+        "list_preferences",
+        "confirm_memory",
+        "prepare_order",
+        "list_delivery_addresses",
+        "select_delivery_address",
+        "read_attached_photo",
+        "get_order_status",
+        "list_recent_orders"
+      ],
+      "summary": {
+        "order_scenarios": 4,
+        "orders_reached": 4,
+        "median_turns_to_order": 2.0,
+        "median_latency_to_order_ms": 21105.4,
+        "median_model_rounds_to_order": 5.5,
+        "per_scenario": {
+          "o1-express-single": {
+            "turns": 1,
+            "model_rounds": 4,
+            "latency_ms": 16546.1,
+            "passed": true
+          },
+          "o2-express-two-items": {
+            "turns": 1,
+            "model_rounds": 4,
+            "latency_ms": 16188.1,
+            "passed": true
+          },
+          "o3-usual-milk": {
+            "turns": 3,
+            "model_rounds": 7,
+            "latency_ms": 25664.7,
+            "passed": true
+          },
+          "o4-ambiguous-one-question": {
+            "turns": 4,
+            "model_rounds": 10,
+            "latency_ms": 37426.3,
+            "passed": true
+          },
+          "c1-clear-cart": {
+            "turns": 1,
+            "model_rounds": 3,
+            "latency_ms": 8705.3,
+            "passed": false
+          }
+        }
+      },
+      "results": [
+        {
+          "id": "o1-express-single",
+          "title": "Express: '2 Amul lassi order kar do' → order card",
+          "reached": true,
+          "turns_to_goal": 1,
+          "model_rounds": 4,
+          "latency_ms": 16546.1,
+          "passed": true,
+          "failures": [],
+          "turns": [
+            {
+              "user": "2 Amul lassi order kar do",
+              "reply": "Zepto par do Amul Sweet Lassi 200 ml, ₹70, cash on delivery. Screen par “Place order” dabaiye.",
+              "rounds": [
+                {
+                  "model_ms": 4442.0,
+                  "tools": [
+                    "recall_household_preferences"
+                  ],
+                  "statuses": [
+                    "no_memory"
+                  ]
+                },
+                {
+                  "model_ms": 4023.6,
+                  "tools": [
+                    "add_to_basket"
+                  ],
+                  "statuses": [
+                    "added"
+                  ]
+                },
+                {
+                  "model_ms": 4267.9,
+                  "tools": [
+                    "prepare_order"
+                  ],
+                  "statuses": [
+                    "awaiting_tap"
+                  ]
+                },
+                {
+                  "model_ms": 3554.0,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 4,
+              "total_ms": 16546.1,
+              "cards": [
+                {
+                  "id": "4545-tWrQh6W6ukuiZjZbupK",
+                  "expires_at": "2026-11-22T05:16:30.062004+00:00",
+                  "payable": "₹70",
+                  "payable_paise": 7000,
+                  "item_count": 2,
+                  "items": [
+                    {
+                      "name": "Amul Sweet Lassi",
+                      "pack_size": "200 ml",
+                      "quantity": 2
+                    }
+                  ],
+                  "payment": "cash_on_delivery",
+                  "payment_method": "cod",
+                  "payment_methods": [
+                    {
+                      "id": "cod",
+                      "label": "Cash on delivery"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "o2-express-two-items",
+          "title": "Express: two specific items in one request",
+          "reached": true,
+          "turns_to_goal": 1,
+          "model_rounds": 4,
+          "latency_ms": 16188.1,
+          "passed": true,
+          "failures": [],
+          "turns": [
+            {
+              "user": "Amul Taaza doodh 1 litre aur Tata Tea Gold 500 g order kar do",
+              "reply": "Zepto, do items, ₹383, cash on delivery. Screen par “Place order” dabaiye.",
+              "rounds": [
+                {
+                  "model_ms": 3409.5,
+                  "tools": [
+                    "search_products",
+                    "search_products"
+                  ],
+                  "statuses": [
+                    "ok",
+                    "ok"
+                  ]
+                },
+                {
+                  "model_ms": 6372.6,
+                  "tools": [
+                    "add_to_basket",
+                    "add_to_basket"
+                  ],
+                  "statuses": [
+                    "added",
+                    "added"
+                  ]
+                },
+                {
+                  "model_ms": 3241.7,
+                  "tools": [
+                    "prepare_order"
+                  ],
+                  "statuses": [
+                    "awaiting_tap"
+                  ]
+                },
+                {
+                  "model_ms": 3163.0,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 4,
+              "total_ms": 16188.1,
+              "cards": [
+                {
+                  "id": "ZG4XXsBImn9hhDpN-qSrZlh3",
+                  "expires_at": "2026-11-22T05:16:46.898402+00:00",
+                  "payable": "₹383",
+                  "payable_paise": 38300,
+                  "item_count": 2,
+                  "items": [
+                    {
+                      "name": "Amul Taaza Homogenised Milk",
+                      "pack_size": "1 L",
+                      "quantity": 1
+                    },
+                    {
+                      "name": "Tata Tea Gold",
+                      "pack_size": "500 g",
+                      "quantity": 1
+                    }
+                  ],
+                  "payment": "cash_on_delivery",
+                  "payment_method": "cod",
+                  "payment_methods": [
+                    {
+                      "id": "cod",
+                      "label": "Cash on delivery"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "o3-usual-milk",
+          "title": "Express: 'usual milk mangwa do' with a remembered Amul Taaza",
+          "reached": true,
+          "turns_to_goal": 3,
+          "model_rounds": 7,
+          "latency_ms": 25664.7,
+          "passed": true,
+          "failures": [],
+          "turns": [
+            {
+              "user": "usual milk mangwa do",
+              "reply": "Pichli baar aapne Amul Taaza toned milk 1 L liya tha; wahi ek mangwaun?",
+              "rounds": [
+                {
+                  "model_ms": 2456.7,
+                  "tools": [
+                    "recall_household_preferences"
+                  ],
+                  "statuses": [
+                    "ok"
+                  ]
+                },
+                {
+                  "model_ms": 4300.7,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 2,
+              "total_ms": 6757.5,
+              "cards": []
+            },
+            {
+              "user": "haan, wahi",
+              "reply": "Amul Taaza toned milk 1 L, ₹54, Zepto basket mein add ho gaya.",
+              "rounds": [
+                {
+                  "model_ms": 3687.0,
+                  "tools": [
+                    "search_products"
+                  ],
+                  "statuses": [
+                    "ok"
+                  ]
+                },
+                {
+                  "model_ms": 4043.9,
+                  "tools": [
+                    "add_to_basket"
+                  ],
+                  "statuses": [
+                    "added"
+                  ]
+                },
+                {
+                  "model_ms": 3940.9,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 3,
+              "total_ms": 11672.4,
+              "cards": []
+            },
+            {
+              "user": "haan, order kar do",
+              "reply": "Zepto, ek item, ₹84, cash on delivery. Screen par “Place order” dabaiye.",
+              "rounds": [
+                {
+                  "model_ms": 3686.8,
+                  "tools": [
+                    "prepare_order"
+                  ],
+                  "statuses": [
+                    "awaiting_tap"
+                  ]
+                },
+                {
+                  "model_ms": 3547.6,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 2,
+              "total_ms": 7234.8,
+              "cards": [
+                {
+                  "id": "zbHn6YYp6fWGpBHglusBUG3h",
+                  "expires_at": "2026-11-22T05:17:12.178869+00:00",
+                  "payable": "₹84",
+                  "payable_paise": 8400,
+                  "item_count": 1,
+                  "items": [
+                    {
+                      "name": "Amul Taaza Toned Milk",
+                      "pack_size": "1 L",
+                      "quantity": 1
+                    }
+                  ],
+                  "payment": "cash_on_delivery",
+                  "payment_method": "cod",
+                  "payment_methods": [
+                    {
+                      "id": "cod",
+                      "label": "Cash on delivery"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "o4-ambiguous-one-question",
+          "title": "Express: ambiguous 'Surf Excel' → one question → card",
+          "reached": true,
+          "turns_to_goal": 4,
+          "model_rounds": 10,
+          "latency_ms": 37426.3,
+          "passed": true,
+          "failures": [],
+          "turns": [
+            {
+              "user": "Surf Excel order kar do",
+              "reply": "Surf Excel ka kaunsa product aur pack size chahiye—powder ya liquid?",
+              "rounds": [
+                {
+                  "model_ms": 2596.2,
+                  "tools": [
+                    "recall_household_preferences"
+                  ],
+                  "statuses": [
+                    "no_memory"
+                  ]
+                },
+                {
+                  "model_ms": 3291.7,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 2,
+              "total_ms": 5887.9,
+              "cards": []
+            },
+            {
+              "user": "Matic 2 kg wala",
+              "reply": "Surf Excel Matic 2 kg Instamart basket mein ₹549 mein add hua, lekin Instamart ka order yahan se place nahi hota; bill screen par review kar sakte hain.",
+              "rounds": [
+                {
+                  "model_ms": 3465.4,
+                  "tools": [
+                    "search_products"
+                  ],
+                  "statuses": [
+                    "ok"
+                  ]
+                },
+                {
+                  "model_ms": 5842.2,
+                  "tools": [
+                    "add_to_basket"
+                  ],
+                  "statuses": [
+                    "added"
+                  ]
+                },
+                {
+                  "model_ms": 3305.7,
+                  "tools": [
+                    "prepare_order"
+                  ],
+                  "statuses": [
+                    "unsupported"
+                  ]
+                },
+                {
+                  "model_ms": 3359.9,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 4,
+              "total_ms": 15973.7,
+              "cards": []
+            },
+            {
+              "user": "haan, order kar do",
+              "reply": "Instamart se order yahan place nahi hota; Zepto par Surf Excel Matic 2 kg available tha—Zepto se order karun?",
+              "rounds": [
+                {
+                  "model_ms": 4970.9,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 1,
+              "total_ms": 4970.9,
+              "cards": []
+            },
+            {
+              "user": "order kar do",
+              "reply": "Zepto, ek item, ₹570, cash on delivery. Screen par “Place order” dabaiye.",
+              "rounds": [
+                {
+                  "model_ms": 4009.4,
+                  "tools": [
+                    "add_to_basket"
+                  ],
+                  "statuses": [
+                    "added"
+                  ]
+                },
+                {
+                  "model_ms": 2969.9,
+                  "tools": [
+                    "prepare_order"
+                  ],
+                  "statuses": [
+                    "awaiting_tap"
+                  ]
+                },
+                {
+                  "model_ms": 3614.0,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 3,
+              "total_ms": 10593.8,
+              "cards": [
+                {
+                  "id": "-_BwcNvHC4lEmSB5_JQhlZE9",
+                  "expires_at": "2026-11-22T05:17:49.539251+00:00",
+                  "payable": "₹570",
+                  "payable_paise": 57000,
+                  "item_count": 1,
+                  "items": [
+                    {
+                      "name": "Surf Excel Matic Front Load Detergent Powder",
+                      "pack_size": "2 kg",
+                      "quantity": 1
+                    }
+                  ],
+                  "payment": "cash_on_delivery",
+                  "payment_method": "cod",
+                  "payment_methods": [
+                    {
+                      "id": "cod",
+                      "label": "Cash on delivery"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "c1-clear-cart",
+          "title": "Typed 'clear cart' with two Zepto items",
+          "reached": true,
+          "turns_to_goal": 1,
+          "model_rounds": 3,
+          "latency_ms": 8705.3,
+          "passed": false,
+          "failures": [
+            "first turn took 3 model rounds (target 2)"
+          ],
+          "turns": [
+            {
+              "user": "clear cart",
+              "reply": "Zepto cart clear ho gaya; Instamart cart pehle se khaali tha.",
+              "rounds": [
+                {
+                  "model_ms": 2109.1,
+                  "tools": [
+                    "view_basket"
+                  ],
+                  "statuses": [
+                    "ok"
+                  ]
+                },
+                {
+                  "model_ms": 3495.2,
+                  "tools": [
+                    "set_basket_quantity",
+                    "set_basket_quantity"
+                  ],
+                  "statuses": [
+                    "updated",
+                    "updated"
+                  ]
+                },
+                {
+                  "model_ms": 3100.6,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 3,
+              "total_ms": 8705.3,
+              "cards": []
+            }
+          ]
+        }
+      ]
+    },
+    "after": {
+      "generated_at": "2026-11-22T05:24:01.055797+00:00",
+      "model": "gpt-6-luna",
+      "prompt_version": "1.40.0",
+      "tools": [
+        "search_products",
+        "add_to_basket",
+        "set_basket_quantity",
+        "view_basket",
+        "request_approval",
+        "clear_basket",
+        "open_address_form",
+        "recall_household_preferences",
+        "remember_preference",
+        "update_preference",
+        "forget_preference",
+        "list_preferences",
+        "confirm_memory",
+        "prepare_order",
+        "express_order",
+        "quick_add",
+        "list_delivery_addresses",
+        "select_delivery_address",
+        "read_attached_photo",
+        "get_order_status",
+        "list_recent_orders"
+      ],
+      "summary": {
+        "order_scenarios": 4,
+        "orders_reached": 4,
+        "median_turns_to_order": 1.0,
+        "median_latency_to_order_ms": 7419.1,
+        "median_model_rounds_to_order": 2.0,
+        "per_scenario": {
+          "o1-express-single": {
+            "turns": 1,
+            "model_rounds": 2,
+            "latency_ms": 6595.7,
+            "passed": true
+          },
+          "o2-express-two-items": {
+            "turns": 1,
+            "model_rounds": 2,
+            "latency_ms": 8242.5,
+            "passed": true
+          },
+          "o3-usual-milk": {
+            "turns": 1,
+            "model_rounds": 2,
+            "latency_ms": 6383.2,
+            "passed": true
+          },
+          "o4-ambiguous-one-question": {
+            "turns": 2,
+            "model_rounds": 4,
+            "latency_ms": 13874.5,
+            "passed": true
+          },
+          "c1-clear-cart": {
+            "turns": 1,
+            "model_rounds": 2,
+            "latency_ms": 6698.9,
+            "passed": true
+          }
+        }
+      },
+      "results": [
+        {
+          "id": "o1-express-single",
+          "title": "Express: '2 Amul lassi order kar do' → order card",
+          "reached": true,
+          "turns_to_goal": 1,
+          "model_rounds": 2,
+          "latency_ms": 6595.7,
+          "passed": true,
+          "failures": [],
+          "turns": [
+            {
+              "user": "2 Amul lassi order kar do",
+              "reply": "Zepto: Amul Sweet Lassi 200 ml × 2; ₹70, cash on delivery. Screen par “Place order” dabaiye.",
+              "rounds": [
+                {
+                  "model_ms": 2782.2,
+                  "tools": [
+                    "express_order"
+                  ],
+                  "statuses": [
+                    "ready"
+                  ]
+                },
+                {
+                  "model_ms": 3573.7,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 2,
+              "total_ms": 6595.7,
+              "cards": [
+                {
+                  "id": "whclxAYqttvlOYaqc9aKX4b5",
+                  "expires_at": "2026-11-22T05:28:22.042685+00:00",
+                  "payable": "₹70",
+                  "payable_paise": 7000,
+                  "item_count": 2,
+                  "items": [
+                    {
+                      "name": "Amul Sweet Lassi",
+                      "pack_size": "200 ml",
+                      "quantity": 2
+                    }
+                  ],
+                  "payment": "cash_on_delivery",
+                  "payment_method": "cod",
+                  "payment_methods": [
+                    {
+                      "id": "cod",
+                      "label": "Cash on delivery"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "o2-express-two-items",
+          "title": "Express: two specific items in one request",
+          "reached": true,
+          "turns_to_goal": 1,
+          "model_rounds": 2,
+          "latency_ms": 8242.5,
+          "passed": true,
+          "failures": [],
+          "turns": [
+            {
+              "user": "Amul Taaza doodh 1 litre aur Tata Tea Gold 500 g order kar do",
+              "reply": "Zepto: Amul Taaza doodh 1 L × 1 aur Tata Tea Gold 500 g × 1, ₹383, cash on delivery. Screen par “Place order” dabaiye.",
+              "rounds": [
+                {
+                  "model_ms": 3697.0,
+                  "tools": [
+                    "express_order",
+                    "remember_preference",
+                    "remember_preference",
+                    "remember_preference",
+                    "remember_preference"
+                  ],
+                  "statuses": [
+                    "ready",
+                    "unavailable",
+                    "unavailable",
+                    "unavailable",
+                    "unavailable"
+                  ]
+                },
+                {
+                  "model_ms": 4544.2,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 2,
+              "total_ms": 8242.5,
+              "cards": [
+                {
+                  "id": "aHcx5NbTKMxnBNaVyqtkKMXO",
+                  "expires_at": "2026-11-22T05:28:29.552843+00:00",
+                  "payable": "₹383",
+                  "payable_paise": 38300,
+                  "item_count": 2,
+                  "items": [
+                    {
+                      "name": "Amul Taaza Homogenised Milk",
+                      "pack_size": "1 L",
+                      "quantity": 1
+                    },
+                    {
+                      "name": "Tata Tea Gold",
+                      "pack_size": "500 g",
+                      "quantity": 1
+                    }
+                  ],
+                  "payment": "cash_on_delivery",
+                  "payment_method": "cod",
+                  "payment_methods": [
+                    {
+                      "id": "cod",
+                      "label": "Cash on delivery"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "o3-usual-milk",
+          "title": "Express: 'usual milk mangwa do' with a remembered Amul Taaza",
+          "reached": true,
+          "turns_to_goal": 1,
+          "model_rounds": 2,
+          "latency_ms": 6383.2,
+          "passed": true,
+          "failures": [],
+          "turns": [
+            {
+              "user": "usual milk mangwa do",
+              "reply": "Amul Taaza Toned Milk 1 L × 1; ₹84, cash on delivery. Screen par “Place order” dabaiye.",
+              "rounds": [
+                {
+                  "model_ms": 2427.6,
+                  "tools": [
+                    "express_order"
+                  ],
+                  "statuses": [
+                    "ready"
+                  ]
+                },
+                {
+                  "model_ms": 3954.9,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 2,
+              "total_ms": 6383.2,
+              "cards": [
+                {
+                  "id": "t1s4ONE0Oz1YwjyWfSo8EqYx",
+                  "expires_at": "2026-11-22T05:28:36.525553+00:00",
+                  "payable": "₹84",
+                  "payable_paise": 8400,
+                  "item_count": 1,
+                  "items": [
+                    {
+                      "name": "Amul Taaza Toned Milk",
+                      "pack_size": "1 L",
+                      "quantity": 1
+                    }
+                  ],
+                  "payment": "cash_on_delivery",
+                  "payment_method": "cod",
+                  "payment_methods": [
+                    {
+                      "id": "cod",
+                      "label": "Cash on delivery"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "o4-ambiguous-one-question",
+          "title": "Express: ambiguous 'Surf Excel' → one question → card",
+          "reached": true,
+          "turns_to_goal": 2,
+          "model_rounds": 4,
+          "latency_ms": 13874.5,
+          "passed": true,
+          "failures": [],
+          "turns": [
+            {
+              "user": "Surf Excel order kar do",
+              "reply": "Surf Excel ka kaunsa product aur pack size chahiye—Matic ya Easy Wash?",
+              "rounds": [
+                {
+                  "model_ms": 2588.8,
+                  "tools": [
+                    "express_order"
+                  ],
+                  "statuses": [
+                    "needs_choice"
+                  ]
+                },
+                {
+                  "model_ms": 3993.4,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 2,
+              "total_ms": 6582.4,
+              "cards": []
+            },
+            {
+              "user": "Matic 2 kg wala",
+              "reply": "Zepto par Surf Excel Matic Front Load Detergent Powder 2 kg × 1, ₹570, cash on delivery. Screen par “Place order” dabaiye.",
+              "rounds": [
+                {
+                  "model_ms": 3355.1,
+                  "tools": [
+                    "express_order"
+                  ],
+                  "statuses": [
+                    "ready"
+                  ]
+                },
+                {
+                  "model_ms": 3936.2,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 2,
+              "total_ms": 7292.1,
+              "cards": [
+                {
+                  "id": "k_n2uj2bOA-AtO6wFxISWaQd",
+                  "expires_at": "2026-11-22T05:28:50.418849+00:00",
+                  "payable": "₹570",
+                  "payable_paise": 57000,
+                  "item_count": 1,
+                  "items": [
+                    {
+                      "name": "Surf Excel Matic Front Load Detergent Powder",
+                      "pack_size": "2 kg",
+                      "quantity": 1
+                    }
+                  ],
+                  "payment": "cash_on_delivery",
+                  "payment_method": "cod",
+                  "payment_methods": [
+                    {
+                      "id": "cod",
+                      "label": "Cash on delivery"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "c1-clear-cart",
+          "title": "Typed 'clear cart' with two Zepto items",
+          "reached": true,
+          "turns_to_goal": 1,
+          "model_rounds": 2,
+          "latency_ms": 6698.9,
+          "passed": true,
+          "failures": [],
+          "turns": [
+            {
+              "user": "clear cart",
+              "reply": "Zepto basket khali kar diya.",
+              "rounds": [
+                {
+                  "model_ms": 3521.6,
+                  "tools": [
+                    "clear_basket"
+                  ],
+                  "statuses": [
+                    "cleared"
+                  ]
+                },
+                {
+                  "model_ms": 3177.1,
+                  "tools": []
+                }
+              ],
+              "model_rounds": 2,
+              "total_ms": 6698.9,
+              "cards": []
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

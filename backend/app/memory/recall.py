@@ -117,6 +117,8 @@ class RememberedItem(BaseModel):
     # a usual pack count told for this item.
     value: str | None = None
     quantity: int | None = None
+    # The exact product told with a usual brand ("Taaza toned milk").
+    product_name: str | None = None
 
 
 class HouseholdMemory(BaseModel):
@@ -176,6 +178,10 @@ def _preference_candidate(memory: MemoryItem) -> PreferenceCandidate:
         quantity=value.get("quantity"),
         summary=memory.text,
     )
+
+
+def _text(raw: object) -> str | None:
+    return raw.strip() if isinstance(raw, str) and raw.strip() else None
 
 
 def _quantity(raw: object) -> int | None:
@@ -322,6 +328,7 @@ async def household_memory_for_person(
                         rule=rule if isinstance(rule, str) else None,
                         value=fact,
                         quantity=_quantity(memory.value.get("quantity")),
+                        product_name=_text(memory.value.get("product_name")),
                     )
                 )
     graph = PurchaseGraphService(session)
