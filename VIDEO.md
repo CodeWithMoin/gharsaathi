@@ -1,10 +1,10 @@
 # GharSaathi demo video
 
-Video: <paste link here>
+Video file: **`demo.mp4`** at the root of the submission folder.
 
 - Length: ~4 minutes
-- Recorded: <date>, on <device> against `http://localhost:3003` (`main` @ <commit>)
-- Order in video: <demo tap → Cancel | real Zepto COD order>
+- App URL: `http://localhost:3003`
+- Order safety shown: the user must tap the bound order card; demo mode never places a real order
 - Shot list and voice-over: [docs/VIDEO_SCRIPT.md](docs/VIDEO_SCRIPT.md)
 
 ## What it shows
