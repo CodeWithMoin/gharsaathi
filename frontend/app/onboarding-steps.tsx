@@ -148,8 +148,8 @@ function Note({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 /* ---------------------------------------------------------------- profile */
 
 const LANGUAGE_OPTIONS: Array<{ value: ReplyLanguage; label: string; note: string }> = [
-  { value: "hinglish", label: "Hinglish", note: "Default" },
-  { value: "english", label: "English", note: "English" },
+  { value: "english", label: "English", note: "Plain English" },
+  { value: "hinglish", label: "Hinglish", note: "Recommended" },
   { value: "hindi", label: "Hindi", note: "हिंदी" },
 ];
 
@@ -227,6 +227,7 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
             <input type="radio" name="address-form" value={option.value} checked={selected} onChange={() => setAddressForm(option.value)} className="sr-only" />
             <span className={`block text-[14px] font-semibold ${selected ? "text-accent-ink" : "text-ink"}`}>{option.label}</span>
             <span className="mt-0.5 block text-[11px] leading-4 text-muted">&ldquo;{option.example}&rdquo;</span>
+            {selected && <Check size={14} weight="bold" className="absolute right-2.5 top-2.5 text-accent-ink" aria-hidden="true" />}
           </label>;
         })}
       </div>
@@ -254,7 +255,7 @@ export function ProfileStep({ initial, focusHeading, onSave }: {
       <div className="mt-2 grid grid-cols-3 gap-2">
         {LANGUAGE_OPTIONS.map((option) => {
           const selected = language === option.value;
-          return <label key={option.value} className={`relative flex min-h-[64px] cursor-pointer flex-col justify-center rounded-2xl border px-3 transition-[border-color,background-color,transform] duration-150 ease-out active:scale-[.97] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus ${selected ? "border-accent bg-accent-soft ring-1 ring-focus" : "border-border-strong bg-surface"}`}>
+          return <label key={option.value} className={`relative flex min-h-[64px] cursor-pointer flex-col items-center justify-center rounded-2xl border px-2 text-center transition-[border-color,background-color,transform] duration-150 ease-out active:scale-[.97] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus ${selected ? "border-accent bg-accent-soft ring-1 ring-focus" : "border-border-strong bg-surface"}`}>
             <input type="radio" name="reply-language" value={option.value} checked={selected} onChange={() => setLanguage(option.value)} className="sr-only" />
             <span className={`text-[14px] font-semibold ${selected ? "text-accent-strong" : "text-ink-secondary"}`}>{option.label}</span>
             <span className="mt-0.5 text-[11px] text-muted" lang={option.value === "hindi" ? "hi" : undefined}>{option.note}</span>
