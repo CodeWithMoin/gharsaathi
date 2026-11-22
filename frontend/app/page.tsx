@@ -995,7 +995,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
         <div className="mb-5 sm:mb-8"><span className="text-[10px] font-semibold uppercase tracking-[.18em] text-subtle">Today</span></div>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mr-7 sm:mr-12">
           <div className="min-w-0 max-w-[620px]">
-            <div className="rounded-[7px_20px_20px_20px] border border-border bg-surface px-4 py-3.5 sm:px-5 sm:py-4">{replyLanguage === "english"
+            <div className="w-fit max-w-full rounded-[7px_20px_20px_20px] border border-border bg-surface px-4 py-3.5 sm:px-5 sm:py-4">{replyLanguage === "english"
               ? <><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hi {userName}, <strong className="font-semibold">what do you need for home today?</strong></p><p className="mt-1 text-[13px] leading-5 text-muted sm:mt-1.5 sm:text-sm sm:leading-6">Just say it—I&apos;ll check all your ready stores together.</p></>
               : <><p className="text-[15px] leading-6 sm:text-base sm:leading-7">Hello, {userName}. <strong className="font-semibold">Aaj ghar ke liye kya mangwana hai?</strong></p><p className="mt-1 text-[13px] leading-5 text-muted sm:mt-1.5 sm:text-sm sm:leading-6">Bas bol dijiye—main ready stores par saath mein check karungi.</p></>}</div>
             {!hasChat && <div className="mt-3 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">{suggestions.map((suggestion) => <button key={suggestion.query} onClick={() => void runSearch(suggestion.query)} disabled={loading === "search" || loading === "assistant"} className="min-h-10 rounded-2xl bg-surface-strong/80 px-2 py-2 text-[11px] font-medium leading-4 text-ink-secondary transition hover:bg-border-strong active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-0 sm:rounded-full sm:px-3.5 sm:text-xs">{suggestion.label}</button>)}</div>}
@@ -1021,7 +1021,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName, onOpenSetup }: { s
               </motion.div>
             ) : (
               <motion.div key={chatMessage.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 mr-8 min-w-0 sm:mr-12">
-                <div className="max-w-[620px] whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px_22px_22px_22px] border border-border bg-surface px-5 py-4 text-[15px] leading-7 sm:text-base">{chatMessage.content}</div>
+                <div className="w-fit max-w-[620px] whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px_22px_22px_22px] border border-border bg-surface px-5 py-4 text-[15px] leading-7 sm:text-base">{chatMessage.content}</div>
               </motion.div>
             );
           })}
