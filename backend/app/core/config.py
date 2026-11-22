@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     chat_turn_timeout_seconds: float = Field(default=60.0, ge=5.0, le=180.0)
     # Shop from a photo: vision model for reading attached photos (Responses API, image input).
     photo_extraction_model: str = "gpt-6-luna"
+    # After a photo item's search, compare the photo with the store's product images
+    # (app/photos/visual_match.py). Empty model = photo_extraction_model.
+    photo_visual_match_enabled: bool = True
+    photo_visual_match_model: str = ""
     # native | tuned (option A) | smart_turn (option B); see docs/voice-turn-taking.md
     voice_turn_taking: Literal["native", "tuned", "smart_turn"] = "native"
     # Dev diagnostic: log content-free sideband event summaries (type, id field names, timing).

@@ -176,6 +176,9 @@ def _snapshot_from_zepto_detail(
     status is the display text. The ETA is Zepto's own committed ETA
     (placed time + ``committedEtaInMins``); none is invented when either is
     missing, and none is shown once the order is delivered or cancelled.
+    Placed, arrived and delivered times are Zepto's own; a missing or
+    unreadable one stays empty. The delivered time is kept only for a
+    delivered shipment.
     """
 
     try:
@@ -192,15 +195,30 @@ def _snapshot_from_zepto_detail(
             shipment.formatted_status if shipment else detail.formatted_status
         )
     display = (shipment.formatted_status if shipment else None) or detail.formatted_status
+    final = status in {TrackingStatus.DELIVERED, TrackingStatus.CANCELLED}
+    placed = _store_time(shipment.placed_time) if shipment else None
+    committed = (
+        shipment.committed_eta_minutes
+        if shipment and shipment.committed_eta_minutes > 0
+        else None
+    )
     eta_at = None
-    if shipment and status not in {TrackingStatus.DELIVERED, TrackingStatus.CANCELLED}:
-        placed = _datetime(shipment.placed_time)
-        if placed is not None and shipment.committed_eta_minutes > 0:
-            eta_at = placed + timedelta(minutes=shipment.committed_eta_minutes)
+    if placed is not None and committed is not None and not final:
+        eta_at = placed + timedelta(minutes=committed)
+    delivered_at = (
+        _store_time(shipment.delivery_time)
+        if shipment and status == TrackingStatus.DELIVERED
+        else None
+    )
     return TrackingSnapshot(
         status=status,
         provider_status=display[:160] if display else None,
         eta_at=eta_at,
+        placed_at=placed,
+        arrived_at=_store_time(shipment.arrived_time) if shipment else None,
+        delivered_at=delivered_at,
+        committed_eta_minutes=committed,
+        total_arrival_minutes=shipment.total_arrival_time_minutes if shipment else None,
         poll_interval_seconds=poll_interval_seconds,
         delivered=status == TrackingStatus.DELIVERED,
         cancelled=status == TrackingStatus.CANCELLED,
@@ -289,6 +307,13 @@ def _datetime(value: object) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _store_time(value: object) -> datetime | None:
+    """A store timestamp with an explicit zone, else none (a zone is never assumed)."""
+
+    parsed = _datetime(value)
+    return parsed if parsed is not None and parsed.utcoffset() is not None else None
 
 
 def _normalise_status(value: str | None) -> TrackingStatus:

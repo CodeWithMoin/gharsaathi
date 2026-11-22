@@ -31,6 +31,14 @@ class TrackingSnapshot(BaseModel):
     provider_status: str | None = Field(default=None, max_length=160)
     message: str | None = Field(default=None, max_length=500)
     eta_at: datetime | None = None
+    # Store-reported times (Zepto ``get_order_detail``'s latest shipment). All
+    # optional: older saved watches and other providers have none of them.
+    placed_at: datetime | None = None
+    arrived_at: datetime | None = None
+    delivered_at: datetime | None = None
+    # The store's own promise when the order was placed, kept after delivery.
+    committed_eta_minutes: int | None = Field(default=None, ge=0)
+    total_arrival_minutes: int | None = Field(default=None, ge=0)
     # Provider cadence is authoritative.  Do not impose an upper cap that
     # could cause us to reject or shorten a legitimate provider interval.
     poll_interval_seconds: int | None = Field(default=None, ge=1)
@@ -42,6 +50,18 @@ class TrackingSnapshot(BaseModel):
     # True only when the live provider catalogue exposes an order-cancellation
     # tool. GharSaathi never calls it; this only tells the assistant what exists.
     cancel_supported: bool = False
+
+    @computed_field
+    @property
+    def took_minutes(self) -> int | None:
+        """Placed to delivered, rounded to the nearest minute; only from store times."""
+
+        if self.placed_at is None or self.delivered_at is None:
+            return None
+        if self.placed_at.utcoffset() is None or self.delivered_at.utcoffset() is None:
+            return None
+        seconds = (self.delivered_at - self.placed_at).total_seconds()
+        return int((seconds + 30) // 60) if seconds >= 0 else None
 
     @property
     def terminal(self) -> bool:

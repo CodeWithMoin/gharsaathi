@@ -44,6 +44,9 @@ const HEADLINES = {
  *   lastNotificationId: string | null,
  *   itemNames: string[],
  *   finishedAt: string | null,
+ *   placedAt: string | null,
+ *   tookMinutes: number | null,
+ *   estimateMinutes: number | null,
  * }} OrderStatusCard
  */
 /** @typedef {{ id: string, label: string, state: "done" | "current" | "todo" | "cancelled" }} OrderStep */
@@ -55,6 +58,8 @@ const time = (value) => {
   const value_ = text(value);
   return value_ && !Number.isNaN(Date.parse(value_)) ? value_ : null;
 };
+/** @param {unknown} value */
+const minutes = (value) => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null);
 /** @param {unknown} value @returns {CardStatus} */
 const cardStatus = (value) => CARD_STATUSES.find((status) => status === value) ?? "unknown";
 
@@ -99,7 +104,7 @@ export function isFinal(card) {
  */
 export function orderCardFromPlaced({ orderId, store, afterMessageId, seq, itemCount = null, payable = null, itemNames = [], tracking = null }) {
   /** @type {OrderStatusCard} */
-  const card = { provider: "zepto", orderId, monitorId: null, store, afterMessageId, seq, itemCount, payable, status: "confirmed", providerStatus: null, etaAt: null, checkedAt: null, active: true, lastNotificationId: null, itemNames: names(itemNames), finishedAt: null };
+  const card = { provider: "zepto", orderId, monitorId: null, store, afterMessageId, seq, itemCount, payable, status: "confirmed", providerStatus: null, etaAt: null, checkedAt: null, active: true, lastNotificationId: null, itemNames: names(itemNames), finishedAt: null, placedAt: null, tookMinutes: null, estimateMinutes: null };
   if (!tracking) return { ...card, active: false };
   const applied = applyTrackingRead(card, tracking);
   // Notifications that existed before the card was shown are not news.
@@ -133,6 +138,8 @@ export function applyTrackingRead(card, raw) {
     if (last !== "unknown") status = last;
   }
   const final = status === "delivered" || status === "cancelled";
+  // Zepto's own delivered time wins over when we happened to check.
+  const deliveredAt = status === "delivered" ? time(snapshot?.delivered_at) : null;
   const next = {
     ...card,
     monitorId: text(read.monitor_id) ?? text(order.id) ?? card.monitorId,
@@ -141,14 +148,17 @@ export function applyTrackingRead(card, raw) {
     etaAt: final ? null : time(snapshot?.eta_at),
     checkedAt: time(order.status_at) ?? card.checkedAt,
     active: order.active === true,
-    finishedAt: final ? card.finishedAt ?? time(order.status_at) ?? time(order.checked_at) : null,
+    finishedAt: final ? deliveredAt ?? card.finishedAt ?? time(order.status_at) ?? time(order.checked_at) : null,
+    placedAt: time(snapshot?.placed_at) ?? card.placedAt ?? null,
+    tookMinutes: status === "delivered" ? minutes(snapshot?.took_minutes) ?? card.tookMinutes ?? null : null,
+    estimateMinutes: minutes(snapshot?.committed_eta_minutes) ?? card.estimateMinutes ?? null,
   };
   const notifications = Array.isArray(order.notifications) ? order.notifications.filter((item) => text(item?.id) && text(item?.message)) : [];
   const seenIndex = card.lastNotificationId ? notifications.findIndex((item) => item.id === card.lastNotificationId) : -1;
   const unseen = notifications.slice(seenIndex + 1);
   const toast = unseen.length ? text(unseen[unseen.length - 1].message) : null;
   if (unseen.length) next.lastNotificationId = unseen[unseen.length - 1].id;
-  const changed = ["monitorId", "status", "providerStatus", "etaAt", "active", "lastNotificationId", "finishedAt"].some((key) => next[/** @type {keyof OrderStatusCard} */ (key)] !== card[/** @type {keyof OrderStatusCard} */ (key)]);
+  const changed = ["monitorId", "status", "providerStatus", "etaAt", "active", "lastNotificationId", "finishedAt", "placedAt", "tookMinutes", "estimateMinutes"].some((key) => next[/** @type {keyof OrderStatusCard} */ (key)] !== card[/** @type {keyof OrderStatusCard} */ (key)]);
   return { card: changed || next.checkedAt !== card.checkedAt ? next : card, changed, toast };
 }
 
@@ -169,7 +179,8 @@ export function pollDelayMs(raw, nowMs) {
 }
 
 /**
- * "About 6 min (Zepto's estimate)", or the estimated clock time once it has passed.
+ * "Arriving by 8:26 am · about 4 min" from the store's estimated time, or
+ * "Running late — Zepto estimated 8:26 am" once that time has passed.
  *
  * @param {Pick<OrderStatusCard, "etaAt" | "status" | "store">} card
  * @param {number} nowMs
@@ -179,9 +190,37 @@ export function etaText(card, nowMs) {
   if (!card.etaAt || card.status === "delivered" || card.status === "cancelled") return null;
   const at = Date.parse(card.etaAt);
   if (Number.isNaN(at)) return null;
-  const minutes = Math.ceil((at - nowMs) / 60_000);
-  if (minutes > 0) return `About ${minutes} min (${card.store}'s estimate)`;
-  return `${card.store} estimated ${clock(at)}`;
+  const left = Math.ceil((at - nowMs) / 60_000);
+  if (left > 0) return `Arriving by ${clock(at)} · about ${left} min`;
+  return `Running late — ${card.store} estimated ${clock(at)}`;
+}
+
+/**
+ * "Placed at 8:18 am", from the store's placed time.
+ *
+ * @param {Pick<OrderStatusCard, "placedAt">} card
+ * @returns {string | null}
+ */
+export function placedText(card) {
+  const at = card.placedAt ? Date.parse(card.placedAt) : NaN;
+  return Number.isNaN(at) ? null : `Placed at ${clock(at)}`;
+}
+
+/**
+ * "8:26 am · took 9 min (estimate 8 min)" for a delivered order; parts the
+ * store did not report are left out.
+ *
+ * @param {Pick<OrderStatusCard, "status" | "finishedAt" | "tookMinutes" | "estimateMinutes">} card
+ * @returns {string | null}
+ */
+export function deliveredText(card) {
+  if (card.status !== "delivered") return null;
+  const at = card.finishedAt ? Date.parse(card.finishedAt) : NaN;
+  const took = card.tookMinutes !== null && card.tookMinutes !== undefined
+    ? `took ${card.tookMinutes} min${card.estimateMinutes ? ` (estimate ${card.estimateMinutes} min)` : ""}`
+    : null;
+  const parts = [Number.isNaN(at) ? null : clock(at), took].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
 }
 
 /** @param {number} ms */
@@ -212,15 +251,17 @@ function names(raw) {
 
 /**
  * The one-line summary a delivered or store-cancelled order collapses to:
- * "Delivered ✓ · Amul Sweet Lassi · ₹55 · 8:41 am" / "Cancelled by Zepto · …".
- * Null while the order is still moving.
+ * "Delivered ✓ · 8:26 am · took 9 min (estimate 8 min)" /
+ * "Cancelled by Zepto · Amul Sweet Lassi · ₹55 · 8:41 am". Items and total of a
+ * delivered order are in the expanded card. Null while the order is still moving.
  *
  * @param {OrderStatusCard} card
  * @returns {string | null}
  */
 export function finishedOrderSummary(card) {
   if (!isFinal(card)) return null;
-  const head = card.status === "delivered" ? "Delivered ✓" : `Cancelled by ${card.store}`;
+  if (card.status === "delivered") return ["Delivered ✓", deliveredText(card)].filter(Boolean).join(" · ");
+  const head = `Cancelled by ${card.store}`;
   const [first, ...rest] = card.itemNames ?? [];
   const items = first ? `${first}${rest.length ? ` +${rest.length} more` : ""}` : card.itemCount !== null ? `${card.itemCount} ${card.itemCount === 1 ? "item" : "items"}` : null;
   const at = card.finishedAt ? Date.parse(card.finishedAt) : NaN;
@@ -246,6 +287,9 @@ export function orderCardSnapshot(card) {
     last_notification_id: card.lastNotificationId,
     item_names: card.itemNames ?? [],
     finished_at: card.finishedAt ?? null,
+    placed_at: card.placedAt ?? null,
+    took_minutes: card.tookMinutes ?? null,
+    estimate_minutes: card.estimateMinutes ?? null,
   };
 }
 
@@ -279,5 +323,8 @@ export function restoreOrderCard(raw) {
     lastNotificationId: text(value.last_notification_id),
     itemNames: names(value.item_names),
     finishedAt: time(value.finished_at),
+    placedAt: time(value.placed_at),
+    tookMinutes: minutes(value.took_minutes),
+    estimateMinutes: minutes(value.estimate_minutes),
   };
 }

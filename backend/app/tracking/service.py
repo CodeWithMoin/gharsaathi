@@ -195,7 +195,10 @@ class OrderTrackingService:
             watch.snapshot = snapshot
             watch.status = _effective_status(snapshot)
             watch.checked_at = now
-            watch.status_at = now
+            # A delivered order shows when the store says it was delivered.
+            watch.status_at = (
+                snapshot.delivered_at if snapshot.delivered and snapshot.delivered_at else now
+            )
             watch.updated_at = now
             watch.last_error = None
             watch.consecutive_failures = 0
