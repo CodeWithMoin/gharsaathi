@@ -59,8 +59,10 @@ class Settings(BaseSettings):
     # Reasoning effort for the delegated backend model (voice and typed chat).
     # gpt-6-luna supports none|low|medium|high|xhigh|max and defaults to medium:
     # https://developers.openai.com/api/docs/models/gpt-6-luna
-    # Empty omits the setting (model default).
-    live_backend_reasoning_effort: Literal["", "none", "low", "medium", "high"] = "low"
+    # Empty omits the setting. low/none measured no faster per round than medium
+    # (reasoning was already ~0-80 tokens) and dropped search-then-add turns in
+    # the delegation eval, so the default stays medium.
+    live_backend_reasoning_effort: Literal["", "none", "low", "medium", "high"] = "medium"
     # Responses service tier for the backend model: "" omits it (project default);
     # "priority" measured ~0.2 s faster per model round at a higher price.
     live_backend_service_tier: Literal["", "auto", "default", "flex", "priority"] = ""

@@ -385,9 +385,12 @@ while the demo-store tools took ~0 ms. Fewer rounds is the main lever.
   and returns it under `search` (UI event included), so "dark chocolate
   chahiye" is recall → reply (2 rounds) instead of recall → search → reply. A
   remembered item still stops at the recall so the user is asked first.
-- **Reasoning effort** `LIVE_BACKEND_REASONING_EFFORT=low` (model default is
-  medium). Reasoning tokens were already small, so this mainly removes variance.
-  `LIVE_BACKEND_SERVICE_TIER=priority` is optional (~0.2 s per round, higher price).
+- **Reasoning effort** is a setting, `LIVE_BACKEND_REASONING_EFFORT` (default
+  `medium`, the model default). At medium the backend used only ~0–80
+  reasoning tokens per turn; `low`/`none` were not faster per round and dropped
+  the add in "Instamart se Amul Taaza doodh 1 litre add karo" in 4 of 11 runs
+  (medium: 0 of 9). `LIVE_BACKEND_SERVICE_TIER=priority` is optional (~0.2 s per
+  round, higher price).
 - **Stores.** Searched concurrently; once one store answered, a slower one gets
   4 s (`PROVIDER_SEARCH_TIMEOUT_SECONDS`) and is then reported unreachable with
   reason `timeout` (its search keeps running and fills the 60 s cache). A known
