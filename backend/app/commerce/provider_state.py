@@ -176,3 +176,45 @@ class SavedAddressDirectory:
             return None
         match = next((item for item in addresses.addresses if item.id == address_id), None)
         return summarise_address(match) if match is not None else None
+
+
+class SavedAddressBook:
+    """Saved addresses per store from the server-side snapshot; never a provider call.
+
+    ``select`` is the same repository write as ``PUT /api/{store}/addresses/selected``
+    and accepts only an id in the user's own snapshot.
+    """
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self.sessions = sessions
+
+    @staticmethod
+    async def _subject(session: AsyncSession, external_user_id: str) -> UUID | None:
+        return (
+            await session.execute(
+                select(MemorySubject.id).where(
+                    MemorySubject.subject_type == SubjectType.PERSON,
+                    MemorySubject.external_id == external_user_id,
+                )
+            )
+        ).scalar_one_or_none()
+
+    async def saved(self, external_user_id: str, provider: str) -> AddressList | None:
+        async with self.sessions() as session:
+            subject_id = await self._subject(session, external_user_id)
+            if subject_id is None:
+                return None
+            state = await ProviderAddressRepository(session).get(subject_id, provider)
+            if state is None or is_demo_address_state(state):
+                return None
+            return cached_address_list(state)
+
+    async def select(
+        self, external_user_id: str, provider: str, address_id: str
+    ) -> AddressList | None:
+        async with self.sessions() as session:
+            subject_id = await self._subject(session, external_user_id)
+            if subject_id is None:
+                return None
+            state = await ProviderAddressRepository(session).select(subject_id, address_id, provider)
+            return cached_address_list(state) if state is not None else None

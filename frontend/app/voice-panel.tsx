@@ -59,13 +59,18 @@ async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
   });
 }
 
-export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onOrderConfirmation, beforeSessionStart }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[], item: { itemKey?: string; itemLabel?: string }) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void; onApprovalRequested?: (provider: VoiceStore, request: ApprovalRequest) => void; onAddressForm?: (request: VoiceAddressFormRequest) => void; onOrderConfirmation?: (confirmation: OrderConfirmation) => void; beforeSessionStart?: () => Promise<void> }) {
+export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onAddressSelected, onOrderConfirmation, beforeSessionStart }: { addressId: string; zeptoAddressId: string; onClose: () => void; onResults: (query: string, products: VoiceProduct[], item: { itemKey?: string; itemLabel?: string }) => void; onTranscriptTurn: (turn: VoiceTranscriptTurn) => void; onBasketTouched?: (provider?: VoiceStore) => void; onApprovalRequested?: (provider: VoiceStore, request: ApprovalRequest) => void; onAddressForm?: (request: VoiceAddressFormRequest) => void | Promise<{ form_visible: boolean; reason?: string; filled_fields?: string[]; kept_user_fields?: string[] }>; onAddressSelected?: (selection: { provider: VoiceStore; addressId: string; label?: string; billCancelled: boolean }) => void; onOrderConfirmation?: (confirmation: OrderConfirmation) => void; beforeSessionStart?: () => Promise<void> }) {
   const authenticatedFetch = useAuthenticatedFetch();
   // Parent callbacks change identity on unrelated re-renders (e.g. commerceMode);
   // reading them through a ref keeps the live session from restarting.
-  const callbacksRef = useRef({ onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onOrderConfirmation, beforeSessionStart, authenticatedFetch });
+  const callbacksRef = useRef({ onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onAddressSelected, onOrderConfirmation, beforeSessionStart, authenticatedFetch });
+  // Addresses the server-side session is using. A switch made by the assistant
+  // updates this first, so it does not restart the session; a manual change does.
+  const latestAddressesRef = useRef({ swiggy: addressId, zepto: zeptoAddressId });
+  latestAddressesRef.current = { swiggy: addressId, zepto: zeptoAddressId };
+  const sessionAddressesRef = useRef<{ swiggy: string; zepto: string } | null>(null);
   useEffect(() => {
-    callbacksRef.current = { onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onOrderConfirmation, beforeSessionStart, authenticatedFetch };
+    callbacksRef.current = { onClose, onResults, onTranscriptTurn, onBasketTouched, onApprovalRequested, onAddressForm, onAddressSelected, onOrderConfirmation, beforeSessionStart, authenticatedFetch };
   });
   const [status, setStatus] = useState<VoiceStatus>("connecting");
   const [message, setMessage] = useState("Connecting voice…");
@@ -129,7 +134,20 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         } else if (event.type === "session.finished") {
           source.close();
         } else {
+          const selected = event as { type?: unknown; provider?: unknown; address_id?: unknown };
+          if (selected.type === "address.selected" && typeof selected.address_id === "string" && sessionAddressesRef.current) {
+            if (selected.provider === "zepto") sessionAddressesRef.current.zepto = selected.address_id;
+            if (selected.provider === "swiggy_instamart") sessionAddressesRef.current.swiggy = selected.address_id;
+          }
           const outcome = applyAssistantEvent<VoiceProduct>(event, callbacksRef.current);
+          if (outcome?.ack && outcome.ackId) {
+            // The backend waits for this before the assistant may say the form is open.
+            void outcome.ack.then((ack) => callbacksRef.current.authenticatedFetch(`${API_BASE_URL}/api/voice/sessions/${encodeURIComponent(sessionId)}/ui-ack`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(ack),
+            })).catch(() => undefined);
+          }
           if (!outcome) return;
           if (outcome.kind === "results" || outcome.kind === "not_connected" || outcome.kind === "error") setSearching(false);
           if (outcome.kind === "results") setHasResults(true);
@@ -171,6 +189,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
     const attempt = attemptRef.current + 1;
     attemptRef.current = attempt;
     cleanup();
+    sessionAddressesRef.current = { ...latestAddressesRef.current };
     transcriptTurnsRef.current.reset();
     eventRecorderRef.current ??= voiceEventRecorder();
     setStatus("connecting");
@@ -240,8 +259,8 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sdp,
-          swiggy_address_id: addressId || null,
-          zepto_address_id: zeptoAddressId || null,
+          swiggy_address_id: sessionAddressesRef.current.swiggy || null,
+          zepto_address_id: sessionAddressesRef.current.zepto || null,
         }),
       });
       const payload = await response.json().catch(() => null);
@@ -260,7 +279,7 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       setMessage(denied ? "Voice shopping needs microphone permission." : error instanceof Error ? error.message : "Could not start voice. Please try again.");
       cleanup();
     }
-  }, [addressId, cleanup, handleTranscriptEvent, listenForToolEvents, startSmartTurn, zeptoAddressId]);
+  }, [cleanup, handleTranscriptEvent, listenForToolEvents, startSmartTurn]);
 
   useEffect(() => {
     void start();
@@ -269,6 +288,11 @@ export function VoicePanel({ addressId, zeptoAddressId, onClose, onResults, onTr
       cleanup();
     };
   }, [cleanup, start]);
+
+  useEffect(() => {
+    const session = sessionAddressesRef.current;
+    if (session && (session.swiggy !== addressId || session.zepto !== zeptoAddressId)) void start();
+  }, [addressId, start, zeptoAddressId]);
 
   function closeConversation() {
     attemptRef.current += 1;

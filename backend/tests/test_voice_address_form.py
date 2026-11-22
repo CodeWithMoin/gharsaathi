@@ -10,6 +10,7 @@ from app.voice.address_tools import (
     OPEN_ADDRESS_FORM,
     TEXT_LIMITS,
 )
+from app.voice.address_prefill import RecentUserWords
 from app.voice.sideband import SessionChannel, SidebandRunner
 from app.voice.toolbox import VOICE_TOOL_DEFINITIONS, VoiceToolbox
 from tests.shopping_fakes import World
@@ -45,11 +46,14 @@ class FakeZepto:
 LIVE = ConnectionStatus(connected=True, mode="live")
 
 
-def toolbox(zepto: FakeZepto | None) -> VoiceToolbox:
+def toolbox(zepto: FakeZepto | None, said: str = "") -> VoiceToolbox:
     world = World()
+    words = RecentUserWords()
+    if said:
+        words.add(said)
     return VoiceToolbox(
         NoSearch(), world.baskets, world.approvals, "addr_home",
-        household_id="user_test_voice", zepto_connection=zepto,
+        household_id="user_test_voice", zepto_connection=zepto, user_words=words,
     )
 
 
@@ -72,39 +76,44 @@ def test_tool_is_strict_text_only_and_registered() -> None:
 async def test_opens_zepto_form_with_cleaned_prefill_and_saves_nothing() -> None:
     zepto = FakeZepto(LIVE)
     result = await call(
-        toolbox(zepto),
+        toolbox(zepto, "Naya ghar add karo, flat 12A, RMZ The Loft, contact Riya"),
         address_type="HOME",
         label="  Naya   ghar ",
-        flat_details="Flat 4B\u0000\n",
-        building_name="Lake View Apartments",
+        flat_details="12A\u0000\n",
+        building_name="RMZ The Loft",
         landmark="",
         contact_name="Riya",
     )
 
     assert zepto.calls == 1
-    assert result["model_output"]["status"] == "form_opened"
-    assert "Nothing was saved" in result["model_output"]["message"]
-    assert result["ui_event"] == {
+    output = result["model_output"]
+    assert output["status"] == "form_requested"
+    assert output["form_visible"] == "pending"
+    assert "Nothing was saved" in output["message"]
+    assert "type the contact number" in output["contact_number"]
+    event = result["ui_event"]
+    assert event.pop("ack_id")
+    assert event == {
         "type": "address_form.open",
         "provider": "zepto",
         "prefill": {
             "type": "HOME",
             "name": "Naya ghar",
-            "flat_details": "Flat 4B",
-            "building_name": "Lake View Apartments",
+            "flat_details": "12A",
+            "building_name": "RMZ The Loft",
             "contact_name": "Riya",
         },
     }
 
 
 async def test_hindi_text_is_preserved() -> None:
-    result = await call(toolbox(FakeZepto(LIVE)), landmark="मंदिर के पास")
+    result = await call(toolbox(FakeZepto(LIVE), "मंदिर के पास वाला"), landmark="मंदिर के पास")
     assert result["ui_event"]["prefill"] == {"landmark": "मंदिर के पास"}
 
 
 async def test_empty_request_still_opens_blank_form() -> None:
     result = await call(toolbox(FakeZepto(LIVE)))
-    assert result["model_output"]["status"] == "form_opened"
+    assert result["model_output"]["status"] == "form_requested"
     assert result["ui_event"]["prefill"] == {}
 
 
@@ -172,7 +181,7 @@ async def test_sideband_publishes_form_event_and_returns_review_status() -> None
                         "type": "function_call",
                         "call_id": "call_addr",
                         "name": OPEN_ADDRESS_FORM,
-                        "arguments": json.dumps({**NULL_FIELDS, "building_name": "Green Park"}),
+                        "arguments": json.dumps({**NULL_FIELDS, "building_name": "Prestige Shantiniketan"}),
                     },
                 },
                 "e1",
@@ -183,12 +192,11 @@ async def test_sideband_publishes_form_event_and_returns_review_status() -> None
     channel = SessionChannel()
     await SidebandRunner(connection, toolbox(FakeZepto(LIVE)), channel.publish).run()  # type: ignore[arg-type]
 
-    assert channel.history == [
-        {"type": "tool.started", "name": OPEN_ADDRESS_FORM},
-        {"type": "address_form.open", "provider": "zepto", "prefill": {"building_name": "Green Park"}},
-    ]
+    assert channel.history[0] == {"type": "tool.started", "name": OPEN_ADDRESS_FORM}
+    assert channel.history[1]["prefill"] == {"building_name": "Prestige Shantiniketan"}
     output = json.loads(connection.sent[0]["item"]["output"])
-    assert output["status"] == "form_opened"
+    # Without an acknowledgement channel the result never claims the form is open.
+    assert output["status"] == "form_requested"
     assert connection.sent[1]["type"] == "response.create"
 
 
@@ -212,5 +220,5 @@ async def test_live_session_wires_zepto_connection_into_address_tool() -> None:
 
     executor = hub.started[0][1]
     outcome = await executor.execute(OPEN_ADDRESS_FORM, json.dumps(NULL_FIELDS))
-    assert outcome.model_output["status"] == "form_opened"
+    assert outcome.model_output["status"] == "form_requested"
     assert zepto.calls == 1

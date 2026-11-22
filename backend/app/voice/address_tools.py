@@ -3,11 +3,18 @@
 It never saves an address and never calls a provider. The only server-side
 check is the local Zepto connection status, which reads the stored token.
 Everything the model heard is untrusted prefill that the user edits and saves
-on screen; coordinates and phone numbers are deliberately not accepted.
+on screen; coordinates and phone numbers are deliberately not accepted, and a
+field the user's own recent words do not contain is dropped
+(``address_prefill.filter_prefill``).
+
+The UI event carries an ``ack_id``. The browser reports whether the form is
+actually visible; voice waits for that report before answering the model
+(``sideband.py``), typed chat passes it in the next turn.
 """
 
 import json
 import logging
+import secrets
 import unicodedata
 from typing import Any, Literal, Protocol
 
@@ -15,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from app.commerce.zepto.errors import ZeptoError
 from app.commerce.zepto.models import ConnectionStatus
+from app.voice.address_prefill import RecentUserWords, filter_prefill
 from app.voice.tools import ToolOutcome
 
 logger = logging.getLogger(__name__)
@@ -34,15 +42,19 @@ TEXT_LIMITS: dict[str, int] = {
     "contact_name": 100,
 }
 
+# No sample values here: models copy examples from tool descriptions.
 _FIELD_DESCRIPTIONS = {
-    "label": "Short label such as 'Home' or 'Mummy ka ghar', if the user said one.",
-    "flat_details": "Flat or house number, if the user said it.",
-    "building_name": "Building, society or street name, if the user said it.",
-    "floor": "Floor, if the user said it.",
-    "landmark": "Nearby landmark, if the user said it.",
-    "area": "Area, city and state, if the user said them.",
-    "formatted_address": "Full address text including PIN code, only if the user dictated it.",
-    "contact_name": "Delivery contact name, only if the user said it.",
+    "label": "A name the user gave this address (their exact words), else null.",
+    "flat_details": "Flat or house number exactly as the user said it, else null.",
+    "building_name": (
+        "Building, society, office or complex name the user said (any named place "
+        "they live or work in), else null."
+    ),
+    "floor": "Floor number the user said (for 'floor 3' or 'teesri manzil' send '3'), else null.",
+    "landmark": "Nearby landmark exactly as the user said it, else null.",
+    "area": "Locality, area or city the user said, else null.",
+    "formatted_address": "Only a complete address the user dictated in full, else null.",
+    "contact_name": "Delivery contact name only if the user said it, else null.",
 }
 
 ADDRESS_TOOL_DEFINITIONS: list[dict[str, Any]] = [
@@ -50,10 +62,13 @@ ADDRESS_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "name": OPEN_ADDRESS_FORM,
         "description": (
-            "Open the on-screen form to add a new delivery address, pre-filled with only "
-            "the text details the user actually said. This never saves the address: the "
-            "user reviews the fields, sets the map location and taps Save. Use null for "
-            "anything not said. Do not include phone numbers or coordinates."
+            "Open (or update) the on-screen form to add a new delivery address, pre-filled "
+            "with only the words the user actually said in this conversation. Call it again "
+            "with new details to fill the open form's empty fields. This never saves the "
+            "address: the user reviews the fields, sets the map location and taps Save. Use "
+            "null for anything not said; never guess or use example values. Phone numbers "
+            "and coordinates are never accepted: the user types the contact number and sets "
+            "the location on screen."
         ),
         "parameters": {
             "type": "object",
@@ -137,11 +152,27 @@ class ZeptoConnectionChecker(Protocol):
 
 
 _UNAVAILABLE = "address_form.unavailable"
+# Form keys back to the tool argument names the model used.
+_MODEL_FIELD = {"name": "label", "short_address": "area", "type": "address_type"}
+
+
+CONTACT_NUMBER_NOTE = (
+    "You cannot know or fill the user's phone number. If they ask you to fill it, say "
+    "they need to type the contact number in the form themselves."
+)
 
 
 class AddressFormToolExecutor:
-    def __init__(self, zepto: ZeptoConnectionChecker | None) -> None:
+    def __init__(
+        self,
+        zepto: ZeptoConnectionChecker | None,
+        user_words: RecentUserWords | None = None,
+    ) -> None:
         self.zepto = zepto
+        self.user_words = user_words
+        # Fields already sent this session, so a follow-up ("floor 3") does not
+        # lose what was said earlier when the model omits it.
+        self._session_prefill: dict[str, str] = {}
 
     async def execute(self, name: str, raw_arguments: str) -> ToolOutcome:
         if name != OPEN_ADDRESS_FORM:
@@ -193,19 +224,38 @@ class AddressFormToolExecutor:
                 ui_event={"type": _UNAVAILABLE, "reason": "zepto_not_connected"},
             )
 
-        prefill = arguments.prefill()
+        user_text = await self.user_words.text() if self.user_words is not None else ""
+        prefill, dropped = filter_prefill(arguments.prefill(), user_text or None)
+        self._session_prefill.update(prefill)
+        prefill = dict(self._session_prefill)
+        ack_id = secrets.token_urlsafe(12)
+        output: dict[str, Any] = {
+            "status": "form_requested",
+            "store": "Zepto",
+            "form_visible": "pending",
+            "prefill_sent": sorted(prefill),
+            "message": (
+                "The Zepto address form was sent to the screen. Nothing was saved. Do not say "
+                "it is open until a screen report says form_visible true; if it says false, "
+                "tell the user why in one line. When it is open, ask the user to check the "
+                "details, set the map location, type the contact number, and tap Save. "
+                "Never say the address was added."
+            ),
+            "contact_number": CONTACT_NUMBER_NOTE,
+        }
+        if dropped:
+            output["not_prefilled"] = sorted(_MODEL_FIELD.get(name, name) for name in dropped)
+            output["not_prefilled_reason"] = (
+                "These values were not in the user's own words, so they were left empty."
+            )
         return ToolOutcome(
-            model_output={
-                "status": "form_opened",
-                "store": "Zepto",
-                "prefilled_fields": sorted(prefill),
-                "message": (
-                    "The Zepto address form is open on screen for review. Nothing was saved. "
-                    "Ask the user to check the details, set the map location, add the contact "
-                    "number, and tap Save. Never say the address was added."
-                ),
+            model_output=output,
+            ui_event={
+                "type": "address_form.open",
+                "provider": "zepto",
+                "prefill": prefill,
+                "ack_id": ack_id,
             },
-            ui_event={"type": "address_form.open", "provider": "zepto", "prefill": prefill},
         )
 
     async def _zepto_status(self) -> Literal["connected", "not_connected", "demo"]:

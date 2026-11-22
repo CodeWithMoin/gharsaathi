@@ -500,3 +500,41 @@ async def test_a_failing_context_loader_does_not_block_the_turn() -> None:
 
     assert result.reply == "ok"
     assert "# This chat so far" not in responses.requests[0]["instructions"]
+
+
+async def test_typed_address_form_never_claims_open_and_next_turn_gets_the_screen_report() -> None:
+    from app.commerce.zepto.models import ConnectionStatus
+    from app.voice.address_tools import OPEN_ADDRESS_FORM, TEXT_LIMITS
+    from app.voice.ui_ack import UiAck
+
+    class LiveZepto:
+        async def connection_status(self) -> ConnectionStatus:
+            return ConnectionStatus(connected=True, mode="live")
+
+    world = World()
+    responses = FakeResponses(
+        [
+            [call(OPEN_ADDRESS_FORM, "c1", **{"store": "unspecified", "address_type": None,
+                  **dict.fromkeys(TEXT_LIMITS), "building_name": "RMZ The Loft", "flat_details": "Flat 4B"})],
+            "Form screen par khul raha hai.",
+            "Theek hai.",
+        ]
+    )
+    chat = service(responses, world, FakeSearcher(AXE))
+    chat.voice.zepto_connection = LiveZepto()
+
+    first = await turn(chat, "naya address add karo, RMZ The Loft")
+
+    event = first.ui_events[0]
+    assert event["type"] == "address_form.open"
+    # Only what the user typed is prefilled; the sample flat number is dropped.
+    assert event["prefill"] == {"building_name": "RMZ The Loft"}
+    output = responses.outputs(1)[0]
+    assert output["status"] == "form_requested"
+    assert "not that it is already open" in output["message"]
+
+    ack = UiAck(ack_id=event["ack_id"], form_visible=False, reason="render_failed")
+    await turn(chat, "kahan hai form?", ui_acks=[ack])
+    report = responses.requests[2]["input"][-2]
+    assert report["role"] == "developer"
+    assert "form_visible false" in report["content"] and "render_failed" in report["content"]
