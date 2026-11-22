@@ -115,6 +115,12 @@ Prompt wording, typed-chat and UI statuses are verified by review, not by the te
 - `GET /api/swiggy/tools`: Diagnostic: live Swiggy MCP tool catalogue.
 - `GET /api/zepto/tools`: Diagnostic: live Zepto MCP tool catalogue.
 - `GET /api/zepto/capabilities`: Diagnostic: Zepto tool-policy summary.
+- `GET /api/dev/status`: Dev tools (local only): inspector availability.
+- `GET /api/dev/traces`: Dev tools (local only): recent DEV_TRACE turn records.
+- `GET /api/dev/state`: Dev tools (local only): the signed-in user's baskets, memory, watches, notification log.
+- `POST /api/dev/basket/clear`: Dev tools (local only): empty the owner's own unlocked basket.
+- `POST /api/dev/doctor`: Dev tools (local only): read-only doctor, no store calls.
+- `POST /api/dev/reconcile-dry-run`: Dev tools (local only): read-only Zepto history check, budgeted, refused under cooldown.
 
 ### API contracts
 

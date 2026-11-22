@@ -10,7 +10,8 @@ make start-demo   # demo catalogue, no store calls
 One command checks setup and tells you only what's missing (tools, `OPENAI_API_KEY`,
 Clerk keys), installs frontend packages on first run, starts the Zepto login helper if
 needed (asks for your Mac password once), runs database migrations, starts everything,
-and opens http://localhost:3003. Stop with `make stop`; check with `make status`.
+and opens http://localhost:3003. Stop with `make stop`; check with `make status`,
+or `make doctor` for a full readiness table ([docs/DEV_TOOLS.md](docs/DEV_TOOLS.md)).
 
 The local app starts in a safe static-demo mode. It can exercise address selection,
 product search, baskets, deterministic fees, and exact-bill approval without calling

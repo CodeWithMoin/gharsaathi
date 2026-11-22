@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.basket import router as basket_router
 from app.api.chat import router as chat_router
 from app.api.conversations import router as conversations_router
+from app.api.dev import router as dev_router
 from app.api.notifications import router as notifications_router
 from app.api.orders import router as orders_router
 from app.api.swiggy import router as swiggy_router
@@ -124,6 +125,8 @@ app.include_router(
     prefix="/api/conversations",
     tags=["Conversations"],
 )
+# Local dev inspector: 404 unless DEV_TOOLS_ENABLED, loopback and signed in (app/api/dev.py).
+app.include_router(dev_router, prefix="/api/dev", tags=["Dev tools"], include_in_schema=False)
 
 
 @app.get("/health", tags=["System"])

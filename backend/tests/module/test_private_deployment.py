@@ -21,7 +21,7 @@ from app.dependencies import (
     get_zepto_service,
 )
 from app.main import app
-from tests.routes import concrete_path, operations
+from tests.routes import DEV_ROUTES, concrete_path, operations
 
 OWNER = "user_owner"
 INTRUDER = "user_intruder"
@@ -103,10 +103,16 @@ def test_every_route_refuses_a_signed_in_non_owner(monkeypatch) -> None:
         app.dependency_overrides[dependency] = MustNotBeCalled
     try:
         results = {}
+        dev_results: dict[str, int] = {}
         with TestClient(app) as client:
             for method, path, _ in operations(app):
                 key = f"{method} {path}"
                 if key in STATE_BOUND_ROUTES:
+                    continue
+                if key in DEV_ROUTES:
+                    # Blocked in production: 404, never 403 or any data.
+                    response = client.request(method, concrete_path(path), json={} if method == "POST" else None)
+                    dev_results[key] = response.status_code
                     continue
                 kwargs = {"json": {}} if method in {"POST", "PUT", "PATCH"} else {}
                 response = client.request(method, concrete_path(path), follow_redirects=False, **kwargs)
@@ -122,6 +128,27 @@ def test_every_route_refuses_a_signed_in_non_owner(monkeypatch) -> None:
     assert len(results) >= 60
     not_refused = {key: value for key, value in results.items() if value != (403, "private_deployment")}
     assert not not_refused, not_refused
+    assert dev_results == {key: 404 for key in DEV_ROUTES}
+
+
+def test_dev_routes_are_blocked_in_production_even_for_the_owner_on_localhost(monkeypatch) -> None:
+    """A private (hosted) deployment never serves /api/dev, even with DEV_TOOLS_ENABLED set."""
+
+    settings = private_settings(dev_tools_enabled=True)
+    signed_in_as(monkeypatch, OWNER)
+    identity = app.dependency_overrides.pop(require_user_id)
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        client = TestClient(app, client=("127.0.0.1", 50000))
+        codes = {
+            key: client.request(key.split()[0], concrete_path(key.split()[1]), json={} if key.startswith("POST") else None).status_code
+            for key in DEV_ROUTES
+        }
+    finally:
+        app.dependency_overrides[require_user_id] = identity
+        app.dependency_overrides.pop(get_settings, None)
+    assert codes == {key: 404 for key in DEV_ROUTES}
+    assert Settings(_env_file=None).dev_tools_enabled is False
 
 
 @pytest.mark.parametrize("store", ["swiggy", "zepto"])

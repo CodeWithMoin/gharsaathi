@@ -17,7 +17,7 @@ from app.dependencies import (
     get_zepto_service,
 )
 from app.main import app
-from tests.routes import PUBLIC_ROUTES, concrete_path, operations
+from tests.routes import DEV_ROUTES, PUBLIC_ROUTES, concrete_path, operations
 
 
 class MustNotBeCalled:
@@ -43,7 +43,8 @@ def test_every_authenticated_route_rejects_a_missing_identity(api: TestClient, o
         app.dependency_overrides[require_user_id] = test_identity
 
     assert len(results) >= 55
-    not_rejected = {key: code for key, code in results.items() if code != 401}
+    # The dev inspector hides itself: 404 instead of 401 (DEV_TOOLS_ENABLED is off here).
+    not_rejected = {key: code for key, code in results.items() if code != (404 if key in DEV_ROUTES else 401)}
     assert not not_rejected, not_rejected
 
 

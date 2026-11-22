@@ -28,6 +28,17 @@ PUBLIC_ROUTES: dict[str, str] = {
     "POST /api/rider/vobiz/after-stream": "Vobiz redirect after the stream; Vobiz webhook signature required",
 }
 
+# Local dev inspector (app/api/dev.py): each needs a verified user, but answers 404
+# instead of 401/403 unless DEV_TOOLS_ENABLED, loopback, unproxied and not private.
+DEV_ROUTES: dict[str, str] = {
+    "GET /api/dev/status": "inspector availability",
+    "GET /api/dev/traces": "local DEV_TRACE records",
+    "GET /api/dev/state": "the signed-in user's baskets, memory, watches, notifications",
+    "POST /api/dev/basket/clear": "owner's own basket clear",
+    "POST /api/dev/doctor": "read-only doctor",
+    "POST /api/dev/reconcile-dry-run": "read-only, budgeted Zepto history check",
+}
+
 
 def walk(routes, prefix: str = "") -> Iterator[tuple[str, APIRoute]]:
     """Yield (full_path, route) in match order.
