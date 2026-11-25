@@ -47,29 +47,11 @@ A spoken or typed “yes” does not place an order. The order card expires afte
 
 ## Household memory
 
-GharSaathi can remember details such as:
+Tell GharSaathi, “Amul Taaza 1 litre is our usual,” and it can remember the brand and pack for the next milk run. It can also learn quantities, dietary preferences, products to avoid, and corrections you make while shopping.
 
-- preferred brands
-- usual pack sizes and quantities
-- dietary preferences
-- products to avoid
-- corrections such as “not that one, I buy the 1 litre pack”
+Saved details appear in **What GharSaathi knows**, where they can be reviewed, changed, or deleted. Purchase history is used only with permission, and GharSaathi never guesses what has run out at home.
 
-Memory follows a reviewable flow:
-
-1. The user states a preference in chat or during setup.
-2. The memory service creates a proposal using evidence from that exact message.
-3. The user chooses **Confirm & use** or rejects it.
-4. A confirmed memory is stored under that person’s account in PostgreSQL.
-5. Relevant memories are retrieved before a broad product search and applied to ranking or follow-up questions.
-
-Each memory records its source, status, and allowed purpose. A permission must be active before the memory can personalize a search. The **What GharSaathi knows** screen shows every saved record and lets the user correct or delete it.
-
-Purchase history is handled separately. Import requires explicit consent, remains read-only, and is used to suggest a previously purchased item. It is never treated as a household inventory or proof that something needs replenishing.
-
-The extraction layer uses a structured OpenAI response when an API key is available. A small local ruleset handles high-confidence brand, size, quantity, dietary, and avoidance statements when the model is unavailable. Both paths create proposals; confirmation is what makes a memory usable.
-
-Implementation details and API contracts are in [Person-scoped memory](docs/DEVELOPER_GUIDE.md#person-scoped-memory).
+This gives each household its own shopping assistant instead of starting every conversation from scratch. See [Person-scoped memory](docs/DEVELOPER_GUIDE.md#person-scoped-memory) for the implementation and API contracts.
 
 ## Run the demo
 
