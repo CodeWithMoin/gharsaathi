@@ -13,6 +13,11 @@ Shop for household essentials by speaking in Hindi, English, or Hinglish.</p>
   <a href="docs/ARCHITECTURE.md">Read the architecture</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/CodeWithMoin/gharsaathi/actions/workflows/ci.yml"><img src="https://github.com/CodeWithMoin/gharsaathi/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8d3516" alt="MIT License"></a>
+</p>
+
 GharSaathi is a voice-first shopping assistant for Indian households. Tell it what you need and it checks connected Zepto and Swiggy Instamart catalogues, compares the available options, and prepares your basket.
 
 Before an order is placed, GharSaathi shows the items, fees, delivery address, and final payable amount. You place the order by tapping **Place order** on that exact bill.
@@ -176,3 +181,7 @@ make check-full
 ```
 
 Automated tests use mocked provider responses and do not place real orders.
+
+## License
+
+[MIT](LICENSE)

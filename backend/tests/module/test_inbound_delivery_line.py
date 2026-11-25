@@ -36,7 +36,7 @@ def settings(**overrides: object) -> Settings:
         "sarvam_voice_agent_org_id": "org-1",
         "sarvam_voice_agent_workspace_id": "workspace-1",
         "sarvam_inbound_deployment_id": "deployment-1",
-        "sarvam_inbound_phone_number": "+918064264240",
+        "sarvam_inbound_phone_number": "+919999999999",
         "sarvam_demo_recipient_number": "+919876543210",
         "sarvam_inbound_owner_user_id": OWNER,
     }
@@ -470,7 +470,7 @@ async def test_routes_share_with_strict_approval_and_return_coded_errors(client,
 
     shared = await client.post("/api/inbound-delivery/contexts", headers=as_user(OWNER), json={"provider": "zepto", "address_id": "z-home", "confirmed": True})
     assert shared.status_code == 200 and shared.json()["phase"] == "ready"
-    assert shared.json()["inbound_phone_number"] == "+918064264240"
+    assert shared.json()["inbound_phone_number"] == "+919999999999"
     assert "9876543210" not in shared.text
 
     config = (await client.get("/api/inbound-delivery/config", headers=as_user(OWNER))).json()

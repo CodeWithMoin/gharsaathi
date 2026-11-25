@@ -284,7 +284,7 @@ test("FM-L03: a store that is down is named as unreachable, never as not found",
   assert.equal(summary.offerBill, false);
 });
 
-const lineConfig = { enabled: true, reason: null, inbound_phone_number: "+918064264240", approved_caller_hint: "•••• 3210", route_directions_enabled: false };
+const lineConfig = { enabled: true, reason: null, inbound_phone_number: "+919999999999", approved_caller_hint: "•••• 3210", route_directions_enabled: false };
 const lineAddress = { id: "z-office", text: "Prestige Tech Park, Bengaluru" };
 const lineDirections = { provider: "zepto", address_id: "z-office", landmark: "Gate 3", route_directions: [], gate_note: null, handover_instructions: null };
 const lineState = (overrides) => ({ phase: "none", provider: "zepto", address_id: "z-home", cohort_id: null, monitor_id: null, reason: null, error: null, auto_share: false, inbound_phone_number: null, updated_at: null, ...overrides });

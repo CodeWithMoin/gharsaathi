@@ -425,13 +425,13 @@ function DeliveryLineDetail({ config, onOpenDirections }: { config: DeliveryLine
       </dl>
     </div>
 
-    <section aria-labelledby="delivery-line-how" className="rounded-2xl border border-border bg-surface p-4">
+    {line.forwarding ? <section aria-labelledby="delivery-line-how" className="rounded-2xl border border-border bg-surface p-4">
       <h3 id="delivery-line-how" className="text-sm font-semibold">How to use</h3>
       <p className="mt-1.5 text-xs leading-5 text-muted">Decline the rider’s call (or press the side button twice). The AI picks it up.</p>
       <h3 className="mt-4 text-sm font-semibold">Forwarding: when busy only</h3>
       <p className="mt-1.5 text-xs leading-6 text-muted">Dial <span className={code}>{line.forwarding}</span> on your phone once. Turn it off with <span className={code}>{line.off}</span>.</p>
       <p className="mt-1.5 text-[11px] leading-4 text-muted">Don’t forward unanswered or unreachable calls; the AI would loop when it hands the rider back to you.</p>
-    </section>
+    </section> : <section className="rounded-2xl border border-border bg-surface p-4"><h3 className="text-sm font-semibold">Setup required</h3><p className="mt-1.5 text-xs leading-5 text-muted">Add your Sarvam delivery-line number to the server configuration before turning on call forwarding.</p></section>}
 
     <button type="button" onClick={onOpenDirections} disabled={!onOpenDirections} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-inverse px-4 text-sm font-semibold text-on-inverse transition-transform active:scale-[.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 motion-reduce:active:scale-100"><MapPin size={16} weight="bold" />Directions for this address</button>
     <p className="-mt-2 px-1 text-[11px] leading-4 text-muted">Landmark, step-by-step route, gate note and handover for your selected address.</p>

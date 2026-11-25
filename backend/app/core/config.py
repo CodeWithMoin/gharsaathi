@@ -60,12 +60,12 @@ class Settings(BaseSettings):
     database_password: SecretStr = SecretStr("postgres")
     openai_api_key: SecretStr = SecretStr("")
     sarvam_voice_agent_api_key: SecretStr = SecretStr("")
-    sarvam_voice_agent_org_id: str = "01a201ca-4fa4-789e-b667-569096863bc7"
-    sarvam_voice_agent_workspace_id: str = "01a201ca-4fb0-776b-8e43-e3a6383a24cf"
-    sarvam_inbound_deployment_id: str = "Moin-AI-Inb-711358d1-fb26"
-    sarvam_inbound_phone_number: str = "+918064264240"
+    sarvam_voice_agent_org_id: str = ""
+    sarvam_voice_agent_workspace_id: str = ""
+    sarvam_inbound_deployment_id: str = ""
+    sarvam_inbound_phone_number: str = ""
     # Agent (app) ID of the inbound delivery agent: the Analytics API is agent-scoped.
-    sarvam_inbound_agent_id: str = "GharSaathi--cba37478-61ed"
+    sarvam_inbound_agent_id: str = ""
     # Read-only poll of Sarvam's List interactions while a user has an active order
     # or a delivery context prepared in the last 2 h (docs/ARCHITECTURE.md).
     sarvam_call_monitor_enabled: bool = True

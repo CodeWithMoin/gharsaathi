@@ -151,7 +151,7 @@ basket arithmetic, order card and tracking are deterministic backend code.
 ## 7. Live-only / out of scope for reviewers
 
 - Zepto and Swiggy account connection (provider OAuth; Zepto also needs a port-80 callback bridge) and real carts/orders — `make start` (live) is for the owner only.
-- Sarvam phone delivery line **+91 80 6426 4240** — wired to the owner's account and an allow-listed caller.
+- Sarvam phone delivery line — optional owner configuration with an allow-listed caller.
 - Online/prepaid payments are **off** (`ZEPTO_ONLINE_PAYMENTS_ENABLED` unset); live mode supports cash on delivery only.
 
 ## 8. Troubleshooting

@@ -22,6 +22,7 @@ backend/.live-smoke/
 # Local agent/browser tooling and review artifacts.
 .omc/
 .playwright-mcp/
-.serena/memories/
+.serena/
+opencode.json
 opencode.json.backup-*
 gharcart-full-ui-desktop.png

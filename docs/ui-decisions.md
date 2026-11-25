@@ -49,7 +49,7 @@ Edit/Delete. Every subpage uses the same header (back · title · close) and spa
 | Profile header row (avatar, name, email) | **Profile**: name, how to address you, reply language (Edit profile popup), reply style (Quick/Detailed), **Notifications** switch |
 | Stores | Shopping mode, Connect (the store's own login, callback checked first) / **Disconnect** (confirm popup), **Change … address** per connected store |
 | What GharSaathi knows | Memory switch, saved items, History, Privacy (above) |
-| Delivery line (Beta) | What it does, the AI number (+91 80 6426 4240, display only), status from `/api/inbound-delivery/config`, how to use (decline the call, or press the side button twice), forwarding **when busy only**: `**67*+918064264240#`, off with `##002#` (never unanswered/unreachable: the AI's transfer back would loop), **Directions for this address** (the directions editor popup below) |
+| Delivery line (Beta) | What it does, the configured AI number (display only), status from `/api/inbound-delivery/config`, how to use (decline the call, or press the side button twice), forwarding **when busy only**, off with `##002#` (never unanswered/unreachable: the AI's transfer back would loop), **Directions for this address** (the directions editor popup below) |
 | Rider assist (Beta) | The parked Vobiz page; the row exists only when `/api/rider/settings` reports `feature_enabled` and `owner_configured` (`riderAssistAvailable`) |
 | **Sign out** | A small text link under the rows |
 

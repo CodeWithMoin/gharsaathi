@@ -6,21 +6,19 @@
  */
 
 export const DELIVERY_LINE_CONFIG_PATH = "/api/inbound-delivery/config";
-/** Used when the server does not report a number. */
-export const DELIVERY_LINE_NUMBER = "+918064264240";
 export const FORWARDING_OFF_CODE = "##002#";
 
-/** "+918064264240" → "+91 80 6426 4240"; anything else is returned trimmed. */
+/** "+919999999999" → "+91 99 9999 9999"; anything else is returned trimmed. */
 export function formatDeliveryNumber(number) {
   const digits = String(number ?? "").replace(/[^\d]/g, "");
   if (digits.length === 12 && digits.startsWith("91")) return `+91 ${digits.slice(2, 4)} ${digits.slice(4, 8)} ${digits.slice(8)}`;
   return String(number ?? "").trim();
 }
 
-/** Busy-only forwarding code, e.g. "**67*+918064264240#". */
+/** Busy-only forwarding code, e.g. "**67*+919999999999#". */
 export function forwardingCode(number) {
   const digits = String(number ?? "").replace(/[^\d]/g, "");
-  return `**67*+${digits}#`;
+  return digits ? `**67*+${digits}#` : "";
 }
 
 /**
@@ -28,7 +26,7 @@ export function forwardingCode(number) {
  * `undefined` = still loading, `null` = could not load.
  */
 export function deliveryLineSettingsView(config) {
-  const number = (config && typeof config.inbound_phone_number === "string" && config.inbound_phone_number.trim()) || DELIVERY_LINE_NUMBER;
+  const number = (config && typeof config.inbound_phone_number === "string" && config.inbound_phone_number.trim()) || "";
   const status = config === undefined
     ? "Checking…"
     : config === null
@@ -36,5 +34,5 @@ export function deliveryLineSettingsView(config) {
       : config.enabled
         ? "On"
         : "Not set up on this server yet";
-  return { number, display: formatDeliveryNumber(number), forwarding: forwardingCode(number), off: FORWARDING_OFF_CODE, status, ready: config?.enabled === true };
+  return { number, display: formatDeliveryNumber(number) || "Not configured", forwarding: forwardingCode(number), off: FORWARDING_OFF_CODE, status, ready: config?.enabled === true };
 }

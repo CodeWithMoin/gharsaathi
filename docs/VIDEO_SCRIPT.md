@@ -94,7 +94,7 @@ GharSaathi. **VO** = your voice-over to the viewer.
 - **DO (pick one):**
   - *Forwarded call:* have someone call your phone as the "rider"; **decline** it
     (or press the side button twice). The forwarded call reaches the AI.
-  - *Direct:* from a second phone, call **+91 80 6426 4240**.
+  - *Direct:* from a second phone, call the configured Sarvam delivery-line number.
 - **DO:** Put it on speaker; let the AI greet the rider and give step-by-step directions
   from your saved directions (gate, floor, landmark). Ask as rider: "OTP kya hai?" — it
   refuses.

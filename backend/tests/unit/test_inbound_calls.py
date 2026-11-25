@@ -18,7 +18,7 @@ from app.inbound_calls import (
 )
 from app.notifications import messages
 
-DEPLOYMENT = "Moin-AI-Inb-711358d1-fb26"
+DEPLOYMENT = "test-inbound-deployment"
 AT = datetime(2026, 11, 22, 8, 44, tzinfo=UTC)  # 2:14 pm India time
 
 

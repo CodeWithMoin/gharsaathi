@@ -1,6 +1,6 @@
 # Inbound delivery-assist line
 
-The Sarvam number `+918064264240` routes inbound calls to a committed agent
+The configured Sarvam number routes inbound calls to a committed agent
 version. The agent behaves as Moin's household shopping/delivery assistant.
 “Sir, Zepto”, “Sir, Swiggy”, and equivalent delivery introductions start the
 delivery flow. Other callers are offered a transfer to Moin.
@@ -122,7 +122,7 @@ the order status card says "Rider has your directions" after a confirmed route.
   `GET https://apps.sarvam.ai/api/analytics/v1/{org_id}/{workspace_id}/{app_id}/interactions`
   — <https://docs.sarvam.ai/voice-agents/api/analytics/interactions> (auth, filters, rate
   limits: <https://docs.sarvam.ai/voice-agents/api/analytics/overview>). `app_id` is the
-  agent id (`SARVAM_INBOUND_AGENT_ID`, default `GharSaathi--cba37478-61ed`); the same
+  agent id (`SARVAM_INBOUND_AGENT_ID`); the same
   `SARVAM_VOICE_AGENT_API_KEY` and org/workspace ids as the cohort stream. The response
   includes the caller's full number (`user_contact`); GharSaathi never reads it.
 - **Fields used.** `interaction_id`, `start_datetime`, `end_datetime`, `channel_direction`,

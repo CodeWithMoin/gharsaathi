@@ -37,7 +37,7 @@ def settings(**overrides: object) -> Settings:
         "sarvam_voice_agent_org_id": "org-1",
         "sarvam_voice_agent_workspace_id": "workspace-1",
         "sarvam_inbound_deployment_id": "deployment-1",
-        "sarvam_inbound_phone_number": "+918064264240",
+        "sarvam_inbound_phone_number": "+919999999999",
         "sarvam_demo_recipient_number": CALLER,
         "sarvam_inbound_owner_user_id": "owner-1",
     }

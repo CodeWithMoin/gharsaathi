@@ -9,7 +9,7 @@ Create the hosted zone first:
 
 ```bash
 aws cloudformation deploy \
-  --profile hackathon-bedrock \
+  --profile YOUR_AWS_PROFILE \
   --region us-west-2 \
   --stack-name gharsaathi-domain \
   --template-file infra/aws/domain.yaml \
@@ -24,7 +24,7 @@ the Route 53 hosted zone automatically:
 
 ```bash
 aws cloudformation deploy \
-  --profile hackathon-bedrock \
+  --profile YOUR_AWS_PROFILE \
   --region us-east-1 \
   --stack-name gharsaathi-certificate \
   --template-file infra/aws/certificate.yaml \

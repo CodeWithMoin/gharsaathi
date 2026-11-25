@@ -15,6 +15,6 @@ Video: **[Watch the GharSaathi live demo on Loom](https://www.loom.com/share/ce3
 4. Price comparison across stores
 5. Shopping from a photo of a pack
 6. Tracking card with ETA and Delivery line ready
-7. Sarvam delivery line guiding a rider (+91 80 6426 4240), rider-call card in app
+7. Sarvam delivery line guiding a rider, rider-call card in app
 8. Settings drawer
 9. Safety: orders only on tap, cash on delivery, never OTPs or passwords

@@ -16,10 +16,10 @@ import {
   updateStep,
 } from "../../app/delivery-line.mjs";
 
-const config = { enabled: true, reason: null, inbound_phone_number: "+918064264240", approved_caller_hint: "•••• 3210", route_directions_enabled: false };
+const config = { enabled: true, reason: null, inbound_phone_number: "+919999999999", approved_caller_hint: "•••• 3210", route_directions_enabled: false };
 const address = { id: "z-home", label: "Home", text: "Flat 402, Lake View Apartments, HSR Layout" };
 const saved = { provider: "zepto", address_id: "z-home", landmark: "Opposite the park", route_directions: ["Main road pe left", "Doosri gali"], gate_note: null, handover_instructions: "Guard ke paas chhod dijiye" };
-const line = (overrides = {}) => ({ phase: "none", provider: null, address_id: null, cohort_id: null, monitor_id: null, reason: null, error: null, auto_share: false, inbound_phone_number: "+918064264240", updated_at: null, ...overrides });
+const line = (overrides = {}) => ({ phase: "none", provider: null, address_id: null, cohort_id: null, monitor_id: null, reason: null, error: null, auto_share: false, inbound_phone_number: "+919999999999", updated_at: null, ...overrides });
 const view = (overrides = {}) => deliveryLineView({ config, address, recipientName: "Moin", directions: saved, line: line(), store: "Zepto", ...overrides });
 
 test("the draft starts with one empty step and round-trips saved directions", () => {
@@ -79,7 +79,7 @@ test("sharing waits for an address, a name and directions", () => {
 test("ready shows only for the selected address, with the number and the store phrase", () => {
   const ready = view({ line: line({ phase: "ready", provider: "zepto", address_id: "z-home" }) });
   assert.equal(ready.kind, "ready");
-  assert.match(ready.message, /•••• 3210 can call \+918064264240 and say “Sir, Zepto\.”/);
+  assert.match(ready.message, /•••• 3210 can call \+919999999999 and say “Sir, Zepto\.”/);
   assert.equal(view({ line: line({ phase: "ready", provider: "zepto", address_id: "z-office" }) }).kind, "idle");
 });
 

@@ -63,7 +63,7 @@ def settings(**overrides: Any) -> Settings:
         sarvam_voice_agent_workspace_id="workspace-1",
         sarvam_inbound_agent_id="agent-1",
         sarvam_inbound_deployment_id=DEPLOYMENT,
-        sarvam_inbound_phone_number="+918064264240",
+        sarvam_inbound_phone_number="+919999999999",
         sarvam_demo_recipient_number="+919876543210",
         sarvam_call_monitor_enabled=True,
     )
