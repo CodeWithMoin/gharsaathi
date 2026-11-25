@@ -93,6 +93,13 @@ def test_parse_products_rejects_missing_provider_identifier() -> None:
         parse_products(invalid)
 
 
+def test_one_malformed_product_does_not_hide_the_other_results() -> None:
+    good = PRODUCT_RESULT["data"]["products"][0]
+    mixed = {"data": {**PRODUCT_RESULT["data"], "products": [{"variations": []}, good]}}
+    result = parse_products(mixed)
+    assert [product.product_id for product in result.products] == ["product_1"]
+
+
 @pytest.mark.asyncio
 async def test_adapter_calls_only_documented_read_tools() -> None:
     class FakeClient:

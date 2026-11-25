@@ -260,3 +260,55 @@ async def test_maintenance_dry_run_on_the_test_database_writes_nothing(session_f
     assert f"order_code={CODE}" in out.getvalue()
     stored = await attempts.get(attempt.id)
     assert stored is not None and stored.status == CheckoutStatus.OUTCOME_UNKNOWN
+
+
+async def test_a_dispatching_attempt_cut_off_mid_order_becomes_unknown(
+    session_factory, history: HistoryClient
+) -> None:
+    """A crash after the claim (before mark_unknown) must not strand the basket."""
+
+    import uuid
+
+    from app.shopping.checkout import idempotency_key_hash
+    from app.shopping.models import CheckoutAttempt
+    from app.shopping.reconciliation import STALE_DISPATCH
+
+    baskets, approvals, approval_id = await _approved_zepto_basket(session_factory, "alice")
+    approval = await approvals.get(approval_id)
+    assert approval is not None
+    basket = await baskets.get(approval.basket_id)
+    assert basket is not None
+    attempts = DatabaseCheckoutAttemptRepository(session_factory)
+    started = datetime.now(UTC) - STALE_DISPATCH - timedelta(minutes=1)
+    claimed, created = await attempts.claim(
+        CheckoutAttempt(
+            id=uuid.uuid4().hex,
+            approval_id=approval_id,
+            basket_id=basket.id,
+            household_id="alice",
+            idempotency_key_hash=idempotency_key_hash("key-crash"),
+            payable_paise=approval.payable_paise,
+            status=CheckoutStatus.DISPATCHING,
+            created_at=started,
+            payment_method="cod",
+        ),
+        basket_revision=basket.revision,
+    )
+    assert created and claimed.status == CheckoutStatus.DISPATCHING
+
+    # Listing is read-only: the stale attempt is offered for checking, unchanged.
+    pending = await attempts.unknown_attempts("alice")
+    assert [item.id for item in pending] == [claimed.id]
+    assert pending[0].status == CheckoutStatus.DISPATCHING
+
+    reconciler = CheckoutReconciler(attempts, baskets, ZeptoService(object(), history))  # type: ignore[arg-type]
+    dry = await reconciler.reconcile(claimed.id, apply=False)
+    assert dry.check == "not_found"
+    stored = await attempts.get(claimed.id)
+    assert stored is not None and stored.status == CheckoutStatus.DISPATCHING
+
+    checked = await reconciler.reconcile(claimed.id)
+    assert checked.check == "not_found"
+    stored = await attempts.get(claimed.id)
+    assert stored is not None and stored.status == CheckoutStatus.OUTCOME_UNKNOWN
+    assert stored.completed_at == started + STALE_DISPATCH

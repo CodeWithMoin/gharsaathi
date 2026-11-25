@@ -17,7 +17,7 @@ def run_cli(tmp_path: Path, env: dict[str, str], *args: str) -> subprocess.Compl
     stub.write_text('#!/usr/bin/env bash\nprintf "url=%s\\n" "$DATABASE_URL"\nprintf "cwd=%s\\n" "$PWD"\nprintf "args=%s\\n" "$*"\n')
     stub.chmod(0o755)
     base = {key: value for key, value in os.environ.items() if key != "DATABASE_URL"}
-    base.update({"PATH": f"{tmp_path}:{os.environ['PATH']}", "USER": "localdev", **env})
+    base.update({"PATH": f"{tmp_path}:{os.environ['PATH']}", "USER": "localdev", "LOCAL_ENV_FILE": str(tmp_path / "missing.env"), **env})
     return subprocess.run(
         [str(REPO / "scripts" / "backend-cli.sh"), *args],
         env=base,
@@ -36,6 +36,16 @@ def test_cli_gets_the_same_default_database_as_dev_sh(tmp_path: Path) -> None:
     assert f"cwd={REPO / 'backend'}" in result.stdout
     assert "args=run --with-requirements requirements.txt python -m app.shopping.reconcile_unknown --dry-run" in result.stdout
     assert result.stderr.strip() == "database=127.0.0.1:5432/equal_ai"
+
+
+def test_the_repo_env_file_is_used_when_the_shell_has_none(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text('OTHER=1\nDATABASE_URL="postgresql+asyncpg://gs@127.0.0.1:5432/gharsaathi"\n')
+
+    result = run_cli(tmp_path, {"LOCAL_ENV_FILE": str(env_file)}, "app.shopping.reconcile_unknown", "--dry-run")
+
+    assert "url=postgresql+asyncpg://gs@127.0.0.1:5432/gharsaathi" in result.stdout
+    assert result.stderr.strip() == "database=127.0.0.1:5432/gharsaathi"
 
 
 def test_an_exported_database_url_wins_and_credentials_are_not_printed(tmp_path: Path) -> None:

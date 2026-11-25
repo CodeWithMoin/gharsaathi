@@ -46,7 +46,7 @@ def _raise_http(exc: ShoppingError) -> NoReturn:
     if isinstance(exc, NotFound):
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     if isinstance(exc, InvalidBasketChange):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(422, str(exc)) from exc
     if isinstance(exc, ApprovalRefused):
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     if isinstance(exc, ProviderNotConnected):

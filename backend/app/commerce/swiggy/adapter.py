@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 from urllib.parse import urlparse
 
@@ -12,6 +13,8 @@ from app.commerce.swiggy.models import (
     Product,
     ProductSearchResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SwiggyInstamartAdapter:
@@ -103,45 +106,61 @@ def _flatten_product_groups(raw_groups: object) -> list[Product]:
     if not isinstance(raw_groups, list):
         raise SwiggySchemaError("Swiggy returned an invalid products list.")
     products: list[Product] = []
+    first_error: SwiggySchemaError | None = None
     for group in raw_groups:
-        if not isinstance(group, dict):
-            raise SwiggySchemaError("Swiggy returned an invalid product item.")
-        product_id = _required_str(group, "productId")
-        parent_product_id = _optional_str(group.get("parentProductId"))
-        variations = group.get("variations", [])
-        if not isinstance(variations, list):
-            raise SwiggySchemaError("A Swiggy product has invalid variations.")
-        for variation in variations:
-            if not isinstance(variation, dict):
-                raise SwiggySchemaError("Swiggy returned an invalid product variation.")
-            price = variation.get("price")
-            if not isinstance(price, dict):
-                raise SwiggySchemaError("A Swiggy product is missing its price.")
-            rating = variation.get("rating", {})
-            sla = variation.get("sla", {})
-            products.append(
-                Product(
-                    product_id=product_id,
-                    parent_product_id=parent_product_id,
-                    sku_id=_required_str(variation, "skuId"),
-                    spin_id=_required_str(variation, "spinId"),
-                    name=_required_str(variation, "displayName"),
-                    brand=_optional_str(variation.get("brandName"))
-                    or _optional_str(group.get("brand")),
-                    pack_size=_optional_str(variation.get("quantityDescription")),
-                    price=Price(
-                        mrp=_number(price, "mrp"),
-                        offer_price=_number(price, "offerPrice"),
-                        unit_level_price=_optional_str(price.get("unitLevelPrice")),
-                    ),
-                    available=variation.get("isInStockAndAvailable") is True,
-                    image_url=_optional_https_url(variation.get("imageUrl")),
-                    rating_value=_dict_str(rating, "value"),
-                    rating_count=_dict_str(rating, "count"),
-                    delivery_value=_dict_str(sla, "value"),
-                    delivery_unit=_dict_str(sla, "unit"),
-                )
+        # One malformed product must not hide the rest of the results; only a
+        # response where nothing parses is a schema error.
+        try:
+            products.extend(_group_products(group))
+        except SwiggySchemaError as exc:
+            first_error = first_error or exc
+    if first_error is not None:
+        if not products:
+            raise first_error
+        logger.warning("event=swiggy_product_skipped reason=%s", first_error)
+    return products
+
+
+def _group_products(group: object) -> list[Product]:
+    if not isinstance(group, dict):
+        raise SwiggySchemaError("Swiggy returned an invalid product item.")
+    product_id = _required_str(group, "productId")
+    parent_product_id = _optional_str(group.get("parentProductId"))
+    variations = group.get("variations", [])
+    if not isinstance(variations, list):
+        raise SwiggySchemaError("A Swiggy product has invalid variations.")
+    products: list[Product] = []
+    for variation in variations:
+        if not isinstance(variation, dict):
+            raise SwiggySchemaError("Swiggy returned an invalid product variation.")
+        price = variation.get("price")
+        if not isinstance(price, dict):
+            raise SwiggySchemaError("A Swiggy product is missing its price.")
+        rating = variation.get("rating", {})
+        sla = variation.get("sla", {})
+        products.append(
+            Product(
+                product_id=product_id,
+                parent_product_id=parent_product_id,
+                sku_id=_required_str(variation, "skuId"),
+                spin_id=_required_str(variation, "spinId"),
+                name=_required_str(variation, "displayName"),
+                brand=_optional_str(variation.get("brandName"))
+                or _optional_str(group.get("brand")),
+                pack_size=_optional_str(variation.get("quantityDescription")),
+                price=Price(
+                    mrp=_number(price, "mrp"),
+                    offer_price=_number(price, "offerPrice"),
+                    unit_level_price=_optional_str(price.get("unitLevelPrice")),
+                ),
+                available=variation.get("isInStockAndAvailable") is True,
+                image_url=_optional_https_url(variation.get("imageUrl")),
+                rating_value=_dict_str(rating, "value"),
+                rating_count=_dict_str(rating, "count"),
+                delivery_value=_dict_str(sla, "value"),
+                delivery_unit=_dict_str(sla, "unit"),
             )
+        )
     return products
 
 

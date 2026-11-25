@@ -792,13 +792,17 @@ class MultiProviderShoppingToolExecutor:
             return {**base, "status": "provider_error", "reason": exc.reason}
         except (SwiggyError, ZeptoError):
             return {**base, "status": "provider_error", "reason": "unavailable"}
+        except Exception as exc:
+            # An unexpected error from one store must not discard the other store's results.
+            logger.warning("event=voice_search_store_error provider=%s error=%s", target.provider, type(exc).__name__)
+            return {**base, "status": "provider_error", "reason": "unavailable"}
         if not result.products:
             # One broader retry (brand + product words) before reporting "nothing found".
             broader = relaxed_query(query)
             if broader:
                 try:
                     result = await target.searcher.search(broader, target.address_id, 0)
-                except (SwiggyError, ZeptoError):
+                except Exception:  # the first, successful (empty) answer stands
                     pass
         return {**base, "status": "ok", "products": result.products}
 

@@ -30,7 +30,9 @@ ensure_local_postgres() {
     pg_ctl -D "${pg_data}" -l "${RUN_DIR}/postgres.log" start >/dev/null
   fi
 
-  if ! psql -h 127.0.0.1 -d postgres -tAc \
+  # Only the built-in default database is created here; a DATABASE_URL from
+  # the shell or .env points at a database the user created themselves.
+  if [[ "$(local_database_url)" == */equal_ai ]] && ! psql -h 127.0.0.1 -d postgres -tAc \
     "SELECT 1 FROM pg_database WHERE datname = 'equal_ai'" | grep -q 1; then
     echo "Creating local equal_ai database"
     createdb -h 127.0.0.1 equal_ai

@@ -218,9 +218,9 @@ answer. `make reconcile-unknown ARGS=--dry-run` (or `ARGS=--apply`) runs the sam
 check for existing unknown attempts and prints only an attempt prefix, match yes/no
 and the order code. It goes through `scripts/backend-cli.sh`, which sets
 `DATABASE_URL` exactly as `scripts/dev.sh` does for the app (`scripts/local-env.sh`:
-the shell's `DATABASE_URL`, else `postgresql+asyncpg://$USER@127.0.0.1:5432/equal_ai`).
-A bare `python -m app.shopping.reconcile_unknown` reads only `.env`, which has no
-`DATABASE_URL`, and falls back to the `postgres` user.
+the shell's `DATABASE_URL`, else the one in the root `.env`, else `postgresql+asyncpg://$USER@127.0.0.1:5432/equal_ai`).
+A bare `python -m app.shopping.reconcile_unknown` reads only `.env`; without a
+`DATABASE_URL` there it falls back to the `postgres` user.
 
 ### Stale cards
 

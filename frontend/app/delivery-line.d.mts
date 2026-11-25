@@ -64,3 +64,25 @@ export function deliveryLineView(input: {
   store: string;
 }): DeliveryLineView;
 export function stepsSummary(directions: SavedDirections | null | undefined): string[];
+export const LIVE_PREVIEW_PATH: string;
+export type LiveDeliveryContext = {
+  active: "yes" | "no";
+  provider: string;
+  provider_mismatch?: "yes" | "no";
+  order_status?: string;
+  recipient_name?: string;
+  delivery_address?: string;
+  landmark?: string;
+  route_directions?: string;
+  handover_instructions?: string;
+  eta?: string;
+  message_for_agent?: string;
+};
+export type LivePreview = { enabled: boolean; context: LiveDeliveryContext | null };
+export type LiveRiderHelpView = {
+  tone: "neutral" | "success" | "warning";
+  title: string;
+  detail: string;
+  lines: { label: string; value: string }[];
+};
+export function liveRiderHelpView(preview: LivePreview | null | undefined): LiveRiderHelpView | null;

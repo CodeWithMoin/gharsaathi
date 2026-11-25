@@ -345,7 +345,11 @@ export function BasketPanel({
     }).finally(() => {
       if (active) setAction(null);
     });
-    return () => { active = false; };
+    // A re-run that still needs the address sync sets the lock again; otherwise it must not stay locked.
+    return () => {
+      active = false;
+      setAction((value) => value === "address" ? null : value);
+    };
   }, [addressId, applyBasket, basket, basketRequest, clearQuote, query]);
 
   const changeQuantity = useCallback(async (line: BasketLine, quantity: number) => {

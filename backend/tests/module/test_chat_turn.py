@@ -321,7 +321,10 @@ async def test_a_failing_tool_reports_tool_error_like_voice() -> None:
 
     result = await turn(chat, "atta chahiye")
 
-    assert responses.outputs(1) == [{"status": "error", "message": "The tool failed unexpectedly."}]
+    # An unexpected store error is that store being unreachable, not "not found".
+    [output] = responses.outputs(1)
+    assert output["status"] == "provider_error"
+    assert output["unreachable_stores"] == [{"store": "Swiggy Instamart", "store_id": "swiggy_instamart", "reason": "unavailable"}]
     assert [event["type"] for event in result.ui_events] == ["tool.error"]
 
 

@@ -46,6 +46,9 @@ FOLLOW_UP_DELAYS: tuple[float, ...] = (15.0, 45.0, 60.0)
 RECONCILED_STATUS = "reconciled_from_history"
 # Unknown attempts older than this are left to the maintenance command.
 RECENT = timedelta(hours=24)
+# No order call runs this long. A ``dispatching`` attempt older than this was cut
+# off (restart, crash, DB outage during mark_unknown): its outcome is unknown.
+STALE_DISPATCH = timedelta(minutes=10)
 
 CheckResult = Literal["matched", "not_found", "ambiguous", "unavailable", "not_unknown"]
 
@@ -60,6 +63,10 @@ class OrderHistoryReader(Protocol):
 
 class ReconcilableAttempts(Protocol):
     async def get(self, attempt_id: str) -> CheckoutAttempt | None: ...
+
+    async def mark_unknown(
+        self, attempt_id: str, completed_at: datetime
+    ) -> CheckoutAttempt: ...
 
     async def unknown_attempts(
         self, household_id: str | None = None, *, since: datetime | None = None
@@ -262,6 +269,17 @@ class CheckoutReconciler:
             attempt = await self.attempts.get(attempt_id)
             if attempt is None or (household_id is not None and attempt.household_id != household_id):
                 return ReconcileOutcome("not_unknown", None)
+            if (
+                attempt.status == CheckoutStatus.DISPATCHING
+                and _utc(self.clock()) - _utc(attempt.created_at) >= STALE_DISPATCH
+            ):
+                # The order call was cut off (restart/crash); its outcome is unknown.
+                # A dry run only looks at it as unknown and writes nothing.
+                attempt = (
+                    await self.attempts.mark_unknown(attempt.id, attempt.created_at + STALE_DISPATCH)
+                    if apply
+                    else attempt.model_copy(update={"status": CheckoutStatus.OUTCOME_UNKNOWN})
+                )
             if attempt.status != CheckoutStatus.OUTCOME_UNKNOWN:
                 outcome = ReconcileOutcome(
                     "not_unknown", attempt, order_id=attempt.provider_order_id

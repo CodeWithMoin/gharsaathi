@@ -85,6 +85,13 @@ class DeliveryContext(BaseModel):
     message_for_agent: str
 
 
+class LivePreview(BaseModel):
+    """The owner's view of the live tool: on or off, and what a rider would hear now."""
+
+    enabled: bool
+    context: DeliveryContext | None = None
+
+
 class WatchList(Protocol):
     def list(self, user_id: str, *, active_only: bool = False) -> list[OrderWatch]: ...
 
@@ -264,7 +271,10 @@ class LiveDeliveryContextService:
 
     # Context -----------------------------------------------------------------
 
-    async def context(self, provider: object) -> DeliveryContext:
+    async def context(self, provider: object, *, log: bool = True) -> DeliveryContext:
+        """What the agent is told. ``log=False`` for the owner's in-app preview, so
+        the preview is not counted as a Sarvam call in the logs."""
+
         requested = normalise_provider(provider)
         owner = self.settings.sarvam_inbound_owner_user_id.strip()
         now = self.clock()
@@ -274,7 +284,8 @@ class LiveDeliveryContextService:
             logger.warning("event=sarvam_live_context result=tracking_unreadable error=%s", type(exc).__name__)
             candidates = []
         if not candidates:
-            self._log("no", requested, "no")
+            if log:
+                self._log("no", requested, "no")
             return DeliveryContext(active="no", provider=requested, message_for_agent=NO_ORDER_MESSAGE)
 
         watch = next((item for item in candidates if item.provider.value == requested), candidates[0])
@@ -284,7 +295,8 @@ class LiveDeliveryContextService:
         context.provider = store
         context.provider_mismatch = mismatch  # type: ignore[assignment]
         context.message_for_agent = _message(store, mismatch == "yes", _delivered(watch), context)
-        self._log("yes", requested, mismatch)
+        if log:
+            self._log("yes", requested, mismatch)
         return context
 
     async def _details(self, owner: str, watch: OrderWatch, now: datetime) -> DeliveryContext:

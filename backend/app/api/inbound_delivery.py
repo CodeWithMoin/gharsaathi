@@ -16,6 +16,8 @@ from app.inbound_delivery import (
     PrepareRequest,
     SavedDirections,
 )
+from app.api.sarvam_tool import LiveContextDependency
+from app.inbound_delivery.live_context import LivePreview
 from app.inbound_delivery.models import Provider
 from app.legal_consent import ConsentedUserIdDependency
 
@@ -27,6 +29,26 @@ async def get_inbound_config(
     service: InboundDeliveryServiceDependency, user_id: UserIdDependency
 ) -> InboundDeliveryConfig:
     return service.config(user_id)
+
+
+@router.get("/live-preview", response_model=LivePreview)
+async def get_live_preview(
+    live: LiveContextDependency,
+    user_id: UserIdDependency,
+    provider: Provider | None = None,
+) -> LivePreview:
+    """Owner only: whether the Sarvam tool is on, and exactly what it would answer now.
+
+    Reads GharSaathi's own records only (no Sarvam or store call) and does not use
+    the tool's rate limit.
+    """
+
+    owner = live.settings.sarvam_inbound_owner_user_id.strip()
+    if not owner or user_id != owner:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can see the delivery line.")
+    if not live.enabled:
+        return LivePreview(enabled=False)
+    return LivePreview(enabled=True, context=await live.context(provider or "unknown", log=False))
 
 
 @router.get("/directions", response_model=SavedDirections | None)

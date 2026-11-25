@@ -16,7 +16,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, runtime_checkable
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -46,7 +46,7 @@ from app.shopping.payments import (
     PrepaidGateway,
     next_checkout_status,
 )
-from app.shopping.reconciliation import RECONCILED_STATUS
+from app.shopping.reconciliation import RECONCILED_STATUS, STALE_DISPATCH
 from app.shopping.ports import ApprovalRepository, BasketRepository, QuoteProvider
 
 
@@ -351,10 +351,22 @@ class DatabaseCheckoutAttemptRepository:
     async def unknown_attempts(
         self, household_id: str | None = None, *, since: datetime | None = None
     ) -> list[CheckoutAttempt]:
-        """Attempts whose order call outcome is unknown, newest first."""
+        """Attempts whose order call outcome is unknown, newest first.
 
+        Includes stale ``dispatching`` attempts (cut off by a restart or crash
+        before ``mark_unknown``). Read-only: ``CheckoutReconciler.reconcile``
+        moves them to ``outcome_unknown`` when it applies.
+        """
+
+        cutoff = datetime.now(UTC) - STALE_DISPATCH
         query = select(ZeptoCheckoutAttemptRecord).where(
-            ZeptoCheckoutAttemptRecord.status == CheckoutStatus.OUTCOME_UNKNOWN.value
+            or_(
+                ZeptoCheckoutAttemptRecord.status == CheckoutStatus.OUTCOME_UNKNOWN.value,
+                and_(
+                    ZeptoCheckoutAttemptRecord.status == CheckoutStatus.DISPATCHING.value,
+                    ZeptoCheckoutAttemptRecord.created_at < cutoff,
+                ),
+            )
         )
         if household_id is not None:
             query = query.where(ZeptoCheckoutAttemptRecord.household_id == household_id)

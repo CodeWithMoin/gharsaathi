@@ -62,7 +62,8 @@ export function OrderConfirmationCard({ confirmation: initial, onResult }: { con
   const place = useCallback(async () => {
     if (state.status !== "open") return;
     setNotice(null);
-    setState({ status: "placing" });
+    // Tell the page too: an in-flight card must not be superseded by a basket refresh.
+    finish({ status: "placing" });
     try {
       const body = await apiRequest<OrderResponse>("/api/orders/confirm", {
         method: "POST",

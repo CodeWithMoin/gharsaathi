@@ -4,7 +4,12 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: process.cwd(),
   images: {
-    remotePatterns: [{ protocol: "https", hostname: "**" }],
+    // Only Clerk avatars go through the optimizer; provider product images render unoptimized.
+    // A "**" pattern would make /_next/image fetch any https URL (open proxy / SSRF).
+    remotePatterns: [
+      { protocol: "https", hostname: "img.clerk.com" },
+      { protocol: "https", hostname: "images.clerk.dev" },
+    ],
   },
   async headers() {
     const immutable = [

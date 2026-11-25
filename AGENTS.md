@@ -85,7 +85,7 @@ The first `uv run` downloads Python deps (~1 min). Alembic reads `DATABASE_URL` 
 **4a. macOS one-command (ports 3003/8000):**
 
 ```bash
-export DATABASE_URL=postgresql+asyncpg://gharsaathi:gharsaathi@127.0.0.1:5432/gharsaathi   # REQUIRED: the script ignores .env's DATABASE_URL and otherwise uses $USER@127.0.0.1/equal_ai
+# DATABASE_URL: the shell's value wins, then the root .env's, else $USER@127.0.0.1/equal_ai
 make start-demo        # = ./scripts/start.sh demo: checks .env, runs migrations, starts both in background, waits for health
 make status            # health of both
 make logs              # follow logs (.run/app.log)
@@ -157,7 +157,7 @@ basket arithmetic, order card and tracking are deterministic backend code.
 ## 8. Troubleshooting
 
 - **Port in use** — `lsof -i :3003 -i :8000`, stop that process (or `make stop`), or use the custom-port recipe in 4b.
-- **DB connection refused / role or database does not exist** — check Postgres is on `127.0.0.1:5432`, `DATABASE_URL` uses the `postgresql+asyncpg://` scheme, the database exists, and (for `make start-demo`) that you exported `DATABASE_URL` in the shell. Re-run `alembic upgrade head`.
+- **DB connection refused / role or database does not exist** — check Postgres is on `127.0.0.1:5432`, `DATABASE_URL` uses the `postgresql+asyncpg://` scheme, the database exists, and that the shell has no stale exported `DATABASE_URL` overriding `.env`. Re-run `alembic upgrade head`.
 - **Clerk "unauthorized party" / every API call 401** — the frontend origin you open (e.g. `http://localhost:3003` vs `http://127.0.0.1:3003`) must be in `CLERK_AUTHORIZED_PARTIES_CSV`, and the backend needs `CLERK_SECRET_KEY` (in root `.env` for 4b) from the **same** Clerk instance as the publishable key. Restart the backend after editing `.env`.
 - **Mic does nothing** — browsers allow the microphone only on `http://localhost` or https; for another device use `cloudflared tunnel --url http://localhost:3003` and add that https origin to `CLERK_AUTHORIZED_PARTIES_CSV`/`CORS_ORIGINS` (and point `NEXT_PUBLIC_API_BASE_URL` at a tunnel for :8000).
 - **Chat replies with an error** — `OPENAI_API_KEY` missing/invalid in root `.env`; restart the backend.

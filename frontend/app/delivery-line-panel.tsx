@@ -10,6 +10,7 @@ import {
   HANDOVER_MAX,
   LANDMARK_MAX,
   LINE_PATH,
+  LIVE_PREVIEW_PATH,
   MAX_STEPS,
   STEP_MAX,
   addStep,
@@ -18,6 +19,7 @@ import {
   directionsDraft,
   directionsError,
   directionsPayload,
+  liveRiderHelpView,
   pickHandover,
   removeStep,
   stepsSummary,
@@ -26,6 +28,7 @@ import {
   type DeliveryProvider,
   type DirectionsDraft,
   type InboundDeliveryConfig,
+  type LivePreview,
   type SavedDirections,
   type SelectedDeliveryAddress,
 } from "./delivery-line.mjs";
@@ -74,6 +77,7 @@ export function DeliveryLinePanel({ provider, address, recipientName, onChangeAd
   const [editing, setEditing] = useState(false);
   const [confirmAuto, setConfirmAuto] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [livePreview, setLivePreview] = useState<LivePreview | null>(null);
   const store = STORE_NAMES[provider];
   const addressId = address?.id ?? null;
 
@@ -99,10 +103,23 @@ export function DeliveryLinePanel({ provider, address, recipientName, onChangeAd
     if (config?.enabled) void loadLine();
   }, [config?.enabled, loadLine, refreshKey, addressId]);
 
+  // What the Sarvam agent's live tool would tell a rider calling now (owner only;
+  // GharSaathi's own records, no Sarvam call). Re-read when the order or address changes.
+  useEffect(() => {
+    if (!config?.enabled) return;
+    let active = true;
+    void request<LivePreview>(`${LIVE_PREVIEW_PATH}?provider=${provider}`)
+      .then((preview) => { if (active) setLivePreview(preview); })
+      .catch(() => { if (active) setLivePreview(null); });
+    return () => { active = false; };
+  }, [addressId, config?.enabled, directions, provider, refreshKey, request]);
+  const liveHelp = liveRiderHelpView(livePreview);
+
   useEffect(() => {
     setConfirmed(false);
     setError("");
     setDirections(null);
+    setDirectionsLoading(false);
     if (!addressId || !config?.enabled) return;
     let active = true;
     setDirectionsLoading(true);
@@ -247,6 +264,18 @@ export function DeliveryLinePanel({ provider, address, recipientName, onChangeAd
           <p className="mt-0.5 text-[11px] leading-4 text-muted">Lets the AI guide the approved delivery caller to your door. This does not place a call.</p>
         </div>
       </div>
+
+      {liveHelp && (
+        <div role="status" className={`mt-3 rounded-xl px-3 py-2.5 ${TONES[liveHelp.tone]}`}>
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold"><ShieldCheck size={14} weight="fill" className="shrink-0" />{liveHelp.title}</p>
+          <p className="mt-0.5 text-[11px] leading-4">{liveHelp.detail}</p>
+          {liveHelp.lines.length > 0 && (
+            <dl className="mt-1.5 space-y-0.5 text-[11px] leading-4 text-ink">
+              {liveHelp.lines.map((item) => <div key={item.label} className="flex gap-1.5"><dt className="shrink-0 text-muted">{item.label}:</dt><dd className="min-w-0">{item.value}</dd></div>)}
+            </dl>
+          )}
+        </div>
+      )}
 
       {view.kind === "loading" ? (
         <div className="mt-3 h-16 animate-pulse rounded-xl bg-surface-muted" aria-label="Checking the delivery line" />

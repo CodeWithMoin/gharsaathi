@@ -378,3 +378,46 @@ def test_tool_spec_never_contains_the_token() -> None:
     assert spec["headers"][0] == {"name": TOKEN_HEADER, "type": "static", "value": "<SARVAM_TOOL_TOKEN>"}
     assert [param["name"] for param in spec["body_params"]] == ["provider", "rider_location_hint"]
     assert tool_spec("http://insecure")["url"].startswith("<public origin>")
+
+
+@pytest.fixture
+def preview():
+    from app.auth import require_user_id
+
+    def run(svc: LiveDeliveryContextService, *, user: str = OWNER, provider: str | None = "zepto"):
+        app.dependency_overrides[get_live_context_service] = lambda: svc
+        app.dependency_overrides[require_user_id] = lambda: user
+        try:
+            params = {"provider": provider} if provider else None
+            return TestClient(app).get("/api/inbound-delivery/live-preview", params=params)
+        finally:
+            app.dependency_overrides.pop(get_live_context_service, None)
+            app.dependency_overrides.pop(require_user_id, None)
+
+    return run
+
+
+def test_owner_preview_shows_what_a_rider_would_hear(preview, caplog: pytest.LogCaptureFixture) -> None:
+    limiter = RateLimiter(limit=1)
+    svc = service(watch(TrackingStatus.OUT_FOR_DELIVERY), limiter=limiter)
+    with caplog.at_level(logging.INFO):
+        response = preview(svc)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is True
+    assert body["context"]["active"] == "yes" and body["context"]["delivery_address"] == HOME
+    # Not a Sarvam call: no tool log line and the tool's rate limit is untouched.
+    assert "event=sarvam_live_context" not in caplog.text
+    assert limiter.allow()
+
+
+def test_preview_when_the_tool_is_off_says_so_without_details(preview) -> None:
+    response = preview(service(watch(TrackingStatus.OUT_FOR_DELIVERY), sarvam_live_context_enabled=False))
+    assert response.status_code == 200
+    assert response.json() == {"enabled": False, "context": None}
+
+
+def test_preview_is_owner_only(preview) -> None:
+    response = preview(service(watch(TrackingStatus.OUT_FOR_DELIVERY)), user="someone-else")
+    assert response.status_code == 403
+    assert HOME not in response.text

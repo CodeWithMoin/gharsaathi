@@ -833,6 +833,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         ),
         routes=(
             "GET /api/inbound-delivery/config",
+            "GET /api/inbound-delivery/live-preview",
             "GET /api/inbound-delivery/directions",
             "PUT /api/inbound-delivery/directions",
             "DELETE /api/inbound-delivery/directions",

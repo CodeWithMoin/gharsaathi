@@ -26,7 +26,7 @@ from app.devtools.data import DevData, DevDataError
 from app.devtools.trace import read_traces
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
-PROXY_HEADERS = ("x-forwarded-for", "x-forwarded-host", "forwarded", "x-real-ip")
+PROXY_HEADERS = ("x-forwarded-for", "x-forwarded-host", "forwarded", "x-real-ip", "cf-connecting-ip")
 # Identity failures inside /api/dev look exactly like a missing route.
 HIDDEN_STATUS = frozenset({401, 403, 503})
 

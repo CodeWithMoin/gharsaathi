@@ -182,7 +182,7 @@ def raise_http(exc: ShoppingError) -> NoReturn:
     if isinstance(exc, ListNameTaken):
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     if isinstance(exc, (ListLimitReached, InvalidBasketChange)):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(422, str(exc)) from exc
     raise exc
 
 
@@ -201,7 +201,7 @@ async def create_list(
     try:
         items = await basket_items(baskets, user_id, body.from_baskets)
         if body.from_baskets and not items:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Your basket is empty, so there is nothing to save.")
+            raise HTTPException(422, "Your basket is empty, so there is nothing to save.")
         return list_out(await store.create(user_id, body.name, items))
     except ShoppingError as exc:
         raise_http(exc)
@@ -233,7 +233,7 @@ async def add_basket_to_list(
         current = await store.get(user_id, list_id)
         extra = await basket_items(baskets, user_id, body.providers)
         if not extra:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Your basket is empty, so there is nothing to add.")
+            raise HTTPException(422, "Your basket is empty, so there is nothing to add.")
         return list_out(await store.update(user_id, list_id, items=merge_items(current.items, extra)))
     except ShoppingError as exc:
         raise_http(exc)
@@ -263,5 +263,5 @@ async def add_list_to_basket(
     except ShoppingError as exc:
         raise_http(exc)
     if not saved.items:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"“{saved.name}” is empty. Add items to it first.")
+        raise HTTPException(422, f"“{saved.name}” is empty. Add items to it first.")
     return report_out(await add_items(baskets, user_id, saved.items, store_targets(body, swiggy, zepto)))

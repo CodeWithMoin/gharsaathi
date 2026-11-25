@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 from collections.abc import Callable
 from typing import Any
@@ -22,6 +23,8 @@ from app.tracking.models import (
 from app.tracking.notifications import meaningful_update, notification_message
 from app.tracking.ports import OrderTrackingProvider
 from app.tracking.store import OrderTrackingStore
+
+logger = logging.getLogger(__name__)
 
 
 MIN_POLL_INTERVAL_SECONDS = 10
@@ -65,6 +68,14 @@ class OrderTrackingService:
         return self._locks.setdefault(key, asyncio.Lock())
 
     async def start(self, user_id: str, request: StartTrackingRequest) -> TrackingRead:
+        async with self._lock_for(user_id, request.provider, request.order_id):
+            watch = self._start_watch(user_id, request)
+        # An immediate read is safe: this boundary exposes read-only operations only.
+        read = await self.refresh(user_id, watch.id)
+        self._line_started(read.order)
+        return read
+
+    def _start_watch(self, user_id: str, request: StartTrackingRequest) -> OrderWatch:
         now = self.now()
         try:
             watch = self.store.get(user_id, request.provider, request.order_id)
@@ -90,10 +101,7 @@ class OrderTrackingService:
                 updated_at=now,
             )
         self.store.save(watch)
-        # An immediate read is safe: this boundary exposes read-only operations only.
-        read = await self.refresh(user_id, watch.id)
-        self._line_started(read.order)
-        return read
+        return watch
 
     async def ensure(self, user_id: str, request: StartTrackingRequest) -> TrackingRead:
         """Start tracking an order once; a second call returns the existing watch.
@@ -271,10 +279,15 @@ class OrderTrackingService:
                 for watch in self.store.list(current_user, active_only=True)
                 if watch.next_check_at is None or watch.next_check_at <= now
             )
-        return [
-            await self.refresh(watch.user_id, watch.id)
-            for watch in due
-        ]
+        reads: list[TrackingRead] = []
+        for watch in due:
+            try:
+                reads.append(await self.refresh(watch.user_id, watch.id))
+            except Exception as exc:  # noqa: BLE001 - one broken watch must not stall the others
+                logger.warning("event=tracking_poll_watch_failed error=%s", type(exc).__name__)
+                # Back off like a transient provider failure, so it is not retried first every cycle.
+                reads.append(self._record_provider_failure(watch, TrackingProviderError(), self.now()))
+        return reads
 
     def _record_provider_failure(
         self, watch: OrderWatch, error: TrackingProviderError, now: datetime

@@ -138,3 +138,33 @@ export function stepsSummary(directions) {
   const steps = directions?.route_directions ?? [];
   return steps.length ? steps.map((step, index) => `${index + 1}. ${step}`) : [];
 }
+
+export const LIVE_PREVIEW_PATH = "/api/inbound-delivery/live-preview";
+const LIVE_STORES = { zepto: "Zepto", swiggy: "Swiggy" };
+const known = (value) => typeof value === "string" && value.trim() && value !== "NOT_AVAILABLE" ? value.trim() : null;
+
+/**
+ * "Live rider help": what the Sarvam agent's get_delivery_context tool would answer
+ * a rider calling right now (GET /live-preview). Null hides the section (off, or
+ * not readable). The server decides everything; this only words it.
+ */
+export function liveRiderHelpView(preview) {
+  if (!preview || preview.enabled !== true || !preview.context) return null;
+  const context = preview.context;
+  if (context.active !== "yes") {
+    return { tone: "neutral", title: "Live rider help is on", detail: "No order is on its way, so a rider calling now is told no delivery is expected.", lines: [] };
+  }
+  const store = LIVE_STORES[context.provider] ?? "Your";
+  const address = known(context.delivery_address);
+  const status = [known(context.order_status), known(context.eta) && `arriving ${known(context.eta)}`].filter(Boolean).join(" · ");
+  if (!address) {
+    return { tone: "warning", title: "Live rider help is on", detail: `Your ${store} order${status ? ` (${status})` : ""} has no saved address linked, so a rider calling now can't be guided. Choose the address for this store.`, lines: [] };
+  }
+  const lines = [
+    ["Address", address],
+    ["Landmark", known(context.landmark)],
+    ["Route", known(context.route_directions)],
+    ["Handover", known(context.handover_instructions)],
+  ].filter(([, value]) => value).map(([label, value]) => ({ label, value }));
+  return { tone: "success", title: "Live rider help is on", detail: `A ${store} rider calling now hears${status ? ` (${status})` : ""}:`, lines };
+}

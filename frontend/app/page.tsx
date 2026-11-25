@@ -153,7 +153,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   const searchRequestsRef = useRef(new Map<string, Promise<void>>());
   const lastSearchRef = useRef<{ key: string; at: number } | null>(null);
   const conversationSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const conversationSaveTimerRef = useRef<number | null>(null);
+  // Bumped whenever the open chat changes, so a late typed-turn reply is not applied to another chat.
+  const chatEpochRef = useRef(0);
   const pendingConversationSaveRef = useRef<(() => void) | null>(null);
   const chatMessagesRef = useRef<ChatMessage[]>([]);
   // Rider assist (beta): calls the AI answered show as a toast and a chat card.
@@ -457,7 +458,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     if (addressRequestRef.current) return addressRequestRef.current;
 
     const request = (async () => {
-      setLoading("addresses");
+      setLoading((value) => value ?? "addresses");
       try {
         const data = await apiRequest<{ addresses: Address[]; resolution: { default_address_id?: string }; needs_refresh?: boolean }>(`/api/swiggy/addresses${refresh ? "?refresh=true" : ""}`);
         setAddresses(data.addresses);
@@ -470,7 +471,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
       setMessage(text);
       if (cause instanceof ApiError && cause.status === 401) setConnected(false);
       } finally {
-        setLoading(null);
+        setLoading((value) => value === "addresses" ? null : value);
         setSwiggyAddressesLoaded(true);
       }
     })();
@@ -657,7 +658,6 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   useEffect(() => {
     if (!chatHydrated || (!submittedQuery && !chatMessages.length)) return;
     const save = () => {
-      conversationSaveTimerRef.current = null;
       pendingConversationSaveRef.current = null;
       const snapshot = conversationSnapshot({ submittedQuery, products: [], searched: false, messages: chatMessages, resultsAfterMessageId: null, timeline });
       conversationSaveQueueRef.current = conversationSaveQueueRef.current
@@ -682,11 +682,9 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     };
     const timer = window.setTimeout(save, 250);
     const flush = () => { window.clearTimeout(timer); save(); };
-    conversationSaveTimerRef.current = timer;
     pendingConversationSaveRef.current = flush;
     return () => {
       window.clearTimeout(timer);
-      if (conversationSaveTimerRef.current === timer) conversationSaveTimerRef.current = null;
       if (pendingConversationSaveRef.current === flush) pendingConversationSaveRef.current = null;
     };
   }, [apiRequest, chatHydrated, chatMessages, submittedQuery, timeline]);
@@ -853,10 +851,8 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   }, [chatHydrated, chatMessages, loading, submittedQuery, timeline, trackingOpen, voiceOpen]);
 
   async function startNewChat() {
-    if (conversationSaveTimerRef.current !== null) {
-      window.clearTimeout(conversationSaveTimerRef.current);
-      conversationSaveTimerRef.current = null;
-    }
+    pendingConversationSaveRef.current?.();
+    chatEpochRef.current += 1;
     setVoiceOpen(false);
     setSubmittedQuery("");
     setChatMessages([]);
@@ -872,9 +868,13 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     swapRef.current = null;
     followScrollRef.current = true;
     setQuery("");
+    // Saves scheduled after this point must reach the server after /new, not overwrite the old chat.
+    const started = conversationSaveQueueRef.current
+      .catch(() => undefined)
+      .then(() => apiRequest<null>("/api/conversations/new", { method: "POST" }));
+    conversationSaveQueueRef.current = started.then(() => undefined, () => undefined);
     try {
-      await conversationSaveQueueRef.current;
-      await apiRequest<null>("/api/conversations/new", { method: "POST" });
+      await started;
       setChatDrawerOpen(false);
       setRecentChats([]);
     } catch (cause) {
@@ -883,15 +883,14 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
   }
 
   async function openSavedChat(conversationId: string) {
-    if (conversationSaveTimerRef.current !== null) {
-      window.clearTimeout(conversationSaveTimerRef.current);
-      conversationSaveTimerRef.current = null;
-    }
+    pendingConversationSaveRef.current?.();
     try {
       await conversationSaveQueueRef.current;
       const conversation = await apiRequest<PersistedConversation>(`/api/conversations/${conversationId}/open`, { method: "POST" });
       setVoiceOpen(false);
       startFreshConversationRef.current = false;
+      // Not inside applyConversation: hydration merges turns typed while it loaded.
+      chatEpochRef.current += 1;
       applyConversation(conversation);
       setQuery("");
       setChatDrawerOpen(false);
@@ -981,6 +980,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     setVoiceOpen(false);
     setChatFailure(null);
     setLoading("assistant");
+    const epoch = chatEpochRef.current;
     try {
       await flushConversationSave();
       const turn = await apiRequest<ChatTurnResponse>("/api/chat/turn", {
@@ -988,6 +988,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversation_id: conversationIdRef.current, message: clean, attachment_id: attachmentId, swiggy_address_id: swiggyReady ? addressId : null, zepto_address_id: zeptoReady ? zeptoAddressId : null, ui_acks: pendingTypedAcksRef.current.splice(0, 4) }),
       });
+      if (epoch !== chatEpochRef.current) return;
       if (turn.conversation_id) conversationIdRef.current ??= turn.conversation_id;
       if (attachmentId) photo.consumed(attachmentId);
       const reply: ChatMessage = { id: `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}-assistant`, role: "assistant", content: turn.reply, modality: "text", created_at: new Date().toISOString() };
@@ -1001,6 +1002,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         if (outcome) setMessage(outcome.message);
       }
     } catch (cause) {
+      if (epoch !== chatEpochRef.current) return;
       const detail = cause instanceof ApiError && [502, 503, 504].includes(cause.status) ? cause.message : "GharSaathi couldn't reply just now.";
       setChatFailure({ query: clean, message: `${detail} You can search the stores directly instead.` });
     } finally {
@@ -1033,7 +1035,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
     setTimeline((current) => recordResultGroup(current, { ...identity, query: clean, products: [], status: "searching", afterMessageId }));
 
     const request = (async () => {
-      setLoading("search");
+      setLoading((value) => value ?? "search");
       setMessage(commerceMode === "demo" ? "Searching both static demo catalogues…" : "Checking each ready store once…");
       try {
         const searches: Promise<Product[]>[] = [];
@@ -1061,7 +1063,7 @@ function ShoppingChat({ startWithSetupOpen = false, userName }: { startWithSetup
         setTimeline((current) => dropResultGroup(current, identity.key));
         setMessage(cause instanceof Error ? cause.message : "Search failed.");
       } finally {
-        setLoading(null);
+        setLoading((value) => value === "search" ? null : value);
       }
     })();
     searchRequestsRef.current.set(searchKey, request);
