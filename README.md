@@ -13,27 +13,22 @@ Shop for household essentials by speaking in Hindi, English, or Hinglish.</p>
   <a href="docs/ARCHITECTURE.md">Read the architecture</a>
 </p>
 
-GharSaathi is a voice-first shopping assistant for Indian households. Tell it what you need and it checks connected Zepto and Swiggy Instamart catalogues, compares the available options, and prepares your basket.
-
-Before an order is placed, GharSaathi shows the items, fees, delivery address, and final payable amount. You place the order by tapping **Place order** on that exact bill.
-
-## Features
-
-- Understand shopping requests in Hindi, English, and Roman-script Hinglish
-- Accept voice, typed messages, and product photos
-- Search Zepto and Swiggy Instamart together
-- Compare price, pack size, availability, and delivery time
-- Build separate baskets for each store
-- Save shopping lists for later
-- Remember preferences that you choose to save
-- Show order status and provider-reported delivery estimates
-- Give an approved delivery rider your saved directions through the optional delivery line
+Say **“2 Amul doodh order kar do.”** GharSaathi can find the right milk, add two packs, calculate the store bill, and prepare an expiring order card in one conversation. You see the items, fees, address, and final amount before tapping **Place order**.
 
 ## Product tour
 
 ![Three GharSaathi mobile screens: the Hinglish home composer, a price comparison between Swiggy Instamart and Zepto, and a Zepto order card that requires a Place order tap](docs/images/product-tour.webp)
 
 *These screens use the sample catalogue. The prices and delivery times are demo data.*
+
+## The moments that make it click
+
+- **One sentence → a checkout-ready basket.** “2 Amul doodh order kar do” becomes the exact product, quantity, fees, total, and a five-minute order card.
+- **One question → a real comparison.** Ask “difference in price?” and see the same pack across stores with price per unit, availability, and delivery time.
+- **A product photo → matching store options.** Take a photo of a pack or label. GharSaathi reads the packaging, searches the catalogues, and puts the closest visual match first.
+- **“This is our usual” → useful next time.** GharSaathi can carry forward the brands, sizes, quantities, and avoidances a household chooses to save.
+- **Order placed → progress in the same chat.** Provider status, ETA, late delivery, and completion stay attached to the conversation where the order began.
+- **A declined rider call → directions to the door.** When the optional delivery line is enabled, it can answer an approved delivery caller and guide them using the saved landmark, route, gate note, and handover instructions.
 
 ## How an order works
 
