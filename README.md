@@ -19,16 +19,7 @@ GharSaathi searches connected Zepto and Swiggy Instamart catalogues, helps build
 
 ## A look inside
 
-<table>
-  <tr>
-    <th>Compare stores</th>
-    <th>Approve the exact order</th>
-  </tr>
-  <tr>
-    <td><img src="docs/images/compare-demo.webp" alt="Demo comparison of the same 5 kg atta at Swiggy Instamart and Zepto, including per-unit prices and availability" width="390"></td>
-    <td><img src="docs/images/order-card-demo.webp" alt="Demo order card with the basket, payable amount, expiry and separate Place order and Cancel buttons" width="390"></td>
-  </tr>
-</table>
+![Three mobile screens from GharSaathi demo mode: the Hinglish home composer, a price comparison between Swiggy Instamart and Zepto, and an exact Zepto order card that requires a separate Place order tap](docs/images/product-tour.webp)
 
 *Screenshots are from the sample catalogue. Prices and delivery times shown here are demo data, not live offers.*
 
