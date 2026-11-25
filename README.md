@@ -1,504 +1,113 @@
-# GharSaathi — Household Shopping Agent
+# GharSaathi
 
-## Quick start
+<p align="center">
+  <img src="frontend/public/gharsaathi-icon.png" alt="GharSaathi icon" width="84">
+</p>
 
-```bash
-make start        # real Zepto/Swiggy stores
-make start-demo   # demo catalogue, no store calls
-```
+<p align="center"><strong>Ghar ka saaman? Bol do.</strong><br>
+A voice-first shopping assistant for Indian households. Ask in Hindi, English, or Hinglish; compare what nearby stores offer; and decide what to buy yourself.</p>
 
-One command checks setup and tells you only what's missing (tools, `OPENAI_API_KEY`,
-Clerk keys), installs frontend packages on first run, starts the Zepto login helper if
-needed (asks for your Mac password once), runs database migrations, starts everything,
-and opens http://localhost:3003. Stop with `make stop`; check with `make status`,
-or `make doctor` for a full readiness table ([docs/DEV_TOOLS.md](docs/DEV_TOOLS.md)).
+<p align="center">
+  <a href="https://www.loom.com/share/ce3eb455ab484b059d11ee0382ed2d65">Watch the 4-minute demo</a> ·
+  <a href="#run-the-demo">Run it locally</a> ·
+  <a href="docs/ARCHITECTURE.md">How it works</a>
+</p>
 
-The local app starts in a safe static-demo mode. It can exercise address selection,
-product search, baskets, deterministic fees, and exact-bill approval without calling
-Swiggy or Zepto. Live mode additionally supports an approval-bound Zepto
-cash-on-delivery checkout; demo mode never places orders.
+GharSaathi searches connected Zepto and Swiggy Instamart catalogues, helps build a basket, shows the exact bill, and keeps the conversation in one place. It remembers preferences you choose to save. When a real order is on its way, it can show tracking updates; an optional, owner-configured delivery line can guide a rider using saved directions.
 
-## Safe demo versus live commerce
+**Nothing is purchased because an AI said "yes."** A person must tap **Place order** on a short-lived card bound to the exact basket, amount, and address. Demo mode never calls a commerce provider or places an order.
 
-```bash
-make dev       # default: static fixtures, zero commerce API/MCP calls
-make dev-live  # explicit opt-in: live provider connections and MCP tools
-```
+## A look inside
 
-Demo mode is the right place to iterate on UI, voice, chat, basket, and confirmation
-flows. It returns a local sample address and catalogue and calculates sample fees in
-deterministic backend code. Both provider cards remain visible, but no provider OAuth,
-search, cart, or catalogue-discovery request is made.
+<table>
+  <tr>
+    <th>Compare stores</th>
+    <th>Approve the exact order</th>
+  </tr>
+  <tr>
+    <td><img src="docs/images/compare-demo.webp" alt="Demo comparison of the same 5 kg atta at Swiggy Instamart and Zepto, including per-unit prices and availability" width="390"></td>
+    <td><img src="docs/images/order-card-demo.webp" alt="Demo order card with the basket, payable amount, expiry and separate Place order and Cancel buttons" width="390"></td>
+  </tr>
+</table>
 
-In live mode, ordinary reloads do not fetch Swiggy addresses again: the backend
-returns the database snapshot and saved selection, and only **Refresh from Swiggy**
-calls a Swiggy address tool (its rate limits are strict).
+*Screenshots are from the sample catalogue. Prices and delivery times shown here are demo data, not live offers.*
 
-Zepto is the one exception. Its read-only `list_saved_addresses` refreshes the
-snapshot automatically, within bounds: when the app loads or a voice session or
-typed chat turn starts and the snapshot is older than
-`ZEPTO_ADDRESS_REFRESH_MAX_AGE_MIN` (default 30) minutes; when the Zepto address
-picker opens and the snapshot is older than 5 minutes; and when selecting the saved
-address fails because it is no longer in the account. At most one refresh runs per
-user and at most one starts every 2 minutes; a request waits at most ~1.5 s, then
-continues with the cached snapshot while the refresh lands. A first snapshot is
-still the user's explicit **Refresh from Zepto** tap. If the selected address was
-deleted in Zepto, the selection is cleared (never replaced, even when only one
-address is left), the Zepto basket keeps its items but its open bill and order card
-are invalidated, and the screen shows "Your Zepto address changed — choose a
-delivery address", which opens the picker. Searches and final-bill requests are live
-actions and are clearly labelled in the UI.
+### What you can do
 
-## Verified Swiggy contract
+- **Talk or type naturally.** Ask for milk in Hinglish, switch products mid-sentence, or attach a photo of a pack. Voice, typed chat, and photo understanding use OpenAI; the basket and prices do not depend on model arithmetic.
+- **Shop across stores.** Search products, compare availability, pack size, price, and delivery estimates, then keep separate baskets and bills for each store.
+- **Keep your household context.** See, correct, or delete saved preferences; reuse shopping lists. Past purchases are never treated as proof that you need more.
+- **Review before ordering.** A live Zepto checkout requires an exact bill, explicit approval, and a separate tap on the final order card. An unknown provider outcome is checked read-only, never blindly retried.
+- **Follow a delivery.** Track provider-reported status and ETA. The optional delivery line uses saved address directions and never asks for an OTP, PIN, or payment details.
 
-The integration was checked against the official Swiggy Builders Club documentation on 21 November 2026:
+## Run the demo
 
-- Instamart Streamable HTTP endpoint: `https://mcp.swiggy.com/im`
-- Authentication: OAuth 2.1 authorization code flow with PKCE S256 and Dynamic Client Registration
-- Client registration: `POST https://mcp.swiggy.com/auth/register`
-- Authorization: `GET https://mcp.swiggy.com/auth/authorize`
-- Token exchange/refresh: `POST https://mcp.swiggy.com/auth/token`
-- Read-only tools: `get_addresses` and `search_products`
-- Tool data: `structuredContent`, normally containing a `{ success, data }` envelope
+This is the safest way to explore the app: sample catalogue and address, deterministic fees, **no Zepto/Swiggy account and no real cart, checkout, payment, or order calls**.
 
-References: [authentication](https://mcp.swiggy.com/builders/docs/start/authenticate/), [MCP protocol](https://mcp.swiggy.com/builders/docs/reference/protocol/), [get_addresses](https://mcp.swiggy.com/builders/docs/reference/instamart/get_addresses/), and [search_products](https://mcp.swiggy.com/builders/docs/reference/instamart/search_products/).
-
-The backend discovers `tools/list` once per authenticated MCP session and validates
-each tool call against the returned live JSON Schema. The same persistent session and
-catalogue are reused for later reads instead of re-initializing MCP for every request.
-Swiggy notes that a user's live catalogue may differ from the public reference.
-
-## Swiggy rate limits
-
-Swiggy does not publish fixed request caps or remaining-quota headers. Its gateway
-can return HTTP `429` with `Retry-After`; at the MCP layer the corresponding error
-code is `-32000`. The backend captures the raw header before the Python MCP SDK can
-wrap the transport error, and also recognizes JSON-RPC and proxy-style 429 messages.
-
-The exact provider delay becomes a shared local cooldown for the linked account. If
-an MCP bridge hides the header, the configurable fallback is 30 seconds. During the
-cooldown the backend returns `429` immediately without probing Swiggy, includes a
-browser-visible `Retry-After` response header, and leaves Zepto unaffected. Every
-provider rejection logs a generated correlation ID, operation name, delay, and delay
-source without logging tokens, addresses, response bodies, or search text.
-
-If a 429 remains after a genuine quiet period, stop all other clients using the same
-Swiggy identity and make one controlled request. Escalate a continued failure to
-`builders@swiggy.in` with the correlation ID, timestamp/timezone, MCP endpoint, HTTP
-status, JSON-RPC code, and `Retry-After` value. Never include an access token or OTP.
-
-Reference: [Swiggy rate-limit guidance](https://mcp.swiggy.com/builders/docs/operate/rate-limits/).
-
-## Optional Jev relevance reranker
-
-Product results always pass through deterministic query, exact-brand, availability,
-and result-cap rules first. An optional Jev second stage may then reorder only that
-shortlist; it cannot add products or change provider fields. It has a two-second
-deadline, a 60-second fingerprint cache, and a circuit breaker that pauses calls for
-30 seconds after three consecutive failures. Any failure returns the deterministic
-order.
-
-Keep it off until the provider-free and labelled Jev evaluations pass:
-
-```dotenv
-JEV_API_KEY=
-JEV_MODEL=jev-1.14.0
-JEV_TIMEOUT_SECONDS=2.0
-JEV_RERANKING_ENABLED=false
-```
+**You need:** macOS or Linux, Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node.js 20+ with npm, PostgreSQL 15+, a Clerk *development* instance, and an OpenAI API key for chat/voice/photo. The sample catalogue and basket do not call OpenAI, but the `make start-demo` launcher checks that a key is configured. On macOS, it can start a local Homebrew PostgreSQL instance; on Linux, start PostgreSQL yourself.
 
 ```bash
-cd backend
-python -m evaluation.run_relevance_benchmark  # zero external calls
-python -m evaluation.run_jev_relevance        # synthetic Jev calls; zero commerce calls
+git clone https://github.com/CodeWithMoin/gharsaathi.git
+cd gharsaathi
+cp .env.example .env
+cp frontend/.env.local.example frontend/.env.local
 ```
 
-The Jev request contains only the shopping query and the shortlisted product name,
-brand, and pack size. It never receives provider credentials, addresses, baskets,
-prices, user IDs, or order data.
-
-## Local setup
-
-Requirements for demo mode: Python 3.11+, Node.js 20+, and PostgreSQL. Live mode also
-requires provider accounts and a browser for the providers' phone/OTP pages.
-
-The common local flows have shell wrappers:
+Create a PostgreSQL database and user, then set `DATABASE_URL` in `.env` to a working `postgresql+asyncpg://…` URL. Generate an encryption key with the command below and put its output in `APP_ENCRYPTION_KEY` in `.env`:
 
 ```bash
-make setup          # create missing local env files and install dependencies
-make dev            # safe demo frontend + backend
-make dev-live       # deliberately enable connected providers
-make swiggy-doctor # read-only Swiggy readiness check
-make zepto-doctor  # read-only Zepto and callback-bridge readiness check
-make check          # backend + frontend tests, lint, and type-check
-make check-full     # same checks plus a production frontend build
+python3 -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
 ```
 
-These wrappers preserve existing environment files. Doctor and verification scripts
-do not make OAuth, MCP, cart, checkout, payment, or order calls.
-
-1. Create the root environment file and encryption key:
-
-   ```bash
-   cp .env.example .env
-   python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
-   ```
-
-   Paste the generated value into `APP_ENCRYPTION_KEY` in `.env`. Do not commit `.env` or reuse this local key in production.
-
-2. Confirm this exact callback value in `.env`:
-
-   ```dotenv
-   SWIGGY_OAUTH_REDIRECT_URI=http://localhost:8000/api/swiggy/oauth/callback
-   ```
-
-   Swiggy documents exact-match redirect allowlisting. Its public manifest lists localhost callbacks, but if this path is rejected, ask `builders@swiggy.in` to allowlist the exact URI above. Production redirects require HTTPS and Swiggy onboarding.
-
-3. Install and run the backend:
-
-   ```bash
-   cd backend
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   uvicorn app.main:app --reload --port 8000 --no-access-log
-   ```
-
-4. In a second terminal, install and run the frontend:
-
-   ```bash
-   cd frontend
-   cp .env.local.example .env.local
-   npm install
-   npm run dev
-   ```
-
-5. Open [http://localhost:3003](http://localhost:3003), choose **Connect securely**, and complete phone/OTP authentication only on Swiggy's page. After Swiggy redirects back, choose a saved address and search for `Fortune cooking oil 1 litre`.
-
-No manually issued client ID, client secret, Swiggy password, or pasted access token is required. Swiggy returns a public-client ID through DCR. OAuth state and the PKCE verifier remain in backend memory and expire after ten minutes.
-
-## Zepto connection and product search
-
-The app can also connect a local Zepto account through the official [Zepto MCP](https://github.com/zeptonow/mcp) OAuth flow. It uses Dynamic Client Registration, PKCE S256, and the official Streamable HTTP MCP endpoint. Zepto accepts the allowlisted `http://localhost/callback` registration, so start the callback bridge in a third terminal before connecting:
+Set `OPENAI_API_KEY` and `CLERK_SECRET_KEY` in `.env`. Set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` in `frontend/.env.local` using keys from the **same Clerk development instance**. Keep the example's `http://localhost:3003` origins (or update the frontend URL, CORS origins, and authorized parties together if you change ports). Never commit either env file.
 
 ```bash
-cd backend
-sudo uvicorn app.local_callback_bridge:app --host 127.0.0.1 --port 80 --no-access-log
+make start-demo    # installs missing frontend dependencies, migrates the DB, starts both servers
+make status
 ```
 
-Before opening OAuth, use the safe readiness wrapper:
+Open **http://localhost:3003**. The backend is at `http://127.0.0.1:8000` (`/health` and `/docs`). `make stop` shuts down the app. For a test login with development Clerk keys, sign up using a fresh `+clerk_test` email and code `424242`. No email is sent.
+
+Try `2 Amul doodh order kar do`, `atta search karo`, and `difference in price?`. The demo order card will **refuse** a real checkout on tap. That refusal is expected.
+
+The full setup, including Linux commands, provider OAuth callbacks, and troubleshooting, is in [AGENTS.md](AGENTS.md) and the [developer guide](docs/DEVELOPER_GUIDE.md).
+
+## Under the hood
+
+```mermaid
+flowchart LR
+    U["Browser · voice / chat / photo"] -->|Clerk session| A["FastAPI"]
+    A --> O["OpenAI · interpret intent"]
+    A --> R["Shopping rules · prices / approval"]
+    R --> P["Zepto + Instamart adapters"]
+    A --> D[("PostgreSQL · conversations / baskets / memory")]
+    T["Optional Sarvam delivery line"] -->|saved directions, owner only| A
+```
+
+The model can understand a request and suggest a tool call. The backend validates permissions, provider results, arithmetic, and order state. Provider tokens stay server-side. See [the architecture](docs/ARCHITECTURE.md), [capability matrix](docs/CAPABILITIES.md), and [failure modes](docs/FAILURE_MODES.md) for the deeper contracts.
+
+| Part | Built with |
+| --- | --- |
+| Web | Next.js 15, React 19, TypeScript, Tailwind |
+| API | FastAPI, Pydantic, SQLAlchemy |
+| Data | PostgreSQL; encrypted local provider connections |
+| Voice and understanding | OpenAI Realtime + backend-delegated shopping tools |
+| Commerce | Official Swiggy Instamart and Zepto MCP integrations |
+| Delivery assistance | Optional Sarvam inbound voice agent |
+
+## Safety and current scope
+
+- **Demo is offline from stores.** Live mode requires your own provider connections and can touch a real basket or place an order after the final tap; use it only when you mean to.
+- **Live Zepto is for supervised, local, single-user use.** Provider connection files are encrypted but deployment-global. Multi-user production needs per-user provider credentials and sessions.
+- **The delivery line is opt-in and owner-configured.** It does not automatically work for everyone who clones the repo.
+- **Provider data is conditional.** Catalogues, addresses, prices, delivery estimates, OAuth access, and call routing depend on external services. The README screenshots are demo data.
+
+## Verify and explore
 
 ```bash
-make zepto-doctor
+make test         # backend + frontend tests; provider calls mocked
+make check        # tests, lint, type-check
+make check-full   # above + production frontend build
 ```
 
-It checks only local prerequisites and the callback bridge; it does not open OAuth,
-call Zepto, change a cart, preview, pay, or order anything.
-
-Then use `GET /api/zepto/oauth/start` (the UI's **Connect Zepto** action) and
-complete the phone/OTP flow only on Zepto's site. The callback bridge forwards the
-result to the backend, which validates OAuth state and keeps the token encrypted
-locally. After connecting, use **Refresh from Zepto** once to fetch and save the
-account's delivery addresses. Later reloads use that database snapshot; it is
-refreshed automatically only within the bounds described above. Swiggy and Zepto can stay connected together; a shopping request searches every
-provider whose saved address is ready.
-
-The authenticated Zepto catalogue was inspected before enabling actions. This build
-exposes saved-address retrieval and explicit address creation, product search,
-read-only cart/order history, and one
-narrow cash-on-delivery checkout path. It keeps one serialized MCP
-session, caches the live tool catalogue for that session, reuses the selected address
-and past-order context, and caches an identical search briefly. A provider 429 starts
-a local cooldown so repeated UI actions do not keep extending the block. Zepto cart,
-payment, and order tools are not exposed generically. The COD flow replaces the Zepto
-cart with the exact local basket, obtains `create_order(confirmOrder=false)`, strictly
-reconciles the returned integer-paise bill, requires exact bill approval, then exposes
-a separate one-shot `confirmOrder=true` action. It persists an idempotent attempt before
-dispatch and treats any ambiguous result as outcome-unknown without retrying. The OAuth
-scope remains fixed to `tools:read`, matching the verified live catalogue.
-
-The preview response contract and cleanup were verified against a connected test
-account on 22 November 2026 without placing an order. The final confirmation parser is
-deliberately strict, but its success response cannot be live-verified without placing a
-real order; the first real checkout must therefore be treated as a supervised test.
-
-Zepto final-bill previews also expose conservative smart-savings guidance. The
-backend validates free-delivery progress and offer-card money as integer paise. It
-shows the remaining threshold, provider-confirmed benefit, and true net extra; locked
-bank offers never become a claimed saving. With explicit purchase-history consent,
-the user can tap one remembered Zepto item to check it. The backend then requires the
-same provider product ID, a current available variant and live price, a purchase in
-the last 90 days, and enough value for that item alone to unlock the benefit. History
-never adds an item by itself. Adding the suggestion is a separate action that
-invalidates the old approval and requires a fresh live bill and approval.
-
-### Optional live preview diagnostic
-
-After connecting Zepto, a supervised developer can capture a privacy-redacted,
-**unconfirmed** checkout preview without manually preparing a cart:
-
-```bash
-COMMERCE_MODE=live ./scripts/zepto-preview.sh --seed-preview-cleanup
-```
-
-The script requires typing `PREVIEW` (or an explicit `--yes` for supervised
-automation), selects the first saved address, adds one inexpensive milk item, calls
-`create_order(confirmOrder=false)`, and removes its own item in cleanup. It never
-calls `confirmOrder=true`, never pays, and never places an order. `make zepto-preview`
-opens the same guarded flow. If cleanup reports a failure, inspect the Zepto cart
-manually before any further provider action.
-
-The current encrypted Zepto connection file is deployment-global, not user-scoped.
-Consequently, live Zepto checkout is **local single-user testing only** and must not be
-enabled in a multi-user deployment. Production use requires a separate encrypted Zepto
-connection and provider session for each authenticated user. The in-process coordinator
-also serializes this app's preview-through-confirm flow, but it cannot make undocumented
-guarantees about provider state changed outside this MCP session.
-
-## Local token storage
-
-The single-user connection is encrypted with Fernet and stored at `backend/.data/swiggy_connection.enc` by default. The file is created with mode `0600`, excluded from Git, and never returned to the browser or logged. If `APP_ENCRYPTION_KEY` is not set, local development creates a private key once at `backend/.data/app_encryption.key` and reuses it across backend restarts. The application redacts OAuth callback query parameters from Uvicorn logs; the documented development command also disables access logs as defense in depth. Keep the configured encryption key stable across backend restarts. Changing or deleting it makes the existing encrypted connection unreadable; delete the local encrypted connection file and reconnect if you intentionally rotate the key.
-
-For a multi-user deployment, replace both provider file stores with per-user encrypted
-database or vault storage and complete each provider's supported delegated-auth or
-enterprise onboarding. Do not expose the Zepto checkout route before that account binding
-is implemented.
-
-## Voice turn-taking
-
-`VOICE_TURN_TAKING` selects how GPT-Live voice handles pauses and interruptions:
-`native` (default), `tuned` (interruption/patience policy in the Live instructions) or
-`smart_turn` (tuned plus a browser-side Hinglish end-of-turn model and barge-in). For
-`smart_turn`, fetch and verify the model once with `cd frontend && npm run
-fetch:smart-turn-model`; without it the browser falls back to `tuned`. Findings,
-measurements and the evaluation command are in
-[`docs/voice-turn-taking.md`](docs/voice-turn-taking.md).
-
-## Browser notifications (optional)
-
-Order updates (placed, out for delivery, delivered, running late, cancelled, an order
-the store still hasn't confirmed, payment needing action, an untapped order card about
-to expire) can also arrive as browser notifications. They are opt-in per person in
-**Settings → Notifications**, and the browser asks for permission only after that tap
-(or after "Turn on" in the one-time prompt shown after the first placed order).
-
-Owner setup, once:
-
-```bash
-make vapid-keys          # prints three lines to this terminal only
-# paste WEB_PUSH_VAPID_PUBLIC_KEY, WEB_PUSH_VAPID_PRIVATE_KEY and WEB_PUSH_SUBJECT
-# (mailto: you) into the repository .env, then restart the backend
-```
-
-Without all three (or with a public key that doesn't match the private key) the
-feature is hidden and Settings shows a setup hint. Keep the keys stable: new keys
-invalidate every browser subscription, and each person turns notifications on again.
-
-Where it works: Chrome, Edge, Firefox and Safari on macOS, and Chrome/Firefox on
-Android, on `https://` or `http://localhost`. A plain-`http` LAN address
-(`http://192.168.x.x:3003`) is not a secure context, so browsers refuse push there.
-On iPhone and iPad (iOS/iPadOS 16.4+) web push works only after **Share → Add to
-Home Screen**; open GharSaathi from the Home Screen icon and turn notifications on
-there. Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#browser-notifications).
-
-## Capability matrix
-
-[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) lists every user-facing capability
-against voice, typed chat, on-screen UI and backend, with status and reasons. It is
-generated from `backend/app/capabilities.py`, and `backend/tests/test_capabilities.py`
-fails when a route or voice tool is added without a registry entry. When you add or
-wire up a feature:
-
-1. Update the capability (status per surface, `voice_tools`, `routes`) in
-   `backend/app/capabilities.py`.
-2. From `backend/`: `uv run --with-requirements requirements.txt python -m app.capabilities --write`
-3. Run `uv run --with-requirements requirements.txt pytest tests/test_capabilities.py -q`.
-
-## API surface
-
-- `GET /health`
-- `GET /api/swiggy/connection`
-- `GET /api/swiggy/oauth/start`
-- `GET /api/swiggy/oauth/callback`
-- `POST /api/swiggy/disconnect`
-- `GET /api/swiggy/tools` — authenticated live catalogue, for diagnostics
-- `GET /api/swiggy/addresses?page=1&pageSize=10`
-- `POST /api/swiggy/search` with `{"query":"Fortune cooking oil 1 litre","address_id":"<saved-address-id>","offset":0}`
-- `POST /api/swiggy/search/personalized` — applies only confirmed, permitted,
-  category-relevant memories and returns which memories were used
-- `GET /api/zepto/connection`
-- `GET /api/zepto/oauth/start`
-- `GET /api/zepto/oauth/callback`
-- `POST /api/zepto/disconnect`
-- `GET /api/zepto/addresses?refresh=false` — database snapshot by default; provider
-  access when `refresh=true`, or with `auto=load` / `auto=picker` when the snapshot
-  is older than 30 / 5 minutes (bounded, debounced, ~1.5 s wait); the response's
-  `selection_removed` is true while a deleted selection awaits the user's choice
-- `POST /api/zepto/addresses` — explicitly add a user-entered address and delivery
-  contact to the connected Zepto account, then refresh the local snapshot
-- `PUT /api/zepto/addresses/selected`
-- `POST /api/zepto/search` with
-  `{"query":"milk and bread","address_id":"<saved-address-id>","page_number":0}`
-- `POST /api/zepto/offer-suggestions` — read-only exact live check for one
-  user-selected, consented usual against a provider-confirmed free-delivery threshold
-- `POST /api/zepto/checkout/cod` with an approved `approval_id`, its exact
-  `fingerprint`, and an `Idempotency-Key` header — one-shot live COD submission
-- `GET /api/notifications/vapid-public-key`, `GET|PUT /api/notifications/settings`,
-  `POST|DELETE /api/notifications/subscriptions`, `POST /api/notifications/test` —
-  the signed-in user's own browser notifications (see above)
-
-## Person-scoped memory
-
-The backend includes a PostgreSQL-ready memory layer for explicit user preferences,
-corrections, and purpose-specific consent. Conversation state and durable memory are
-kept separate. A memory must be confirmed before retrieval, and retrieval requires
-both an allowed purpose on the memory and a matching active permission.
-
-`make dev` starts the local Homebrew PostgreSQL instance when needed, creates the
-`equal_ai` development database, and applies migrations before starting the API.
-To configure another database or apply migrations manually:
-
-```bash
-cd backend
-alembic upgrade head
-```
-
-User-scoped endpoints require a Clerk session token in the cross-origin
-`Authorization: Bearer …` header. The backend verifies the token and uses its `sub`
-claim as the external identity; browser-supplied user IDs are not trusted. Baskets and
-approvals are stored in the database under that identity and survive backend restarts.
-
-- `POST /api/memory/proposals`
-- `POST /api/memory/extract` — extracts evidence-backed proposals from one user message
-- `GET /api/memory`
-- `POST /api/memory/{memory_id}/confirm`
-- `POST /api/memory/{memory_id}/reject`
-- `POST /api/memory/{memory_id}/correct`
-- `DELETE /api/memory/{memory_id}`
-- `PUT /api/memory/permissions/{data_category}/{purpose}`
-- `GET /api/memory/permissions`
-- `POST /api/memory/retrieve`
-
-The initial policy blocks memory purposes related to differential pricing, credit,
-eligibility, employment, housing, insurance, and pressure targeting. Corrections
-create a new confirmed record and retain the superseded record and audit events.
-
-Memory extraction uses the versioned structured-output prompt in
-`backend/app/memory/prompts.py`. If `OPENAI_API_KEY` is configured, the backend uses
-the Responses API with a strict Pydantic output schema and the model selected by
-`MEMORY_EXTRACTION_MODEL`. Without a key, it falls back to a high-precision local
-English/Hinglish ruleset. Model output never becomes confirmed memory automatically:
-the evidence must occur verbatim in the user's message, and the UI asks the user to
-**Confirm & use** or reject each proposal.
-
-The first extraction version recognizes brand, pack-size, quantity, dietary, and
-product-avoidance preferences. It deliberately excludes demographics, precise
-location, financial profiling, health conditions, relationships, and business data.
-
-### Voice recall before search
-
-For a broad request such as "deo order karna hai", the voice backend first calls
-`recall_household_preferences` (read-only). It returns at most four of the signed-in
-person's own candidates, labelled `confirmed_preference` (confirmed memories whose
-type has an active `personalize_search` permission) or `purchase_history` (delivered,
-retained orders, only with `purchase_history/proactive_reorder` consent), plus the
-consent state. The assistant then asks one question ("… wahi chahiye?") or, with
-nothing remembered, asks for brand and size. A past purchase is never treated as
-current need or stock. Live check (OpenAI only, demo catalogues):
-`python -m evaluation.run_voice_memory_recall`.
-
-### Sample household seed (demo mode only)
-
-```bash
-make seed-sample-household            # optional: USER_ID=user_… HOUSEHOLD=USR-006
-make unseed-sample-household
-```
-
-Loads one fictional household from `backend/tests/fixtures/sample_households.json`
-(Instamart orders and confirmed brand/pack-size memories) into one signed-in user's
-records. Without `USER_ID` it uses the only signed-in user in the database and
-otherwise lists them. It refuses unless `COMMERCE_MODE=demo`, never calls a provider,
-and grants sample-scoped purchase-history (90 days) and `personalize_search`
-permissions if they are not already on. Seeded orders use `sample-` order ids and
-memories use the `sample-household-seed` source, so the unseed command removes only
-them; it leaves permissions for you to change in settings.
-
-### Settle unknown Zepto orders
-
-```bash
-make reconcile-unknown ARGS=--dry-run   # read-only; ARGS=--apply settles single matches
-```
-
-Checks every `outcome_unknown` Zepto checkout against Zepto's order history (read-only
-tools only). Like the seed commands it runs through `scripts/backend-cli.sh`, which uses
-the same `DATABASE_URL` as the app (`scripts/local-env.sh`).
-
-## Voice transcript turns and event diagnostics
-
-GPT-Live transcript events (`session.input_transcript.delta`,
-`session.output_transcript.delta`) have no item id and no done event; each
-fragment carries `start_ms`/`end_ms` on the session timeline, and the app
-chooses message boundaries
-([Live conversations: transcript deltas](https://developers.openai.com/api/docs/guides/live-conversations#transcript-deltas)).
-`frontend/app/voice-transcript-turns.mjs` closes a speaker's bubble after a
-1.8 s timeline silence, when the other speaker talks for 0.9 s or more during
-that silence, on Realtime lifecycle events (`input_audio_buffer.speech_*`,
-`response.created/done`) or `session.paused`, and when the other speaker's turn
-closes after this speaker had already stopped. A short backchannel does not
-split an ongoing sentence.
-
-To see which events a real session actually delivers, turn on the content-free
-event recorder. It records event type, the names of id fields that are present,
-timing values and text lengths. It never records transcript text, tool arguments
-or id values.
-
-- Browser (data channel and tool SSE), outside production builds: run
-  `localStorage.setItem("gharsaathi:voice-event-log", "1")` in the console, then
-  start voice. Or set `NEXT_PUBLIC_VOICE_EVENT_LOG=1` before `npm run dev`/`build`.
-  Entries are logged with `console.debug("[voice-event]", …)` and kept in
-  `window.__gharsaathiVoiceEvents`. Copy them with
-  `copy(JSON.stringify(window.__gharsaathiVoiceEvents))`. To turn it off, run
-  `localStorage.removeItem("gharsaathi:voice-event-log")`.
-- Backend sideband: set `VOICE_EVENT_LOG=true` in `.env` and restart the backend.
-  Lines are logged at WARNING (so they show without extra logging setup) as
-  `Voice sideband event {...}`.
-- Start latency: with either flag on, each voice start also records
-  `voice.start_timing` entries (stage names and milliseconds only). The browser
-  entry (`source: "client"`) has `offer`, `mic`, `ice`, `chat_saved`,
-  `session_created`, `answer_applied`, `channel_open` and `session_started`,
-  each measured from the tap. With `VOICE_EVENT_LOG=true` the backend logs
-  `event=voice_session_start_timing profile_ms=… context_ms=… openai_ms=… total_ms=…`
-  and returns the same numbers to the browser (`source: "server"`). An offline
-  benchmark of the backend stages with fakes:
-  `cd backend && PYTHONPATH=. uv run --with-requirements requirements.txt python scripts/bench_voice_start.py`.
-- Turn latency: with `VOICE_EVENT_LOG=true` the backend also logs, per shopping
-  turn, `event=voice_delegation_timing` (first function call, tool wait,
-  continuation to next backend event, first text, total, rounds),
-  `event=voice_tool_timing` / `event=chat_tool_timing` per tool (memory,
-  `swiggy_instamart_ms`, `zepto_ms`, `post_ms`) and `event=chat_turn_timing` for
-  typed turns. Benchmark (offline fakes by default; `--live` uses OpenAI with the
-  demo catalogues only):
-  `cd backend && PYTHONPATH=. uv run --with-requirements requirements.txt python -m evaluation.run_turn_latency [--live --runs 5 --effort low]`.
-
-## Verification
-
-Backend:
-
-```bash
-cd backend
-pytest -q
-python -m evaluation.run_memory_extraction
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm run lint
-npx tsc --noEmit
-npm run build
-```
-
-Automated tests mock OAuth and MCP results. They never call live cart, checkout,
-payment, or order tools. Live provider verification is always a deliberate manual step;
-never use `confirmOrder=true` merely to test the integration.
+Start in [the developer guide](docs/DEVELOPER_GUIDE.md) for the exact OAuth setup and advanced workflows. The [demo video](VIDEO.md) walks through shopping, approval, tracking, and the delivery line.
