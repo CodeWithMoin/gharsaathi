@@ -5,37 +5,62 @@
 </p>
 
 <p align="center"><strong>Ghar ka saaman? Bol do.</strong><br>
-A voice-first shopping assistant for Indian households. Ask in Hindi, English, or Hinglish; compare what nearby stores offer; and decide what to buy yourself.</p>
+Shop for household essentials by speaking in Hindi, English, or Hinglish.</p>
 
 <p align="center">
   <a href="https://www.loom.com/share/ce3eb455ab484b059d11ee0382ed2d65">Watch the 4-minute demo</a> ·
-  <a href="#run-the-demo">Run it locally</a> ·
-  <a href="docs/ARCHITECTURE.md">How it works</a>
+  <a href="#run-the-demo">Run the demo</a> ·
+  <a href="docs/ARCHITECTURE.md">Read the architecture</a>
 </p>
 
-GharSaathi searches connected Zepto and Swiggy Instamart catalogues, helps build a basket, shows the exact bill, and keeps the conversation in one place. It remembers preferences you choose to save. When a real order is on its way, it can show tracking updates; an optional, owner-configured delivery line can guide a rider using saved directions.
+GharSaathi is a voice-first shopping assistant for Indian households. Tell it what you need and it checks connected Zepto and Swiggy Instamart catalogues, compares the available options, and prepares your basket.
 
-**Nothing is purchased because an AI said "yes."** A person must tap **Place order** on a short-lived card bound to the exact basket, amount, and address. Demo mode never calls a commerce provider or places an order.
+Before an order is placed, GharSaathi shows the items, fees, delivery address, and final payable amount. You place the order by tapping **Place order** on that exact bill.
 
-## A look inside
+## What it can do
 
-![Three mobile screens from GharSaathi demo mode: the Hinglish home composer, a price comparison between Swiggy Instamart and Zepto, and an exact Zepto order card that requires a separate Place order tap](docs/images/product-tour.webp)
+- Understand shopping requests in Hindi, English, and Roman-script Hinglish
+- Accept voice, typed messages, and product photos
+- Search Zepto and Swiggy Instamart together
+- Compare price, pack size, availability, and delivery time
+- Build separate baskets for each store
+- Save shopping lists for later
+- Remember preferences that you choose to save
+- Show order status and provider-reported delivery estimates
+- Give an approved delivery rider your saved directions through the optional delivery line
 
-*Screenshots are from the sample catalogue. Prices and delivery times shown here are demo data, not live offers.*
+## Product tour
 
-### What you can do
+![Three GharSaathi mobile screens: the Hinglish home composer, a price comparison between Swiggy Instamart and Zepto, and a Zepto order card that requires a Place order tap](docs/images/product-tour.webp)
 
-- **Talk or type naturally.** Ask for milk in Hinglish, switch products mid-sentence, or attach a photo of a pack. Voice, typed chat, and photo understanding use OpenAI; the basket and prices do not depend on model arithmetic.
-- **Shop across stores.** Search products, compare availability, pack size, price, and delivery estimates, then keep separate baskets and bills for each store.
-- **Keep your household context.** See, correct, or delete saved preferences; reuse shopping lists. Past purchases are never treated as proof that you need more.
-- **Review before ordering.** A live Zepto checkout requires an exact bill, explicit approval, and a separate tap on the final order card. An unknown provider outcome is checked read-only, never blindly retried.
-- **Follow a delivery.** Track provider-reported status and ETA. The optional delivery line uses saved address directions and never asks for an OTP, PIN, or payment details.
+*These screens use the sample catalogue. The prices and delivery times are demo data.*
+
+## How an order works
+
+1. Say or type what you need.
+2. GharSaathi searches the stores that are ready for your selected address.
+3. Choose a product, or ask GharSaathi to prepare the basket.
+4. Review the exact items, fees, address, payment method, and total.
+5. Tap **Place order** on the final order card.
+
+A spoken or typed “yes” does not place an order. The order card expires after five minutes, and any change to the basket creates a new bill.
 
 ## Run the demo
 
-This is the safest way to explore the app: sample catalogue and address, deterministic fees, **no Zepto/Swiggy account and no real cart, checkout, payment, or order calls**.
+Demo mode uses a sample address, sample products, and deterministic fees. It does not contact Zepto or Swiggy, change a real cart, take payment, or place an order.
 
-**You need:** macOS or Linux, Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node.js 20+ with npm, PostgreSQL 15+, a Clerk *development* instance, and an OpenAI API key for chat/voice/photo. The sample catalogue and basket do not call OpenAI, but the `make start-demo` launcher checks that a key is configured. On macOS, it can start a local Homebrew PostgreSQL instance; on Linux, start PostgreSQL yourself.
+### Requirements
+
+- macOS or Linux
+- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
+- Node.js 20+ and npm
+- PostgreSQL 15+
+- a Clerk development instance
+- an OpenAI API key for chat, voice, and photo understanding
+
+The launcher currently checks for an OpenAI key. The sample catalogue and basket calculations themselves do not call OpenAI.
+
+### Setup
 
 ```bash
 git clone https://github.com/CodeWithMoin/gharsaathi.git
@@ -44,61 +69,110 @@ cp .env.example .env
 cp frontend/.env.local.example frontend/.env.local
 ```
 
-Create a PostgreSQL database and user, then set `DATABASE_URL` in `.env` to a working `postgresql+asyncpg://…` URL. Generate an encryption key with the command below and put its output in `APP_ENCRYPTION_KEY` in `.env`:
+Create a PostgreSQL database and set `DATABASE_URL` in `.env` to its `postgresql+asyncpg://…` connection string.
+
+Generate an encryption key:
 
 ```bash
 python3 -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
 ```
 
-Set `OPENAI_API_KEY` and `CLERK_SECRET_KEY` in `.env`. Set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` in `frontend/.env.local` using keys from the **same Clerk development instance**. Keep the example's `http://localhost:3003` origins (or update the frontend URL, CORS origins, and authorized parties together if you change ports). Never commit either env file.
+Add the result as `APP_ENCRYPTION_KEY` in `.env`.
+
+Then configure:
+
+- `OPENAI_API_KEY` and `CLERK_SECRET_KEY` in `.env`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` in `frontend/.env.local`
+
+Use keys from the same Clerk development instance. Keep the example `http://localhost:3003` origins unless you also update the frontend URL, CORS origins, and Clerk authorized parties. The environment files are ignored by Git.
+
+Start the app:
 
 ```bash
-make start-demo    # installs missing frontend dependencies, migrates the DB, starts both servers
+make start-demo
 make status
 ```
 
-Open **http://localhost:3003**. The backend is at `http://127.0.0.1:8000` (`/health` and `/docs`). `make stop` shuts down the app. For a test login with development Clerk keys, sign up using a fresh `+clerk_test` email and code `424242`. No email is sent.
+Open **http://localhost:3003**. The API runs at `http://127.0.0.1:8000`, with health at `/health` and interactive docs at `/docs`.
 
-Try `2 Amul doodh order kar do`, `atta search karo`, and `difference in price?`. The demo order card will **refuse** a real checkout on tap. That refusal is expected.
+For a Clerk test login, sign up with a fresh address containing `+clerk_test` and use verification code `424242`.
 
-The full setup, including Linux commands, provider OAuth callbacks, and troubleshooting, is in [AGENTS.md](AGENTS.md) and the [developer guide](docs/DEVELOPER_GUIDE.md).
+Try:
 
-## Under the hood
+```text
+2 Amul doodh order kar do
+atta search karo
+difference in price?
+```
+
+The demo shows the full order flow and blocks the real checkout when **Place order** is tapped.
+
+Useful commands:
+
+```bash
+make logs          # follow frontend and backend logs
+make stop          # stop the app
+make doctor        # check local readiness
+make check         # tests, lint, and type-check
+make check-full    # checks plus a production frontend build
+```
+
+See [AGENTS.md](AGENTS.md) for the complete reviewer setup, including Linux PostgreSQL commands and troubleshooting. The [developer guide](docs/DEVELOPER_GUIDE.md) covers provider OAuth, voice diagnostics, notifications, and advanced local workflows.
+
+## How it is built
 
 ```mermaid
 flowchart LR
-    U["Browser · voice / chat / photo"] -->|Clerk session| A["FastAPI"]
-    A --> O["OpenAI · interpret intent"]
-    A --> R["Shopping rules · prices / approval"]
-    R --> P["Zepto + Instamart adapters"]
-    A --> D[("PostgreSQL · conversations / baskets / memory")]
-    T["Optional Sarvam delivery line"] -->|saved directions, owner only| A
+    U["Mobile web app<br/>voice · chat · photo"] -->|Clerk session| A["FastAPI"]
+    A --> O["OpenAI<br/>language and voice"]
+    A --> R["Shopping rules<br/>basket · bill · approval"]
+    R --> P["Zepto and Instamart<br/>MCP adapters"]
+    A --> D[("PostgreSQL<br/>chats · baskets · memory")]
+    T["Optional Sarvam<br/>delivery line"] --> A
 ```
 
-The model can understand a request and suggest a tool call. The backend validates permissions, provider results, arithmetic, and order state. Provider tokens stay server-side. See [the architecture](docs/ARCHITECTURE.md), [capability matrix](docs/CAPABILITIES.md), and [failure modes](docs/FAILURE_MODES.md) for the deeper contracts.
-
-| Part | Built with |
+| Area | Technology |
 | --- | --- |
-| Web | Next.js 15, React 19, TypeScript, Tailwind |
+| Web app | Next.js 15, React 19, TypeScript, Tailwind |
 | API | FastAPI, Pydantic, SQLAlchemy |
-| Data | PostgreSQL; encrypted local provider connections |
-| Voice and understanding | OpenAI Realtime + backend-delegated shopping tools |
-| Commerce | Official Swiggy Instamart and Zepto MCP integrations |
-| Delivery assistance | Optional Sarvam inbound voice agent |
+| Data | PostgreSQL |
+| Voice and language | OpenAI Realtime and Responses APIs |
+| Commerce | Zepto MCP and Swiggy Instamart MCP |
+| Delivery line | Sarvam inbound voice agent |
 
-## Safety and current scope
+The backend handles product data, prices, fees, permissions, baskets, approvals, and order state. Money calculations use deterministic code. Provider credentials stay on the server and are encrypted at rest for local development.
 
-- **Demo is offline from stores.** Live mode requires your own provider connections and can touch a real basket or place an order after the final tap; use it only when you mean to.
-- **Live Zepto is for supervised, local, single-user use.** Provider connection files are encrypted but deployment-global. Multi-user production needs per-user provider credentials and sessions.
-- **The delivery line is opt-in and owner-configured.** It does not automatically work for everyone who clones the repo.
-- **Provider data is conditional.** Catalogues, addresses, prices, delivery estimates, OAuth access, and call routing depend on external services. The README screenshots are demo data.
+More detail:
 
-## Verify and explore
+- [Architecture](docs/ARCHITECTURE.md)
+- [Capability matrix](docs/CAPABILITIES.md)
+- [Failure modes](docs/FAILURE_MODES.md)
+- [Demo video and walkthrough](VIDEO.md)
+
+## Safety rules
+
+- Every order requires a tap on the final order card.
+- Approval applies only to the items, amount, address, and payment method shown.
+- Basket or price changes require a new bill.
+- GharSaathi never asks for a password, OTP, UPI PIN, card number, or CVV.
+- Unknown checkout outcomes are checked against provider history before another attempt is allowed.
+- Saved preferences can be viewed, corrected, or deleted.
+- Purchase history is never treated as proof that an item has run out at home.
+
+## Current scope
+
+Live mode connects real provider accounts and can change a real cart. Use it only with your own accounts.
+
+The current Zepto connection storage is intended for supervised, local, single-user use. A multi-user deployment needs a separate encrypted provider connection for every user.
+
+Catalogue data, prices, delivery times, OAuth access, and order tracking depend on the connected providers. The Sarvam delivery line also needs an owner-configured phone setup and public backend endpoint.
+
+## Tests
 
 ```bash
-make test         # backend + frontend tests; provider calls mocked
-make check        # tests, lint, type-check
-make check-full   # above + production frontend build
+make test
+make check
+make check-full
 ```
 
-Start in [the developer guide](docs/DEVELOPER_GUIDE.md) for the exact OAuth setup and advanced workflows. The [demo video](VIDEO.md) walks through shopping, approval, tracking, and the delivery line.
+Automated tests use mocked provider responses and do not place real orders.
