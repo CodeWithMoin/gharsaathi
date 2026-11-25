@@ -20,7 +20,7 @@
     "@clerk/nextjs": "^7.10.7",
     "@phosphor-icons/react": "^2.1.10",
     "framer-motion": "^14.14.0",
-    "next": "^15.3.0",
+    "next": "^16.4.6",
     "onnxruntime-web": "^1.31.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
